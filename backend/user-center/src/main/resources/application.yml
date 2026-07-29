@@ -1,0 +1,10 @@
+server:
+  port: ${USER_CENTER_PORT:8081}
+spring:
+  application:
+    name: user-center
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info

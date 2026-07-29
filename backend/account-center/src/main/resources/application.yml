@@ -1,0 +1,10 @@
+server:
+  port: ${ACCOUNT_CENTER_PORT:8083}
+spring:
+  application:
+    name: account-center
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info

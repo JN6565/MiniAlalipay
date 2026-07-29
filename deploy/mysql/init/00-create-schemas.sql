@@ -1,0 +1,15 @@
+CREATE DATABASE IF NOT EXISTS user_db CHARACTER SET utf8mb4 COLLATE utf8mb4_0900_ai_ci;
+CREATE DATABASE IF NOT EXISTS business_db CHARACTER SET utf8mb4 COLLATE utf8mb4_0900_ai_ci;
+CREATE DATABASE IF NOT EXISTS account_db CHARACTER SET utf8mb4 COLLATE utf8mb4_0900_ai_ci;
+CREATE DATABASE IF NOT EXISTS ledger_db CHARACTER SET utf8mb4 COLLATE utf8mb4_0900_ai_ci;
+CREATE DATABASE IF NOT EXISTS agent_db CHARACTER SET utf8mb4 COLLATE utf8mb4_0900_ai_ci;
+CREATE DATABASE IF NOT EXISTS metrics_db CHARACTER SET utf8mb4 COLLATE utf8mb4_0900_ai_ci;
+
+CREATE USER IF NOT EXISTS 'mini_app'@'%' IDENTIFIED BY 'mini_app_dev_only';
+GRANT ALL PRIVILEGES ON user_db.* TO 'mini_app'@'%';
+GRANT ALL PRIVILEGES ON business_db.* TO 'mini_app'@'%';
+GRANT ALL PRIVILEGES ON account_db.* TO 'mini_app'@'%';
+GRANT ALL PRIVILEGES ON ledger_db.* TO 'mini_app'@'%';
+GRANT ALL PRIVILEGES ON agent_db.* TO 'mini_app'@'%';
+GRANT ALL PRIVILEGES ON metrics_db.* TO 'mini_app'@'%';
+FLUSH PRIVILEGES;
