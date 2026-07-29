@@ -17,6 +17,7 @@ MiniAIalipay 是一个虚拟资金支付系统，用于演示 C2C 转账、商�
 - Maven 3.9 及以上
 - Docker Desktop，用于启动本地依赖
 
+
 ## 启动本地依赖
 
 ```powershell
