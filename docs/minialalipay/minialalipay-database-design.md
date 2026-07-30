@@ -9,7 +9,7 @@
 | 时间标准 | UTC `DATETIME(3)`，API 转 ISO 8601 |
 | 资金属性 | 仅演示虚拟资金，不接入真实人民币 |
 
-本文件说明分库、字段、关系、约束、索引和事务边界；18 张核心资金/信用/收款表的完整可执行 DDL 同步维护在[系统分析文档第 11.8 节](./2026-07-28-minialalipay-system-analysis.md)，实现时必须以两份文档的字段和约束交叉校验。
+本文件说明分库、字段、关系、约束、索引和事务边界；18 张核心资金/信用/收款表的完整可执行 DDL 同步维护在[系统分析文档第 11.8 节](./minialalipay-system-analysis.md)，实现时必须以两份文档的字段和约束交叉校验。
 
 ## 1. 设计原则
 
@@ -113,7 +113,7 @@ COLLATE = utf8mb4_0900_ai_ci;
 
 ### 5.3 `contact` 与 `role`
 
-`contact(contact_id, owner_user_id, payee_user_id, alias, created_at)` 使用 `(owner_user_id,payee_user_id)` 唯一键。它是单向常用收款人，不表示好友关系。
+`contact(contact_id, owner_user_id, payee_user_id, alias, success_count, last_success_at, pinned, hidden, version, created_at, updated_at)` 使用 `(owner_user_id,payee_user_id)` 唯一键。它是由成功转账事件创建和累计的单向常用收款人投影，不表示好友关系；用户搜索不得写入该表。用户只能通过版本 CAS 修改 `alias`、`pinned` 和 `hidden`，成功次数和最近成功时间只能由确定终态的转账事件更新。
 
 `role(user_id, role_code, created_at)` 使用 `(user_id,role_code)` 联合主键，角色包括 `USER`、`MERCHANT`、`OPERATOR`、`ADMIN`、`OBSERVER`。
 

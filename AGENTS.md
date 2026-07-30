@@ -10,9 +10,9 @@
 
 修改代码前，必须阅读与任务相关的：
 
-1. `docs/superpowers/specs/2026-07-28-minialalipay-prd.md`
-2. `docs/superpowers/specs/2026-07-28-minialalipay-system-analysis.md`
-3. 涉及数据库时阅读 `docs/superpowers/specs/2026-07-29-minialalipay-database-design.md`
+1. `docs/minialalipay/minialalipay-prd.md`
+2. `docs/minialalipay/minialalipay-system-analysis.md`
+3. 涉及数据库时阅读 `docs/minialalipay/minialalipay-database-design.md`
 4. 涉及接口时阅读 `contracts/openapi/minialalipay-api.yaml`
 
 只实现 PRD 和系统分析已经说明的能力。如果实现中必须新增或改变系统分析未提及的功能、接口字段、状态流转、数据库表、事件、安全规则或部署依赖，必须在同一次修改中同步更新对应的系统分析文档和接口契约。不得把未说明的行为隐藏在代码实现中。

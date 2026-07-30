@@ -6,11 +6,11 @@
 |---|---|
 | 系统名称 | MiniAlalipay |
 | 文档类型 | 系统分析文档 |
-| 文档版本 | V1.7 |
+| 文档版本 | V1.10 |
 | 编制日期 | 2026-07-29 |
-| 需求基线 | MiniAlalipay PRD V1.6 |
-| PRD 文件 | `2026-07-28-minialalipay-prd.md` |
-| PRD SHA-256 | `D176D3E41F607FD43C48D00229093710767DCB3E9DE7D4E46FA18E766926AC9A` |
+| 需求基线 | MiniAlalipay PRD V1.8 |
+| PRD 文件 | `minialalipay-prd.md` |
+| PRD SHA-256 | `0DF43B216FC30237F8FF994D6B2BBBD1420BE3B86C602523F0485B68B9E4D964` |
 | 项目周期 | 2 周 |
 | 团队规模 | 5 人 |
 | 资金属性 | 系统虚拟资金，不接入真实人民币通道 |
@@ -28,6 +28,9 @@
 | V1.5 | 2026-07-29 | 项目组 | 固定 B 端/C 端 React 技术栈，补充 Umi H5 工程约束、目录结构、页面映射及移动端兼容要求 |
 | V1.6 | 2026-07-29 | 项目组 | 明确后端 Maven 模块、限界上下文包结构、依赖方向、数据所有权和测试边界 |
 | V1.7 | 2026-07-29 | 项目组 | 固定 Monorepo 单仓库方案：后端 Maven 多模块、前端单 Umi 工程，并以 `/admin`、`/h5` 隔离 B/C 端 |
+| V1.8 | 2026-07-29 | 项目组 | 调整为同一 Monorepo 下 B 端与 C 端两个独立 Umi 前端工程，分别构建和部署 |
+| V1.9 | 2026-07-29 | 项目组 | 对齐 PRD V1.7：开户初始余额改为 0，新增模拟充值资金来源与对应账户、账本、接口约束 |
+| V1.10 | 2026-07-30 | 项目组 | 对齐 PRD V1.8：补充普通用户个人收支投影与商户经营收款、订单、退款和对账统计 |
 
 ## 1. 文档目的与范围
 
@@ -49,7 +52,7 @@
 
 纳入范围：
 
-- 用户名/密码注册登录、自动开户和 10000 元虚拟金初始化。
+- 用户名/密码注册登录、自动开户（初始余额为 0）和受控模拟充值。
 - 支付密码、用户搜索、常用收款人和模拟身份状态。
 - 传统表单转账、AI Talk 转账、余额、明细、回执和资产分析。
 - Web 商户收银台、动态二维码、手机 H5 和 `QR_PAY` 虚拟资金支付。
@@ -196,7 +199,8 @@ flowchart LR
 
 | 用例编号 | 用例 | 主参与者 | 前置条件 | 成功结果 |
 |---|---|---|---|---|
-| UC-01 | 注册并自动开户 | 普通用户 | 登录名未占用 | 用户、10000 元余额初始化分录和独立 5000 元信用额度一致 |
+| UC-01 | 注册并自动开户 | 普通用户 | 登录名未占用 | 用户、初始余额为 0 的账户和独立 5000 元信用额度一致 |
+| UC-01A | 模拟充值 | 登录用户 | 账户正常、未超过限额 | 充值交易、余额、账本和审计记录一致 |
 | UC-02 | 登录 | 普通用户 | 用户正常且未锁定 | 获得有效会话 |
 | UC-03 | 传统表单转账 | 普通用户 | 已登录、账户正常 | `TRANSFER` 成功并生成回执 |
 | UC-04 | AI 多轮转账 | 普通用户、Agent | 已登录 | 澄清槽位、人工确认后执行 `TRANSFER` |
@@ -289,7 +293,7 @@ flowchart TB
 - Mini 花呗额度账户、额度冻结、信用应收、消费明细、月度账单和还款分配。
 - TCC 付款冻结/扣款、收款预占/入账和账本凭证分支。
 - TCC 信用额度冻结/占用、应收确认/释放及余额还款分支。
-- 不可变复式账本、明细和资产分析数据来源。
+- 不可变复式账本、个人收支投影与商户经营统计数据来源。
 - 账本是资金事实来源，任何余额修复必须通过冲正分录。
 
 ### 6.4 功能实现总览
@@ -298,7 +302,8 @@ flowchart TB
 
 | 功能点 | 入口 | 业务中心实现 | 账户/账本实现 | 持久化事实 | 结果反馈 |
 |---|---|---|---|---|---|
-| 注册与开户 | C 端 Web | 校验用户名、创建身份和开户事件 | 创建虚拟账户并执行初始化分录 | `user`、`account`、`voucher`、`ledger_entry` | 登录成功和余额摘要 |
+| 注册与开户 | C 端 H5 | 校验用户名、创建身份和开户事件 | 创建余额为 0 的虚拟账户 | `user`、`account`、`account_balance` | 登录成功和余额摘要 |
+| 模拟充值 | C 端 H5 | 校验登录态、限额、幂等与模拟渠道结果 | 发行账户向用户余额账户入账并写平衡分录 | `recharge_order`、`fund_transaction`、`voucher`、`ledger_entry` | 充值状态、余额、明细和回执 |
 | 主动 C2C 转账 | Web 表单/AI Talk | 草稿版本、收款人解析、风控、确认令牌、`TRANSFER` 受理 | TCC 冻结付款方、增加收款方、写借贷分录 | `transfer_draft`、`confirmation`、`fund_transaction` | 交易状态、回执、明细 |
 | 商户扫码余额支付 | 商户 Web + 手机 H5 | `QrPayOrder`、令牌交换、订单 CAS、SSE | `QR_PAY` TCC 扣款和商户入账 | `qr_pay_order`、`qr_pay_token`、交易和账本 | 商户 Web 实时结果、H5 回执 |
 | 商户扫码信用支付 | 手机 H5 | 同一扫码订单切换 `CREDIT_PAY`，重新确认 | 冻结/占用额度、增加信用应收、商户入账 | `credit_account`、`credit_purchase`、`credit_receivable` | 额度变化、账单明细、商户回执 |
@@ -540,7 +545,7 @@ MVP 可以让多个 Schema 位于同一个 MySQL 实例，但服务只能访问�
 | B 端组件与可视化 | Ant Design、AntV | 表格、表单、权限菜单、监控大盘和趋势图统一使用既定组件/图表库 |
 | B 端工具与路由 | Lodash、Day.js、Moment、aHooks；React Router 或 Umi 路由 | Umi 应用优先使用 Umi 路由；仅独立非 Umi 模块使用 React Router；同一应用不得存在两个路由权威 |
 | B 端状态与样式 | Zustand；CSS、Less | Zustand 只保存登录态、权限、筛选条件等客户端状态，不复制资金服务端事实 |
-| C 端 H5 | React + TypeScript；与 B 端共用一个 Umi 工程、Vite 构建 | 不使用 Vue；以独立 H5 路由和布局运行于浏览器，不内嵌 App，不开发支付宝小程序 |
+| C 端 H5 | React + TypeScript；独立 Umi H5 工程、Vite 构建 | 不使用 Vue；独立浏览器 H5 构建产物，不内嵌 App，不开发支付宝小程序 |
 | C 端请求与数据 | Umi `request`、TanStack Query、Axios | 与 B 端职责规则一致；支付状态查询必须以服务端状态为准 |
 | C 端组件与可视化 | Ant Design Mobile、AntV F2 | 移动端表单、确认页、账单和轻量数据图表采用移动组件和 F2 |
 | C 端工具、路由、状态 | Lodash、Day.js、aHooks；React Router 或 Umi 路由；Zustand | 统一会话、扫码订单、转账草稿和 AI 会话的客户端状态边界 |
@@ -557,10 +562,10 @@ MVP 可以让多个 Schema 位于同一个 MySQL 实例，但服务只能访问�
 
 #### 7.6.3 Umi 工程目录基线
 
-B 端和 C 端 H5 使用同一个 Umi 工程，通过 `/admin/**` 与 `/h5/**` 两套路由、两套 Layout 和端侧组件目录进行隔离。两端共享 API 服务、OpenAPI 类型、错误码和无副作用工具；不得共享权限菜单、页面级 Zustand Store、全局样式或依赖端侧环境的业务组件。
+B 端与 C 端 H5 分别建立 `frontend-admin` 和 `frontend-h5` 两个独立 Umi 工程，分别安装依赖、构建、部署和维护路由。两端仅通过 Monorepo 的 `contracts` 共享 OpenAPI 类型、错误码和无副作用工具；不得共享路由、Layout、页面级 Zustand Store、全局样式或依赖端侧环境的业务组件。
 
 ```text
-frontend/
+frontend-admin/ 或 frontend-h5/
 ├── config/
 │   ├── config.ts
 │   └── routes.ts
@@ -590,66 +595,55 @@ src/
 ├── type.d.ts
 ├── overrides.css
 ├── assets/
-├── components/
-│   ├── admin/                    # B 端 Ant Design 组件
-│   ├── h5/                       # C 端 Ant Design Mobile 组件
-│   └── shared/                   # 不依赖端侧布局的公共组件
+├── components/                   # 当前端专属组件
 ├── constants/
 ├── hooks/
 ├── icons/
-├── layouts/
-│   ├── AdminLayout/              # 桌面菜单、权限和工作区布局
-│   └── H5Layout/                 # 手机安全区、触控和扫码会话布局
-├── models/
-│   ├── admin/                    # B 端客户端状态
-│   ├── h5/                       # C 端客户端状态
-│   └── session.ts               # 受控共享的登录会话摘要
-├── pages/
-│   ├── admin/                    # `/admin/**` 页面
-│   └── h5/                       # `/h5/**` 页面
+├── layouts/                      # B 端或 H5 专属布局
+├── models/                       # 当前端客户端状态
+├── pages/                        # 当前端页面
 ├── services/
 ├── typings/
 └── utils/
 ```
 
-Umi 路由基线如下；B/C 端页面必须启用路由级懒加载，手机访问 `/h5` 时不得下载 B 端大盘和完整 AntV 桌面图表代码：
+两个工程均启用路由级懒加载；C 端 H5 不得下载 B 端大盘和完整 AntV 桌面图表代码。B 端路由以 `/admin/**` 为前缀，C 端路由以 `/h5/**` 为前缀。
 
 ```typescript
+// frontend-admin/config/routes.ts
 export default [
-  {
-    path: '/admin',
-    component: '@/layouts/AdminLayout',
-    routes: [
-      { path: '/admin/dashboard', component: '@/pages/admin/Dashboard' },
-      { path: '/admin/cashier', component: '@/pages/admin/MerchantCashier' },
-      { path: '/admin/transactions', component: '@/pages/admin/Transactions' },
-    ],
-  },
-  {
-    path: '/h5',
-    component: '@/layouts/H5Layout',
-    routes: [
-      { path: '/h5/home', component: '@/pages/h5/Home' },
-      { path: '/h5/transfer', component: '@/pages/h5/Transfer' },
-      { path: '/h5/qr-pay/:token', component: '@/pages/h5/QrPay' },
-      { path: '/h5/receipt/:id', component: '@/pages/h5/Receipt' },
-    ],
-  },
+  { path: '/admin/dashboard', component: '@/pages/Dashboard' },
+  { path: '/admin/transactions', component: '@/pages/Transactions' },
+];
+
+// frontend-h5/config/routes.ts
+export const h5Routes = [
+  { path: '/h5/home', component: '@/pages/Home' },
+  { path: '/h5/transfer', component: '@/pages/Transfer' },
+  { path: '/h5/qr-pay/:token', component: '@/pages/QrPay' },
 ];
 ```
 
-Ant Design 与 Ant Design Mobile 可以存在于同一工程，但样式必须使用 Layout 根节点限定作用域或 CSS Modules 隔离，禁止以全局选择器互相覆盖。前端路由只负责页面分区，B 端权限仍由后端 RBAC 和对象级授权控制，不能依赖隐藏菜单或 `/admin` 路径实现安全隔离。
+两个工程分别使用 Ant Design 与 Ant Design Mobile，不共享全局样式。B 端权限仍由后端 RBAC 和对象级授权控制，不能依赖隐藏菜单或 `/admin` 路径实现安全隔离。
 
 #### 7.6.4 MiniAlalipay 页面映射
 
 | 端 | 页面模块 | 主要职责 |
 |---|---|---|
-| B 端 | `Dashboard`、`MerchantCashier`、`Transactions` | 经营概览、动态收款码/订单、交易查询与回执 |
+| B 端 | `Dashboard`、`Users`、`Transactions` | 全平台脱敏运营概览、用户审计、交易查询与回执 |
 | B 端 | `ManualCases`、`Alerts`、`DataQuality`、`Trace` | 人工确认、告警处置、离线质量、链路追溯 |
 | C 端 H5 | `Login`、`Home`、`Transfer`、`Collection` | 登录、余额摘要、C2C 转账、个人收款码/收款请求 |
 | C 端 H5 | `QrPay`、`AITalk`、`Credit`、`Bills`、`Receipt` | 扫码支付确认、AI 助理、Mini 花呗、账单和支付结果 |
+| 商户 C 端 Web | `MerchantCashier`、`MerchantAnalytics`、`MerchantOrders` | 创建动态收款码、查看本人订单、收款趋势、退款和对账摘要 |
 
 页面只负责交互和展示，所有资金扣减、信用额度变更、订单终态和资金不变的模拟支付结果均由服务端状态机与查询接口决定。
+
+#### 7.6.5 用户与商户统计边界
+
+- 普通用户统计按个人账户归属生成，只包含本人成功交易及账本投影；模拟充值属于资金流入而非收入，Mini 花呗还款属于偿债而非重复消费。
+- 商户经营统计按 `merchant_account_id` 隔离，只统计本人商户的 `SUCCESS QR_PAY/CREDIT_PAY`，退款冲减净收款；失败、处理中、补偿中和人工处理订单不计入成功金额。
+- 同一自然人同时拥有个人账户和商户账户时分别统计，不得合并为一个资产或经营口径。
+- B 端只查看全平台聚合、脱敏运营与异常数据，不复用普通用户或商户的本人统计权限。
 
 ### 7.7 单仓库与后端模块包结构基线
 
@@ -667,11 +661,8 @@ minialalipay/
 │   ├── business-center/
 │   ├── account-center/
 │   └── ai-service/
-├── frontend/                            # 单一 React + TypeScript + Umi 工程
-│   ├── config/routes.ts                 # `/admin` 与 `/h5` 路由入口
-│   ├── src/pages/admin/                 # B 端页面
-│   ├── src/pages/h5/                    # C 端 H5 页面
-│   └── package.json
+├── frontend-admin/                      # B 端独立 React + TypeScript + Umi 工程
+├── frontend-h5/                         # C 端独立 React + TypeScript + Umi H5 工程
 ├── contracts/
 │   ├── openapi/                         # REST/SSE 接口契约及生成配置
 │   ├── events/                          # 可靠事件 Schema
@@ -1101,8 +1092,7 @@ sequenceDiagram
     G->>UC: 注册请求
     UC->>UC: 校验唯一性并创建待激活用户
     UC->>AC: 创建虚拟账户
-    AC->>L: 初始化 10000 元借贷分录
-    L-->>AC: 分录平衡
+    AC->>AC: 创建余额为 0 的账户与余额快照
     AC->>CR: 幂等创建固定 5000 元额度账户
     CR-->>AC: total=available=500000，used=frozen=0
     AC-->>UC: 余额与信用开户成功
@@ -1113,8 +1103,8 @@ sequenceDiagram
 异常规则：
 
 - 用户创建失败：不调用账户中心。
-- 开户或初始化记账失败：用户保持不可用并进入可重试/补偿，不得形成可登录但无账户的用户。
-- 初始化事件使用唯一业务键 `VIRTUAL_FUND_INIT + user_id`，重复请求不得重复赠送。
+- 开户失败：用户保持不可用并进入可重试/补偿，不得形成可登录但无账户的用户。
+- 注册不得创建虚拟资金分录；模拟充值使用唯一业务键 `RECHARGE + recharge_order_id`，重复请求不得重复入账。
 - 信用开户使用唯一业务键 `CREDIT_ACCOUNT_INIT + user_id`，额度不写入余额或虚拟金初始化凭证；任一步失败时用户保持不可用并由恢复任务接续。
 
 ### 9.2 传统转账
@@ -1762,7 +1752,7 @@ stateDiagram-v2
 |---|---|---|---|
 | `app_user` | `user_id CHAR(26)`、`login_name VARCHAR(64)`、`nickname VARCHAR(64)`、`identity_status VARCHAR(16)`、`status VARCHAR(16)`、`version BIGINT UNSIGNED`、`created_at/updated_at DATETIME(3)` | PK `user_id`；UK `login_name` | `(status, created_at)` |
 | `credential` | `user_id CHAR(26)`、`login_password_hash/payment_password_hash VARCHAR(255)`、`login_fail_count/pay_fail_count INT UNSIGNED`、`login_lock_until/pay_lock_until DATETIME(3)`、`updated_at DATETIME(3)` | PK/FK `user_id` | `(login_lock_until)`、`(pay_lock_until)` |
-| `contact` | `owner_user_id CHAR(26)`、`payee_user_id CHAR(26)`、`alias VARCHAR(64)`、`created_at DATETIME(3)` | PK `(owner_user_id, payee_user_id)` | `(payee_user_id)` |
+| `contact` | `owner_user_id/payee_user_id CHAR(26)`、`alias VARCHAR(64)`、`success_count BIGINT UNSIGNED`、`last_success_at DATETIME(3)`、`pinned/hidden BOOLEAN`、`version BIGINT UNSIGNED`、`created_at/updated_at DATETIME(3)` | PK `(owner_user_id, payee_user_id)`；仅成功转账事件创建/累计 | `(owner_user_id, pinned, hidden, last_success_at)`、`(payee_user_id)` |
 | `role_assignment` | `user_id CHAR(26)`、`role_code VARCHAR(32)`、`created_at DATETIME(3)` | PK `(user_id, role_code)` | `(role_code)` |
 | `idempotency_record` | `record_id CHAR(26)`、`principal_key VARCHAR(128)`、`api_scope VARCHAR(64)`、`idempotency_key VARCHAR(64)`、`request_digest BINARY(32)`、`resource_type VARCHAR(32)`、`resource_id CHAR(26)`、`response_json JSON`、`status VARCHAR(16)`、`expires_at/created_at/updated_at DATETIME(3)` | PK `record_id`；UK `(principal_key, api_scope, idempotency_key)` | `(status, updated_at)`、`(expires_at)` |
 | `audit_log` | `audit_id BIGINT UNSIGNED`、`actor_type VARCHAR(16)`、`actor_id VARCHAR(128)`、`action VARCHAR(64)`、`target_type VARCHAR(32)`、`target_id VARCHAR(128)`、`result_code VARCHAR(32)`、`trace_id CHAR(32)`、`detail_json JSON`、`occurred_at DATETIME(3)` | PK `audit_id` | `(actor_id, occurred_at)`、`(target_type, target_id, occurred_at)` |
@@ -2409,17 +2399,20 @@ erDiagram
 
 | 方法 | 路径 | 权限 | 用途 | 幂等/并发要求 |
 |---|---|---|---|---|
-| POST | `/api/v1/auth/register` | 匿名 | 注册、自动开户和初始化虚拟金 | `Idempotency-Key`；登录名唯一 |
+| POST | `/api/v1/auth/register` | 匿名 | 注册并创建初始余额为 0 的账户 | `Idempotency-Key`；登录名唯一 |
+| POST | `/api/v1/recharges` | 登录用户 | 创建模拟充值订单 | `Idempotency-Key`；单笔/单日限额与限流 |
 | POST | `/api/v1/auth/login` | 匿名 | 登录并建立会话 | IP + 登录名限流 |
 | POST | `/api/v1/auth/logout` | 登录用户 | 销毁当前会话 | 重复退出返回成功 |
+| PUT | `/api/v1/payment-password` | 首次注册/登录用户 | 设置独立 6 位支付密码 | 已设置时拒绝覆盖；只存强哈希 |
+| PATCH | `/api/v1/payment-password` | 登录用户 | 验证登录密码后修改支付密码 | 原子更新并撤销全部活动确认令牌 |
 | POST | `/api/v1/payment-password/verify` | 登录用户 | 校验支付密码并签发短期凭证 | 错误次数原子累加与锁定 |
 | GET | `/api/v1/users/search?q=` | 登录用户 | 搜索脱敏收款人 | 只读，最多返回 10 项 |
-| GET | `/api/v1/contacts` | 登录用户 | 查询常用收款人 | 游标分页 |
-| POST | `/api/v1/contacts` | 登录用户 | 添加常用收款人 | owner + payee 唯一 |
-| DELETE | `/api/v1/contacts/{payeeUserId}` | 登录用户 | 删除联系人 | 重复删除返回 204 |
+| GET | `/api/v1/contacts` | 登录用户 | 查询成功转账历史生成的常用收款人 | 次数、最近成功时间和置顶排序；游标分页 |
+| PATCH | `/api/v1/contacts/{payeeUserId}` | 登录用户 | 设置已有常用收款人的置顶、隐藏或备注 | 只能修改成功转账生成的记录；`version` CAS |
 | GET | `/api/v1/accounts/me` | 登录用户 | 查询本人账户和实时余额 | 不使用过期缓存代替资金事实 |
 | GET | `/api/v1/accounts/me/entries` | 登录用户 | 查询本人账本明细 | `cursor` + `limit<=100` |
-| GET | `/api/v1/accounts/me/analytics?range=7d\|30d` | 登录用户 | 查询收支分析 | 返回指标口径版本 |
+| GET | `/api/v1/accounts/me/analytics?range=7d\|30d\|month` | 登录用户 | 查询本人收支、余额资金流、信用消费/还款和对象分布 | 返回指标口径版本；充值不计收入、还款不重复计消费 |
+| GET | `/api/v1/merchants/me/analytics?range=today\|month` | 商户用户 | 查询本人商户收款、订单、支付方式、退款、净收款和对账摘要 | 服务端派生商户账户；只统计确定终态并按订单去重 |
 
 #### 12.7.2 转账、交易与人工处置
 
@@ -2510,6 +2503,8 @@ C2C 创建请求与个人码订单金额锁定共用以下 OpenAPI 字段约束�
 | POST | `/api/v1/ops/alerts/{id}/close` | 运营 | 关闭已恢复告警 | 仅 `RESOLVED→CLOSED` |
 | GET | `/api/v1/ops/data-quality` | 运营/观察者 | 查询质量检查 | 数据日期、任务、规则筛选 |
 | GET | `/api/v1/ops/metric-definitions` | 运营/观察者 | 查询指标口径版本 | 只读历史版本 |
+| POST | `/api/v1/ops/credit/statement-runs` | 演示管理员 | 受审计触发指定演示日期出账 | 业务日期唯一；重复执行幂等 |
+| POST | `/api/v1/ops/credit/due-check-runs` | 演示管理员 | 受审计触发指定演示日期到期检查 | 只推进合法状态，不修改账单金额 |
 
 #### 12.7.7 MVP 优先级与裁剪
 
@@ -3154,7 +3149,7 @@ TCC Confirm 原则上持续重试。只有出现无法自动收敛、跨版本�
 - 单凭证平衡：`sum(DEBIT) = sum(CREDIT)`。
 - 余额资金守恒：`TRANSFER`、`QR_PAY` 及其冲正中，所有用户和商户虚拟余额净变化之和始终为 0；C2C 手续费固定为 0。
 - 信用会计平衡：`CREDIT_PAY` 中商户虚拟余额负债增加额必须等于用户信用应收资产增加额，用户虚拟余额变化为 0；`CREDIT_REPAY` 中用户虚拟余额负债减少额必须等于信用应收资产减少额。信用交易不得套用“用户/商户余额净变化为 0”的余额转移公式，但仍必须借贷平衡并满足额度/应收守恒。
-- 虚拟金初始化：使用专用“虚拟金发行/权益账户”作为借贷对手并生成平衡凭证；只有受控初始化业务允许用户与商户余额总量增加。
+- 模拟充值：使用专用“虚拟资金发行/权益账户”作为借贷对手并生成平衡凭证；只有已通过限额、限流、幂等和审计校验的模拟充值允许用户余额总量增加。
 - 成功交易：主单 `SUCCESS`、TCC 全分支 `CONFIRMED`、账本已过账、余额版本已更新。
 - 撤销交易：主单 `CANCELLED/REVERSED`、冻结为 0、补偿分录完整。
 - 信用额度：`total_limit_fen = available_fen + used_fen + frozen_fen`，四项均不得为负。
@@ -3496,8 +3491,8 @@ flowchart LR
 | 缓存与事件总线 | Redis + Redis Streams；资金事实由 MySQL Outbox 保证，不依赖 Redis 持久性 |
 | AI | Spring AI + 标准 MCP Server，与 Agent 共进程部署 |
 | 代码仓库 | Monorepo；包含独立构建的 `backend`、`frontend`、`contracts`、`tests`、`deploy` 和 `docs` |
-| B 端前端 | 单一 Umi 工程的 `/admin/**` 路由；React + TypeScript + Ant Design + AntV + TanStack Query + Zustand |
-| C 端 H5 | 同一 Umi 工程的 `/h5/**` 路由；React + TypeScript + Ant Design Mobile + AntV F2 + TanStack Query + Zustand；浏览器 H5，不使用 Vue/小程序 |
+| B 端前端 | `frontend-admin` 独立 Umi 工程；React + TypeScript + Ant Design + AntV + TanStack Query + Zustand |
+| C 端 H5 | `frontend-h5` 独立 Umi 工程；React + TypeScript + Ant Design Mobile + AntV F2 + TanStack Query + Zustand；浏览器 H5，不使用 Vue/小程序 |
 | 监控 | Micrometer/OpenTelemetry SDK + OTel Collector + Prometheus + Tempo + Grafana |
 | 部署 | Docker Compose，后续可迁移 Kubernetes |
 
@@ -3669,7 +3664,7 @@ P2P Collection 验收映射：
 | FR-AC-003 | 账本模块 | voucher、ledger_entry | AT-06、AT-12、AT-20 |
 | FR-AC-004 | 账户中心 | 明细分页接口 | 查询 E2E |
 | FR-AC-005 | 账户中心 | close-account policy | 零余额/在途测试 |
-| FR-AC-006 | 账户/分析 | analytics API | 7/30 天口径测试 |
+| FR-AC-006 | 账户/分析 | personal analytics projection、analytics API | 收入/支出/充值/信用/还款/退款口径测试 |
 | FR-RC-001 | 风控模块 | RiskDecision、规则版本 | AT-05、AT-33、AT-35、AT-36 |
 | FR-RC-002 | 用户/业务 | 密码凭证、确认上下文 | AT-14、AT-15、AT-34 |
 | FR-RC-003 | 工单模块 | ManualCase、subject 多态关联 | AT-09、AT-28、AT-35、AT-40 |
@@ -3693,6 +3688,7 @@ P2P Collection 验收映射：
 | FR-SP-002 | H5/业务中心 | token exchange、H5 session | AT-19、AT-22 |
 | FR-SP-003 | 业务/TCC/账户/账本 | confirmation、qr-pay/pay | AT-20、AT-21、AT-32–AT-40 |
 | FR-SP-004 | SSE/监控 | order events、businessType | AT-24、AT-31 |
+| FR-SP-005 | 业务/分析 | merchant analytics projection、merchant analytics API | 商户归属、终态去重、退款与净收款口径测试 |
 | FR-QA-001 | 测试流程 | AI 候选用例 + 人工审核 | 用例证据链审查 |
 
 ### 22.4 Mini 花呗与 C2C 个人收款
@@ -3779,6 +3775,6 @@ P2P Collection 验收映射：
 
 ## 附录 B：参考文档
 
-- [MiniAlalipay PRD V1.6](./2026-07-28-minialalipay-prd.md)
+- [MiniAlalipay PRD V1.6](./minialalipay-prd.md)
 - [选题说明](./MiniAIalipay.md)
 - [PRD 模板参考](./PRD模板参考.md)

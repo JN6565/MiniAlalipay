@@ -61,3 +61,6 @@ redis-data/
 *.sql.gz
 *.dump
 *.bak
+
+# 本地 Superpowers 过程产物
+/docs/superpowers/
