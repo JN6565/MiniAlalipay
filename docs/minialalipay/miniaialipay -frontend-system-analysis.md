@@ -4,12 +4,12 @@
 | --- | --- |
 | 产品名称 | MiniAlalipay — AI 加持的确定性金融信任平台 |
 | 文档类型 | 前端系统分析文档 |
-| 文档版本 | V1.6 |
+| 文档版本 | V1.7 |
 | 编制日期 | 2026-07-29 |
-| 需求基线 | MiniAlalipay PRD V1.8 |
-| 后端系分基线 | MiniAlalipay 系统分析文档 V1.10 |
-| PRD 文件 | MiniAlalipay PRD V1.8 |
-| 后端系分文件 | MiniAlalipay 系统分析文档 V1.10 |
+| 需求基线 | MiniAlalipay PRD V1.9 |
+| 总体系分基线 | MiniAlalipay 系统分析文档 V1.12 |
+| PRD 文件 | MiniAlalipay PRD V1.9 |
+| 总体系分文件 | MiniAlalipay 系统分析文档 V1.12 |
 | 项目周期 | 2 周 |
 | 团队规模 | 5 人 |
 | 资金属性 | 系统虚拟资金，不接入真实人民币通道 |
@@ -26,6 +26,7 @@
 | V1.4 | 2026-07-30 | 项目组 | 以后端系分 V1.10 为基准修正前后端冲突：删除 rerun 残留、工单内联查询、订单 FAILED、标注 3 个待补充端点、修正登录误用码与锁定/充值/风控阈值表述 |
 | V1.5 | 2026-07-30 | 项目组 | 对齐后端系分变更：注册移除支付密码改为登录后 PUT 设置；新增 2.3.2 支付密码设置与修改页；2.3.5 常用收款人改为成功转账历史生成+置顶/隐藏/备注；新增 2.3.31 演示任务触发页 |
 | V1.6 | 2026-07-30 | 项目组 | 补充标准系分章节：新增 2.3.0 全局交互流程图、2.6 接口规约、2.7 数据模型与状态设计、2.8 边界与异常处理、2.9 非功能性设计 |
+| V1.7 | 2026-07-30 | 项目组 | 统一端侧与身份边界：C 端仅面向普通用户并承载全部本人业务，B 端仅面向运营维护人员；将扫码收款、本人订单和本人统计迁入 C 端并删除商户系统角色 |
 
 
 ---
@@ -38,8 +39,8 @@ MiniAlalipay 是一个 AI 加持的确定性金融信任平台，以虚拟资金
 ### 1.1 项目成员
 | 角色 | 成员 | 备注 |
 | --- | --- | --- |
-| 业务方 | 产品经理（PD） | 需求基线 PRD V1.8 |
-| 后端技术 | 后端/架构负责人 + 账户工程师 | 系分 V1.10，Maven 多模块 5 部署单元 |
+| 业务方 | 产品经理（PD） | 需求基线 PRD V1.9 |
+| 后端技术 | 后端/架构负责人 + 账户工程师 | 总体系分 V1.12，Maven 多模块 5 部署单元 |
 | UED | — | 低保真原型由 PRD 第 13 章定义，研发据此完成实现稿 |
 | 前端 | 前端工程师 | 本文档产出方，负责 Web/H5 双工程 |
 | 质量 | 测试/产品/集成 | 验收、自动化、故障注入、答辩材料 |
@@ -48,8 +49,8 @@ MiniAlalipay 是一个 AI 加持的确定性金融信任平台，以虚拟资金
 ### 1.2 项目文档
 | 文档类型 | 路径 | 说明 |
 | --- | --- | --- |
-| PRD 文档（必填） | MiniAlalipay PRD V1.8 | V1.8，产品需求与页面交互规格 |
-| 后端系分（必填） | MiniAlalipay 系统分析文档 V1.10 | V1.10，架构、API 契约、状态模型、数据模型 |
+| PRD 文档（必填） | MiniAlalipay PRD V1.9 | V1.9，产品需求与页面交互规格 |
+| 总体系分（必填） | MiniAlalipay 系统分析文档 V1.12 | V1.12，架构、API 目录、状态模型、数据模型 |
 | 迭代地址（必填） | [XX-迭代地址] |  |
 | 开发环境地址（必填） | [XX-开发环境] |  |
 | 测试环境地址（必填） | [XX-测试环境] |  |
@@ -61,22 +62,22 @@ MiniAlalipay 是一个 AI 加持的确定性金融信任平台，以虚拟资金
 ### 2.1 前端迭代目标
 在两周 MVP 范围内，前端需完成以下交付：
 
-1. **C 端 H5 工程（**`frontend-h5`**）**：18 个页面，覆盖注册登录、首页资产摘要、传统转账与确认、AI Talk 多轮对话转账、扫码支付、Mini 花呗额度/账单/还款、个人收款码与固定请求、账户明细与资产分析、交易详情与回执。
-2. **B 端 Web 工程（**`frontend-admin`**）**：11 个页面，覆盖商户收银台、人工确认台、可信运行看板、T+1 报表、告警中心、数据质量、用户管理、交易查询与回执、链路追溯、商户经营统计、商户订单与对账。
+1. **C 端 H5 工程（**`frontend-h5`**）**：22 个页面，仅面向普通用户，覆盖注册登录、首页资产摘要、传统转账与确认、AI Talk、多种扫码付款与收款、本人收款订单和统计、Mini 花呗、个人收款码与固定请求、账户明细与回执。
+2. **B 端 Web 工程（**`frontend-admin`**）**：9 个页面，仅面向运营、管理员和观察者，覆盖人工确认台、可信运行看板、T+1 报表、告警中心、数据质量、用户管理、全局交易查询与回执、链路追溯和演示任务触发。B 端不提供收银台、本人订单或本人收款统计。
 3. **安全链路**：支付密码通过独立安全输入组件采集，确认令牌（`confirmationToken`）通过请求体传递给后端支付 API，不写入 URL、日志、埋点或 Query 持久化缓存；AI Talk 场景下确认上下文由策略网关服务端注入，不进入 Agent 消息体。
-4. **跨端同步**：B 端收银台通过 SSE 订阅扫码支付状态，C 端固定请求创建者通过 SSE 订阅收款状态；SSE 失败时降级为 2 秒轮询。
+4. **跨端同步**：C 端扫码收款页和固定请求创建者通过 SSE 订阅收款状态；SSE 失败时降级为 2 秒轮询。
 5. **工程规范**：Monorepo 双 Umi 工程独立构建部署，通过 `contracts/openapi` 共享类型和错误码；TanStack Query 管理服务端状态，Zustand 管理客户端状态；Day.js 处理日期，金额统一使用后端返回的分值。
 
 ### 2.2 技术栈与工程约束
 #### 2.2.1 端侧技术栈
 | 端 | 技术栈 | 关键约束 |
 | --- | --- | --- |
-| B 端 Web | React + TypeScript；Umi + Vite | 不使用 Vue；面向商户、运营、风控和数据监控后台 |
+| B 端 Web | React + TypeScript；Umi + Vite | 不使用 Vue；仅面向运营、管理员和观察者，提供风控处置、数据监控和运行维护功能 |
 | B 端请求与数据 | Umi `request`、TanStack Query、Axios | `request` 为标准 API 客户端；Query 管理服务端状态；Axios 仅用于流式/二进制特殊场景 |
 | B 端组件与可视化 | Ant Design、AntV | 表格、表单、权限菜单、监控大盘和趋势图统一使用既定组件 |
 | B 端工具与路由 | Lodash、Day.js、Moment（遗留兼容）、aHooks；React Router 或 Umi 路由 | 同一应用不得存在两个路由权威 |
 | B 端状态与样式 | Zustand；CSS + Less | Zustand 只保存登录态、权限、筛选条件等客户端状态 |
-| C 端 H5 | React + TypeScript；独立 Umi H5 工程 + Vite | 不使用 Vue；独立浏览器 H5 构建产物，不内嵌 App |
+| C 端 H5 | React + TypeScript；独立 Umi H5 工程 + Vite | 不使用 Vue；仅面向普通用户并承载本人全部付款和收款业务；独立浏览器 H5 构建产物，不内嵌 App |
 | C 端请求与数据 | Umi `request`、TanStack Query、Axios | 与 B 端职责规则一致；支付状态查询必须以服务端状态为准 |
 | C 端组件与可视化 | Ant Design Mobile、AntV F2 | 移动端表单、确认页、账单和轻量数据图表 |
 | C 端工具、路由、状态 | Lodash、Day.js、aHooks；React Router 或 Umi 路由；Zustand | 统一会话、扫码订单、转账草稿和 AI 会话的客户端状态边界 |
@@ -210,13 +211,15 @@ minialalipay/
 | `/h5/credit` | Mini 花呗首页 | P0 |
 | `/h5/credit/bills` | Mini 花呗账单页 | P0 |
 | `/h5/credit/repayment` | Mini 花呗还款页 | P0 |
+| `/h5/qr-collection` | 动态扫码收款页 | P0 |
+| `/h5/qr-collection/analytics` | 本人扫码收款统计 | P0 |
+| `/h5/qr-collection/orders` | 本人扫码收款订单与对账 | P0 |
 
 
 **B 端 Web 路由（**`frontend-admin/config/routes.ts`**）：**
 
 | 路由路径 | 页面 | 优先级 |
 | --- | --- | --- |
-| `/admin/cashier` | Web 商户收银台 | P0 |
 | `/admin/manual-cases` | 人工确认台 | P0 |
 | `/admin/dashboard` | 可信运行看板 | P0 |
 | `/admin/reports` | T+1 报表页 | P0 |
@@ -225,8 +228,6 @@ minialalipay/
 | `/admin/users` | 用户管理页 | P1 |
 | `/admin/transactions` | 交易查询与回执 | P0 |
 | `/admin/trace` | 链路追溯 | P0 |
-| `/admin/merchant-analytics` | 商户经营统计 | P0 |
-| `/admin/merchant-orders` | 商户订单与对账 | P0 |
 | `/admin/demo-tasks` | 演示任务触发页 | P0 |
 
 
@@ -269,10 +270,10 @@ minialalipay/
 
 安全红线：`paymentPassword`、`confirmationToken`、`paymentProof`、二维码原始令牌、Cookie、Authorization 等敏感值不得写入 URL、日志、埋点、Query 持久化缓存或 AI 消息体。常规转账/扫码/C2C/还款场景下 `confirmationToken` 通过请求体传递给后端支付 API；AI Talk 场景下确认上下文由策略网关服务端注入（`submit_confirmed_transfer` 仅接受 `{draftId}`），不进入 Agent 消息体。  
 幂等键规则：`Idempotency-Key` 为 16-64 位随机字符串，同用户保留 24 小时；资金类请求超时后只按原幂等键重试或查询交易状态，禁止自动创建新键再次扣款。  
-统计边界规则（后端 7.6.5）：普通用户统计按个人账户归属生成，只包含本人成功交易及账本投影；模拟充值属于资金流入而非收入，Mini 花呗还款属于偿债而非重复消费。商户经营统计按 `merchant_account_id` 隔离，只统计本人商户的 `SUCCESS QR_PAY/CREDIT_PAY`，退款冲减净收款；失败、处理中、补偿中和人工处理订单不计入成功金额。同一自然人同时拥有个人账户和商户账户时分别统计，不得合并。B 端只查看全平台聚合、脱敏运营与异常数据，不复用普通用户或商户的本人统计权限。
+统计边界规则（总体系分 7.6.5）：普通用户综合收支按本人账户归属生成；扫码收款统计同样按本人逻辑收款字段 `payee_account_id` 隔离，但只统计本人作为收款方的 `SUCCESS QR_PAY/CREDIT_PAY`，退款冲减净收款，失败、处理中、补偿中和人工处理订单不计入成功金额。动态扫码订单持久化时，`payee_account_id` 映射服务器现有 `merchant_account_id`，该历史字段名不产生商户角色、第二账户或 B 端权限。两者是同一普通用户的不同统计视图，不创建第二系统身份或第二账户。B 端只查看全平台聚合、脱敏运营与异常数据，不复用普通用户的本人查询权限。
 
 ### 2.3 迭代具体描述
-本次迭代实现 PRD V1.8 全部 31 个 P0/P1 页面，覆盖 C 端 H5（19 页）和 B 端 Web（12 页）。以下按页面逐一描述 UI&交互时序图、前端逻辑字段表、操作按钮和所需 API。
+本次迭代实现 PRD V1.9 全部 31 个 P0/P1 页面，覆盖 C 端 H5（22 页）和 B 端 Web（9 页）。以下按页面逐一描述 UI&交互时序图、前端逻辑字段表、操作按钮和所需 API。
 
 #### 2.3.0 全局交互流程
 **C 端 H5 用户主流程**
@@ -288,6 +289,9 @@ flowchart LR
     C --> H[Mini 花呗 2.3.14]
     C --> I[个人收款 2.3.11]
     C --> J[扫码支付 2.3.9]
+    C --> R[动态扫码收款 2.3.20]
+    R --> S[本人收款统计 2.3.29]
+    R --> T[本人收款订单 2.3.30]
     D --> K[转账确认 2.3.6]
     E --> K
     K --> L[结果/回执 2.3.8]
@@ -301,8 +305,26 @@ flowchart LR
 
 **B 端 Web 页面结构（按角色分流）**
 
-<!-- 这是一张图片，ocr 内容为： -->
-![](https://cdn.nlark.com/yuque/__mermaid_v3/7511dd892d6b7a201d564efee1d51ba2.svg)
+```mermaid
+flowchart LR
+    O[运营人员] --> M[人工确认台 2.3.21]
+    O --> D[可信运行看板 2.3.22]
+    O --> R[T+1 报表 2.3.23]
+    O --> A[告警中心 2.3.24]
+    O --> Q[数据质量 2.3.25]
+    O --> T[全局交易查询 2.3.27]
+    O --> L[链路追溯 2.3.28]
+    X[系统管理员] --> U[用户管理 2.3.26]
+    X --> J[演示任务触发 2.3.31]
+    V[观察者] --> D
+    V --> R
+    V --> A
+    V --> Q
+    V --> T
+    V --> L
+```
+
+B 端没有普通用户、收款用户或所谓商户入口。观察者只读，运营人员按权限处置工单和告警，系统管理员只执行用户维护和受审计的演示任务。
 
 **前端交易状态流转（统一展示映射）**
 
@@ -884,7 +906,7 @@ sequenceDiagram
         BE-->>FE: 电子回执
         FE-->>U: 高亮金额/收款人/交易号
         alt 信用支付成功
-            FE-->>U: "虚拟余额变化0""已用额度增加""商户入账"
+            FE-->>U: "虚拟余额变化0""已用额度增加""收款方入账"
         else 还款成功
             FE-->>U: "虚拟余额减少""应收减少""可用额度恢复""账单剩余应还"
         end
@@ -908,7 +930,7 @@ sequenceDiagram
 + 进入页面查询交易状态，PROCESSING 时自动轮询（2s→5s→10s 间隔逐步增大），不创建重复交易。
 + 电子回执仅在确定终态后可查询，非终态调用返回错误。
 + 状态分类展示：SUCCESS/REVERSED/COMPENSATING/REJECTED/EXPIRED/MANUAL_REVIEW/CANCELLED，各自对应独立文案与入口。
-+ 信用支付成功展示虚拟余额变化 0、已用额度增加、商户入账；还款成功展示虚拟余额减少、可用额度恢复、账单剩余应还。
++ 信用支付成功展示虚拟余额变化 0、已用额度增加、收款方入账；还款成功展示虚拟余额减少、可用额度恢复、账单剩余应还。
 + CANCELLED 状态提供重新转账入口；MANUAL_REVIEW 提供联系客服入口；SUCCESS 提供查看明细入口。
 + 终态后隐藏手动刷新按钮，所有金额以后端分值为准格式化为元展示。
 
@@ -964,16 +986,18 @@ sequenceDiagram
     API-->>H5: H5外壳(bootstrap cookie+CSRF, 无业务数据)
     H5->>H5: 清除地址栏token(history.replaceState)
     H5->>API: POST /api/v1/qr-pay/token-exchanges {token}
-    API-->>H5: {qrOrderId, merchantDisplayName, amountFen, subject, status, expiresAt}
+    API-->>H5: {qrOrderId, payeeDisplayName, amountFen, subject, status, expiresAt}
     H5->>API: POST /api/v1/qr-pay/orders/{id}/scan
     API-->>H5: status:SCANNED
     H5->>H5: 启动5分钟倒计时
     U->>H5: 选择资金来源(BALANCE/MINI_CREDIT)
     U->>H5: 输入支付密码
     U->>H5: 点击确认支付
-    H5->>API: POST /api/v1/qr-pay/orders/{id}/confirmations {paymentPassword, fundingSource, orderVersion}
+    H5->>API: POST /api/v1/payment-password/verify {paymentPassword, purpose:QR_PAY_CONFIRM}
+    API-->>H5: {paymentProof}
+    H5->>API: POST /api/v1/qr-pay/orders/{id}/confirmations {paymentProof, fundingSource, orderVersion}
     API-->>H5: confirmationToken
-    H5->>API: POST /api/v1/qr-pay/orders/{id}/pay {confirmationToken, fundingSource, orderVersion} Idempotency-Key
+    H5->>API: POST /api/v1/qr-pay/orders/{id}/pay {confirmationToken} Idempotency-Key
     API-->>H5: {qrOrderId, transactionId, businessType, status:PROCESSING}
     H5->>H5: 跳转支付回执页
 ```
@@ -991,7 +1015,7 @@ sequenceDiagram
 
 | 字段名称 | 说明 | 输入方式 | 是否必填 | 输入限制 | 字段类型 | 数据源 |
 | --- | --- | --- | --- | --- | --- | --- |
-| 商户名称 | 商户展示名称 | 只读展示 | Y | — | string | token-exchanges 返回 |
+| 收款方名称 | 收款普通用户脱敏展示名 | 只读展示 | Y | — | string | token-exchanges 返回 |
 | 支付金额 | 金额（元） | 只读展示 | Y | — | decimal | token-exchanges 返回 |
 | 商品说明 | 订单标题 | 只读展示 | Y | max 50 | string | token-exchanges 返回 |
 | 订单号 | 扫码订单 ID | 只读展示 | Y | — | string | token-exchanges 返回 |
@@ -1031,7 +1055,7 @@ sequenceDiagram
     participant API as 后端API
     U->>H5: 从扫码支付页跳转
     H5->>API: GET /api/v1/qr-pay/orders/{id}
-    API-->>H5: {status, amountFen, transactionId, payerBalanceChangeFen, merchantBalanceChangeFen, ledgerBalanced, completedAt}  # merchantDisplayName 来自 token-exchanges 响应，非订单查询
+    API-->>H5: {status, amountFen, transactionId, payerBalanceChangeFen, payeeBalanceChangeFen, ledgerBalanced, completedAt}  # payeeDisplayName 来自 token-exchanges 响应，非订单查询
     alt PROCESSING
         H5->>API: GET /api/v1/qr-pay/orders/{id}/events (SSE)
         API-->>H5: event: qr-pay-status (data.status=SUCCESS)
@@ -1039,9 +1063,9 @@ sequenceDiagram
         API-->>H5: 终态详情
     end
     alt SUCCESS + QR_PAY
-        H5-->>U: "虚拟资金支付成功"+交易号+商户+金额+时间
+        H5-->>U: "虚拟资金支付成功"+交易号+收款方+金额+时间
     else SUCCESS + CREDIT_PAY
-        H5-->>U: "虚拟余额变化0""已用额度增加""商户入账"
+        H5-->>U: "虚拟余额变化0""已用额度增加""收款方入账"
     else CANCELLED/EXPIRED/REJECTED
         H5-->>U: 展示对应终态
     else COMPENSATING
@@ -1053,11 +1077,11 @@ sequenceDiagram
 
 **前端逻辑**
 
-+ 查询订单真实资金状态，`merchantDisplayName` 来自 token-exchanges 响应而非订单查询，需在会话内缓存。
++ 查询订单真实资金状态，`payeeDisplayName` 来自 token-exchanges 响应而非订单查询，需在会话内缓存。
 + PROCESSING 时通过 SSE 订阅 `qr-pay-status` 事件，支持 `Last-Event-ID` 续传，避免事件丢失。
 + SSE 失败降级为 2 秒轮询，确保状态最终一致。
-+ QR_PAY 成功展示虚拟资金支付成功 + 交易号 + 商户 + 金额 + 时间。
-+ CREDIT_PAY 成功展示虚拟余额变化 0、已用额度增加、商户入账。
++ QR_PAY 成功展示虚拟资金支付成功 + 交易号 + 收款方 + 金额 + 时间。
++ CREDIT_PAY 成功展示虚拟余额变化 0、已用额度增加、收款方入账。
 + COMPENSATING 展示"交易异常，正在自动补偿"；MANUAL_REVIEW 展示"人工审核中，请等待"；CANCELLED/EXPIRED/REJECTED 展示对应终态。
 
 **所需 API**
@@ -1146,9 +1170,11 @@ sequenceDiagram
         H5-->>U: 展示固定金额(只读)
     end
     U->>H5: 输入支付密码→确认
-    H5->>API: POST /api/v1/p2p-collections/orders/{id}/confirmations {paymentPassword, fundingSource:BALANCE, orderVersion}
+    H5->>API: POST /api/v1/payment-password/verify {paymentPassword, purpose:P2P_COLLECTION_CONFIRM}
+    API-->>H5: {paymentProof}
+    H5->>API: POST /api/v1/p2p-collections/orders/{id}/confirmations {paymentProof, fundingSource:BALANCE, orderVersion}
     API-->>H5: confirmationToken
-    H5->>API: POST /api/v1/p2p-collections/orders/{id}/pay {confirmationToken, fundingSource:BALANCE, orderVersion, requestVersion?} Idempotency-Key
+    H5->>API: POST /api/v1/p2p-collections/orders/{id}/pay {confirmationToken} Idempotency-Key
     API-->>H5: {orderId, requestId, transactionId, businessType, sourceType, fundingSource, status:PROCESSING}
     H5-->>U: 跳转支付回执页
     alt SUCCESS
@@ -1467,36 +1493,37 @@ sequenceDiagram
 | POST | `/api/v1/credit/repayments` | 执行还款，请求体含 `{repaymentDraftId, confirmationToken}`，携带 Idempotency-Key |
 
 
-#### 2.3.20 Web 商户收银台（B 端 Web）
+#### 2.3.20 动态扫码收款页（C 端 H5）
 **UI&交互**
 
 ```mermaid
 sequenceDiagram
-    participant M as 商户
-    participant Web as B端Web
+    participant U as 普通用户（收款方）
+    participant H5 as C端H5
     participant API as 后端API
-    M->>Web: 进入 /admin/cashier
-    M->>Web: 输入金额+商品说明→创建订单
-    Web->>API: POST /api/v1/qr-pay/orders {amountFen, subject} Idempotency-Key
-    API-->>Web: {qrOrderId, qrCodeUrl, status:CREATED, expiresAt, version}
-    Web-->>M: 展示动态收款码+状态时间线+5分钟倒计时
-    Web->>API: GET /api/v1/qr-pay/orders/{id}/events (SSE)
-    API-->>Web: event: qr-pay-status (data.status: SCANNED→PENDING_CONFIRMATION→PROCESSING→SUCCESS)
+    U->>H5: 进入 /h5/qr-collection
+    U->>H5: 输入金额+商品说明→创建本人收款订单
+    H5->>API: POST /api/v1/qr-pay/orders {amountFen, subject} Idempotency-Key
+    API-->>H5: {qrOrderId, qrCodeUrl, status:CREATED, expiresAt, version}
+    H5-->>U: 展示动态收款码+状态时间线+5分钟倒计时
+    H5->>API: GET /api/v1/qr-pay/orders/{id}/events (SSE)
+    API-->>H5: event: qr-pay-status (data.status: SCANNED→PENDING_CONFIRMATION→PROCESSING→SUCCESS)
     alt SSE失败
-        Web->>API: GET /api/v1/qr-pay/orders/{id} (每2秒轮询)
+        H5->>API: GET /api/v1/qr-pay/orders/{id} (每2秒轮询)
     end
     alt 取消未支付订单
-        M->>Web: 点击"取消订单"
-        Web->>API: DELETE /api/v1/qr-pay/orders/{id}
-        API-->>Web: status:CANCELLED
+        U->>H5: 点击"取消订单"
+        H5->>API: DELETE /api/v1/qr-pay/orders/{id}
+        API-->>H5: status:CANCELLED
     else 终态后创建新订单
-        M->>Web: 点击"新建订单"
+        U->>H5: 点击"新建订单"
     end
 ```
 
 **前端逻辑**
 
 + 输入金额（0.01-50000.00 元）+ 商品说明（max 50 字符）创建订单，携带 Idempotency-Key，返回动态收款码 + 5 分钟倒计时。
++ 收款账户由服务端从当前普通用户会话派生，前端不得提交 `payeeUserId` 或 `payeeAccountId`；现实生活中的商户称谓不产生额外权限。
 + 通过 SSE 订阅 `qr-pay-status` 事件，支持 `Last-Event-ID` 续传；SSE 失败降级为 2 秒轮询。
 + 状态时间线展示 CREATED→SCANNED→PENDING_CONFIRMATION→PROCESSING→SUCCESS（含 RISK_REVIEW/COMPENSATING/MANUAL_REVIEW/REJECTED/CANCELLED/EXPIRED 分支），状态以服务端为准。
 + 仅 CREATED/SCANNED/PENDING_CONFIRMATION 可取消订单，取消需二次确认。
@@ -1905,34 +1932,35 @@ sequenceDiagram
 | GET | `/api/v1/transfers/{id}/trace` | 查询脱敏全链路，按角色裁剪 Span（后端 12.7.2） |
 
 
-#### 2.3.29 商户经营统计（B 端 Web）
-> 对应后端 7.6.4 `MerchantAnalytics` 页面模块和 PRD FR-SP-005，商户用户查看本人商户账户的今日/本月成功收款金额、订单数、客单价、支付方式占比、收款趋势、退款金额和净收款金额。
+#### 2.3.29 本人扫码收款统计（C 端 H5）
+> 对应总体系分 7.6.4 `QrCollectionAnalytics` 页面模块和 PRD FR-SP-005，普通用户查看本人作为动态扫码收款方的今日/本月成功收款金额、订单数、客单价、支付方式占比、收款趋势、退款金额和净收款金额。
 >
 
 **UI&交互**
 
-> Web: {totalReceiptFen, orderCount, avgOrderFen, payMethodBreakdown, refundFen, netReceiptFen, reconciliationStatus, trend[]}
->
-
-```plain
-Web-->>M: 今日收款概览卡片+趋势图
-M->>Web: 切换本月
-Web->>API: GET /api/v1/merchants/me/analytics?range=month
-API-->>Web: 更新数据
-Web-->>M: 本月收款概览+趋势图
-Note over Web: 统计口径：只统计SUCCESS的QR_PAY/CREDIT_PAY并按订单去重；<br/>净收款=成功收款-成功退款；<br/>失败/处理中/补偿中/人工处理不计入 -->
+```mermaid
+sequenceDiagram
+    participant U as 普通用户
+    participant H5 as C端H5
+    participant API as 后端API
+    U->>H5: 进入 /h5/qr-collection/analytics
+    H5->>API: GET /api/v1/accounts/me/qr-collection-analytics?range=today
+    API-->>H5: {totalReceiptFen,orderCount,avgOrderFen,payMethodBreakdown,refundFen,netReceiptFen,reconciliationStatus,trend[]}
+    H5-->>U: 今日收款概览卡片+趋势图
+    U->>H5: 切换本月
+    H5->>API: GET /api/v1/accounts/me/qr-collection-analytics?range=month
+    API-->>H5: 更新数据
+    H5-->>U: 本月收款概览+趋势图
+    Note over H5: 只统计本人收款的 SUCCESS QR_PAY/CREDIT_PAY 并按订单去重
 ```
-
-<!-- 这是一张图片，ocr 内容为： -->
-![](https://cdn.nlark.com/yuque/__mermaid_v3/dba939c94d05155998cf88a6cf2bcbf3.svg)
 
 **前端逻辑**
 
-+ 查询本人商户收款统计，支持 today/month 维度切换，服务端派生商户账户。
++ 查询当前普通用户本人的扫码收款统计，支持 today/month 维度切换，服务端从会话派生本人收款账户。
 + 统计口径：只统计 SUCCESS 的 QR_PAY/CREDIT_PAY 并按订单去重；净收款 = 成功收款 - 成功退款；失败/处理中/补偿中/人工处理不计入。
 + 退款冲减净收款，不重复计入成功金额。
 + 展示成功收款金额/订单数/客单价/余额支付占比/花呗支付占比/收款趋势/退款金额/净收款金额/对账状态。
-+ 金额以后端分值为准格式化为元展示，趋势图由 AntV 渲染，不前端聚合。
++ 金额以后端分值为准格式化为元展示，趋势图由 AntV F2 渲染，不前端聚合。
 
 **前端逻辑 — 统计展示字段**
 
@@ -1953,34 +1981,34 @@ Note over Web: 统计口径：只统计SUCCESS的QR_PAY/CREDIT_PAY并按订单�
 
 | 方法 | 路径 | 说明 |
 | --- | --- | --- |
-| GET | `/api/v1/merchants/me/analytics?range=today | month` |
+| GET | `/api/v1/accounts/me/qr-collection-analytics?range=today | month` |
 
 
-#### 2.3.30 商户订单与对账（B 端 Web）
-> 对应后端 7.6.4 `MerchantOrders` 页面模块，商户用户查看本人商户订单列表和退款、对账摘要。
+#### 2.3.30 本人扫码收款订单与对账（C 端 H5）
+> 对应总体系分 7.6.4 `QrCollectionOrders` 页面模块，普通用户查看本人创建的动态扫码收款订单列表和退款、对账摘要。
 >
 
 **UI&交互**
 
 ```mermaid
 sequenceDiagram
-    participant M as 商户用户
-    participant Web as B端Web
+    participant U as 普通用户
+    participant H5 as C端H5
     participant API as 后端API
-    M->>Web: 进入 /admin/merchant-orders
-    Web->>API: GET /api/v1/qr-pay/orders?status=&cursor= ⚠️后端12.7.3未定义列表端点,待补充
-    API-->>Web: {orders[], nextCursor}
-    Web-->>M: 订单列表(订单号/金额/状态/支付方式/时间)
-    M->>Web: 查看订单详情
-    Web->>API: GET /api/v1/transfers/{id}
-    API-->>Web: 交易唯一事实状态
-    Web-->>M: 订单详情弹窗
-    Note over Web: 商户只可见本人商户订单；<br/>不展示付款人余额、完整账号或其他隐私信息
+    U->>H5: 进入 /h5/qr-collection/orders
+    H5->>API: GET /api/v1/qr-pay/orders?status=&cursor=
+    API-->>H5: {orders[], nextCursor}
+    H5-->>U: 本人收款订单列表(订单号/金额/状态/支付方式/时间)
+    U->>H5: 查看订单详情
+    H5->>API: GET /api/v1/transfers/{id}
+    API-->>H5: 交易唯一事实状态
+    H5-->>U: 订单详情弹窗
+    Note over H5: 普通用户只可见本人创建的收款订单；<br/>不展示付款人余额、完整账号或其他隐私信息
 ```
 
 **前端逻辑**
 
-+ 查询商户订单列表，按状态和游标分页，商户只可见本人商户订单。
++ 查询本人扫码收款订单列表，按状态和游标分页，当前普通用户只可见本人创建的订单。
 + 不展示付款人余额、完整账号或其他隐私信息，仅展示订单维度数据。
 + 点击订单查询关联交易详情（交易唯一事实状态），弹窗展示。
 + 订单状态含 CREATED/PENDING_CONFIRMATION/PROCESSING/SUCCESS/FAILED 等，完成时间仅终态有值。
@@ -2002,7 +2030,7 @@ sequenceDiagram
 
 | 方法 | 路径 | 说明 |
 | --- | --- | --- |
-| GET | `/api/v1/qr-pay/orders` | ⚠️ 查询商户订单列表，后端 12.7.3 未定义列表端点，待后端补充 |
+| GET | `/api/v1/qr-pay/orders` | 查询本人创建的扫码收款订单列表，按状态和游标分页 |
 | GET | `/api/v1/transfers/{id}` | 查询订单关联的交易详情 |
 
 
@@ -2062,13 +2090,12 @@ sequenceDiagram
 
 
 ### 2.4 菜单与权限变动
-本次迭代不涉及已有菜单结构的变更，但需新增以下菜单项：
+本次迭代按端侧硬边界新增以下入口。B 端菜单只包含运营维护功能；普通用户业务不进入 `/admin/**`。
 
 **B 端 Web（**`/admin`** 前缀）：**
 
 | 菜单码 | 菜单名称 | 路由 | 权限角色 |
 | --- | --- | --- | --- |
-| `admin.cashier` | 商户收银台 | `/admin/cashier` | 商户 |
 | `admin.manualCases` | 人工确认台 | `/admin/manual-cases` | 运营 |
 | `admin.dashboard` | 可信运行看板 | `/admin/dashboard` | 运营/观察者 |
 | `admin.reports` | T+1 报表 | `/admin/reports` | 运营/观察者 |
@@ -2077,14 +2104,12 @@ sequenceDiagram
 | `admin.users` | 用户管理 | `/admin/users` | 系统管理员 |
 | `admin.transactions` | 交易查询与回执 | `/admin/transactions` | 运营/观察者 |
 | `admin.trace` | 链路追溯 | `/admin/trace` | 运营/观察者 |
-| `admin.merchantAnalytics` | 商户经营统计 | `/admin/merchant-analytics` | 商户 |
-| `admin.merchantOrders` | 商户订单与对账 | `/admin/merchant-orders` | 商户 |
 | `admin.demoTasks` | 演示任务触发 | `/admin/demo-tasks` | 演示管理员 |
 
 
-B 端权限由后端 RBAC 和对象级授权控制，不依赖隐藏菜单或路由路径实现安全隔离。运营人员可处置告警，观察者只读查看脱敏大盘，系统管理员可配置非资金告警阈值。
+B 端权限由后端 RBAC 和对象级授权控制，不依赖隐藏菜单或路由路径实现安全隔离。运营人员可处置告警，观察者只读查看脱敏大盘，系统管理员可配置非资金告警阈值。普通用户访问任意 `/admin/**` 路由或接口均返回 403，现实生活中的商户身份不例外。
 
-**C 端 H5（**`/h5`** 前缀）：** 无独立菜单系统，通过首页快捷入口和页面间导航跳转。
+**C 端 H5（**`/h5`** 前缀）：** 无独立菜单系统，通过首页快捷入口和页面间导航跳转；首页为普通用户提供动态扫码收款、本人扫码收款订单和本人扫码收款统计入口。
 
 ### 2.5 模块划分与工作量评估
 ```mermaid
@@ -2099,7 +2124,7 @@ gantt
     传统转账+确认+回执    :b1, 2026-08-01, 2d
     AI Talk+MCP对接       :b2, 2026-08-03, 2d
     section 扫码与收款
-    商户收银台+SSE        :c1, 2026-08-05, 2d
+    动态扫码收款+SSE      :c1, 2026-08-05, 2d
     H5扫码支付+回执       :c2, 2026-08-05, 2d
     个人收款+C2C+固定请求 :c3, 2026-08-07, 2d
     section 花呗与账户
@@ -2109,7 +2134,7 @@ gantt
     人工确认台+看板       :e1, 2026-08-07, 2d
     报表+告警+数据质量+用户 :e2, 2026-08-09, 2d
     交易查询+链路追溯       :e3, 2026-08-09, 1d
-    商户经营统计+订单对账   :e4, 2026-08-09, 1d
+    本人扫码收款统计+订单对账 :c4, 2026-08-09, 1d
     section 质量
     联调+缺陷收敛+稳定性   :f1, 2026-08-09, 1d
     彩排+最终验收           :milestone, f2, 2026-08-10, 1d
@@ -2121,12 +2146,12 @@ gantt
 | 注册+登录+首页 | 注册页/登录页/首页/模拟充值 | 1.5 | 0.5 | 0.5 | 前端 | 后端 |
 | 传统转账+确认+回执 | 转账页/确认页/回执页 | 1.5 | 0.5 | 0.5 | 前端 | 后端 |
 | AI Talk | AI Talk 页+Agent 对接+结构化草稿 | 2 | 1 | 0.5 | 前端 | AI |
-| 扫码支付 | 商户收银台/H5 扫码/回执/SSE | 2 | 1 | 0.5 | 前端 | 后端 |
+| 扫码支付 | C 端动态扫码收款/H5 扫码付款/回执/SSE | 2 | 1 | 0.5 | 前端 | 后端 |
 | 个人收款 | 个人码/C2C H5/固定请求详情 | 2 | 1 | 0.5 | 前端 | 后端 |
 | Mini 花呗 | 首页/账单/还款 | 2 | 1 | 0.5 | 前端 | 后端 |
 | 账户与明细 | 明细/资产分析/交易详情 | 1.5 | 0.5 | 0.5 | 前端 | 后端 |
 | B 端后台 | 人工确认台/看板/报表/告警/数据质量/用户/交易查询/链路追溯 | 2.5 | 1 | 0.5 | 前端 | 后端 |
-| 商户经营 | 商户经营统计/商户订单与对账 | 1.5 | 0.5 | 0.5 | 前端 | 后端 |
+| 本人扫码收款 | C 端本人收款统计/本人收款订单与对账 | 1.5 | 0.5 | 0.5 | 前端 | 后端 |
 | 联调与稳定性 | 全链路联调/缺陷收敛/性能优化 | — | 1 | 1 | 前端 | 后端 |
 
 
@@ -2187,7 +2212,7 @@ data: { "orderId": "...", "status": "PROCESSING", "summary": "支付处理中", 
 
 | 事件类型 | 订阅端点 | 订阅权限 | 终态 |
 | --- | --- | --- | --- |
-| `qr-pay-status` | `GET /qr-pay/orders/{id}/events` | 商户/付款人 | SUCCESS/REJECTED/CANCELLED/EXPIRED 后关闭 |
+| `qr-pay-status` | `GET /qr-pay/orders/{id}/events` | 订单创建者/付款人 | SUCCESS/REJECTED/CANCELLED/EXPIRED 后关闭 |
 | `p2p-collection-status` | `GET /p2p-collections/requests/{id}/events` | 请求创建者 | SUCCESS/CANCELLED/EXPIRED 后关闭 |
 
 
@@ -2305,7 +2330,7 @@ interface TransferDraft {
 
 /** 扫码订单 */
 interface QrPayOrder {
-  qrOrderId: string; merchantAccountId: string; amountFen: number; subject: string;
+  qrOrderId: string; payeeAccountId: string; amountFen: number; subject: string;
   fundingSource: 'BALANCE' | 'MINI_CREDIT'; status: string; version: number;
   expiresAt: string; transactionId?: string;
 }
@@ -2593,7 +2618,7 @@ stateDiagram-v2
 | `page.view` | 页面加载完成 | pagePath, loadTime, userIdHash |
 | `transfer.draft.created` | 转账草稿创建成功 | draftId, amountFen, source(AI/form) |
 | `transfer.confirmed` | 转账确认提交 | transactionId, businessType, riskLevel |
-| `qrpay.order.created` | 商户创建扫码订单 | qrOrderId, amountFen |
+| `qrpay.order.created` | 普通用户创建扫码收款订单 | qrOrderId, amountFen |
 | `qrpay.scanned` | H5 扫码成功 | qrOrderId |
 | `qrpay.paid` | 扫码支付提交 | qrOrderId, fundingSource |
 | `aitalk.message.sent` | AI Talk 发送消息 | sessionId, intent |
@@ -2647,4 +2672,3 @@ stateDiagram-v2
 
 ### 5.3 项目总结/复盘
 [XX-项目复盘待项目结束后补充]
-

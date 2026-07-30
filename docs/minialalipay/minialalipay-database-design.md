@@ -3,10 +3,10 @@
 | 项目 | 内容 |
 | --- | --- |
 | 产品 | MiniAlalipay |
-| 文档版本 | V2.7 |
+| 文档版本 | V2.8 |
 | 修订日期 | 2026-07-30 |
-| 需求基线 | PRD V1.8 |
-| 系统分析基线 | 系统分析 V1.11 |
+| 需求基线 | PRD V1.9 |
+| 系统分析基线 | 系统分析 V1.12 |
 | 数据库 | MySQL 8.0 / InnoDB |
 | 金额单位 | 人民币分，`BIGINT UNSIGNED` |
 | 时间标准 | UTC `DATETIME(3)`，API 转 ISO 8601 |
@@ -16,7 +16,7 @@
 
 本版统一 PRD、系统分析和原库表设计中的数据口径，可作为建表脚本、实体模型和迁移脚本的设计基线。完整 DDL 应由本文件生成并纳入代码仓库版本管理，不再由两份文档分别维护同一张表。
 
-基线识别说明：PRD 变更记录已更新到 V1.8，且系统分析 V1.11 明确以 PRD V1.8 为需求基线；PRD“文档信息”中的版本号仍误写为 V1.6，本设计按其最新变更记录和实际新增内容采用 V1.8，不回退到旧版本。过程修改记录不作为独立基线，已批准内容必须合并到总体系统分析后再由本设计引用。
+基线识别说明：本设计以 PRD V1.9 和系统分析 V1.12 为业务与架构基线。`deploy/mysql/init/00-create-schemas.sql` 已在服务器执行，因此本版不修改既有表、字段、索引或约束，只补充端侧与身份语义。现有 `merchant_*`、`MERCHANT` 等物理标识属于历史兼容命名，不代表独立商户系统角色、商户账户或商户客户端；MVP 业务只给普通用户分配 `USER` 和 `PERSONAL`，扫码收款主体仍是普通用户及其本人账户。过程修改记录不作为独立基线，已批准内容必须合并到总体系统分析后再由本设计引用。
 
 本次修订重点如下：
 
@@ -40,6 +40,7 @@
 18. 统一第 5 至 12 章的库表表达：每张表均按“功能与归属、字段设计、键与索引、写入规则”描述，并为字段补充业务功能。
 19. 对齐系统分析 V1.11：增加注册 `registration_id` 和 `PROVISIONING` 状态，支持跨服务开户幂等恢复。
 20. 基于 PRD V1.8 和系统分析 V1.11 补充按逻辑库拆分的 ER 图，区分同库物理外键与跨库逻辑引用，并覆盖业务、信用、账本、事件和统计投影关系。
+21. 对齐 PRD V1.9 和系统分析 V1.12：不变更已部署物理结构；明确 `merchant_*` 与 `MERCHANT` 是兼容标识，业务统一解释为普通用户的扫码收款数据，禁止据此授予 B 端权限或创建第二账户。
 
 ## 1. 设计原则
 
@@ -55,6 +56,7 @@
 10. 交易、账本、TCC、审计、人工处置和对账差异不可物理删除；允许归档，但归档前必须完成对账。
 11. 同一服务 Schema 内使用外键保证引用完整性；跨服务只保存业务 ID，通过 API、事件和对账验证。
 12. 资金关键字段使用独立列，JSON 只保存快照、扩展元数据和事件载荷。
+13. 已部署物理对象采用向前兼容策略：历史 `merchant_*` 字段在应用逻辑中映射为 `payee*`，只承载收款用户及其本人账户；如未来确需物理重命名，必须新增对应服务的 Flyway 迁移并完成数据回填、双读写兼容和对账，禁止修改已执行初始化脚本。
 
 ## 2. 逻辑分库与数据归属
 
@@ -460,12 +462,12 @@ erDiagram
 | 字段 | 类型 | 必填/默认 | 功能 |
 | --- | --- | --- | --- |
 | `user_id` | `CHAR(26)` | 联合 PK/FK，必填 | 被授权用户 |
-| `role_code` | `VARCHAR(32)` | 联合 PK，必填 | `USER/MERCHANT/OPERATOR/ADMIN/OBSERVER` |
+| `role_code` | `VARCHAR(32)` | 联合 PK，必填 | 物理约束保留 `USER/MERCHANT/OPERATOR/ADMIN/OBSERVER`；`MERCHANT` 为历史保留值，MVP 禁止分配 |
 | `created_at` | `DATETIME(3)` | 必填 | 角色授予时间 |
 
 **键与索引**：PK `(user_id,role_code)`；索引 `(role_code)`。
 
-**写入规则**：权限判断从本表读取；商户、运营、管理员和观察者角色不得在 `app_user` 重复编码。
+**写入规则**：权限判断从本表读取；普通用户只分配 `USER`，运营维护人员按职责分配 `OPERATOR/ADMIN/OBSERVER`。应用服务禁止写入 `MERCHANT`；历史物理值即使存在也不得获得 B 端权限，必须按普通用户数据迁移或兼容读取。
 
 ## 6. 账户与额度表
 
@@ -473,14 +475,14 @@ erDiagram
 
 ### 6.1 `account`
 
-**功能与归属**：保存用户或商户虚拟账户的身份、币种与可用状态，不直接保存余额。
+**功能与归属**：保存普通用户虚拟账户的身份、币种与可用状态，不直接保存余额。
 
 | 字段 | 类型 | 必填/默认 | 功能 |
 | --- | --- | --- | --- |
 | `account_id` | `CHAR(26)` | PK，必填 | 虚拟账户 ID |
 | `user_id` | `CHAR(26)` | 必填 | 账户所有者，跨 `user_db` 逻辑引用 |
 | `registration_id` | `CHAR(26)` | UK，必填 | 开户请求幂等和恢复查询键，由用户中心生成 |
-| `account_type` | `VARCHAR(16)` | 必填 | `PERSONAL/MERCHANT` 等账户类型 |
+| `account_type` | `VARCHAR(16)` | 必填 | 物理结构兼容 `PERSONAL/MERCHANT`；MVP 只允许新建 `PERSONAL`，`MERCHANT` 为历史保留值 |
 | `currency` | `CHAR(3)` | `CNY` | 账户币种，MVP 固定人民币 |
 | `status` | `VARCHAR(16)` | `ACTIVE` | `ACTIVE/FROZEN/CLOSED` |
 | `version` | `BIGINT UNSIGNED` | `0` | 账户状态 CAS 版本 |
@@ -489,7 +491,7 @@ erDiagram
 
 **键与索引**：UK `(registration_id)`、UK `(user_id,account_type,currency)`；索引 `(status,updated_at)`。
 
-**写入规则**：注册只创建账户和零余额行，不创建初始化资金凭证；重复 `registration_id` 必须返回既有账户，不得重复开户。余额只能由成功充值、成功收款或受控退款增加。
+**写入规则**：注册只创建一个 `PERSONAL` 账户和零余额行，不创建初始化资金凭证；动态扫码收款复用本人 `PERSONAL` 账户，不创建第二账户。重复 `registration_id` 必须返回既有账户，不得重复开户。余额只能由成功充值、成功收款或受控退款增加。
 
 ### 6.2 `account_balance`
 
@@ -626,8 +628,8 @@ credit_account.used_fen
 | `purchase_id` | `CHAR(26)` | PK，必填 | 信用消费事实 ID |
 | `credit_transaction_id` | `CHAR(26)` | 必填 | 原 `CREDIT_PAY` 资金交易 ID |
 | `credit_account_id` | `CHAR(26)` | 必填 | 消费所属信用账户 |
-| `qr_order_id` | `CHAR(26)` | 必填 | 原商户扫码订单 |
-| `merchant_account_id` | `CHAR(26)` | 必填 | 收款商户账户 |
+| `qr_order_id` | `CHAR(26)` | 必填 | 原动态扫码收款订单 |
+| `merchant_account_id` | `CHAR(26)` | 必填 | 历史物理字段名，实际指收款普通用户的本人账户 |
 | `amount_fen` | `BIGINT UNSIGNED` | 必填 | 原始信用消费金额 |
 | `repaid_fen` | `BIGINT UNSIGNED` | `0` | 已由还款分配覆盖的金额 |
 | `refunded_fen` | `BIGINT UNSIGNED` | `0` | 已由经营退款冲销的金额 |
@@ -776,7 +778,7 @@ credit_account.used_fen
 | 字段 | 类型 | 必填/默认 | 功能 |
 | --- | --- | --- | --- |
 | `ledger_account_id` | `CHAR(26)` | PK，必填 | 账本科目 ID |
-| `owner_type` | `VARCHAR(24)` | 必填 | `SYSTEM/USER/MERCHANT/CREDIT_ACCOUNT` |
+| `owner_type` | `VARCHAR(24)` | 必填 | 物理约束保留 `SYSTEM/USER/MERCHANT/CREDIT_ACCOUNT`；MVP 不新增 `MERCHANT` 科目主体 |
 | `owner_id` | `VARCHAR(64)` | 必填 | 系统常量或业务聚合 ID |
 | `account_code` | `VARCHAR(64)` | 必填 | 稳定、可审计的唯一科目编码 |
 | `account_type` | `VARCHAR(32)` | 必填 | 用户余额负债、信用应收资产、发行权益等业务科目类型 |
@@ -789,7 +791,7 @@ credit_account.used_fen
 
 **键与索引**：UK `(owner_type,owner_id,account_type,currency)`、UK `(account_code)`；索引 `(owner_type,owner_id)`。
 
-**写入规则**：科目编码、分类和正常方向创建后不得修改；关闭只阻止新分录，不删除历史。
+**写入规则**：科目编码、分类和正常方向创建后不得修改；关闭只阻止新分录，不删除历史。普通用户扫码收款使用 `USER` 科目，禁止因现实生活中的商户称谓创建 `MERCHANT` 科目。
 
 模拟充值使用唯一的系统发行权益科目，初始化数据如下：
 
@@ -862,11 +864,11 @@ SUM(entry.amount_fen WHERE direction='DEBIT')
 | 交易类型 | 借方 | 贷方 |
 | --- | --- | --- |
 | `TRANSFER`/`QR_PAY` | 付款方虚拟余额负债 | 收款方虚拟余额负债 |
-| `CREDIT_PAY` | 用户信用应收资产 | 商户虚拟余额负债 |
+| `CREDIT_PAY` | 用户信用应收资产 | 收款用户虚拟余额负债 |
 | `CREDIT_REPAY` | 用户虚拟余额负债 | 用户信用应收资产 |
 | `RECHARGE` | 虚拟资金发行权益 | 用户虚拟余额负债 |
-| `REFUND`（余额支付） | 商户虚拟余额负债 | 原付款方虚拟余额负债 |
-| `REFUND`（信用支付） | 商户虚拟余额负债 | 原付款方信用应收资产 |
+| `REFUND`（余额支付） | 收款用户虚拟余额负债 | 原付款方虚拟余额负债 |
+| `REFUND`（信用支付） | 收款用户虚拟余额负债 | 原付款方信用应收资产 |
 
 MVP 退款仅支持单笔全额受控虚拟退款，不接入真实支付通道。信用支付只有在对应消费尚未发生还款分配时才允许退款；退款成功后等额减少应收和已用额度并恢复可用额度。
 
@@ -943,20 +945,20 @@ MVP 退款仅支持单笔全额受控虚拟退款，不接入真实支付通道�
 
 ### 9.4 `refund_order`
 
-**功能与归属**：保存商户对成功扫码支付发起的全额虚拟退款尝试。
+**功能与归属**：保存动态扫码收款订单创建用户对成功扫码支付发起的全额虚拟退款尝试。
 
 | 字段 | 类型 | 必填/默认 | 功能 |
 | --- | --- | --- | --- |
 | `refund_order_id` | `CHAR(26)` | PK，必填 | 退款尝试 ID |
 | `original_transaction_id` | `CHAR(26)` | 必填 | 原 `QR_PAY/CREDIT_PAY` 交易 |
-| `merchant_user_id` | `CHAR(26)` | 必填 | 发起退款商户用户 |
-| `merchant_account_id` | `CHAR(26)` | 必填 | 原收款商户账户 |
+| `merchant_user_id` | `CHAR(26)` | 必填 | 历史物理字段名，实际指发起退款的原收款普通用户 |
+| `merchant_account_id` | `CHAR(26)` | 必填 | 历史物理字段名，实际指原收款用户的本人账户 |
 | `payer_user_id` | `CHAR(26)` | 必填 | 原付款用户 |
 | `payer_account_id` | `CHAR(26)` | 必填 | 原付款余额或信用账户映射 |
 | `original_business_type` | `VARCHAR(16)` | 必填 | `QR_PAY/CREDIT_PAY` |
 | `funding_source` | `VARCHAR(16)` | 必填 | `BALANCE/MINI_CREDIT` |
 | `amount_fen` | `BIGINT UNSIGNED` | 必填 | 必须等于原交易全额 |
-| `reason_code` | `VARCHAR(32)` | 必填 | 商户退款原因 |
+| `reason_code` | `VARCHAR(32)` | 必填 | 收款用户退款原因 |
 | `status` | `VARCHAR(16)` | `CREATED` | `CREATED/PROCESSING/SUCCESS/REJECTED/CANCELLED/MANUAL_REVIEW` |
 | `active_original_key` | `CHAR(26)` | 生成/可空 | 有效或成功退款占位键 |
 | `transaction_id` | `CHAR(26)` | 可空 | 对应 `REFUND` 资金交易 |
@@ -1045,13 +1047,13 @@ MVP 退款仅支持单笔全额受控虚拟退款，不接入真实支付通道�
 
 ### 9.8 `qr_pay_order`
 
-**功能与归属**：保存商户动态扫码支付订单、付款选择、支付和退款状态。
+**功能与归属**：保存普通用户为本人账户创建的动态扫码收款订单、付款选择、支付和退款状态。
 
 | 字段 | 类型 | 必填/默认 | 功能 |
 | --- | --- | --- | --- |
 | `qr_order_id` | `CHAR(26)` | PK，必填 | 扫码订单 ID |
-| `merchant_user_id` | `CHAR(26)` | 必填 | 创建订单的商户用户 |
-| `merchant_account_id` | `CHAR(26)` | 必填 | 收款商户账户 |
+| `merchant_user_id` | `CHAR(26)` | 必填 | 历史物理字段名，实际指创建订单的普通用户 |
+| `merchant_account_id` | `CHAR(26)` | 必填 | 历史物理字段名，实际指该用户本人的收款账户 |
 | `payer_user_id` | `CHAR(26)` | 可空 | 扫码后绑定的付款用户 |
 | `transaction_id` | `CHAR(26)` | 可空 | 支付资金交易 |
 | `amount_fen` | `BIGINT UNSIGNED` | 必填 | 订单金额 `1..5000000` |
@@ -1069,7 +1071,7 @@ MVP 退款仅支持单笔全额受控虚拟退款，不接入真实支付通道�
 
 **键与索引**：UK `(transaction_id)`；索引 `(merchant_account_id,status,created_at,qr_order_id)`、`(status,expires_at)`。
 
-**写入规则**：原支付成功后支付状态保持 `SUCCESS`；退款只更新退款字段，用于同时支持毛收款与净收款统计。
+**写入规则**：创建时从登录会话派生收款用户及其 `PERSONAL` 账户，客户端不得提交这两个物理字段。原支付成功后支付状态保持 `SUCCESS`；退款只更新退款字段，用于同时支持毛收款与净收款统计。
 
 ### 9.9 `qr_pay_token`
 
@@ -1312,7 +1314,7 @@ MVP 退款仅支持单笔全额受控虚拟退款，不接入真实支付通道�
 | `transaction_id` | `CHAR(26)` | 可空 | 关联资金交易 |
 | `producer` | `VARCHAR(32)` | 必填 | 发布模块 |
 | `account_id` | `CHAR(26)` | 可空 | 受限个人账户路由键 |
-| `merchant_account_id` | `CHAR(26)` | 可空 | 受限商户账户路由键 |
+| `merchant_account_id` | `CHAR(26)` | 可空 | 历史物理字段名，实际为受限扫码收款账户路由键 |
 | `user_id_hash` | `BINARY(32)` | 可空 | 脱敏用户维度 |
 | `trace_id` | `CHAR(32)` | 必填 | 全链路追踪 ID |
 | `occurred_at` | `DATETIME(3)` | 必填 | 业务事实发生时间 |
@@ -1392,7 +1394,7 @@ MVP 退款仅支持单笔全额受控虚拟退款，不接入真实支付通道�
 
 ### 11.2 `analytics_event`
 
-**功能与归属**：把业务事件标准化为个人、商户和平台指标可共同消费的分析事实。
+**功能与归属**：把业务事件标准化为普通用户本人统计和平台运营指标可共同消费的分析事实。
 
 | 字段 | 类型 | 必填/默认 | 功能 |
 | --- | --- | --- | --- |
@@ -1406,9 +1408,9 @@ MVP 退款仅支持单笔全额受控虚拟退款，不接入真实支付通道�
 | `transaction_id` | `CHAR(26)` | 可空 | 当前交易 ID |
 | `original_transaction_id` | `CHAR(26)` | 可空 | 退款关联原交易 |
 | `account_id` | `CHAR(26)` | 可空 | 受限个人投影路由键 |
-| `merchant_account_id` | `CHAR(26)` | 可空 | 受限商户投影路由键 |
+| `merchant_account_id` | `CHAR(26)` | 可空 | 历史物理字段名，实际为受限扫码收款账户投影路由键 |
 | `account_id_hash` | `BINARY(32)` | 可空 | 脱敏个人维度 |
-| `merchant_account_id_hash` | `BINARY(32)` | 可空 | 脱敏商户维度 |
+| `merchant_account_id_hash` | `BINARY(32)` | 可空 | 历史物理字段名，实际为脱敏收款账户维度 |
 | `direction` | `VARCHAR(16)` | 可空 | `INCOME/EXPENSE/NEUTRAL` |
 | `stat_category` | `VARCHAR(32)` | 可空 | 收入、支出、充值、还款或退款类别 |
 | `amount_fen` | `BIGINT UNSIGNED` | 可空 | 确定终态统计金额 |
@@ -1586,11 +1588,11 @@ MVP 退款仅支持单笔全额受控虚拟退款，不接入真实支付通道�
 
 ### 11.11 `merchant_business_daily`
 
-**功能与归属**：按商户账户和日期保存订单状态、收款方式、退款和净收款经营投影。
+**功能与归属**：表名为已部署历史物理名称，实际按普通用户本人收款账户和日期保存动态扫码订单状态、收款方式、退款和净收款投影。
 
 | 字段 | 类型 | 必填/默认 | 功能 |
 | --- | --- | --- | --- |
-| `merchant_account_id` | `CHAR(26)` | 联合 PK，必填 | 商户账户 ID |
+| `merchant_account_id` | `CHAR(26)` | 联合 PK，必填 | 历史物理字段名，实际为普通用户本人收款账户 ID |
 | `stat_date` | `DATE` | 联合 PK，必填 | 统计日期 |
 | `definition_version` | `INT UNSIGNED` | 联合 PK，必填 | 口径版本 |
 | `success_order_count` | `INT UNSIGNED` | `0` | 成功扫码订单数 |
@@ -1610,17 +1612,17 @@ MVP 退款仅支持单笔全额受控虚拟退款，不接入真实支付通道�
 
 ### 11.12 `merchant_reconciliation_daily`
 
-**功能与归属**：保存商户日订单净额与账本净额的核对结果。
+**功能与归属**：表名为已部署历史物理名称，实际保存普通用户扫码收款日订单净额与账本净额的核对结果。
 
 | 字段 | 类型 | 必填/默认 | 功能 |
 | --- | --- | --- | --- |
-| `merchant_account_id` | `CHAR(26)` | 联合 PK，必填 | 被对账商户账户 |
+| `merchant_account_id` | `CHAR(26)` | 联合 PK，必填 | 历史物理字段名，实际为被对账的普通用户本人收款账户 |
 | `biz_date` | `DATE` | 联合 PK，必填 | 对账业务日期 |
 | `definition_version` | `INT UNSIGNED` | 联合 PK，必填 | 对账口径版本 |
 | `successful_order_fen` | `BIGINT UNSIGNED` | `0` | 成功支付毛额 |
 | `successful_refund_fen` | `BIGINT UNSIGNED` | `0` | 成功经营退款额 |
 | `expected_net_fen` | `BIGINT` | 必填 | 订单毛额减退款额 |
-| `ledger_net_fen` | `BIGINT` | 必填 | 账本商户净变动 |
+| `ledger_net_fen` | `BIGINT` | 必填 | 账本收款账户净变动 |
 | `diff_fen` | `BIGINT` | 必填 | 账本净额减预期净额 |
 | `status` | `VARCHAR(16)` | `PENDING` | `PENDING/MATCHED/DIFF/RESOLVED` |
 | `reconciliation_diff_id` | `CHAR(26)` | 可空 | 差异证据逻辑引用 |
@@ -1628,7 +1630,7 @@ MVP 退款仅支持单笔全额受控虚拟退款，不接入真实支付通道�
 
 **键与索引**：PK `(merchant_account_id,biz_date,definition_version)`；索引 `(status,biz_date)`。
 
-**写入规则**：差异非 0 时必须创建 `reconciliation_diff`，不得标记 `MATCHED`。所有投影在 Inbox 去重同事务更新；个人和商户身份严格隔离。
+**写入规则**：差异非 0 时必须创建 `reconciliation_diff`，不得标记 `MATCHED`。所有投影在 Inbox 去重同事务更新；本人综合收支与本人扫码收款统计是同一普通用户的不同统计视图，不形成不同系统身份。
 
 ## 12. AI 与审计表
 
@@ -1771,7 +1773,7 @@ PROCESSING -> SUCCESS/CANCELLED/MANUAL_REVIEW
 MANUAL_REVIEW -> SUCCESS/CANCELLED
 ```
 
-原支付、退款订单、退款交易和原凭证冲正原因必须完整关联。只有 `SUCCESS` 且 `reversal_reason='BUSINESS_REFUND'` 的退款进入个人和商户统计。
+原支付、退款订单、退款交易和原凭证冲正原因必须完整关联。只有 `SUCCESS` 且 `reversal_reason='BUSINESS_REFUND'` 的退款进入个人和本人扫码收款统计。
 
 ## 14. 写入事务边界
 
@@ -1791,9 +1793,9 @@ MANUAL_REVIEW -> SUCCESS/CANCELLED
 
 ### 14.4 Mini 花呗支付
 
-- Try：冻结信用额度，预占商户入账和信用应收凭证。
-- Confirm：冻结额度转已用，增加应收汇总和消费明细，商户入账，凭证过账。
-- Cancel：释放额度冻结，取消商户入账和账本预占，不生成有效消费事实。
+- Try：冻结信用额度，预占收款用户入账和信用应收凭证。
+- Confirm：冻结额度转已用，增加应收汇总和消费明细，收款用户入账，凭证过账。
+- Cancel：释放额度冻结，取消收款用户入账和账本预占，不生成有效消费事实。
 
 ### 14.5 Mini 花呗还款
 
@@ -1815,8 +1817,8 @@ MANUAL_REVIEW -> SUCCESS/CANCELLED
 
 `business_db` 本地事务：锁定原 `SUCCESS QR_PAY/CREDIT_PAY` -> 验证未退款及退款资格 -> 插入并占用 `refund_order.active_original_key` -> 插入 `fund_transaction(REFUND)` -> CAS 原订单 `refund_status=PROCESSING` -> 写业务 Outbox。TCC：
 
-- 余额支付退款：Try 冻结商户余额；Confirm 扣减商户并增加原付款方余额；Cancel 释放商户冻结。
-- 信用支付退款：Try 锁定 `credit_purchase` 及关联账单明细，确认 `repaid_fen=0` 后冻结商户余额并预占信用应收减少；Confirm 扣减商户、减少未出账应收或账单应收、同步账单/明细冲销、减少已用额度、恢复可用额度并将消费转 `REVERSED`；Cancel 完整释放。退款与还款必须按相同锁顺序串行，二者只能有一个成功。
+- 余额支付退款：Try 冻结原收款用户余额；Confirm 扣减原收款用户余额并增加原付款方余额；Cancel 释放收款方冻结。
+- 信用支付退款：Try 锁定 `credit_purchase` 及关联账单明细，确认 `repaid_fen=0` 后冻结原收款用户余额并预占信用应收减少；Confirm 扣减原收款用户余额、减少未出账应收或账单应收、同步账单/明细冲销、减少已用额度、恢复可用额度并将消费转 `REVERSED`；Cancel 完整释放。退款与还款必须按相同锁顺序串行，二者只能有一个成功。
 - 账本分支必须创建引用原凭证且 `reversal_reason='BUSINESS_REFUND'` 的反向凭证。
 - 终态发布器验证退款资金和凭证后，在一个 `business_db` 事务中将退款交易/退款订单置为 `SUCCESS`、原资金交易置为 `REVERSED`、原扫码订单 `refund_status` 置为 `SUCCESS` 并写 Outbox；原扫码订单支付状态仍保留 `SUCCESS`，用于毛收款统计。
 
@@ -1828,7 +1830,7 @@ MANUAL_REVIEW -> SUCCESS/CANCELLED
 1. 同一 source_type + source_order_id 只有一笔 fund_transaction
 2. 同一确认令牌最多消费一次
 3. TRANSFER/QR_PAY：付款减少 = 收款增加 = 借方合计 = 贷方合计
-4. CREDIT_PAY：已用额度增加 = 信用应收增加 = 商户余额增加
+4. CREDIT_PAY：已用额度增加 = 信用应收增加 = 收款用户余额增加
 5. CREDIT_REPAY：用户余额减少 = 信用应收减少 = 已用额度减少 = 可用额度恢复
 6. used_fen = unbilled_fen + billed_fen
 7. billed_fen = 全部未结账单 outstanding_fen 合计
@@ -1837,8 +1839,8 @@ MANUAL_REVIEW -> SUCCESS/CANCELLED
 10. POSTED 凭证的实际分录借贷相等
 11. RECHARGE：用户余额增加 = 发行权益借方 = 充值成功金额
 12. REFUND：原订单最多一笔有效或成功退款；失败/完整 Cancel 历史可保留并重试；成功退款金额 = 原订单金额
-13. 余额退款：商户余额减少 = 原付款方余额增加
-14. 信用退款：商户余额减少 = 信用应收减少 = 已用额度减少
+13. 余额退款：收款用户余额减少 = 原付款方余额增加
+14. 信用退款：收款用户余额减少 = 信用应收减少 = 已用额度减少
 15. personal_cashflow_daily 只按确定终态且 event_id 去重
 16. merchant_business_daily.success_receipt_fen
     = balance_receipt_fen + credit_receipt_fen
@@ -1861,7 +1863,7 @@ MANUAL_REVIEW -> SUCCESS/CANCELLED
 - 充值受理：`recharge_order(user_id,business_date,status,created_at)`；日额度 PK `(user_id,business_date)`。
 - 退款受理：UK `refund_order(active_original_key)`，其中 `active_original_key` 必须为生成列；索引 `(original_transaction_id,created_at)`、`(merchant_account_id,status,created_at)`。
 - 订单过期：`qr_pay_order(status,expires_at)`、`collection_request(status,expires_at)`。
-- 商户订单：`qr_pay_order(merchant_account_id,status,created_at,qr_order_id)`。
+- 动态扫码收款订单：`qr_pay_order(merchant_account_id,status,created_at,qr_order_id)`；`merchant_account_id` 为已部署兼容字段名。
 - 固定请求：`collection_order(request_id,status)`、`collection_request(active_order_id)`。
 - 账户明细：`ledger_entry(ledger_account_id,created_at,entry_id)`，使用游标分页。
 - 信用出账：`credit_purchase(credit_account_id,billing_status,occurred_at)`。
@@ -1881,7 +1883,7 @@ MANUAL_REVIEW -> SUCCESS/CANCELLED
 3. `ledger_db`：`ledger_account` -> `ledger_voucher` -> `ledger_entry` -> `credit_receivable` -> `credit_purchase` -> `credit_bill` -> `credit_bill_item` -> `credit_repayment` -> `credit_repayment_allocation` -> `credit_repayment_allocation_detail` -> `credit_job_run` -> `tcc_branch` -> `reconciliation_diff` -> `outbox_event`。
 4. `business_db`：充值策略/日额度 -> `recharge_order`/`refund_order` -> 草稿 -> 扫码/收款来源对象 -> 确认/风控 -> `fund_transaction` -> `tcc_global` -> 通用表。
 5. `agent_db`：会话、消息、工具、偏好和通用表。
-6. `metrics_db`：Inbox/隔离事件 -> 分析事件 -> 个人/商户投影 -> 指标定义 -> 分钟/日指标 -> 质量结果 -> 告警。
+6. `metrics_db`：Inbox/隔离事件 -> 分析事件 -> 个人/扫码收款投影 -> 指标定义 -> 分钟/日指标 -> 质量结果 -> 告警。
 
 每次迁移必须包含前置检查、正向 SQL、回滚说明、数据回填、约束验证和对账结果。禁止在未清理重复数据前直接添加唯一键。
 
@@ -1908,6 +1910,6 @@ MANUAL_REVIEW -> SUCCESS/CANCELLED
 - [ ] 信用额度、应收汇总、消费、账单、还款分配和账本能够交叉对账。
 - [ ] 对账差异保存证据并关联人工工单，禁止直接修改余额修数。
 - [ ] 个人统计区分收入、支出、信用消费、还款、充值和退款，不发生重复计数。
-- [ ] 商户统计按本人 `merchant_account_id` 隔离，收款、支付方式、退款、净收款和对账恒等式成立。
+- [ ] 本人扫码收款统计按兼容字段 `merchant_account_id` 隔离，收款、支付方式、退款、净收款和对账恒等式成立，且该字段不得用于推导商户角色或 B 端权限。
 - [ ] Redis、事件投递或 SSE 不可用时，资金判断仍回源 MySQL 且不重复扣款。
 - [ ] 迁移、备份恢复、归档和 T+1 数据质量门禁均有自动化验证。

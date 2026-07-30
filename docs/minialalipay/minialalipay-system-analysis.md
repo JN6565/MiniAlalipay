@@ -6,9 +6,9 @@
 |---|---|
 | 系统名称 | MiniAlalipay |
 | 文档类型 | 系统分析文档 |
-| 文档版本 | V1.11 |
-| 编制日期 | 2026-07-29 |
-| 需求基线 | MiniAlalipay PRD V1.8 |
+| 文档版本 | V1.12 |
+| 编制日期 | 2026-07-30 |
+| 需求基线 | MiniAlalipay PRD V1.9 |
 | PRD 文件 | `minialalipay-prd.md` |
 | 项目周期 | 2 周 |
 | 团队规模 | 5 人 |
@@ -31,6 +31,7 @@
 | V1.9 | 2026-07-29 | 项目组 | 对齐 PRD V1.7：开户初始余额改为 0，新增模拟充值资金来源与对应账户、账本、接口约束 |
 | V1.10 | 2026-07-30 | 项目组 | 对齐 PRD V1.8：补充普通用户个人收支投影与商户经营收款、订单、退款和对账统计 |
 | V1.11 | 2026-07-30 | 项目组 | 明确文档权威层级，补齐注册开户中间状态和幂等恢复事实，专项实现改由派生文档引用 |
+| V1.12 | 2026-07-30 | 项目组 | 对齐 PRD V1.9 统一端侧与身份边界：C 端承载普通用户全部付款和收款能力，B 端仅承载运营维护；删除独立商户系统角色及商户 B 端页面 |
 
 ## 1. 文档目的与范围
 
@@ -55,8 +56,8 @@
 - 用户名/密码注册登录、自动开户（初始余额为 0）和受控模拟充值。
 - 支付密码、用户搜索、常用收款人和模拟身份状态。
 - 传统表单转账、AI Talk 转账、余额、明细、回执和资产分析。
-- Web 商户收银台、动态二维码、手机 H5 和 `QR_PAY` 虚拟资金支付。
-- Mini 花呗固定 5000 元虚拟额度、商户 `CREDIT_PAY`、应收/账单和余额 `CREDIT_REPAY`。
+- C 端扫码收款、动态二维码、手机 H5 和 `QR_PAY` 虚拟资金支付。
+- Mini 花呗固定 5000 元虚拟额度、动态扫码 `CREDIT_PAY`、应收/账单和余额 `CREDIT_REPAY`。
 - 普通用户长期个人收款码、30 分钟固定金额收款请求和统一 `TRANSFER` 余额付款。
 - 风控、确认令牌、幂等、TCC、Saga、恢复任务、人工确认和证账实对账。
 - AI 多轮对话、上下文记忆、MCP 工具、策略网关和执行 Trace。
@@ -65,7 +66,7 @@
 不纳入范围：
 
 - 真实支付宝、银行卡、清算机构或真实人民币资金通道。
-- 真实 KYC、反洗钱、监管报送、商户结算和原路退款。
+- 真实 KYC、反洗钱、监管报送、收单结算和原路退款。
 - 多币种、跨境、真实信贷/征信/放贷、理财、保险和生产级多地域容灾。
 - C2C 好友申请、双向好友关系、群收款、AA 收款、手续费和信用付款。
 
@@ -73,7 +74,8 @@
 
 - 系统运行于演示/教学环境，但资金一致性、安全门槛和审计要求按准生产标准设计。
 - 所有金额以人民币“分”为最小单位，使用 64 位整数计算。
-- 用户和商户均持有系统虚拟账户；商户账号由演示数据预置，不建设商户入驻流程。
+- 所有前台主体均为普通用户并持有系统虚拟账户；现实生活中的商户身份不进入系统角色模型，不建设经营主体入驻或独立商户端。
+- C 端仅面向普通用户并承载本人付款、收款、动态码、订单和统计；B 端仅面向运营、管理员和观察者，禁止放置任何收银或本人经营功能。
 - Mini 花呗仅为演示虚拟授信：固定额度 500000 分，账单日为每月 1 日，到期日为每月 10 日，不计利息、罚息和手续费。
 - 个人收款不依赖好友关系，个人码和固定请求均只能使用 `BALANCE`，禁止 `MINI_CREDIT`。
 - PRD 中的 P0 为两周必须交付，P1 可在 P0 稳定后实现。
@@ -87,7 +89,7 @@
 | UML 用例视图 | 参与者与核心用例 | 4.2 | 明确系统参与者和功能边界 |
 | UML 组件图 | 五个部署单元、核心组件和依赖 | 7.4 | 指导模块分工与接口归属 |
 | UML 类图 | 核心聚合、实体和值对象 | 8.4 | 指导领域对象与关系实现 |
-| UML 时序图 | 注册、转账、商户扫码、信用支付/还款、个人码和固定请求 | 第 9 章 | 明确跨端、跨服务调用顺序 |
+| UML 时序图 | 注册、转账、动态扫码、信用支付/还款、个人码和固定请求 | 第 9 章 | 明确跨端、跨服务调用顺序 |
 | UML 状态图 | QR 订单、信用账户/账单、个人码、固定请求/订单、TCC 分支、告警 | 第 10 章 | 约束合法状态迁移 |
 | ER 图 | 用户、账户、交易、账本和 Agent 关系 | 8.2 | 说明逻辑数据关系 |
 | 数据架构 | 数据所有权、逻辑实体关系、关键约束和分片边界 | 第 11 章 | 为物理数据库设计提供系统架构输入 |
@@ -127,7 +129,7 @@
 | 可追溯 | 请求、Agent、MCP、风控、事务和账本可关联 | 交易号/Trace ID 可查完整链路 |
 | 可恢复 | 超时、重启和部分失败可重试、补偿或转人工 | 故障注入后 60 秒内收敛或入人工 |
 | 可监控 | 实时、离线、告警和数据质量形成闭环 | 关键事件 2 分钟内可见，T+1 有发布门禁 |
-| 渠道统一 | 主动转账、个人码和固定请求均形成 `TRANSFER`，商户码按资金来源形成 `QR_PAY`/`CREDIT_PAY` | 同一核心按 `source_type` 区分且金额不重复统计 |
+| 渠道统一 | 主动转账、个人码和固定请求均形成 `TRANSFER`，动态订单码按资金来源形成 `QR_PAY`/`CREDIT_PAY` | 同一核心按 `source_type` 区分且金额不重复统计 |
 | 信用闭环 | 额度、冻结、应收、账单和还款可独立对账 | 总额=可用+已用+冻结，已用=信用应收 |
 
 ### 2.2 核心质量属性优先级
@@ -159,12 +161,12 @@
 
 ### 3.2 工期可行性
 
-两周内不宜把每个逻辑模块都拆成独立进程。冻结为 5 个后端部署单元：网关、用户中心、账户中心、业务中心、AI 服务。MCP Server 与 Agent 共进程；风控、商户扫码、P2P Collection、人工工单、对账、监控聚合和运营 API 作为业务中心内的独立模块共进程部署；Mini Credit 作为账户中心内模块。逻辑与数据库边界保持稳定，MVP 不再增加应用进程。
+两周内不宜把每个逻辑模块都拆成独立进程。冻结为 5 个后端部署单元：网关、用户中心、账户中心、业务中心、AI 服务。MCP Server 与 Agent 共进程；风控、动态扫码、P2P Collection、人工工单、对账、监控聚合和运营 API 作为业务中心内的独立模块共进程部署；Mini Credit 作为账户中心内模块。逻辑与数据库边界保持稳定，MVP 不再增加应用进程。
 
 ### 3.3 运行可行性
 
 - 使用 Docker Compose 一键启动服务和基础设施。
-- 演示数据、商户账号、虚拟资金、故障开关可重复初始化。
+- 演示数据、收款用户账号、虚拟资金、故障开关可重复初始化。
 - 手机 H5 使用局域网可达地址或 HTTPS 临时域名。
 - 监控后台和故障注入入口只对运营/管理员开放。
 
@@ -182,8 +184,7 @@
 
 | 参与者 | 类型 | 核心行为 |
 |---|---|---|
-| 普通用户 | C 端 | 注册、转账、商户扫码、Mini 花呗支付/还款、管理个人码/固定请求、查询余额和账单 |
-| 模拟商户 | C/B 端 | 创建商户扫码订单、展示收款码、接收 `QR_PAY`/`CREDIT_PAY` 并查看结果 |
+| 普通用户 | C 端 | 注册、转账、扫码付款、创建动态扫码收款订单、查看本人收款结果与统计、Mini 花呗支付/还款、管理个人码/固定请求、查询余额和账单 |
 | 运营人员 | B 端 | 查看异常交易、处理人工工单和告警 |
 | 系统管理员 | B 端 | 管理演示用户、非资金配置、故障开关和权限 |
 | 观察者/评委 | B 端只读 | 查看脱敏监控、Trace、事务和对账结果 |
@@ -199,12 +200,12 @@
 flowchart LR
     User[普通用户] --> Register[注册与自动开户]
     User --> Transfer[传统/AI 转账]
-    User --> QrPay[商户扫码支付]
+    User --> QrPay[动态扫码付款]
+    User --> QrOrder[创建动态收款码]
+    User --> QrResult[查看本人收款结果]
     User --> Credit[Mini 花呗支付/账单/还款]
     User --> P2P[个人码与固定请求收款]
     User --> Query[余额/明细/额度/账单]
-    Merchant[模拟商户] --> QrOrder[创建动态收款码]
-    Merchant --> QrResult[查看收款结果]
     Agent[AI Agent] --> Transfer
     Agent --> Query
     Operator[运营人员] --> Manual[人工确认]
@@ -224,9 +225,9 @@ flowchart LR
 | UC-03 | 传统表单转账 | 普通用户 | 已登录、账户正常 | `TRANSFER` 成功并生成回执 |
 | UC-04 | AI 多轮转账 | 普通用户、Agent | 已登录 | 澄清槽位、人工确认后执行 `TRANSFER` |
 | UC-05 | 查询余额/明细 | 普通用户、Agent | 已登录 | 返回本人实时余额和账本明细 |
-| UC-06 | 创建动态收款码 | 模拟商户 | 商户已登录且账户正常 | 创建 5 分钟有效 `QR_PAY` 订单 |
-| UC-07 | H5 扫码支付 | 普通用户 | 有效二维码、余额充足 | 付款方扣款、商户入账、账本平衡 |
-| UC-08 | 查询交易与回执 | 普通用户/商户 | 有访问权限 | 返回交易核心真实状态 |
+| UC-06 | 创建动态收款码 | 普通用户 | 已登录且本人账户正常 | 为本人收款账户创建 5 分钟有效 `QR_PAY` 订单 |
+| UC-07 | H5 扫码支付 | 普通用户 | 有效二维码、余额充足且非本人订单 | 付款方扣款、收款用户入账、账本平衡 |
+| UC-08 | 查询交易与回执 | 普通用户 | 为付款人、收款人或订单创建者 | 返回交易核心真实状态 |
 | UC-09 | 风控前置人工确认 | 运营人员 | 命中转人工规则 | 批准后用户重新确认或驳回 |
 | UC-10 | 事务恢复人工确认 | 运营人员 | 自动补偿未收敛 | 冻结资金得到安全处置 |
 | UC-11 | 证账实对账 | 定时任务/运营 | 存在交易与账本数据 | 差异自动修复或生成工单 |
@@ -237,7 +238,7 @@ flowchart LR
 | UC-16 | 创建和取消固定金额收款请求 | 普通用户 | 已登录、金额有效 | 创建 30 分钟不可改金额请求，或在未受理时取消 |
 | UC-17 | 扫码或打开请求完成 C2C 余额付款 | 普通用户 | 非本人收款对象、余额充足 | 形成 `TRANSFER`，双方余额变化且账本平衡 |
 | UC-18 | 查看 C2C 跨端状态与回执 | 付款人/收款人 | 有对象级访问权 | SSE/轮询返回交易核心真实状态 |
-| UC-19 | Mini 花呗商户扫码支付 | 普通用户 | 额度账户正常、额度充足 | 形成 `CREDIT_PAY`，增加应收与商户余额 |
+| UC-19 | Mini 花呗动态扫码支付 | 普通用户 | 额度账户正常、额度充足且非本人订单 | 形成 `CREDIT_PAY`，增加应收与收款用户余额 |
 | UC-20 | 查询账单并余额还款 | 普通用户 | 存在应收且余额充足 | 形成 `CREDIT_REPAY`，减少余额与应收并恢复额度 |
 
 ## 5. 系统边界与上下文
@@ -258,7 +259,7 @@ flowchart TB
 
 ### 5.2 边界说明
 
-- MiniAlalipay 负责虚拟账户、信用额度/应收/账单、交易、账本、AI 编排、商户与个人收款 H5、监控和审计。
+- MiniAlalipay 负责虚拟账户、信用额度/应收/账单、交易、账本、AI 编排、动态扫码与个人收款 H5、监控和审计。
 - 手机系统相机只负责识别二维码并打开 URL，不属于系统内部能力。
 - 外部大模型是不可信计算依赖；身份、权限、余额、风控和交易结果均由后端决定。
 - 真实支付通道明确位于边界之外，任何页面和回执都必须标注虚拟资金属性。
@@ -285,7 +286,7 @@ flowchart TB
 | `api-gateway` | 鉴权、路由、限流、Trace | 无业务数据 | Redis、服务注册 |
 | `user-center` | 用户、身份、登录密码、支付密码、联系人 | `user_db` | Redis、事件总线 |
 | `account-center` | 账户、余额、信用额度、应收、账单、还款分配、账本 | `account_db`、`ledger_db` | TCC、事件总线 |
-| `business-center` | 草稿、交易、风控、商户扫码、P2P Collection、工单、恢复、对账、监控聚合、T+1、告警、质量、运营 API | `business_db`、`metrics_db` | user/account、Seata、Redis Streams、Tempo |
+| `business-center` | 草稿、交易、风控、动态扫码、P2P Collection、工单、恢复、对账、监控聚合、T+1、告警、质量、运营 API | `business_db`、`metrics_db` | user/account、Seata、Redis Streams、Tempo |
 | `ai-service` | Agent、会话、Memory、提示、Tool Router、MCP 工具目录、Schema、策略网关 | `agent_db`/Redis | LLM、三中心 API |
 
 以上固定为 5 个后端部署单元。逻辑模块边界必须稳定，但扫码、风控、人工工单、对账和监控暂与业务中心共部署，MCP 暂与 Agent 共部署；后续可按负载和团队边界拆分。
@@ -296,13 +297,13 @@ flowchart TB
 
 - 用户身份、角色、登录会话、登录锁定和支付锁定。
 - 登录密码、支付密码的强哈希和校验。
-- 用户搜索、联系人、模拟实名和商户身份。
+- 用户搜索、联系人和模拟实名；不维护独立商户身份。
 - 不保存账户余额，不决定资金交易成功。
 
 #### 业务中心
 
 - 统一交易主单，业务类型包括 `TRANSFER`、`QR_PAY`、`CREDIT_PAY`、`CREDIT_REPAY`。
-- 转账草稿、确认、风控、幂等、商户扫码订单、个人码、固定请求/尝试、人工工单。
+- 转账草稿、确认、风控、幂等、动态扫码收款订单、个人码、固定请求/尝试、人工工单。
 - TCC 全局事务发起、Saga 恢复、定时扫描和对账编排。
 - 不直接修改账户余额和账本分录。
 
@@ -312,7 +313,7 @@ flowchart TB
 - Mini 花呗额度账户、额度冻结、信用应收、消费明细、月度账单和还款分配。
 - TCC 付款冻结/扣款、收款预占/入账和账本凭证分支。
 - TCC 信用额度冻结/占用、应收确认/释放及余额还款分支。
-- 不可变复式账本、个人收支投影与商户经营统计数据来源。
+- 不可变复式账本、个人收支投影与扫码收款统计数据来源。
 - 账本是资金事实来源，任何余额修复必须通过冲正分录。
 
 ### 6.4 功能实现总览
@@ -324,8 +325,8 @@ flowchart TB
 | 注册与开户 | C 端 H5 | 校验用户名、创建身份和开户事件 | 创建余额为 0 的虚拟账户 | `user`、`account`、`account_balance` | 登录成功和余额摘要 |
 | 模拟充值 | C 端 H5 | 校验登录态、限额、幂等与模拟渠道结果 | 发行账户向用户余额账户入账并写平衡分录 | `recharge_order`、`fund_transaction`、`voucher`、`ledger_entry` | 充值状态、余额、明细和回执 |
 | 主动 C2C 转账 | Web 表单/AI Talk | 草稿版本、收款人解析、风控、确认令牌、`TRANSFER` 受理 | TCC 冻结付款方、增加收款方、写借贷分录 | `transfer_draft`、`confirmation`、`fund_transaction` | 交易状态、回执、明细 |
-| 商户扫码余额支付 | 商户 Web + 手机 H5 | `QrPayOrder`、令牌交换、订单 CAS、SSE | `QR_PAY` TCC 扣款和商户入账 | `qr_pay_order`、`qr_pay_token`、交易和账本 | 商户 Web 实时结果、H5 回执 |
-| 商户扫码信用支付 | 手机 H5 | 同一扫码订单切换 `CREDIT_PAY`，重新确认 | 冻结/占用额度、增加信用应收、商户入账 | `credit_account`、`credit_purchase`、`credit_receivable` | 额度变化、账单明细、商户回执 |
+| 动态扫码余额支付 | 收款用户 C 端 + 付款用户 H5 | `QrPayOrder`、令牌交换、订单 CAS、SSE | `QR_PAY` TCC 扣款和收款用户入账 | `qr_pay_order`、`qr_pay_token`、交易和账本 | 收款方 C 端实时结果、付款方回执 |
+| 动态扫码信用支付 | 付款用户 H5 | 同一扫码订单切换 `CREDIT_PAY`，重新确认 | 冻结/占用额度、增加信用应收、收款用户入账 | `credit_account`、`credit_purchase`、`credit_receivable` | 额度变化、账单明细、收款回执 |
 | 个人长期收款码 | C 端收款页 + H5 | 个人码生命周期、独立 `CollectionOrder`、余额 `TRANSFER` | 付款方余额减少、收款方余额增加、账本平衡 | `personal_collection_code`、`collection_order` | 收款明细、付款回执、可选 SSE |
 | 固定金额收款请求 | C 端收款页 + H5 | 请求不可变、30 分钟过期、`active_order_id` CAS 仲裁 | 仅抢占成功订单进入 TCC | `collection_request`、`collection_order`、交易和 Outbox | 请求状态、并发冲突和最终回执 |
 | Mini 花呗出账/还款 | C 端信用页 | 账期任务、应还分配、还款确认和 `CREDIT_REPAY` | 额度、应收、余额和账本 TCC | `credit_bill`、`credit_bill_item`、`credit_repayment` | 账单、还款结果和额度恢复 |
@@ -349,7 +350,6 @@ flowchart TB
     subgraph Client[客户端]
       CWeb[用户 Web/H5]
       Talk[AI Talk]
-      Cashier[商户 Web 收银台]
       Ops[运营后台]
     end
 
@@ -390,8 +390,8 @@ flowchart TB
 | 账本 | 不可变复式账本 | 可审计、可冲正、可对账，避免直接改余额 |
 | AI 权限 | Agent 无资金权限 | 模型只理解/编排，策略网关和交易服务持有执行权 |
 | 确认 | 一次性确认令牌 | 绑定用户、双方、金额、订单哈希和有效期，防篡改/重放 |
-| 扫码 | Web 二维码 + 手机 H5 | 无小程序资质依赖，复用现有安全与交易核心 |
-| C2C 收款 | 独立个人码/固定请求聚合 + `TRANSFER` | 与商户码隔离，长期码可复用，固定请求以 CAS 仲裁多尝试 |
+| 扫码 | C 端动态二维码 + 手机 H5 | 普通用户创建本人收款订单，无小程序资质依赖，复用现有安全与交易核心 |
+| C2C 收款 | 独立个人码/固定请求聚合 + `TRANSFER` | 与动态订单码隔离，长期码可复用，固定请求以 CAS 仲裁多尝试 |
 | Mini 花呗 | 账户中心信用子域 | 额度不是余额；支付生成应收，还款消减应收并恢复额度 |
 | 监控数据 | 事件驱动 | 实时/离线统一来源，禁止报表直连业务 DB |
 | MVP 拆分 | 有限部署单元 | 保持领域边界，同时控制两周集成成本 |
@@ -399,7 +399,7 @@ flowchart TB
 ### 7.3 架构不变量
 
 1. 任何 `SUCCESS` 资金交易必须存在借贷平衡分录。
-2. 同一 `source_type + source_order_id` 最多存在一笔资金交易；商户扫码即使切换余额/信用资金来源也只能成功一次。
+2. 同一 `source_type + source_order_id` 最多存在一笔资金交易；动态扫码即使切换余额/信用资金来源也只能成功一次。
 3. 任何资金执行必须持有未过期、未消费且字段完全匹配的确认令牌。
 4. AI、前端、运营后台都不能直接修改余额或账本。
 5. 交易状态未确定时只能展示处理中、补偿中或人工确认，不能提前显示成功。
@@ -411,7 +411,7 @@ flowchart TB
 11. 长期个人码每用户最多一个 `ACTIVE`，换码原子撤销旧码；每次支付创建独立 `CollectionOrder`，允许并发多笔成功。
 12. 固定请求金额和备注创建后不可变且不绑定付款人；可有多个付款尝试，但 `active_order_id` 保证同时最多一笔处理中、最终最多一笔成功。
 13. 固定请求只有在 TCC 完整 Cancel 且终态发布器验证余额、冻结、账本全部恢复后才可回到 `OPEN`；未知结果必须保持 `PROCESSING`/`MANUAL_REVIEW`。
-14. Mini 花呗只允许商户 `CREDIT_PAY`，禁止转账、C2C、提现或以信用偿还信用；额度不计入虚拟余额。
+14. Mini 花呗只允许支付另一普通用户创建的动态扫码订单，禁止自付、转账、C2C、提现或以信用偿还信用；额度不计入虚拟余额。
 15. 信用不变量为 `总额度 = 可用额度 + 已用额度 + 冻结额度`，且 `已用额度 = 信用应收余额 = 未出账剩余 + 账单剩余应还`。
 
 ### 7.4 UML 组件图
@@ -526,7 +526,7 @@ flowchart LR
 | 事件总线 | Redis Streams | Outbox 投递、SSE 投影、监控和离线消费；消费者使用 Inbox 去重 |
 | 分布式事务 | Seata TCC | `Try/Confirm/Cancel` 资金分支、分支屏障、超时恢复；Saga 处理异常补偿 |
 | AI | Spring AI + MCP Server | Agent 会话、工具 Schema、策略网关；高风险工具必须有可信确认上下文 |
-| 前端 | React + TypeScript；B/C 端分别按 7.6 约束实现 | B 端运营与商户 Web、C 端独立 H5；按路由拆包，禁止使用 Vue |
+| 前端 | React + TypeScript；B/C 端分别按 7.6 约束实现 | B 端仅提供运营维护后台，C 端承载普通用户全部业务；按路由拆包，禁止使用 Vue |
 | 观测 | Micrometer/OpenTelemetry + Collector + Prometheus + Tempo + Grafana | 指标、Trace、日志关联、实时看板和告警 |
 | 部署 | Docker Compose + Nginx | 两周演示环境；服务、MySQL、Redis、OTel 组件可一键启动，后续迁移 Kubernetes |
 
@@ -559,12 +559,12 @@ MVP 可以让多个 Schema 位于同一个 MySQL 实例，但服务只能访问�
 
 | 端 | 技术栈 | 关键约束 |
 |---|---|---|
-| B 端 Web | React + TypeScript；Umi、Vite | 不使用 Vue；面向商户、运营、风控和数据监控后台 |
+| B 端 Web | React + TypeScript；Umi、Vite | 不使用 Vue；仅面向运营、管理员和观察者，提供风控处置、数据监控和运行维护功能 |
 | B 端请求与数据 | Umi `request`、TanStack Query、Axios | `request` 为标准 API 客户端；Query 管理服务端状态、缓存、重试和失效；Axios 仅用于第三方、文件/二进制或流式特殊场景 |
 | B 端组件与可视化 | Ant Design、AntV | 表格、表单、权限菜单、监控大盘和趋势图统一使用既定组件/图表库 |
 | B 端工具与路由 | Lodash、Day.js、Moment、aHooks；React Router 或 Umi 路由 | Umi 应用优先使用 Umi 路由；仅独立非 Umi 模块使用 React Router；同一应用不得存在两个路由权威 |
 | B 端状态与样式 | Zustand；CSS、Less | Zustand 只保存登录态、权限、筛选条件等客户端状态，不复制资金服务端事实 |
-| C 端 H5 | React + TypeScript；独立 Umi H5 工程、Vite 构建 | 不使用 Vue；独立浏览器 H5 构建产物，不内嵌 App，不开发支付宝小程序 |
+| C 端 H5 | React + TypeScript；独立 Umi H5 工程、Vite 构建 | 不使用 Vue；仅面向普通用户，承载本人付款、收款、动态码、订单与统计；独立浏览器 H5 构建产物，不内嵌 App，不开发支付宝小程序 |
 | C 端请求与数据 | Umi `request`、TanStack Query、Axios | 与 B 端职责规则一致；支付状态查询必须以服务端状态为准 |
 | C 端组件与可视化 | Ant Design Mobile、AntV F2 | 移动端表单、确认页、账单和轻量数据图表采用移动组件和 F2 |
 | C 端工具、路由、状态 | Lodash、Day.js、aHooks；React Router 或 Umi 路由；Zustand | 统一会话、扫码订单、转账草稿和 AI 会话的客户端状态边界 |
@@ -628,6 +628,8 @@ src/
 
 两个工程均启用路由级懒加载；C 端 H5 不得下载 B 端大盘和完整 AntV 桌面图表代码。B 端路由以 `/admin/**` 为前缀，C 端路由以 `/h5/**` 为前缀。
 
+端侧权限是硬边界：普通用户会话不得访问 `/admin/**`；运营、管理员和观察者的 B 端菜单不得出现动态收款码、本人收款订单或本人收款统计。现实生活中的商户称谓不映射为系统角色，不能据此进入 B 端。
+
 ```typescript
 // frontend-admin/config/routes.ts
 export default [
@@ -653,16 +655,16 @@ export const h5Routes = [
 | B 端 | `ManualCases`、`Alerts`、`DataQuality`、`Trace` | 人工确认、告警处置、离线质量、链路追溯 |
 | C 端 H5 | `Login`、`Home`、`Transfer`、`Collection` | 登录、余额摘要、C2C 转账、个人收款码/收款请求 |
 | C 端 H5 | `QrPay`、`AITalk`、`Credit`、`Bills`、`Receipt` | 扫码支付确认、AI 助理、Mini 花呗、账单和支付结果 |
-| 商户 C 端 Web | `MerchantCashier`、`MerchantAnalytics`、`MerchantOrders` | 创建动态收款码、查看本人订单、收款趋势、退款和对账摘要 |
+| C 端 H5 | `QrCollection`、`QrCollectionAnalytics`、`QrCollectionOrders` | 普通用户创建动态收款码、查看本人收款订单、收款趋势、退款和对账摘要 |
 
 页面只负责交互和展示，所有资金扣减、信用额度变更、订单终态和资金不变的模拟支付结果均由服务端状态机与查询接口决定。
 
-#### 7.6.5 用户与商户统计边界
+#### 7.6.5 普通用户收支与扫码收款统计边界
 
 - 普通用户统计按个人账户归属生成，只包含本人成功交易及账本投影；模拟充值属于资金流入而非收入，Mini 花呗还款属于偿债而非重复消费。
-- 商户经营统计按 `merchant_account_id` 隔离，只统计本人商户的 `SUCCESS QR_PAY/CREDIT_PAY`，退款冲减净收款；失败、处理中、补偿中和人工处理订单不计入成功金额。
-- 同一自然人同时拥有个人账户和商户账户时分别统计，不得合并为一个资产或经营口径。
-- B 端只查看全平台聚合、脱敏运营与异常数据，不复用普通用户或商户的本人统计权限。
+- 扫码收款统计按 `payee_account_id` 隔离，只统计当前普通用户本人作为收款方的 `SUCCESS QR_PAY/CREDIT_PAY`，退款冲减净收款；失败、处理中、补偿中和人工处理订单不计入成功金额。
+- 本人综合收支与扫码收款经营口径是同一普通用户的两个查询视图：前者反映个人全部资金流，后者只反映动态扫码订单，不创建第二账户或第二系统身份。
+- B 端只查看全平台聚合、脱敏运营与异常数据，不复用任何普通用户的本人查询权限。
 
 ### 7.7 单仓库与后端模块包结构基线
 
@@ -711,7 +713,7 @@ minialalipay/
 |---|---|---|---|---|
 | `gateway` | 接入上下文 | TLS、认证转发、限流、CORS、Trace 与安全头 | 无业务表 | `gateway` |
 | `user-center` | 用户上下文 | 注册、身份、登录/支付凭证、联系人 | `user_db` | `user-center` |
-| `business-center` | 业务上下文 | 草稿、交易、商户扫码、个人收款、风控、工单、对账编排、监控投影 | `business_db`、`metrics_db` | `business-center` |
+| `business-center` | 业务上下文 | 草稿、交易、动态扫码、个人收款、风控、工单、对账编排、监控投影 | `business_db`、`metrics_db` | `business-center` |
 | `account-center` | 账户/账本/信用上下文 | 余额、冻结、TCC、借贷分录、额度、账单和还款 | `account_db`、`ledger_db` | `account-center` |
 | `ai-service` | AI Agent 上下文 | 会话、记忆、工具路由、MCP 策略与调用留痕 | `agent_db`、受控 Redis Key | `ai-service` |
 
@@ -874,7 +876,7 @@ erDiagram
     TRANSACTION ||--o{ AUDIT_LOG : audits
 ```
 
-`MANUAL_SUBJECT` 是逻辑多态关联，通过 `subject_type + subject_id` 指向草稿、商户扫码订单、个人收款订单、固定请求或交易，不是单独数据库表。`CollectionRequest` 与 `CollectionOrder` 是一对多尝试关系；只有 `active_order_id` 指向的订单可以进入资金处理。
+`MANUAL_SUBJECT` 是逻辑多态关联，通过 `subject_type + subject_id` 指向草稿、动态扫码收款订单、个人收款订单、固定请求或交易，不是单独数据库表。`CollectionRequest` 与 `CollectionOrder` 是一对多尝试关系；只有 `active_order_id` 指向的订单可以进入资金处理。
 
 ### 8.3 聚合边界原则
 
@@ -925,7 +927,7 @@ classDiagram
     }
     class QrPayOrder {
       +String qrOrderId
-      +String merchantAccountId
+      +String payeeAccountId
       +String payerUserId
       +long amountFen
       +QrOrderStatus status
@@ -1189,8 +1191,8 @@ sequenceDiagram
 
 ```mermaid
 sequenceDiagram
-    actor M as 模拟商户
-    participant C as Web 收银台
+    actor R as 收款用户
+    participant C as C 端扫码收款页
     participant B as 业务中心
     actor U as 手机用户
     participant H as H5 支付页
@@ -1198,8 +1200,8 @@ sequenceDiagram
     participant T as TCC/账户账本
     participant F as 终态发布器
 
-    M->>C: 输入金额和商品说明
-    C->>B: 创建商户扫码订单
+    R->>C: 输入金额和商品说明
+    C->>B: 为本人账户创建扫码收款订单
     B-->>C: 二维码 URL + 5 分钟令牌
     U->>H: 扫码打开 URL
     H->>B: GET 落地页并建立 bootstrap 会话
@@ -1236,29 +1238,29 @@ sequenceDiagram
 
 #### 9.4.1 Mini 花呗信用支付
 
-商户扫码订单沿用 9.4 的交互状态，选择 `MINI_CREDIT` 后只替换资金分支，不创建第二个扫码订单：
+动态扫码收款订单沿用 9.4 的交互状态，选择 `MINI_CREDIT` 后只替换资金分支，不创建第二个扫码订单：
 
 ```mermaid
 sequenceDiagram
     actor U as 用户
     participant B as 业务中心
     participant C as Mini Credit
-    participant M as 商户余额
+    participant R as 收款用户余额
     participant L as 账本
     participant F as 终态发布器
     U->>B: 确认 MINI_CREDIT + 支付密码证明
     B->>B: 消费令牌并 CAS QrPayOrder，创建 CREDIT_PAY
     B->>C: Try 冻结额度
-    B->>M: Try 预占商户入账
-    B->>L: Try 预留应收/商户负债凭证
+    B->>R: Try 预占收款用户入账
+    B->>L: Try 预留应收/收款用户负债凭证
     alt 全部 Try 成功
       B->>C: Confirm 冻结转已用，增加信用应收
-      B->>M: Confirm 增加商户可用余额
-      B->>L: Confirm 借记信用应收，贷记商户余额负债
-      B->>F: 验证额度、应收、商户余额和账本后发布 SUCCESS
+      B->>R: Confirm 增加收款用户可用余额
+      B->>L: Confirm 借记信用应收，贷记收款用户余额负债
+      B->>F: 验证额度、应收、收款用户余额和账本后发布 SUCCESS
     else 任一 Try 失败
       B->>C: Cancel 释放额度
-      B->>M: Cancel 取消入账预占
+      B->>R: Cancel 取消入账预占
       B->>L: Cancel 取消凭证预留
     end
 ```
@@ -1361,13 +1363,13 @@ sequenceDiagram
 flowchart TD
     Start[用户发起功能] --> Entry{入口类型}
     Entry -->|主动转账| Draft[创建/更新 TransferDraft]
-    Entry -->|商户扫码| Merchant[创建或读取 QrPayOrder]
+    Entry -->|动态扫码| QrCollection[创建或读取 QrPayOrder]
     Entry -->|个人收款码| Personal[交换个人码令牌\n创建 CollectionOrder]
     Entry -->|固定收款请求| Request[读取 CollectionRequest\n创建付款尝试]
     Entry -->|AI Talk| Agent[Agent 抽取槽位\n创建只读草稿]
     Agent --> Draft
     Draft --> Validate[用户/对象权限\n金额/账户/状态校验]
-    Merchant --> Validate
+    QrCollection --> Validate
     Personal --> Validate
     Request --> Validate
     Validate --> Risk[风控预检]
@@ -1377,7 +1379,7 @@ flowchart TD
     Token --> Accept[业务库本地事务\n消费令牌 + CAS来源 + 插入交易 + Outbox]
     Accept -->|C2C| Balance[Seata TCC\n冻结/扣减付款方余额\n增加收款方余额]
     Accept -->|QR_PAY| Balance
-    Accept -->|CREDIT_PAY| Credit[Seata TCC\n冻结/占用额度\n增加信用应收和商户余额]
+    Accept -->|CREDIT_PAY| Credit[Seata TCC\n冻结/占用额度\n增加信用应收和收款用户余额]
     Accept -->|CREDIT_REPAY| Repay[Seata TCC\n冻结余额\n减少应收并恢复额度]
     Balance --> Finalizer[Finalizer 查询全局事务\n分支、余额/额度、账本]
     Credit --> Finalizer
@@ -1407,7 +1409,7 @@ flowchart TD
 | 高频/异常金额 | `RISK_PRECHECK` | 否 | 无变化 | 回到待确认，用户重新输入支付密码 |
 | TCC/Saga 未收敛 | `TRANSACTION_RECOVERY` | 是 | 可能冻结 | 继续受控恢复或补偿 |
 
-`RISK_PRECHECK` 使用 `subject_type + subject_id` 关联转账草稿、商户扫码订单、个人收款订单、固定请求或信用还款草案。来源过期、换码失效或请求已被其他订单抢占时工单同步失效，运营审批必须重新检查来源状态、资金来源和版本 CAS。
+`RISK_PRECHECK` 使用 `subject_type + subject_id` 关联转账草稿、动态扫码收款订单、个人收款订单、固定请求或信用还款草案。来源过期、换码失效或请求已被其他订单抢占时工单同步失效，运营审批必须重新检查来源状态、资金来源和版本 CAS。
 
 ### 9.7 事务恢复与对账
 
@@ -1433,7 +1435,7 @@ flowchart TD
     Start([用户发起资金操作]) --> Entry{入口类型}
     Entry -->|传统转账| Draft[创建/更新 TransferDraft]
     Entry -->|AI Talk| Intent[意图识别与槽位澄清]
-    Entry -->|商户扫码 H5| Qr[读取服务端 QrPayOrder]
+    Entry -->|动态扫码 H5| Qr[读取服务端 QrPayOrder]
     Entry -->|长期个人码| Personal[创建独立 CollectionOrder]
     Entry -->|固定请求| Request[读取不可变金额并创建付款尝试]
     Entry -->|Mini 花呗还款| Repay[生成还款分配草案]
@@ -1460,8 +1462,8 @@ flowchart TD
     PasswordOk -->|是| Token[签发字段绑定的一次性令牌]
     Token --> Funding{资金来源与来源类型}
     Funding -->|C2C: BALANCE only| Accept[本地事务消费令牌、CAS 来源、创建 TRANSFER]
-    Funding -->|商户余额| AcceptQr[创建 QR_PAY]
-    Funding -->|商户 Mini Credit| AcceptCredit[创建 CREDIT_PAY]
+    Funding -->|收款用户余额| AcceptQr[创建 QR_PAY]
+    Funding -->|动态码 Mini Credit| AcceptCredit[创建 CREDIT_PAY]
     Funding -->|余额还款| AcceptRepay[创建 CREDIT_REPAY]
     AcceptQr --> Tcc
     AcceptCredit --> Tcc
@@ -1479,7 +1481,7 @@ flowchart TD
     Reconcile --> EndState([收敛到确定终态])
 ```
 
-该流程按来源聚合和资金来源选择 TCC 分支，但共享受理、确认、恢复与终态发布模板。主动转账、个人码和固定请求都创建 `TRANSFER`；商户余额/信用扫码分别创建 `QR_PAY`/`CREDIT_PAY`；还款创建 `CREDIT_REPAY`。任何拒绝或前置人工审核都不创建资金交易；只有进入 `PROCESSING` 后才可能出现余额或额度冻结。
+该流程按来源聚合和资金来源选择 TCC 分支，但共享受理、确认、恢复与终态发布模板。主动转账、个人码和固定请求都创建 `TRANSFER`；收款用户余额/信用扫码分别创建 `QR_PAY`/`CREDIT_PAY`；还款创建 `CREDIT_REPAY`。任何拒绝或前置人工审核都不创建资金交易；只有进入 `PROCESSING` 后才可能出现余额或额度冻结。
 
 ## 10. 状态模型分析
 
@@ -1708,12 +1710,14 @@ stateDiagram-v2
 
 #### 交易与扫码
 
+本表描述逻辑字段和领域语义，不替代 11.7 节及数据库设计中的实际物理列。动态扫码订单的逻辑收款字段统一称为 `payee_user_id/payee_account_id`；已部署数据库中对应为 `merchant_user_id/merchant_account_id`，映射规则见 11.6 节兼容命名说明。
+
 | 表 | 关键字段 | 约束 |
 |---|---|---|
 | `transaction` | transaction_id、business_type、source_type、source_order_id、idempotency_key、payer、payee、amount、status | payer + idempotency 唯一；source_type + source_order 唯一；物理状态从 PROCESSING 开始 |
 | `confirmation_subject` | subject_type、subject_id、current_confirmation_id、version | 主体主键唯一；签发时锁定该活动槽位 |
 | `confirmation` | confirmation_id、subject_type、subject_id、draft_hash、active_subject_key、status、expires_at、consumed_at | 令牌摘要与活动主体键唯一；状态为 ACTIVE/CONSUMED/REVOKED/EXPIRED |
-| `qr_pay_order` | qr_order_id、merchant_account_id、payer_user_id、transaction_id、amount、status、version、expires_at | version CAS；transaction_id 唯一 |
+| `qr_pay_order` | qr_order_id、payee_account_id、payer_user_id、transaction_id、amount、status、version、expires_at | version CAS；transaction_id 唯一 |
 | `qr_pay_token` | token_digest、qr_order_id、bootstrap_session_hash、h5_session_id、status、expires_at、consumed_at | token_digest 唯一，只存摘要；POST 交换并绑定浏览器引导会话 |
 | `personal_collection_code` | code_id、owner_user_id、payee_account_id、token_digest、status、active_owner_key、version | token_digest 唯一；生成列保证每个用户最多一个 ACTIVE 码 |
 | `collection_request` | request_id、requester_user_id、payee_account_id、token_digest、amount_fen、status、active_order_id、transaction_id、version、expires_at | 金额创建后不可变；30 分钟过期；请求 CAS 仲裁付款尝试 |
@@ -1758,7 +1762,7 @@ stateDiagram-v2
 
 - 原始事件 30 天，分钟指标 90 天，日指标和口径 180 天。
 - 账本、审计、人工处置和对账记录在项目周期内永久保留。
-- 草稿 30 分钟过期；确认令牌 2 分钟；商户二维码令牌 5 分钟；固定收款请求及其未确认订单 30 分钟过期。
+- 草稿 30 分钟过期；确认令牌 2 分钟；动态扫码收款二维码令牌 5 分钟；固定收款请求及其未确认订单 30 分钟过期。
 - 长期个人码在停用或换码前不按时间过期；换码必须保留已撤销记录并使旧 token 立即失效，已进入 `PROCESSING` 的订单继续按交易事实收敛。
 - 清理任务只删除允许清理的会话/缓存数据，不删除资金事实。
 
@@ -1776,6 +1780,8 @@ stateDiagram-v2
 | JSON | 仅用于事件载荷、快照和可扩展维度；可检索核心字段必须独立成列 |
 | 外键 | 同一服务 Schema 内可建外键；跨服务只保存 ID 并通过 API/事件校验 |
 | 命名 | 物理表使用小写下划线；逻辑 `Transaction` 映射为 `fund_transaction`，避免保留字 |
+
+兼容命名说明：`deploy/mysql/init/00-create-schemas.sql` 已在服务器执行，本次端侧与身份边界调整不修改该初始化脚本，也不重命名既有表、字段、索引或约束。现库 `qr_pay_order.merchant_user_id`、`qr_pay_order.merchant_account_id`、`credit_purchase.merchant_account_id`、`refund_order.merchant_*` 以及监控库 `merchant_*` 表/字段仅为历史物理标识；领域模型、API DTO 和前端统一使用“收款用户/收款账户”语义并映射为 `payeeUserId/payeeAccountId`。这些物理标识不得用于推导 `MERCHANT` 角色、第二账户类型或 B 端访问权。后续如需物理重命名，必须新增对应服务的 Flyway 向前迁移并完成回填、兼容和对账，禁止修改已执行初始化脚本。
 
 ### 11.7 物理表目录与字段设计
 
@@ -1803,7 +1809,7 @@ stateDiagram-v2
 | `ledger_voucher` | `voucher_id CHAR(26)`、`transaction_id CHAR(26)`、`voucher_type VARCHAR(24)`、`reversal_no SMALLINT UNSIGNED`、`original_voucher_id CHAR(26)`、`status VARCHAR(16)`、`total_debit_fen/total_credit_fen BIGINT UNSIGNED`、`posted_at DATETIME(3)`、`created_at DATETIME(3)` | PK `voucher_id`；UK `(transaction_id, voucher_type, reversal_no)` | `(original_voucher_id)`、`(status, created_at)` |
 | `ledger_entry` | `entry_id BIGINT UNSIGNED`、`voucher_id CHAR(26)`、`transaction_id CHAR(26)`、`account_id CHAR(26)`、`direction VARCHAR(8)`、`amount_fen BIGINT UNSIGNED`、`sequence_no SMALLINT UNSIGNED`、`created_at DATETIME(3)` | PK `entry_id`；UK `(voucher_id, sequence_no)` | `(account_id, created_at)`、`(transaction_id)` |
 | `credit_receivable` | `credit_account_id CHAR(26)`、`unbilled_fen/billed_fen/overdue_fen BIGINT UNSIGNED`、`version BIGINT UNSIGNED`、`updated_at DATETIME(3)` | PK `credit_account_id` | `(updated_at)` |
-| `credit_purchase` | `purchase_id CHAR(26)`、`credit_transaction_id CHAR(26)`、`credit_account_id CHAR(26)`、`qr_order_id CHAR(26)`、`merchant_account_id CHAR(26)`、`amount_fen BIGINT UNSIGNED`、`billing_status VARCHAR(16)`、`occurred_at/updated_at DATETIME(3)` | PK `purchase_id`；UK `credit_transaction_id` | `(credit_account_id, billing_status, occurred_at)`、`(qr_order_id)` |
+| `credit_purchase` | `purchase_id CHAR(26)`、`credit_transaction_id CHAR(26)`、`credit_account_id CHAR(26)`、`qr_order_id CHAR(26)`、`merchant_account_id CHAR(26)`、`amount_fen BIGINT UNSIGNED`、`billing_status VARCHAR(16)`、`occurred_at/updated_at DATETIME(3)` | PK `purchase_id`；UK `credit_transaction_id`；`merchant_account_id` 为收款账户兼容字段名 | `(credit_account_id, billing_status, occurred_at)`、`(qr_order_id)` |
 | `credit_bill` | `bill_id CHAR(26)`、`credit_account_id CHAR(26)`、`period CHAR(7)`、`statement_date DATE`、`due_at DATETIME(3)`、`total_fen/paid_fen/outstanding_fen BIGINT UNSIGNED`、`status VARCHAR(16)`、`version BIGINT UNSIGNED`、`created_at/updated_at DATETIME(3)` | PK `bill_id`；UK `(credit_account_id, period)` | `(status, due_at)` |
 | `credit_bill_item` | `bill_id/purchase_id CHAR(26)`、`amount_fen/allocated_paid_fen BIGINT UNSIGNED`、`created_at/updated_at DATETIME(3)` | PK `(bill_id, purchase_id)` | `(purchase_id)` |
 | `credit_repayment` | `repayment_id CHAR(26)`、`transaction_id CHAR(26)`、`credit_account_id CHAR(26)`、`amount_fen BIGINT UNSIGNED`、`status VARCHAR(16)`、`created_at/updated_at DATETIME(3)` | PK `repayment_id`；UK `transaction_id` | `(credit_account_id, status, created_at)` |
@@ -1818,7 +1824,7 @@ stateDiagram-v2
 | `fund_transaction` | `transaction_id CHAR(26)`、`business_type VARCHAR(16)`、`source_type VARCHAR(32)`、`source_order_id CHAR(26)`、`idempotency_key VARCHAR(64)`、`payer/payee_account_id CHAR(26)`、`amount_fen BIGINT UNSIGNED`、`status VARCHAR(32)`、`risk_level VARCHAR(16)`、`trace_id CHAR(32)`、`version BIGINT UNSIGNED`、`created_at/updated_at DATETIME(3)` | PK `transaction_id`；UK `(payer_account_id, idempotency_key)`；UK `(source_type, source_order_id)` | `(status, updated_at)`、`(payee_account_id, created_at)`、`(business_type, created_at)` |
 | `confirmation_subject` | `subject_type VARCHAR(24)`、`subject_id CHAR(26)`、`current_confirmation_id CHAR(26)`、`version BIGINT UNSIGNED`、`updated_at DATETIME(3)` | PK `(subject_type, subject_id)`；UK `current_confirmation_id` | `(updated_at)` |
 | `confirmation` | `confirmation_id CHAR(26)`、`token_digest BINARY(32)`、`subject_type VARCHAR(24)`、`subject_id CHAR(26)`、`subject_hash BINARY(32)`、`payer_user_id CHAR(26)`、`status VARCHAR(16)`、`active_subject_key VARCHAR(64) GENERATED`、`expires_at/consumed_at/created_at DATETIME(3)` | PK `confirmation_id`；UK `token_digest`；UK `active_subject_key` | `(subject_type, subject_id, status)`、`(expires_at)` |
-| `qr_pay_order` | `qr_order_id CHAR(26)`、`merchant_user_id/merchant_account_id CHAR(26)`、`payer_user_id CHAR(26)`、`transaction_id CHAR(26)`、`amount_fen BIGINT UNSIGNED`、`subject VARCHAR(128)`、`funding_source VARCHAR(16)`、`status VARCHAR(32)`、`version BIGINT UNSIGNED`、`scanned_at/confirmed_at/expires_at/created_at/updated_at DATETIME(3)` | PK `qr_order_id`；UK `transaction_id` | `(merchant_user_id, status, created_at)`、`(status, expires_at)` |
+| `qr_pay_order` | `qr_order_id CHAR(26)`、`merchant_user_id/merchant_account_id CHAR(26)`、`payer_user_id CHAR(26)`、`transaction_id CHAR(26)`、`amount_fen BIGINT UNSIGNED`、`subject VARCHAR(128)`、`funding_source VARCHAR(16)`、`status VARCHAR(32)`、`version BIGINT UNSIGNED`、`scanned_at/confirmed_at/expires_at/created_at/updated_at DATETIME(3)` | PK `qr_order_id`；UK `transaction_id`；`merchant_*` 为收款用户/账户兼容字段名 | `(merchant_account_id, status, created_at, qr_order_id)`、`(status, expires_at)` |
 | `qr_pay_token` | `token_digest BINARY(32)`、`qr_order_id CHAR(26)`、`bootstrap_session_hash BINARY(32)`、`h5_session_id CHAR(26)`、`status VARCHAR(16)`、`expires_at/consumed_at/created_at DATETIME(3)` | PK `token_digest`；UK `qr_order_id`；UK `h5_session_id` | `(status, expires_at)` |
 | `personal_collection_code` | `code_id CHAR(26)`、`owner_user_id/payee_account_id CHAR(26)`、`token_digest BINARY(32)`、`status VARCHAR(16)`、`active_owner_key CHAR(26) GENERATED`、`version BIGINT UNSIGNED`、`created_at/updated_at/revoked_at DATETIME(3)` | PK `code_id`；UK `token_digest`；UK `active_owner_key` | `(owner_user_id, created_at)`、`(status, updated_at)` |
 | `collection_request` | `request_id CHAR(26)`、`requester_user_id/payee_account_id CHAR(26)`、`token_digest BINARY(32)`、`amount_fen BIGINT UNSIGNED`、`subject VARCHAR(50)`、`status VARCHAR(32)`、`active_order_id/transaction_id CHAR(26)`、`cancel_requested_at DATETIME(3)`、`version BIGINT UNSIGNED`、`expires_at/created_at/updated_at DATETIME(3)` | PK `request_id`；UK `token_digest`；UK `transaction_id` | `(status, expires_at)`、`(active_order_id)`、`(requester_user_id, created_at)` |
@@ -1990,8 +1996,8 @@ CREATE TABLE collection_order (
 
 CREATE TABLE qr_pay_order (
   qr_order_id CHAR(26) NOT NULL,
-  merchant_user_id CHAR(26) NOT NULL,
-  merchant_account_id CHAR(26) NOT NULL,
+  payee_user_id CHAR(26) NOT NULL,
+  payee_account_id CHAR(26) NOT NULL,
   payer_user_id CHAR(26) NULL,
   transaction_id CHAR(26) NULL,
   amount_fen BIGINT UNSIGNED NOT NULL,
@@ -2006,7 +2012,7 @@ CREATE TABLE qr_pay_order (
   updated_at DATETIME(3) NOT NULL,
   PRIMARY KEY (qr_order_id),
   UNIQUE KEY uk_qr_transaction (transaction_id),
-  KEY idx_qr_merchant (merchant_user_id, status, created_at),
+  KEY idx_qr_payee (payee_user_id, status, created_at),
   KEY idx_qr_expire (status, expires_at),
   CONSTRAINT ck_qr_amount CHECK (amount_fen > 0),
   CONSTRAINT ck_qr_funding
@@ -2073,7 +2079,7 @@ CREATE TABLE credit_purchase (
   credit_transaction_id CHAR(26) NOT NULL,
   credit_account_id CHAR(26) NOT NULL,
   qr_order_id CHAR(26) NOT NULL,
-  merchant_account_id CHAR(26) NOT NULL,
+  payee_account_id CHAR(26) NOT NULL,
   amount_fen BIGINT UNSIGNED NOT NULL,
   billing_status VARCHAR(16) NOT NULL,
   occurred_at DATETIME(3) NOT NULL,
@@ -2253,7 +2259,7 @@ CREATE TABLE idempotency_record (
 - `business_db` 受理事务：消费确认令牌、来源聚合 CAS、插入 `fund_transaction`、回填来源 `transaction_id`、写受理 Outbox，必须一次提交。
 - `account_db` TCC 分支：余额版本、冻结记录、分支屏障和账户 Outbox 在同一分支本地事务提交。
 - `ledger_db` TCC 分支：凭证、至少两条分录、借贷合计和账本 Outbox 在同一事务提交；不允许只写一侧分录。
-- Mini 花呗额度与余额分属不同资金资源：`CREDIT_PAY` 在 `account_db` 原子冻结/确认额度，在 `ledger_db` 原子写信用应收、信用消费、商户入账凭证和 Outbox；`CREDIT_REPAY` 原子冻结/扣减本人余额，并按分配快照减少应收、账单剩余和已用额度。任何分支不得直接跨 Schema 更新对方表。
+- Mini 花呗额度与余额分属不同资金资源：`CREDIT_PAY` 在 `account_db` 原子冻结/确认额度，在 `ledger_db` 原子写信用应收、信用消费、收款用户入账凭证和 Outbox；`CREDIT_REPAY` 原子冻结/扣减本人余额，并按分配快照减少应收、账单剩余和已用额度。任何分支不得直接跨 Schema 更新对方表。
 - 信用账单任务以 `(credit_account_id, period)` 防重，固定每月 1 日生成上月账单、每月 10 日 23:59:59 到期；逾期只把信用账户置为 `SUSPENDED`，不得阻止查询或 `CREDIT_REPAY`。
 - `personal_collection_code` 换码事务必须 CAS 当前 ACTIVE 码为 `REVOKED`、插入新 ACTIVE 码并写 Outbox；生成列唯一键保证并发换码最多提交一个新码。
 - 固定收款请求创建时锁定 `payee_account_id`、`amount_fen`、`subject` 与 `expires_at`，后续 API 不提供金额或收款账户修改路径；`collection_order` 只保存服务端解析的收付款账户，C2C `funding_source` 固定为 `BALANCE`。
@@ -2420,7 +2426,7 @@ erDiagram
 
 - 仅推送订单 ID、状态、事件 ID、发生时间和可展示摘要。
 - 使用 `Last-Event-ID` 恢复断线位置。
-- 服务端授权商户或付款用户订阅对应订单。
+- 服务端授权订单创建者或付款用户订阅对应订单。
 - 固定收款请求 SSE 仅允许请求创建者订阅；关联付款人通过订单查询获取本人尝试状态，不能枚举其他付款人的订单。
 - 个人收款码可并行产生多笔独立订单，不提供“个人码整体成功”终态流；固定请求事件同时携带 `requestId`、当前 `activeOrderId` 和可展示状态。
 - SSE 不传递支付密码、确认令牌、二维码原始令牌或完整账号。
@@ -2445,7 +2451,7 @@ erDiagram
 | GET | `/api/v1/accounts/me` | 登录用户 | 查询本人账户和实时余额 | 不使用过期缓存代替资金事实 |
 | GET | `/api/v1/accounts/me/entries` | 登录用户 | 查询本人账本明细 | `cursor` + `limit<=100` |
 | GET | `/api/v1/accounts/me/analytics?range=7d\|30d\|month` | 登录用户 | 查询本人收支、余额资金流、信用消费/还款和对象分布 | 返回指标口径版本；充值不计收入、还款不重复计消费 |
-| GET | `/api/v1/merchants/me/analytics?range=today\|month` | 商户用户 | 查询本人商户收款、订单、支付方式、退款、净收款和对账摘要 | 服务端派生商户账户；只统计确定终态并按订单去重 |
+| GET | `/api/v1/accounts/me/qr-collection-analytics?range=today\|month` | 普通用户本人 | 查询本人动态扫码收款、订单、支付方式、退款、净收款和对账摘要 | 服务端从会话派生本人收款账户；只统计确定终态并按订单去重 |
 
 #### 12.7.2 转账、交易与人工处置
 
@@ -2467,15 +2473,16 @@ erDiagram
 
 | 方法 | 路径 | 权限 | 用途 | 幂等/并发要求 |
 |---|---|---|---|---|
-| POST | `/api/v1/qr-pay/orders` | 模拟商户 | 创建订单和动态收款码 | `Idempotency-Key`；金额创建后锁定 |
+| POST | `/api/v1/qr-pay/orders` | 普通用户本人 | 为本人收款账户创建订单和动态收款码 | `Idempotency-Key`；金额创建后锁定；禁止提交收款账户 |
+| GET | `/api/v1/qr-pay/orders` | 普通用户本人 | 查询本人创建的动态扫码收款订单列表 | `status` + `cursor` + `limit<=100`；服务端强制按当前用户过滤 |
 | GET | `/api/v1/qr-pay/orders/by-token?t=` | 匿名 H5 | 加载无业务数据的 H5 落地页和 bootstrap 会话 | `no-store`；不消费令牌，防预取/链接扫描 |
 | POST | `/api/v1/qr-pay/token-exchanges` | 匿名 bootstrap 会话 | 原子绑定原始令牌并返回脱敏订单 | 校验 Origin/Fetch Metadata；同浏览器幂等恢复 |
 | POST | `/api/v1/qr-pay/orders/{id}/scan` | H5 会话 | 标记已扫码 | `CREATED→SCANNED` 幂等 CAS |
-| POST | `/api/v1/qr-pay/orders/{id}/confirmations` | 登录付款人 + H5 会话 | 校验密码、风控并签发确认令牌 | 绑定付款人、商户、金额、资金来源和订单哈希 |
+| POST | `/api/v1/qr-pay/orders/{id}/confirmations` | 登录付款人 + H5 会话 | 校验密码、风控并签发确认令牌 | 绑定付款人、收款用户、金额、资金来源和订单哈希 |
 | POST | `/api/v1/qr-pay/orders/{id}/pay` | 登录付款人 + H5 会话 | 创建并执行 `QR_PAY` 或 `CREDIT_PAY` | 令牌消费、订单 CAS、跨资金来源唯一键、交易插入同事务 |
-| GET | `/api/v1/qr-pay/orders/{id}` | 商户/付款人/H5 会话 | 查询订单和真实资金状态 | 进入处理中后回源交易核心 |
-| DELETE | `/api/v1/qr-pay/orders/{id}` | 创建商户/付款人 | 取消未处理订单 | 仅前置状态可 CAS 取消 |
-| GET | `/api/v1/qr-pay/orders/{id}/events` | 商户/付款人 | SSE 订阅跨端状态 | 支持 `Last-Event-ID` |
+| GET | `/api/v1/qr-pay/orders/{id}` | 创建者/付款人/H5 会话 | 查询订单和真实资金状态 | 进入处理中后回源交易核心 |
+| DELETE | `/api/v1/qr-pay/orders/{id}` | 订单创建用户 | 取消未处理订单 | 仅前置状态可 CAS 取消 |
+| GET | `/api/v1/qr-pay/orders/{id}/events` | 订单创建者/付款人 | SSE 订阅跨端状态 | 支持 `Last-Event-ID` |
 
 #### 12.7.4 Mini 花呗
 
@@ -2489,7 +2496,7 @@ erDiagram
 | POST | `/api/v1/credit/repayments` | 可信确认流程 | 创建并执行 `CREDIT_REPAY` | 密码证明、确认令牌、幂等、TCC、账本 |
 | GET | `/api/v1/credit/repayments/{id}` | 还款用户本人 | 查询还款和额度恢复状态 | 回源统一交易事实 |
 
-Mini 花呗接口只能操作当前登录用户的信用账户。客户端不能提交 `creditAccountId`、商户账户、账单分配结果或额度变更值；还款分配由服务端按“逾期账单、其他已出账、未出账”顺序生成并以 `allocationHash` 绑定确认。
+Mini 花呗接口只能操作当前登录用户的信用账户。客户端不能提交 `creditAccountId`、收款账户、账单分配结果或额度变更值；动态扫码订单的收款账户由订单创建用户的本人账户派生。还款分配由服务端按“逾期账单、其他已出账、未出账”顺序生成并以 `allocationHash` 绑定确认。
 
 #### 12.7.5 C2C 个人收款
 
@@ -2646,7 +2653,7 @@ POST /api/v1/payment-password/verify
 Content-Type: application/json
 
 {
-  "paymentPassword": "******",
+  "paymentProof": "ppf_opaque_once_value",
   "purpose": "TRANSFER_CONFIRM"
 }
 ```
@@ -2719,7 +2726,7 @@ Content-Type: application/json
 
 重试命中同一幂等键和相同参数时返回同一 `transactionId`；参数不同返回 409 `IDEMPOTENCY_CONFLICT`。
 
-#### 12.9.4 商户创建扫码订单
+#### 12.9.4 普通用户创建扫码收款订单
 
 ```http
 POST /api/v1/qr-pay/orders
@@ -2749,11 +2756,11 @@ Content-Type: application/json
 }
 ```
 
-`merchantAccountId` 不接受客户端传入，必须从登录商户身份解析。二维码 URL 中不得包含金额、商户账号或内部订单字段。
+`payeeAccountId` 不接受客户端传入，必须从当前普通用户会话解析本人收款账户。二维码 URL 中不得包含金额、收款账号、用户 ID 或内部订单字段。
 
 #### 12.9.5 H5 查询与确认扫码订单
 
-首次访问 `GET /api/v1/qr-pay/orders/by-token?t=<opaque-token>` 时只返回 H5 壳页面，设置短期 bootstrap Cookie 和 CSRF nonce，并发送 `Cache-Control: no-store`、`Referrer-Policy: no-referrer`、`X-Robots-Tag: noindex`。该 GET 不消费令牌，也不返回商户、金额或订单状态，避免浏览器预取、安全扫描器和链接预览烧毁二维码。
+首次访问 `GET /api/v1/qr-pay/orders/by-token?t=<opaque-token>` 时只返回 H5 壳页面，设置短期 bootstrap Cookie 和 CSRF nonce，并发送 `Cache-Control: no-store`、`Referrer-Policy: no-referrer`、`X-Robots-Tag: noindex`。该 GET 不消费令牌，也不返回收款用户、金额或订单状态，避免浏览器预取、安全扫描器和链接预览烧毁二维码。
 
 H5 JavaScript 随即清理地址栏中的原始令牌，并在同源上下文发起受保护的交换请求：
 
@@ -2775,7 +2782,7 @@ X-CSRF-Token: bootstrap_csrf_nonce
   "message": "success",
   "data": {
     "qrOrderId": "01K1QR0002GH3JK4MN5PQRSTV",
-    "merchantDisplayName": "Mini 商户",
+    "payeeDisplayName": "小林（尾号 1024）",
     "amountFen": 8800,
     "subject": "演示商品 A",
     "status": "CREATED",
@@ -2785,7 +2792,7 @@ X-CSRF-Token: bootstrap_csrf_nonce
 }
 ```
 
-相同 bootstrap 会话重试同一令牌时返回既有 H5 会话和相同订单；其他会话使用已绑定令牌返回 `QR_TOKEN_CONSUMED`。H5 完成首屏渲染后立即调用 `POST /api/v1/qr-pay/orders/{id}/scan`。该接口使用 H5 会话绑定的订单 ID 做 CAS，首次调用迁移为 `SCANNED` 并写 Outbox，重复调用返回当前状态；Web 收银台据此在 3 秒内收到 SSE 更新。
+相同 bootstrap 会话重试同一令牌时返回既有 H5 会话和相同订单；其他会话使用已绑定令牌返回 `QR_TOKEN_CONSUMED`。H5 完成首屏渲染后立即调用 `POST /api/v1/qr-pay/orders/{id}/scan`。该接口使用 H5 会话绑定的订单 ID 做 CAS，首次调用迁移为 `SCANNED` 并写 Outbox，重复调用返回当前状态；收款用户的 C 端页面据此在 3 秒内收到 SSE 更新。
 
 确认请求在一个入口完成支付密码校验和风控：
 
@@ -2794,7 +2801,7 @@ POST /api/v1/qr-pay/orders/01K1QR0002GH3JK4MN5PQRSTV/confirmations
 Content-Type: application/json
 
 {
-  "paymentPassword": "******",
+  "paymentProof": "ppf_opaque_once_value",
   "fundingSource": "BALANCE",
   "orderVersion": 2
 }
@@ -2810,9 +2817,7 @@ Idempotency-Key: d7e23a80-7835-41a1-8f9e-19bc10dfa6be
 Content-Type: application/json
 
 {
-  "confirmationToken": "cfm_qr_opaque_once_value",
-  "fundingSource": "BALANCE",
-  "orderVersion": 2
+  "confirmationToken": "cfm_qr_opaque_once_value"
 }
 ```
 
@@ -2843,7 +2848,7 @@ Content-Type: application/json
     "status": "SUCCESS",
     "amountFen": 8800,
     "payerBalanceChangeFen": -8800,
-    "merchantBalanceChangeFen": 8800,
+    "payeeBalanceChangeFen": 8800,
     "ledgerBalanced": true,
     "completedAt": "2026-07-28T10:03:12.384+08:00"
   },
@@ -3043,10 +3048,7 @@ Idempotency-Key: a88d1444-a2d1-40c7-b01f-ef2d77146450
 Content-Type: application/json
 
 {
-  "confirmationToken": "cfm_p2p_opaque_once_value",
-  "fundingSource": "BALANCE",
-  "orderVersion": 1,
-  "requestVersion": 0
+  "confirmationToken": "cfm_p2p_opaque_once_value"
 }
 ```
 
@@ -3118,8 +3120,8 @@ SSE 只在终态发布事务的 Outbox 事件投递后发送 `SUCCESS`。断线�
 - 对象级授权：所有 `{id}` 查询先按当前主体过滤，不通过时统一返回 404，避免枚举资源。
 - C2C 对象授权：个人码管理只认 `owner_user_id`；固定请求创建者可看请求与全部状态，付款人只能看本人关联订单；H5 会话必须同时匹配 `h5_session_id` 和订单，不因持有可复用分享 token 获得历史交易权限。
 - 服务端派生：C2C 付款账户来自登录身份，收款账户来自个人码/固定请求；Mini 花呗信用账户和还款分配也由服务端派生。上述字段进入请求时按越权参数拒绝，而不是忽略后继续执行。
-- 资金来源白名单：个人码、固定请求和主动 C2C 转账只允许 `BALANCE`；商户扫码才允许 `BALANCE`/`MINI_CREDIT`，资金来源变化使旧确认令牌失效。
-- 参数边界：通用金额技术上限为 `1..100000000` 分，但转账、商户扫码和 C2C 收款按产品规则收紧为 `1..5000000` 分；C2C 备注最多 50 个字符并落实到 API Schema 与 `VARCHAR(50)`，其他备注/商品说明仍须按各自 PRD 上限校验；分页 `limit` 最大 100。
+- 资金来源白名单：个人码、固定请求和主动 C2C 转账只允许 `BALANCE`；动态扫码才允许 `BALANCE`/`MINI_CREDIT`，资金来源变化使旧确认令牌失效。
+- 参数边界：通用金额技术上限为 `1..100000000` 分，但转账、动态扫码和 C2C 收款按产品规则收紧为 `1..5000000` 分；C2C 备注最多 50 个字符并落实到 API Schema 与 `VARCHAR(50)`，其他备注/商品说明仍须按各自 PRD 上限校验；分页 `limit` 最大 100。
 - 幂等快照：服务端保存幂等键对应的请求摘要、资源 ID 和响应摘要；同键不同摘要返回 409。
 - 乐观并发：更新请求携带 `version`，SQL 使用 `WHERE id=? AND version=?`，影响行数为 0 返回 `VERSION_CONFLICT`。
 - 资金超时：客户端超时后只按幂等键重试或查询交易，禁止自动创建新键再次扣款。
@@ -3148,7 +3150,7 @@ SSE 只在终态发布事务的 Outbox 事件投递后发送 `SUCCESS`。断线�
 2. Try 只做可撤销的冻结/预占，不提前展示成功。
 3. Confirm 和 Cancel 必须幂等，允许协调器无限安全重试。
 4. 任一分支 Confirm 不得直接把主单标记为 `SUCCESS`；业务侧最多记录不可对外展示的 `CONFIRMED_PENDING_FINALIZE` 协调结果。
-5. 全局事务完成回调触发终态发布器。余额交易验证双方余额/冻结，`CREDIT_PAY` 验证额度、应收和商户余额，`CREDIT_REPAY` 验证余额、应收、额度与还款分配；全部类型还必须验证全部 TCC 分支 `CONFIRMED` 和账本平衡，才在 `business_db` 本地事务中 CAS 主单和来源聚合为 `SUCCESS`，并写入 Outbox。
+5. 全局事务完成回调触发终态发布器。余额交易验证双方余额/冻结，`CREDIT_PAY` 验证额度、应收和收款用户余额，`CREDIT_REPAY` 验证余额、应收、额度与还款分配；全部类型还必须验证全部 TCC 分支 `CONFIRMED` 和账本平衡，才在 `business_db` 本地事务中 CAS 主单和来源聚合为 `SUCCESS`，并写入 Outbox。
 6. 回调丢失或发布器崩溃时，恢复扫描依据 `PROCESSING + updated_at` 重跑相同校验；重复发布由 CAS 和 Outbox 事件唯一键消除。
 7. 分支状态不明时查询事实，不根据超时猜测结果；SSE、回执和监控均以终态发布后的主单状态为准。
 
@@ -3160,7 +3162,7 @@ SSE 只在终态发布事务的 Outbox 事件投递后发送 `SUCCESS`。断线�
 - 空回滚：Cancel 先到时写入取消屏障，即使 Try 未执行也返回成功。
 - 防悬挂：Try 发现取消屏障后拒绝冻结，防止晚到请求重新占用资金。
 - 有效令牌槽位：签发确认令牌时锁定 `confirmation_subject`，原子撤销旧令牌、插入新令牌并更新 `current_confirmation_id`；因此同一主体最多一个 `ACTIVE` 令牌。
-- 商户扫码受理原子性：在单个 `business_db` 本地事务内条件消费当前 `ACTIVE` 令牌、CAS 订单、插入 `QR_PAY` 或 `CREDIT_PAY` 交易并回填关联；资金来源切换后旧令牌失效。
+- 动态扫码受理原子性：在单个 `business_db` 本地事务内条件消费当前 `ACTIVE` 令牌、CAS 订单、插入 `QR_PAY` 或 `CREDIT_PAY` 交易并回填关联；资金来源切换后旧令牌失效。
 - 长期个人码受理原子性：权威余额/账户/自付检查通过后，在一个 `business_db` 本地事务内依次执行：条件消费当前 `ACTIVE` 确认令牌；CAS `CollectionOrder PENDING_CONFIRMATION→PROCESSING` 并校验版本、H5 会话、金额与 `funding_source=BALANCE`；插入 `business_type=TRANSFER, source_type=PERSONAL_QR_ORDER, source_order_id=order_id` 的主单；回填订单 `transaction_id`；写受理 Outbox。任一步失败整体回滚，个人码保持 ACTIVE，其他独立订单不受影响。
 - 固定请求受理原子性：权威余额/账户/自付检查通过后，在一个 `business_db` 本地事务内依次执行：条件消费当前 `ACTIVE` 确认令牌；CAS `CollectionRequest OPEN→PROCESSING`，条件同时包含请求版本、未过期、`active_order_id IS NULL`，并写入当前订单；CAS 当前 `CollectionOrder PENDING_CONFIRMATION→PROCESSING` 并校验订单/请求版本和 `BALANCE`；插入 `business_type=TRANSFER, source_type=COLLECTION_REQUEST_ORDER, source_order_id=order_id` 的主单；回填订单和请求的 `transaction_id`；写订单已受理与请求状态 Outbox。任一步失败整体回滚，竞争失败返回请求当前状态。预检后的余额竞态若在 Try 暴露，按 Cancel 收敛，不能删除已受理交易。
 - 固定请求安全重开：只有协调器已持久化全局 `CANCELLED`，全部分支均为 `CANCELLED`，且终态发布器验证付款冻结为 0、收款未入账、信用额度/应收无变化、账本无已过账残片后，才在单个 `business_db` 事务中把当前订单置为 `FAILED`、清除请求 `active_order_id/transaction_id`，再按 `cancel_requested_at`、过期时间决定请求回到 `OPEN`、`CANCELLED` 或 `EXPIRED` 并写 Outbox。任何未知或部分完成状态进入 `MANUAL_REVIEW`，不得清槽或接受第二笔付款。
@@ -3180,15 +3182,15 @@ TCC Confirm 原则上持续重试。只有出现无法自动收敛、跨版本�
 
 - 账户总余额：`available_fen + frozen_fen`。
 - 单凭证平衡：`sum(DEBIT) = sum(CREDIT)`。
-- 余额资金守恒：`TRANSFER`、`QR_PAY` 及其冲正中，所有用户和商户虚拟余额净变化之和始终为 0；C2C 手续费固定为 0。
-- 信用会计平衡：`CREDIT_PAY` 中商户虚拟余额负债增加额必须等于用户信用应收资产增加额，用户虚拟余额变化为 0；`CREDIT_REPAY` 中用户虚拟余额负债减少额必须等于信用应收资产减少额。信用交易不得套用“用户/商户余额净变化为 0”的余额转移公式，但仍必须借贷平衡并满足额度/应收守恒。
+- 余额资金守恒：`TRANSFER`、`QR_PAY` 及其冲正中，所有用户和收款用户虚拟余额净变化之和始终为 0；C2C 手续费固定为 0。
+- 信用会计平衡：`CREDIT_PAY` 中收款用户虚拟余额负债增加额必须等于用户信用应收资产增加额，用户虚拟余额变化为 0；`CREDIT_REPAY` 中用户虚拟余额负债减少额必须等于信用应收资产减少额。信用交易不得套用“用户/收款用户余额净变化为 0”的余额转移公式，但仍必须借贷平衡并满足额度/应收守恒。
 - 模拟充值：使用专用“虚拟资金发行/权益账户”作为借贷对手并生成平衡凭证；只有已通过限额、限流、幂等和审计校验的模拟充值允许用户余额总量增加。
 - 成功交易：主单 `SUCCESS`、TCC 全分支 `CONFIRMED`、账本已过账、余额版本已更新。
 - 撤销交易：主单 `CANCELLED/REVERSED`、冻结为 0、补偿分录完整。
 - 信用额度：`total_limit_fen = available_fen + used_fen + frozen_fen`，四项均不得为负。
 - 信用应收：`used_fen = receivable_outstanding_fen = unbilled_remaining_fen + sum(bill.outstanding_fen)`。
 - 信用交易净额：累计 `CREDIT_PAY - CREDIT_REPAY - 信用冲正 = 信用应收账本净额`。
-- `CREDIT_PAY` 成功：用户余额不变，已用额度/应收/商户余额等额增加，借记信用应收资产、贷记商户余额负债。
+- `CREDIT_PAY` 成功：用户余额不变，已用额度/应收/收款用户余额等额增加，借记信用应收资产、贷记收款用户余额负债。
 - `CREDIT_REPAY` 成功：用户余额、应收和已用额度等额减少，可用额度等额恢复，借记用户余额负债、贷记信用应收资产。
 - C2C 对账：交易、付款方余额减少、收款方余额增加、账本凭证四方一致；个人码重复判断以 `CollectionOrder` 为单位，不能把多笔合法付款当成重复。
 
@@ -3261,7 +3263,7 @@ flowchart LR
 - 大模型超时：提示切换传统表单，保留已验证草稿字段。
 - MCP 查询超时：只读工具重试一次，写工具依赖幂等查询原状态。
 - 意图置信度低：展示支持范围并询问用户，不自动执行。
-- 模型不可用：余额、明细、传统转账、商户扫码、个人收款、信用查询与余额还款仍可正常使用。
+- 模型不可用：余额、明细、传统转账、动态扫码、个人收款、信用查询与余额还款仍可正常使用。
 
 ## 15. 扫码与个人收款专项分析
 
@@ -3273,7 +3275,7 @@ flowchart LR
 https://<h5-host>/h5/qr-pay?t=<opaque-random-token>
 ```
 
-不得编码金额、商户账号、用户 ID、内部订单字段、支付密码或签名密钥。令牌至少 128 位随机强度，数据库只保存摘要。
+不得编码金额、收款用户账号、用户 ID、内部订单字段、支付密码或签名密钥。令牌至少 128 位随机强度，数据库只保存摘要。
 
 ### 15.2 令牌交换
 
@@ -3283,12 +3285,12 @@ https://<h5-host>/h5/qr-pay?t=<opaque-random-token>
 4. 同一 bootstrap 会话的交换重试幂等返回既有 H5 会话；其他设备再次交换返回 `QR_TOKEN_CONSUMED`，且不泄露订单详情。
 5. 后续请求只使用安全 Cookie/H5 会话，不在 URL、Referer、日志或埋点中传播原始令牌。
 
-### 15.3 商户防篡改
+### 15.3 动态扫码收款防篡改
 
-- 收款账户来自登录商户身份和服务端数据，不接受前端指定任意 account_id。
+- 收款用户和账户来自当前普通用户会话及服务端数据，不接受前端指定任意 `payee_user_id/payee_account_id`。
 - 金额与商品说明在创建后锁定，H5 只提交订单 ID 和确认动作。
 - 支付时重新读取订单，客户端金额即使被篡改也不参与资金计算。
-- 付款账户和商户账户不能相同，双方账户必须处于正常状态。
+- 付款账户和收款用户账户不能相同，双方账户必须处于正常状态。
 
 ### 15.4 并发与竞态
 
@@ -3311,7 +3313,7 @@ https://<h5-host>/h5/qr-pay?t=<opaque-random-token>
 
 ### 15.6 个人收款令牌与跨端规则
 
-- 商户动态码令牌是单订单、一次性交换；长期个人码令牌是可复用公开定位符，但每次交换都创建隔离的短期 H5 会话和独立 `CollectionOrder`，不得复用支付授权。
+- 动态扫码订单令牌是单订单、一次性交换；长期个人码令牌是可复用公开定位符，但每次交换都创建隔离的短期 H5 会话和独立 `CollectionOrder`，不得复用支付授权。
 - 固定请求令牌在 30 分钟内允许多人建立只读/待确认会话；请求 `SUCCESS`、`CANCELLED`、`EXPIRED` 后立即停止创建新订单。
 - 两类个人收款二维码都只包含 HTTPS 地址和至少 128 位不可预测令牌，不包含用户 ID、账户、昵称、金额或备注；服务端只保存摘要。
 - H5 首屏只返回空壳、bootstrap Cookie 和 CSRF nonce，使用 `Cache-Control: no-store`、`Referrer-Policy: no-referrer`、`X-Robots-Tag: noindex`；清理 URL 后才通过同源 POST 交换令牌。
@@ -3332,7 +3334,7 @@ https://<h5-host>/h5/qr-pay?t=<opaque-random-token>
 | TCC/Saga | 全局与分支事务 | Try/Confirm/Cancel、重试、补偿、人工 |
 | 账本 | 凭证、分录、对账 | 借贷不平、冻结未释放、差异 |
 | Agent | 意图、槽位、模型、MCP | 延迟、Schema 失败、工具成功、越权拦截 |
-| 扫码/个人收款 | 商户订单、个人码、固定请求和 SSE | 扫码率、确认率、支付/过期率、竞争冲突、同步延迟 |
+| 扫码/个人收款 | 动态扫码收款订单、个人码、固定请求和 SSE | 扫码率、确认率、支付/过期率、竞争冲突、同步延迟 |
 | 数据链路 | 事件、批任务、质量 | 积压、迟到、重复、完整性、发布状态 |
 
 ### 16.2 监控架构
@@ -3374,7 +3376,7 @@ flowchart LR
 
 ### 16.4 T+1 分析
 
-离线指标包括登录成功率、注册转化率、四类交易成功率与金额、余额不足/额度不足占比、AI 转账完成率、信用额度利用率/应收/逾期、TCC 补偿成功率、商户扫码成功率、个人码转化率及固定请求支付/过期率。任务 01:00 启动、02:00 前完成，失败重试两次。
+离线指标包括登录成功率、注册转化率、四类交易成功率与金额、余额不足/额度不足占比、AI 转账完成率、信用额度利用率/应收/逾期、TCC 补偿成功率、动态扫码成功率、个人码转化率及固定请求支付/过期率。任务 01:00 启动、02:00 前完成，失败重试两次。
 
 个人收款生命周期事件固定为：`P2P_COLLECTION_CODE_CREATED`、`P2P_COLLECTION_CODE_REVOKED`、`P2P_COLLECTION_REQUEST_CREATED`、`P2P_COLLECTION_REQUEST_CANCELLED`、`P2P_COLLECTION_REQUEST_EXPIRED`、`P2P_COLLECTION_ORDER_ACCEPTED`、`P2P_COLLECTION_ORDER_SUCCEEDED`、`P2P_COLLECTION_ORDER_FAILED`。所有事件携带 `traceId`、`sourceType`、来源 ID、订单 ID 和可选交易 ID，不携带原始令牌或完整账户。
 
@@ -3409,12 +3411,13 @@ flowchart LR
 
 ### 17.2 身份与授权
 
-- RBAC 角色：用户、商户、运营、管理员、观察者。
+- RBAC 角色：用户、运营、管理员、观察者。不存在独立 `MERCHANT` 系统角色。
 - 服务端根据登录会话确定主体，不接受客户端覆盖身份。
-- 普通用户只访问本人账户、信用账户/账单、交易、草稿、个人码、本人创建的请求及本人参与的收款订单和 Agent 会话。
-- 商户只能创建绑定本人商户账户的二维码并查看本人订单。
+- 普通用户只访问本人账户、信用账户/账单、交易、草稿、个人码、本人创建的动态扫码订单/固定请求、本人参与的收款订单和 Agent 会话。
+- 普通用户创建动态扫码订单时，收款账户由服务端从当前会话派生；现实生活中的商户身份不影响系统授权，也不能访问 B 端。
 - 运营可处置工单和告警，但不能修改交易双方、金额或余额。
 - 管理员配置权限和资金处置权限分离。
+- B 端 `/admin/**` 仅允许运营、管理员和观察者按职责访问；普通用户一律拒绝，且 B 端不提供收银、本人订单或本人收款统计接口入口。
 - 个人收款公开令牌只用于建立受限 H5 会话，不等于对象所有权；取消、换码、请求明细和 SSE 必须校验创建者或关联付款人。
 
 ### 17.3 密码与令牌
@@ -3424,14 +3427,14 @@ flowchart LR
 - 支付密码不进入日志、Agent、MCP 或监控事件。
 - 访问令牌、确认令牌和二维码令牌用途隔离，不可互换。
 - 确认令牌绑定主体、付款账户、收款账户、金额、业务类型、源订单哈希、有效期和消费状态。
-- 商户扫码确认令牌额外绑定 `fundingSource`；C2C 确认令牌强制绑定 `BALANCE`，传入 `MINI_CREDIT` 即使 Schema 合法也拒绝。
+- 动态扫码确认令牌额外绑定 `fundingSource`；C2C 确认令牌强制绑定 `BALANCE`，传入 `MINI_CREDIT` 即使 Schema 合法也拒绝。
 - 长期个人码与固定请求的公开令牌使用独立命名空间和摘要，不能兑换登录态、支付确认或另一类型收款对象。
 
 ### 17.4 威胁模型
 
 | 威胁 | 攻击方式 | 防护 |
 |---|---|---|
-| 身份冒用 | 伪造 user_id/merchant_id | 网关会话 + 服务端对象授权 |
+| 身份冒用 | 伪造 `user_id/payee_user_id` | 网关会话 + 服务端对象授权 |
 | 参数篡改 | 修改 H5 金额/收款账户 | 服务端订单为事实，确认哈希校验 |
 | 重放 | 重复提交确认或旧二维码 | nonce、时间戳、一次性令牌、幂等、CAS |
 | 重复扣款 | 不同幂等键并发支付 | 源订单唯一约束 |
@@ -3445,7 +3448,7 @@ flowchart LR
 | 固定金额篡改 | 修改金额、备注或收款账户 | 服务端请求为事实、字段不可变、确认哈希和对象级授权 |
 | 固定请求并发双付 | 多付款人/幂等键同时确认 | 请求 CAS、`active_order_id`、来源唯一键和终态发布器 |
 | 自付与信用绕过 | 扫自己的码或提交 MINI_CREDIT | 服务端双方账户比较、C2C 资金来源硬白名单 |
-| 信用额度伪造 | 客户端提交额度或篡改资金来源 | 额度回源账户中心、商户订单来源唯一键、确认令牌绑定资金来源 |
+| 信用额度伪造 | 客户端提交额度或篡改资金来源 | 额度回源账户中心、动态扫码收款订单来源唯一键、确认令牌绑定资金来源 |
 | 未授权账单查询 | 枚举 bill/user ID | 会话主体派生 credit_account、对象级授权、审计与限流 |
 
 ### 17.5 审计事件
@@ -3590,7 +3593,7 @@ Demo 禁止使用开发者个人密钥；LLM、数据库和网关配置通过环
 |---|---|---|---|---|
 | 网关超时 | Trace/超时指标 | 客户端按幂等键重试 | 处理中 | 返回同一交易 |
 | Try 付款冻结失败 | TCC 分支结果 | 取消其他预占 | 未扣款/拒绝 | 冻结为 0 |
-| Try 商户预占失败 | 分支结果 | Cancel 付款冻结 | 处理中后撤销 | 双方余额恢复 |
+| Try 收款方预占失败 | 分支结果 | Cancel 付款冻结 | 处理中后撤销 | 双方余额恢复 |
 | Confirm 入账超时 | 分支状态未知 | 查询后重试 Confirm | 处理中 | 成功或补偿一致 |
 | 账本写入失败 | 凭证状态 | 不标成功，重试/补偿 | 处理中 | 借贷平衡 |
 | Cancel 失败 | 恢复扫描 | 重试，超限转人工 | 人工确认 | 冻结不重复释放 |
@@ -3601,7 +3604,7 @@ Demo 禁止使用开发者个人密钥；LLM、数据库和网关配置通过环
 | SSE 断开 | 客户端心跳 | 降级轮询 | 状态稍延迟 | 最终状态正确 |
 | 事件重复 | eventId 去重 | 忽略重复统计 | 无感 | 实时/离线只计一次 |
 | T+1 缺数据 | 质量检查 | 阻断发布并告警 | 报表不可用 | 重跑通过质量门禁 |
-| 信用额度冻结成功、商户预占失败 | 信用 TCC 分支 | Cancel 释放额度 | 信用支付撤销 | 可用/已用/冻结和应收恢复 |
+| 信用额度冻结成功、收款方预占失败 | 信用 TCC 分支 | Cancel 释放额度 | 信用支付撤销 | 可用/已用/冻结和应收恢复 |
 | 信用支付已用额度与应收不一致 | 信用对账 | 阻断成功或信用指标，转人工 | 处理中/人工确认 | 额度、应收、账本差异为 0 |
 | 还款余额扣减后应收更新超时 | 分支事实查询 | 重试应收/分配 Confirm 或冲正 | 处理中 | 余额减少=应收减少=额度恢复 |
 | 出账任务重复或中断 | 账期唯一键/任务游标 | 幂等接续未完成汇总 | 暂不可见新账单 | 每明细只进入一个账期一次 |
@@ -3632,7 +3635,7 @@ Demo 禁止使用开发者个人密钥；LLM、数据库和网关配置通过环
 - `TRANSFER`：正常、重名、改金额、余额不足、大额、100 次重复提交。
 - Agent：提示注入、缺槽位、工具超时、Schema 失败、上下文纠错。
 - `QR_PAY`：成功、不同幂等键并发、过期、金额篡改、SSE 断线、密码锁定、风险审核、支付/取消竞态、Try/Confirm 故障、响应丢失。
-- `CREDIT_PAY`：固定额度初始化、额度不足、余额/信用并发竞争、额度冻结回滚、商户入账和应收/账本一致。
+- `CREDIT_PAY`：固定额度初始化、额度不足、余额/信用并发竞争、额度冻结回滚、收款用户入账和应收/账本一致。
 - `CREDIT_REPAY`：提前/部分/全额还款、分配优先级、重复确认、余额或应收不足、逾期暂停与清偿恢复。
 - P2P Collection：个人码双付款并发、金额/收款账户篡改、原子换码旧码失效、30 分钟过期、固定请求 100 路竞争、抢占余额不足、完整 Cancel 安全重开、未知结果不重开、自付/信用拒绝、SSE 降级、Redis 故障和全链路 Trace。
 - 受理原子性：在令牌消费、订单 CAS、交易插入和订单关联四个边界分别注入崩溃，验证只能整体提交或整体回滚；提交后 TCC 未启动由恢复任务接管。
@@ -3717,11 +3720,11 @@ P2P Collection 验收映射：
 | FR-OB-004 | 批处理/metrics_db | daily_metric | AT-17、AT-26、AT-29 |
 | FR-OB-005 | 告警中心 | MonitorAlert 状态机 | AT-27、AT-28 |
 | FR-OB-006 | 数据质量 | QualityResult、隔离事件 | AT-25、AT-26、AT-29 |
-| FR-SP-001 | 业务中心、商户 Web | QrPayOrder、QrPayToken | AT-19、AT-22、AT-23 |
+| FR-SP-001 | 业务中心、C 端扫码收款页 | QrPayOrder、QrPayToken | AT-19、AT-22、AT-23 |
 | FR-SP-002 | H5/业务中心 | token exchange、H5 session | AT-19、AT-22 |
 | FR-SP-003 | 业务/TCC/账户/账本 | confirmation、qr-pay/pay | AT-20、AT-21、AT-32–AT-40 |
 | FR-SP-004 | SSE/监控 | order events、businessType | AT-24、AT-31 |
-| FR-SP-005 | 业务/分析 | merchant analytics projection、merchant analytics API | 商户归属、终态去重、退款与净收款口径测试 |
+| FR-SP-005 | 业务/分析 | 扫码收款分析投影、本人扫码收款统计 API | 收款账户归属、终态去重、退款与净收款口径测试 |
 | FR-QA-001 | 测试流程 | AI 候选用例 + 人工审核 | 用例证据链审查 |
 
 ### 22.4 Mini 花呗与 C2C 个人收款
@@ -3751,8 +3754,8 @@ P2P Collection 验收映射：
 ### 23.1 两周内必须保持的边界
 
 - 只实现 `TRANSFER`、`QR_PAY`、`CREDIT_PAY`、`CREDIT_REPAY` 四种资金业务；个人码和固定请求只作为 `TRANSFER` 来源，不增加第五类交易。
-- 商户使用预置身份，不建设商户入驻和结算。
-- Mini 花呗固定 5000 元额度，只做商户支付、轻量账单和余额还款，不做真实征信、计息、分期、最低还款或额度运营平台。
+- 不建设商户系统身份、经营主体入驻、独立商户端或收单结算；演示中的经营者仍使用普通用户身份和本人账户。
+- Mini 花呗固定 5000 元额度，只做动态扫码支付、轻量账单和余额还款，不做真实征信、计息、分期、最低还款或额度运营平台。
 - P0 包含长期个人码、30 分钟固定请求、H5 余额付款、请求 CAS、TCC/账本、回执、核心监控和 15 个 C2C 验收场景，不新增部署进程。
 - 风控使用确定性规则，不建设复杂模型平台。
 - 离线分析使用轻量批处理，不建设完整数据湖。
@@ -3774,7 +3777,7 @@ P2P Collection 验收映射：
 | 事件口径漂移 | 实时离线不一致 | Schema/指标版本和质量门禁 |
 | 两周范围膨胀 | 核心质量下降 | P0 门禁和明确裁剪顺序 |
 | 信用额度被当作余额 | 资产展示和资金口径错误 | 独立信用子域、分录模板、三方对账和 UI 明确分区 |
-| 商户扫码跨资金来源双付 | 商户重复入账 | `QR_PAY_ORDER + order_id` 来源唯一和订单 CAS |
+| 动态扫码跨资金来源双付 | 收款方重复入账 | `QR_PAY_ORDER + order_id` 来源唯一和订单 CAS |
 | 固定请求多尝试双成功 | 付款人重复扣款/收款人多收 | 请求 CAS、active_order_id、订单来源唯一和 100 路并发测试 |
 | 完整回滚前错误重开 | 第二笔付款与未知资金并存 | 终态发布器验证 Cancel 后重开，未知结果转人工 |
 | 长期码泄露或旧码可用 | 未授权收款信息暴露 | 高熵摘要、限流、空壳交换、原子换码和模糊错误 |
@@ -3787,7 +3790,7 @@ P2P Collection 验收映射：
 2. 按第 12 章的接口架构约束，在 OpenAPI 3.1 文件和 MCP Tool Schema 中定义并校验可执行契约。
 3. 按第 11 章的数据架构约束及数据库设计，编写数据库迁移、回滚说明和初始化脚本，并通过容器实测约束。
 4. 四类交易的 TCC 分支接口、屏障表、信用还款分配和固定请求安全重开详细设计。
-5. 商户扫码、Mini 花呗、个人码、固定请求和跨端回执的前端原型与状态组件。
+5. 动态扫码、Mini 花呗、个人码、固定请求和跨端回执的前端原型与状态组件。
 6. `P2P_COLLECTION_*`、信用事件 Schema、source_type 指标字典和告警规则配置。
 7. 覆盖 AT-01 至 AT-68 的自动化测试、故障注入和演示数据方案。
 
@@ -3796,7 +3799,7 @@ P2P Collection 验收映射：
 | 术语 | 说明 |
 |---|---|
 | `TRANSFER` | 用户向用户发起的虚拟资金转账 |
-| `QR_PAY` | 用户扫描商户动态二维码完成的虚拟资金支付 |
+| `QR_PAY` | 用户扫描另一普通用户创建的动态二维码完成的虚拟资金支付 |
 | TCC | Try、Confirm、Cancel 分布式事务模式 |
 | Saga | 通过正向步骤和反向补偿实现最终一致性的模式 |
 | 确认令牌 | 绑定资金操作关键字段的一次性短期授权凭证 |

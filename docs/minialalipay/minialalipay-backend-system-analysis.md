@@ -4,7 +4,7 @@
 
 | 项目 | 内容 |
 |---|---|
-| 文档版本 | V2.0 |
+| 文档版本 | V2.1 |
 | 修订日期 | 2026-07-30 |
 | 需求基线 | [MiniAlalipay PRD](./minialalipay-prd.md) |
 | 架构事实 | [MiniAlalipay 总体系统分析](./minialalipay-system-analysis.md) |
@@ -20,6 +20,7 @@
 | V1.0 | 2026-07-30 | 建立后端系统分析基线 |
 | V1.1 | 2026-07-30 | 明确派生文档定位，删除重复系统事实 |
 | V2.0 | 2026-07-30 | 按标准系分补齐架构、依赖、领域落点、主流程、接口就绪、事务、安全、异常用例和编码追踪 |
+| V2.1 | 2026-07-30 | 对齐 PRD V1.9 与总体系统分析 V1.12：删除独立商户权限主体，扫码订单收款用户及本人账户统一从普通用户会话派生 |
 
 ## 1. 文档目的、范围与标准项
 
@@ -301,8 +302,8 @@ sequenceDiagram
 | 来源 | 来源聚合 | 资金类型 | 受理前必须校验 | 特殊并发控制 |
 |---|---|---|---|---|
 | 主动转账 | `TransferDraft` | `TRANSFER` | 草稿版本、收款人、余额、风控、确认 | 草稿来源唯一 |
-| 商户余额码 | `QrPayOrder` | `QR_PAY` | H5 会话、订单金额、商户、余额、确认 | 订单 CAS + 跨资金来源唯一 |
-| 商户信用码 | `QrPayOrder` | `CREDIT_PAY` | 同上并校验额度/逾期 | 与余额支付竞争同一来源键 |
+| 动态扫码余额支付 | `QrPayOrder` | `QR_PAY` | H5 会话、订单金额、收款用户、余额、确认 | 订单 CAS + 跨资金来源唯一 |
+| 动态扫码信用支付 | `QrPayOrder` | `CREDIT_PAY` | 同上并校验额度/逾期 | 与余额支付竞争同一来源键 |
 | 长期个人码 | `CollectionOrder` | `TRANSFER` | 服务端收款人、锁定金额、余额、禁止自付 | 每次扫码独立订单 |
 | 固定请求 | `CollectionRequest` + `CollectionOrder` | `TRANSFER` | 固定金额、余额、禁止自付 | `active_order_id` 只允许一个处理中 |
 | 信用还款 | `CreditRepaymentDraft` | `CREDIT_REPAY` | 余额、应收、分配哈希、确认 | Confirm 不得重新计算分配 |
@@ -359,7 +360,7 @@ public record CommandContext(
 ```
 
 - 金额命令统一使用 `long amountFen`，时间使用 `Instant` 或 `OffsetDateTime`。
-- Controller 不能把客户端提交的 `userId/accountId/merchantId` 当作权限主体。
+- Controller 不能把客户端提交的 `userId/accountId/payeeUserId/payeeAccountId` 当作权限主体。
 - 写命令返回资源 ID、当前状态和版本；未知资金结果必须返回交易 ID。
 - Application Service 捕获基础设施异常后转换为明确的应用错误，不泄露 SQL、令牌或内部地址。
 
@@ -409,7 +410,7 @@ public record CommandContext(
 | `POST /api/v1/auth/logout` | 无请求体 | `OperationResult(success=true)` | `AUTH_REQUIRED` |
 | `PUT /api/v1/payment-password` | `SetPaymentPasswordRequest(paymentPassword)` | `PasswordVersionView(version,updatedAt)` | `PAYMENT_PASSWORD_ALREADY_SET` |
 | `PATCH /api/v1/payment-password` | `ChangePaymentPasswordRequest(loginPassword,newPaymentPassword)` | `PasswordVersionView` | `LOGIN_INVALID`、`PAYMENT_LOCKED` |
-| `POST /api/v1/payment-password/verify` | `VerifyPaymentPasswordRequest(paymentPassword,purpose)` | `PaymentProofView(proofToken,expiresAt,passwordVersion)`；令牌只返回一次 | `PAY_PASSWORD_INVALID`、`PAYMENT_LOCKED` |
+| `POST /api/v1/payment-password/verify` | `VerifyPaymentPasswordRequest(paymentPassword,purpose)` | `PaymentProofView(paymentProof,expiresAt,passwordVersion)`；短期凭证只返回一次 | `PAY_PASSWORD_INVALID`、`PAYMENT_LOCKED` |
 | `GET /api/v1/users/search` | 查询参数 `q`，长度 1..64，最多返回 10 条 | `PayeeCandidateList(items[userId,displayName,loginNameMasked,phoneTail])` | `AUTH_REQUIRED`、`RATE_LIMITED` |
 | `GET /api/v1/contacts` | `cursor`、`limit<=100` | `ContactPage(items,nextCursor)` | `AUTH_REQUIRED` |
 | `PATCH /api/v1/contacts/{payeeUserId}` | 路径 `payeeUserId`；`UpdateContactRequest(alias,pinned,hidden,version)` | `ContactView(...,version)` | `CONTACT_NOT_FOUND`、`VERSION_CONFLICT` |
@@ -425,7 +426,7 @@ public record CommandContext(
 | `GET /api/v1/transfer-drafts/{id}` | 草稿 ID | `TransferDraftView` | `DRAFT_NOT_FOUND` |
 | `PATCH /api/v1/transfer-drafts/{id}` | `UpdateTransferDraftRequest(payeeUserId,amountFen,subject,version)` | 新版本 `TransferDraftView` | `VERSION_CONFLICT`、`DRAFT_NOT_EDITABLE` |
 | `POST /api/v1/transfer-drafts/{id}/validate` | `ValidateDraftRequest(version)` | `DraftValidationView(valid,riskAction,balanceFen,confirmationRequired,violations[])` | `INSUFFICIENT_BALANCE`、`RISK_REJECTED` |
-| `POST /api/v1/confirmations` | `CreateConfirmationRequest(subjectType,subjectId,subjectVersion,paymentProofToken)` | `ConfirmationView(confirmationToken,expiresAt,subjectHash)`；令牌只返回可信 UI | `CONFIRMATION_MISMATCH`、`PAYMENT_PROOF_INVALID` |
+| `POST /api/v1/confirmations` | `CreateConfirmationRequest(subjectType,subjectId,subjectVersion,paymentProof)` | `ConfirmationView(confirmationToken,expiresAt,subjectHash)`；令牌只返回可信 UI | `CONFIRMATION_MISMATCH`、`PAYMENT_PROOF_INVALID` |
 | `POST /api/v1/transfers` | `Idempotency-Key`；`SubmitTransferRequest(draftId,confirmationToken)` | `TransactionView(transactionId,businessType,amountFen,status,createdAt)` | `IDEMPOTENCY_CONFLICT`、`CONFIRMATION_EXPIRED` |
 | `GET /api/v1/transfers/{id}` | 交易 ID | `TransactionView` | `TRANSACTION_NOT_FOUND` |
 | `GET /api/v1/transfers/{id}/receipt` | 交易 ID | `ReceiptView(transactionId,payerMasked,payeeMasked,amountFen,status,completedAt)` | `RECEIPT_NOT_READY` |
@@ -434,17 +435,18 @@ public record CommandContext(
 
 | 方法与路径 | 请求参数/DTO | 成功返回 `data` | 主要错误 |
 |---|---|---|---|
-| `POST /api/v1/qr-pay/orders` | `Idempotency-Key`；`CreateQrOrderRequest(amountFen,subject)`；商户由会话派生 | `QrOrderView(orderId,amountFen,status,qrUrl,expiresAt,version)` | `MERCHANT_REQUIRED` |
+| `POST /api/v1/qr-pay/orders` | `Idempotency-Key`；`CreateQrOrderRequest(amountFen,subject)`；收款用户及本人账户由会话派生 | `QrOrderView(orderId,amountFen,status,qrUrl,expiresAt,version)` | `ACCOUNT_UNAVAILABLE` |
+| `GET /api/v1/qr-pay/orders` | `status,cursor,limit<=100`；服务端从会话派生订单创建者 | `QrOrderPage(items,nextCursor)`，仅返回本人创建的订单 | `AUTH_REQUIRED`、`INVALID_CURSOR` |
 | `POST /api/v1/qr-pay/token-exchanges` | `QrTokenExchangeRequest(token,bootstrapSessionId)` | 脱敏 `QrOrderView` + `h5SessionId` | `QR_TOKEN_INVALID`、`ORDER_EXPIRED` |
-| `POST /api/v1/qr-pay/orders/{id}/confirmations` | `QrConfirmationRequest(fundingSource,paymentProofToken,orderVersion)` | `ConfirmationView` | `INSUFFICIENT_BALANCE`、`INSUFFICIENT_CREDIT` |
+| `POST /api/v1/qr-pay/orders/{id}/confirmations` | `QrConfirmationRequest(fundingSource,paymentProof,orderVersion)`；短期凭证由 `payment-password/verify` 签发，仅通过 HTTPS 请求体传输，禁止记录、存储或回显 | `ConfirmationView` | `INSUFFICIENT_BALANCE`、`INSUFFICIENT_CREDIT` |
 | `POST /api/v1/qr-pay/orders/{id}/pay` | `Idempotency-Key`；`QrPayRequest(confirmationToken)`，禁止提交金额和双方账户 | `TransactionView` | `ORDER_ALREADY_CLAIMED`、`CONFIRMATION_MISMATCH` |
-| `GET /api/v1/qr-pay/orders/{id}` | 订单 ID；主体由商户、付款人或 H5 会话校验 | `QrOrderView`，处理中后包含 `transactionId` | `ORDER_NOT_FOUND` |
+| `GET /api/v1/qr-pay/orders/{id}` | 订单 ID；主体由订单创建者、付款人或 H5 会话校验 | `QrOrderView`，处理中后包含 `transactionId` | `ORDER_NOT_FOUND` |
 | `GET /api/v1/p2p-collections/codes/me` | 无业务参数 | `PersonalCodeView(codeId,status,qrUrl,version)` 或空状态 | `AUTH_REQUIRED` |
 | `POST /api/v1/p2p-collections/codes/me/regenerations` | `Idempotency-Key`；可选 `version` | 新 `PersonalCodeView` | `VERSION_CONFLICT` |
 | `POST /api/v1/p2p-collections/requests` | `Idempotency-Key`；`CreateCollectionRequest(amountFen,subject)` | `CollectionRequestView(requestId,amountFen,subject,status,qrUrl,expiresAt,version)` | `AMOUNT_OUT_OF_RANGE` |
 | `POST /api/v1/p2p-collections/token-exchanges` | `CollectionTokenExchangeRequest(token,bootstrapSessionId)` | `CollectionOrderView(orderId,mode,payeeMasked,amountFen,status,h5SessionId,version)` | `COLLECTION_TOKEN_INVALID` |
 | `PATCH /api/v1/p2p-collections/orders/{id}` | `LockCollectionOrderRequest(amountFen,subject,version)`；仅个人码草稿 | `CollectionOrderView` | `ORDER_NOT_EDITABLE`、`VERSION_CONFLICT` |
-| `POST /api/v1/p2p-collections/orders/{id}/confirmations` | `CollectionConfirmationRequest(paymentProofToken,orderVersion)`；资金来源固定 `BALANCE` | `ConfirmationView` | `SELF_PAYMENT_FORBIDDEN`、`FUNDING_SOURCE_NOT_ALLOWED` |
+| `POST /api/v1/p2p-collections/orders/{id}/confirmations` | `CollectionConfirmationRequest(paymentProof,orderVersion)`；短期凭证由 `payment-password/verify` 签发，资金来源固定 `BALANCE`，禁止记录、存储或回显 | `ConfirmationView` | `SELF_PAYMENT_FORBIDDEN`、`FUNDING_SOURCE_NOT_ALLOWED` |
 | `POST /api/v1/p2p-collections/orders/{id}/pay` | `Idempotency-Key`；`CollectionPayRequest(confirmationToken)` | `TransactionView` | `ORDER_ALREADY_CLAIMED`、`IDEMPOTENCY_CONFLICT` |
 | `GET /api/v1/credit/me` | 用户由会话派生 | `CreditSummaryView(totalLimitFen,availableFen,usedFen,frozenFen,status)` | `CREDIT_ACCOUNT_NOT_FOUND` |
 | `GET /api/v1/credit/bills` | `cursor`、`limit<=100`、可选 `status` | `CreditBillPage(items,nextCursor)` | `INVALID_CURSOR` |
@@ -468,7 +470,7 @@ public record CommandContext(
 | 方法与路径 | 请求参数/DTO | 成功返回 `data` | 主要错误 |
 |---|---|---|---|
 | `GET /api/v1/accounts/me/analytics` | `range=7d/30d/month` | `PersonalAnalyticsView(range,definitionVersion,incomeFen,expenseFen,balanceFlow,creditFlow,counterparties[])` | `RANGE_NOT_SUPPORTED` |
-| `GET /api/v1/merchants/me/analytics` | `range=today/month` | `MerchantAnalyticsView(receiptFen,orderCount,refundFen,netReceiptFen,fundingBreakdown,reconciliation)` | `MERCHANT_REQUIRED` |
+| `GET /api/v1/accounts/me/qr-collection-analytics` | `range=today/month` | `QrCollectionAnalyticsView(receiptFen,orderCount,refundFen,netReceiptFen,fundingBreakdown,reconciliation)` | `ACCOUNT_UNAVAILABLE` |
 | `GET /api/v1/transfers/{id}/trace` | 交易 ID | `TraceView(traceId,transactionId,spans[],masked=true)` | `OPS_PERMISSION_REQUIRED` |
 | `GET /api/v1/manual-cases` | `status,type,cursor,limit` | `ManualCasePage(items,nextCursor)` | `OPS_PERMISSION_REQUIRED` |
 | `POST /api/v1/manual-cases/{id}/decisions` | `ManualCaseDecisionRequest(decision,comment,version)` | `ManualCaseView(id,status,decision,version,updatedAt)` | `CASE_STATE_INVALID`、`VERSION_CONFLICT` |
@@ -671,7 +673,7 @@ tests/api|e2e|performance|fault-injection/
 2. 注册、开户、支付密码、登录会话。
 3. 模拟充值、余额、账本明细和对账基线。
 4. 转账草稿、风控、确认、普通转账、终态和恢复。
-5. 商户扫码、H5 令牌交换、余额支付、SSE。
+5. 普通用户动态扫码收款、H5 令牌交换、余额支付、SSE。
 6. 长期个人码、固定请求和并发仲裁。
 7. 信用支付、账单、还款和逾期。
 8. Agent/MCP、指标、告警、T+1 和质量门禁。
