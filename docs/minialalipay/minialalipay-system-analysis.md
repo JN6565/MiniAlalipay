@@ -6,11 +6,10 @@
 |---|---|
 | 系统名称 | MiniAlalipay |
 | 文档类型 | 系统分析文档 |
-| 文档版本 | V1.10 |
+| 文档版本 | V1.11 |
 | 编制日期 | 2026-07-29 |
 | 需求基线 | MiniAlalipay PRD V1.8 |
 | PRD 文件 | `minialalipay-prd.md` |
-| PRD SHA-256 | `0DF43B216FC30237F8FF994D6B2BBBD1420BE3B86C602523F0485B68B9E4D964` |
 | 项目周期 | 2 周 |
 | 团队规模 | 5 人 |
 | 资金属性 | 系统虚拟资金，不接入真实人民币通道 |
@@ -31,6 +30,7 @@
 | V1.8 | 2026-07-29 | 项目组 | 调整为同一 Monorepo 下 B 端与 C 端两个独立 Umi 前端工程，分别构建和部署 |
 | V1.9 | 2026-07-29 | 项目组 | 对齐 PRD V1.7：开户初始余额改为 0，新增模拟充值资金来源与对应账户、账本、接口约束 |
 | V1.10 | 2026-07-30 | 项目组 | 对齐 PRD V1.8：补充普通用户个人收支投影与商户经营收款、订单、退款和对账统计 |
+| V1.11 | 2026-07-30 | 项目组 | 明确文档权威层级，补齐注册开户中间状态和幂等恢复事实，专项实现改由派生文档引用 |
 
 ## 1. 文档目的与范围
 
@@ -46,7 +46,7 @@
 6. 两周、5 人约束下，哪些能力独立部署，哪些能力以模块方式共部署。
 7. 如何通过自动化测试、故障注入和对账证明“钱不少、账不乱”。
 
-本文档同时给出开发所需的流程、UML、物理数据模型和 API 契约基线。可执行 DDL、OpenAPI 3.1 文件和部署脚本必须从本基线派生，并通过契约测试防止实现漂移。
+本文档同时给出开发所需的流程、UML、逻辑数据模型、接口分组和协议约束。第 11、12 章是系统架构视图；可执行 DDL 的物理结构以数据库设计为准，可执行 HTTP/SSE 契约以 OpenAPI 3.1 文件为准，部署脚本以 `deploy/` 中受版本管理的配置为准，并通过迁移测试和契约测试防止实现漂移。
 
 ### 1.2 分析范围
 
@@ -90,11 +90,30 @@
 | UML 时序图 | 注册、转账、商户扫码、信用支付/还款、个人码和固定请求 | 第 9 章 | 明确跨端、跨服务调用顺序 |
 | UML 状态图 | QR 订单、信用账户/账单、个人码、固定请求/订单、TCC 分支、告警 | 第 10 章 | 约束合法状态迁移 |
 | ER 图 | 用户、账户、交易、账本和 Agent 关系 | 8.2 | 说明逻辑数据关系 |
-| 数据库设计 | 数据所有权、物理表、字段类型、键和索引 | 第 11 章 | 指导 MySQL DDL 与迁移 |
-| API 设计 | 端点目录、权限、请求响应、SSE/MCP/事件 | 第 12 章 | 指导前后端联调和契约测试 |
+| 数据架构 | 数据所有权、逻辑实体关系、关键约束和分片边界 | 第 11 章 | 为物理数据库设计提供系统架构输入 |
+| 接口架构 | 能力分组、权限边界、交互协议和集成约束 | 第 12 章 | 为 OpenAPI、SSE/MCP 和事件契约提供系统架构输入 |
 | 技术选型 | 语言、框架、中间件、部署和选型取舍 | 7.5、7.6、7.7、19.1 | 固定 MVP 技术基线及前后端工程约束 |
 | 功能实现详述 | 功能点、后端处理、数据表、事务和结果 | 6.4、9.8 | 指导按功能实现和联调 |
 | 库表总览 | 服务数据所有权、核心表关系和分片边界 | 11.10 | 解释库表设计与 DDL 的对应关系 |
+
+第 11 章出现的字段目录和第 12 章出现的端点、请求响应 Schema 用于表达架构约束与设计意图，不构成第二份可执行契约。发生字段级或协议级差异时，分别以[数据库设计](./minialalipay-database-design.md)和 [`contracts/openapi/minialalipay-api.yaml`](../../contracts/openapi/minialalipay-api.yaml)为准，并同步回写本文受影响的逻辑模型或架构约束。
+
+### 1.5 文档权威与派生关系
+
+本文档是 MiniAlalipay 的**系统架构事实来源**，统一维护系统边界、服务职责、业务流程、状态模型、领域关系、数据所有权、资金不变量、安全规则、质量属性和跨端协作方式。后端、前端、AI、测试和部署设计不得在各自专项文档中重新定义或覆盖这些系统事实。
+
+项目文档按以下职责分层：
+
+1. [产品需求文档](./minialalipay-prd.md)是需求与验收事实来源，定义系统需要实现什么。
+2. 本文档是系统架构事实来源，定义各能力如何组成、协作和保持一致。
+3. [`contracts/openapi/minialalipay-api.yaml`](../../contracts/openapi/minialalipay-api.yaml)是 HTTP/SSE 路径、方法、字段、响应和协议的接口契约事实来源。
+4. [数据库设计](./minialalipay-database-design.md)是物理表、字段、索引、约束和 Schema 所有权的事实来源。
+5. [后端系统分析](./minialalipay-backend-system-analysis.md)是派生的后端实现设计，只描述上述事实如何映射到 Java 模块、包、组件、事务、配置和测试。
+6. [前端系统分析](./miniaialipay%20-frontend-system-analysis.md)是派生的前端实现设计，只描述总体交互和接口契约如何映射到 B/C 端工程。
+
+专项文档不得通过复制形成第二套业务流程、状态、接口或数据定义。确需说明上下文时，应引用本文档的稳定章节标题，然后只补充本专项的实现增量。引用不得依赖易变化的物理行号。
+
+发现文档冲突时必须停止实现或合并：PRD 与本文档先统一需求和架构语义；本文档与 OpenAPI 或数据库设计再统一专项契约；后端或前端系分必须服从已批准的上层基线。代码和测试不能被当作默认事实来源，也不得通过兼容逻辑隐藏未说明行为。
 
 ## 2. 系统目标与质量属性
 
@@ -1090,8 +1109,8 @@ sequenceDiagram
 
     U->>G: 提交登录名、登录密码、支付密码
     G->>UC: 注册请求
-    UC->>UC: 校验唯一性并创建待激活用户
-    UC->>AC: 创建虚拟账户
+    UC->>UC: 生成 registrationId 并创建 PROVISIONING 用户
+    UC->>AC: 以 registrationId 幂等创建虚拟账户
     AC->>AC: 创建余额为 0 的账户与余额快照
     AC->>CR: 幂等创建固定 5000 元额度账户
     CR-->>AC: total=available=500000，used=frozen=0
@@ -1103,7 +1122,8 @@ sequenceDiagram
 异常规则：
 
 - 用户创建失败：不调用账户中心。
-- 开户失败：用户保持不可用并进入可重试/补偿，不得形成可登录但无账户的用户。
+- 开户失败：用户保持 `PROVISIONING` 并进入可重试/补偿，不得形成可登录但无账户的用户。
+- `registrationId` 由用户中心生成并持久化，是账户中心开户和恢复查询的幂等键；账户或信用账户已存在时返回原资源，不重复开户或发放额度。
 - 注册不得创建虚拟资金分录；模拟充值使用唯一业务键 `RECHARGE + recharge_order_id`，重复请求不得重复入账。
 - 信用开户使用唯一业务键 `CREDIT_ACCOUNT_INIT + user_id`，额度不写入余额或虚拟金初始化凭证；任一步失败时用户保持不可用并由恢复任务接续。
 
@@ -1630,6 +1650,19 @@ stateDiagram-v2
 
 长期个人码订单彼此独立；固定请求订单只有被 `active_order_id` 选中的尝试可进入 `PROCESSING`，未抢占订单保持非资金终态并可查询最终请求结果。
 
+### 10.9 用户注册开户状态
+
+```mermaid
+stateDiagram-v2
+    [*] --> PROVISIONING: 注册请求校验通过
+    PROVISIONING --> ACTIVE: 余额账户和适用的信用账户均创建成功
+    PROVISIONING --> PROVISIONING: 按 registrationId 幂等恢复
+    ACTIVE --> DISABLED: 管理停用
+    DISABLED --> ACTIVE: 管理恢复
+```
+
+`PROVISIONING` 用户不能登录或发起业务。用户中心持久化唯一 `registrationId`，账户中心使用该键幂等返回既有开户结果；恢复任务只有在余额账户和适用的信用账户均可核验后才能把用户 CAS 激活为 `ACTIVE`。恢复超过自动处理阈值时，用户仍保持 `PROVISIONING` 并创建人工工单。临时登录锁定只由 `credential.login_fail_count/login_lock_until` 表达，不修改 `app_user.status`；账户销户只改变账户状态，不关闭用户身份。
+
 ## 11. 数据架构与数据库分析
 
 ### 11.1 数据所有权
@@ -1651,7 +1684,7 @@ stateDiagram-v2
 
 | 表 | 关键字段 | 约束 |
 |---|---|---|
-| `user` | user_id、login_name、nickname、status、version | login_name 唯一 |
+| `user` | user_id、registration_id、login_name、nickname、status、version | registration_id、login_name 唯一；开户完成前保持 `PROVISIONING` |
 | `credential` | user_id、login_hash、pay_hash、login/pay_fail_count、login/pay_lock_until | 密码强哈希，登录与支付失败分别原子锁定 |
 | `contact` | owner_id、payee_user_id、alias | owner + payee 唯一 |
 
@@ -1659,7 +1692,7 @@ stateDiagram-v2
 
 | 表 | 关键字段 | 约束 |
 |---|---|---|
-| `account` | account_id、user_id、type、currency、status | user + type + currency 唯一 |
+| `account` | account_id、user_id、registration_id、type、currency、status | registration_id 唯一；user + type + currency 唯一 |
 | `account_balance` | account_id、available_fen、frozen_fen、version | 金额非负，乐观锁 |
 | `freeze_record` | freeze_id、transaction_id、account_id、amount_fen、status | transaction + account + purpose 唯一 |
 | `credit_account` | credit_account_id、user_id、total/used/frozen_limit_fen、status、version | 用户唯一；固定额度 500000 分；总额 = 可用 + 已用 + 冻结 |
@@ -1750,7 +1783,7 @@ stateDiagram-v2
 
 | 表 | 字段及类型 | 主键/唯一键 | 主要索引 |
 |---|---|---|---|
-| `app_user` | `user_id CHAR(26)`、`login_name VARCHAR(64)`、`nickname VARCHAR(64)`、`identity_status VARCHAR(16)`、`status VARCHAR(16)`、`version BIGINT UNSIGNED`、`created_at/updated_at DATETIME(3)` | PK `user_id`；UK `login_name` | `(status, created_at)` |
+| `app_user` | `user_id/registration_id CHAR(26)`、`login_name VARCHAR(64)`、`nickname VARCHAR(64)`、`identity_status/status VARCHAR(16)`、`version BIGINT UNSIGNED`、`created_at/updated_at DATETIME(3)` | PK `user_id`；UK `registration_id`；UK `login_name` | `(status, created_at)` |
 | `credential` | `user_id CHAR(26)`、`login_password_hash/payment_password_hash VARCHAR(255)`、`login_fail_count/pay_fail_count INT UNSIGNED`、`login_lock_until/pay_lock_until DATETIME(3)`、`updated_at DATETIME(3)` | PK/FK `user_id` | `(login_lock_until)`、`(pay_lock_until)` |
 | `contact` | `owner_user_id/payee_user_id CHAR(26)`、`alias VARCHAR(64)`、`success_count BIGINT UNSIGNED`、`last_success_at DATETIME(3)`、`pinned/hidden BOOLEAN`、`version BIGINT UNSIGNED`、`created_at/updated_at DATETIME(3)` | PK `(owner_user_id, payee_user_id)`；仅成功转账事件创建/累计 | `(owner_user_id, pinned, hidden, last_success_at)`、`(payee_user_id)` |
 | `role_assignment` | `user_id CHAR(26)`、`role_code VARCHAR(32)`、`created_at DATETIME(3)` | PK `(user_id, role_code)` | `(role_code)` |
@@ -1761,7 +1794,7 @@ stateDiagram-v2
 
 | 表 | 字段及类型 | 主键/唯一键 | 主要索引 |
 |---|---|---|---|
-| `account` | `account_id CHAR(26)`、`user_id CHAR(26)`、`account_type VARCHAR(16)`、`currency CHAR(3)`、`status VARCHAR(16)`、`created_at/updated_at DATETIME(3)` | PK `account_id`；UK `(user_id, account_type, currency)` | `(status, updated_at)` |
+| `account` | `account_id CHAR(26)`、`user_id/registration_id CHAR(26)`、`account_type VARCHAR(16)`、`currency CHAR(3)`、`status VARCHAR(16)`、`created_at/updated_at DATETIME(3)` | PK `account_id`；UK `registration_id`；UK `(user_id, account_type, currency)` | `(status, updated_at)` |
 | `account_balance` | `account_id CHAR(26)`、`available_fen BIGINT UNSIGNED`、`frozen_fen BIGINT UNSIGNED`、`version BIGINT UNSIGNED`、`updated_at DATETIME(3)` | PK/FK `account_id` | `(updated_at)` |
 | `freeze_record` | `freeze_id CHAR(26)`、`transaction_id CHAR(26)`、`account_id CHAR(26)`、`purpose VARCHAR(24)`、`amount_fen BIGINT UNSIGNED`、`status VARCHAR(16)`、`created_at/updated_at DATETIME(3)` | PK `freeze_id`；UK `(transaction_id, account_id, purpose)` | `(account_id, status)`、`(status, updated_at)` |
 | `credit_account` | `credit_account_id CHAR(26)`、`user_id CHAR(26)`、`total_limit_fen/used_fen/frozen_fen BIGINT UNSIGNED`、`status VARCHAR(16)`、`suspend_reason VARCHAR(32)`、`version BIGINT UNSIGNED`、`created_at/updated_at DATETIME(3)` | PK `credit_account_id`；UK `user_id` | `(status, updated_at)` |
@@ -3751,8 +3784,8 @@ P2P Collection 验收映射：
 基于本文档，后续需要产出：
 
 1. 详细实施计划与任务拆分。
-2. 从第 12 章生成并校验机器可读的 OpenAPI 3.1 文件和 MCP Tool Schema。
-3. 从第 11 章生成完整数据库迁移、回滚和初始化脚本，并通过容器实测约束。
+2. 按第 12 章的接口架构约束，在 OpenAPI 3.1 文件和 MCP Tool Schema 中定义并校验可执行契约。
+3. 按第 11 章的数据架构约束及数据库设计，编写数据库迁移、回滚说明和初始化脚本，并通过容器实测约束。
 4. 四类交易的 TCC 分支接口、屏障表、信用还款分配和固定请求安全重开详细设计。
 5. 商户扫码、Mini 花呗、个人码、固定请求和跨端回执的前端原型与状态组件。
 6. `P2P_COLLECTION_*`、信用事件 Schema、source_type 指标字典和告警规则配置。
@@ -3775,6 +3808,8 @@ P2P Collection 验收映射：
 
 ## 附录 B：参考文档
 
-- [MiniAlalipay PRD V1.6](./minialalipay-prd.md)
-- [选题说明](./MiniAIalipay.md)
-- [PRD 模板参考](./PRD模板参考.md)
+- [MiniAlalipay 产品需求文档](./minialalipay-prd.md)
+- [MiniAlalipay 数据库设计](./minialalipay-database-design.md)
+- [MiniAlalipay 后端系统分析](./minialalipay-backend-system-analysis.md)
+- [MiniAlalipay 前端系统分析](./miniaialipay%20-frontend-system-analysis.md)
+- [MiniAlalipay OpenAPI 契约](../../contracts/openapi/minialalipay-api.yaml)

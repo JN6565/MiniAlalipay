@@ -3,11 +3,10 @@
 | 项目 | 内容 |
 | --- | --- |
 | 产品 | MiniAlalipay |
-| 文档版本 | V2.6 |
+| 文档版本 | V2.7 |
 | 修订日期 | 2026-07-30 |
 | 需求基线 | PRD V1.8 |
-| 系统分析基线 | 系统分析 V1.10 |
-| 补充基线 | `2026-07-30-minialalipay-system-analysis-change-record.md` |
+| 系统分析基线 | 系统分析 V1.11 |
 | 数据库 | MySQL 8.0 / InnoDB |
 | 金额单位 | 人民币分，`BIGINT UNSIGNED` |
 | 时间标准 | UTC `DATETIME(3)`，API 转 ISO 8601 |
@@ -17,7 +16,7 @@
 
 本版统一 PRD、系统分析和原库表设计中的数据口径，可作为建表脚本、实体模型和迁移脚本的设计基线。完整 DDL 应由本文件生成并纳入代码仓库版本管理，不再由两份文档分别维护同一张表。
 
-基线识别说明：PRD 变更记录已更新到 V1.8，且系统分析 V1.10 明确以 PRD V1.8 为需求基线；PRD“文档信息”中的版本号仍误写为 V1.6，本设计按其最新变更记录和实际新增内容采用 V1.8，不回退到旧版本。系统分析正文已应用 2026-07-30 修改记录但未提升文档版本，因此该修改记录作为 V1.10 的补充基线一并约束本设计。
+基线识别说明：PRD 变更记录已更新到 V1.8，且系统分析 V1.11 明确以 PRD V1.8 为需求基线；PRD“文档信息”中的版本号仍误写为 V1.6，本设计按其最新变更记录和实际新增内容采用 V1.8，不回退到旧版本。过程修改记录不作为独立基线，已批准内容必须合并到总体系统分析后再由本设计引用。
 
 本次修订重点如下：
 
@@ -39,6 +38,7 @@
 16. 消除退款重试基数、统计主体 ID、信用退款账单、用户角色来源和还款分配粒度之间的表述冲突。
 17. 对齐系统分析补充修改记录：统一联系人字段和索引，补齐改密撤销闭环及演示信用任务运行记录。
 18. 统一第 5 至 12 章的库表表达：每张表均按“功能与归属、字段设计、键与索引、写入规则”描述，并为字段补充业务功能。
+19. 对齐系统分析 V1.11：增加注册 `registration_id` 和 `PROVISIONING` 状态，支持跨服务开户幂等恢复。
 
 ## 1. 设计原则
 
@@ -129,18 +129,19 @@ erDiagram
 | 字段 | 类型 | 必填/默认 | 功能 |
 | --- | --- | --- | --- |
 | `user_id` | `CHAR(26)` | PK，必填 | 用户 ULID，跨模块引用用户的稳定标识 |
+| `registration_id` | `CHAR(26)` | 必填 | 用户中心生成的注册幂等键，用于开户恢复和既有资源查询 |
 | `login_name` | `VARCHAR(64)` | 必填 | 规范化登录名，用于登录和唯一识别 |
 | `nickname` | `VARCHAR(64)` | 必填 | 可重复的展示名称和模糊搜索条件 |
 | `phone_tail` | `CHAR(4)` | 可空 | 手机号尾号，仅用于辅助检索和脱敏展示 |
 | `identity_status` | `VARCHAR(16)` | 必填 | 演示身份状态，不代表真实 KYC |
-| `status` | `VARCHAR(16)` | `ACTIVE` | 用户可用状态：`ACTIVE/LOCKED/CLOSED` |
+| `status` | `VARCHAR(16)` | `PROVISIONING` | 用户状态：`PROVISIONING/ACTIVE/DISABLED` |
 | `version` | `BIGINT UNSIGNED` | `0` | 用户资料和状态的 CAS 版本 |
 | `created_at` | `DATETIME(3)` | 必填 | 用户注册时间 |
 | `updated_at` | `DATETIME(3)` | 必填 | 最近资料或状态变更时间 |
 
-**键与索引**：UK `(login_name)`；索引 `(nickname,status)`、`(status,created_at)`。
+**键与索引**：UK `(registration_id)`、UK `(login_name)`；索引 `(nickname,status)`、`(status,created_at)`。
 
-**写入规则**：注册事务创建用户后触发开户，但不得写初始资金；RBAC 角色只写 `role_assignment`，不得在本表重复保存 `user_type`。
+**写入规则**：注册事务以 `PROVISIONING` 创建用户并触发开户，但不得写初始资金；账户中心以 `registration_id` 作为开户幂等键，用户中心核验余额账户和适用的信用账户后才能 CAS 更新为 `ACTIVE`。恢复期间禁止登录，超过自动恢复阈值后仍保持 `PROVISIONING` 并创建人工工单。临时登录锁定只更新 `credential.login_fail_count/login_lock_until`，不修改用户状态；管理停用使用 `DISABLED`。RBAC 角色只写 `role_assignment`，不得在本表重复保存 `user_type`。
 
 ### 5.2 `credential`
 
@@ -230,6 +231,7 @@ erDiagram
 | --- | --- | --- | --- |
 | `account_id` | `CHAR(26)` | PK，必填 | 虚拟账户 ID |
 | `user_id` | `CHAR(26)` | 必填 | 账户所有者，跨 `user_db` 逻辑引用 |
+| `registration_id` | `CHAR(26)` | UK，必填 | 开户请求幂等和恢复查询键，由用户中心生成 |
 | `account_type` | `VARCHAR(16)` | 必填 | `PERSONAL/MERCHANT` 等账户类型 |
 | `currency` | `CHAR(3)` | `CNY` | 账户币种，MVP 固定人民币 |
 | `status` | `VARCHAR(16)` | `ACTIVE` | `ACTIVE/FROZEN/CLOSED` |
@@ -237,9 +239,9 @@ erDiagram
 | `created_at` | `DATETIME(3)` | 必填 | 开户时间 |
 | `updated_at` | `DATETIME(3)` | 必填 | 最近状态更新时间 |
 
-**键与索引**：UK `(user_id,account_type,currency)`；索引 `(status,updated_at)`。
+**键与索引**：UK `(registration_id)`、UK `(user_id,account_type,currency)`；索引 `(status,updated_at)`。
 
-**写入规则**：注册只创建账户和零余额行，不创建初始化资金凭证；余额只能由成功充值、成功收款或受控退款增加。
+**写入规则**：注册只创建账户和零余额行，不创建初始化资金凭证；重复 `registration_id` 必须返回既有账户，不得重复开户。余额只能由成功充值、成功收款或受控退款增加。
 
 ### 6.2 `account_balance`
 
