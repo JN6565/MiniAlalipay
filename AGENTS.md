@@ -1,5 +1,4 @@
-# MiniAIalipay 工程规范
-
+q
 ## 中文说明强制约束
 
 - 项目文档、需求说明、系统分析、数据库说明、接口说明、代码注释、日志说明、错误提示和 Git 提交摘要必须使用中文。
@@ -20,7 +19,8 @@
 ## 仓库边界
 
 - `backend/`：Java 21 Maven 多模块后端工程。
-- `frontend/`：一个 React + TypeScript + Umi 工程；B 端路由为 `/admin/**`，浏览器 H5 路由为 `/h5/**`。
+- `frontend-admin/`：B 端独立 React + TypeScript + Umi 工程。
+- `frontend-h5/`：C 端独立 React + TypeScript + Umi H5 工程。
 - `contracts/`：接口、事件和错误码契约。
 - `tests/`：跨服务接口、端到端、性能和故障注入测试。
 - `deploy/`：本地运行依赖配置。
@@ -68,7 +68,7 @@
 
 - 使用 React + TypeScript，禁止引入 Vue。
 - B 端使用 Ant Design/AntV；H5 使用 Ant Design Mobile/AntV F2。
-- `/admin` 与 `/h5` 必须分离 Layout、页面模块、Zustand Store 和样式；仅可共享 API 服务、契约类型、错误码和无副作用工具函数。
+- B/C 端为两个独立工程，分别构建、部署和维护依赖；仅可通过 `contracts` 共享契约类型、错误码和无副作用工具函数。
 - 默认使用 Umi `request`；TanStack Query 管理服务端缓存，Zustand 只保存客户端 UI 状态，禁止复制余额、账本事实或交易终态。
 - 必须启用路由级拆包，H5 不得下载 B 端大盘代码。
 

@@ -5,7 +5,8 @@ MiniAIalipay 是一个虚拟资金支付系统，用于演示 C2C 转账、商�
 ## 仓库结构
 
 - `backend/`：Java 21 Maven 多模块后端，包含网关和各限界上下文服务。
-- `frontend/`：预留的单一 Umi 前端工程，后续承载 `/admin/**` B 端与 `/h5/**` C 端路由。
+- `frontend-admin/`：B 端独立 Umi 前端工程。
+- `frontend-h5/`：C 端独立 Umi H5 前端工程。
 - `contracts/`：OpenAPI、事件和错误码契约。
 - `tests/`：跨服务验证测试。
 - `deploy/`：本地 MySQL、Redis、Seata 运行依赖。
