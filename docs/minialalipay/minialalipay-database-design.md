@@ -39,7 +39,7 @@
 17. 对齐系统分析补充修改记录：统一联系人字段和索引，补齐改密撤销闭环及演示信用任务运行记录。
 18. 统一第 5 至 12 章的库表表达：每张表均按“功能与归属、字段设计、键与索引、写入规则”描述，并为字段补充业务功能。
 19. 对齐系统分析 V1.11：增加注册 `registration_id` 和 `PROVISIONING` 状态，支持跨服务开户幂等恢复。
-19. 基于 PRD V1.8 和系统分析 V1.10 补充按逻辑库拆分的 ER 图，区分同库物理外键与跨库逻辑引用，并覆盖业务、信用、账本、事件和统计投影关系。
+20. 基于 PRD V1.8 和系统分析 V1.11 补充按逻辑库拆分的 ER 图，区分同库物理外键与跨库逻辑引用，并覆盖业务、信用、账本、事件和统计投影关系。
 
 ## 1. 设计原则
 
@@ -88,7 +88,7 @@ MVP 可以把这些 Schema 部署在同一个 MySQL 实例，但仍应使用不�
 
 ## 4. 实体关系设计
 
-本章 ER 图以 PRD V1.8 的业务对象和系统分析 V1.10 的限界上下文为输入，并以本文件后续字段、主键和唯一约束为准。为保证图可读性，按逻辑库和业务域拆分展示。
+本章 ER 图以 PRD V1.8 的业务对象和系统分析 V1.11 的限界上下文为输入，并以本文件后续字段、主键和唯一约束为准。为保证图可读性，按逻辑库和业务域拆分展示。
 
 关系实现规则：同一 Schema 内的稳定实体关系优先使用物理外键；跨 Schema 关系只保存业务 ID，属于逻辑引用，不创建跨库外键；`subject_type + subject_id`、`target_type + target_id` 等多态关系由应用校验，不能误建为指向单表的外键。各 Schema 内重复部署的 `outbox_event`、`inbox_event`、`idempotency_record` 和 `audit_log` 在 4.5 节统一表示。
 
@@ -110,6 +110,7 @@ erDiagram
 
     APP_USER {
         char26 user_id PK
+        char26 registration_id UK
         varchar login_name UK
         varchar status
     }
@@ -132,6 +133,7 @@ erDiagram
     }
     ACCOUNT {
         char26 account_id PK
+        char26 registration_id UK
         char26 user_id FK "logical reference"
         varchar account_type
     }
