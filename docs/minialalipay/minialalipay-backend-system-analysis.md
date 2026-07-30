@@ -1,1003 +1,720 @@
-# MiniAIalipay 后端系统分析文档
+# MiniAlalipay 后端系统分析与详细设计
 
-## 0. 文档信息
+## 0. 文档控制
 
 | 项目 | 内容 |
 |---|---|
-| 文档版本 | V1.0 |
-| 编制日期 | 2026-07-30 |
-| PRD 基线 | MiniAIalipay PRD V1.8 |
-| PRD SHA-256 | `0DF43B216FC30237F8FF994D6B2BBBD1420BE3B86C602523F0485B68B9E4D964` |
-| 总体系统分析基线 | MiniAIalipay 系统分析 V1.10 |
-| 总体系分 SHA-256 | `E895DE738617C3EEF84201E76D4CA0A12FA439208E83DFA314B6FFDBE3342F52` |
-| 库表设计基线 | `minialalipay-database-design.md` |
-| 库表设计 SHA-256 | `161562C58D7C67E1D260365F4FE1B5666CDD68BF0F0908943778A89F341CC969` |
-| 项目周期 | 2 周 |
-| 团队规模 | 5 人 |
+| 文档版本 | V2.0 |
+| 修订日期 | 2026-07-30 |
+| 需求基线 | [MiniAlalipay PRD](./minialalipay-prd.md) |
+| 架构事实 | [MiniAlalipay 总体系统分析](./minialalipay-system-analysis.md) |
+| 物理数据事实 | [MiniAlalipay 数据库设计](./minialalipay-database-design.md) |
+| 可执行接口事实 | [`contracts/openapi/minialalipay-api.yaml`](../../contracts/openapi/minialalipay-api.yaml) |
+| 技术基线 | Java 21、Spring Boot 3.3.4、Spring Cloud 2023.0.3、MySQL 8、Redis 7、Seata 2 |
 | 目标读者 | 后端、AI、测试、前端联调、运维和技术评审人员 |
 
-## 1. 文档目标与边界
+### 0.1 变更记录
 
-本文将 PRD 和总体系统分析转换为后端可实施设计，明确：
+| 版本 | 日期 | 内容 |
+|---|---|---|
+| V1.0 | 2026-07-30 | 建立后端系统分析基线 |
+| V1.1 | 2026-07-30 | 明确派生文档定位，删除重复系统事实 |
+| V2.0 | 2026-07-30 | 按标准系分补齐架构、依赖、领域落点、主流程、接口就绪、事务、安全、异常用例和编码追踪 |
 
-1. Maven 模块、服务进程、包结构和依赖方向。
-2. 限界上下文、聚合根、数据库归属和事务边界。
-3. 注册、模拟充值、转账、扫码、个人收款、Mini 花呗和 AI 工具调用流程。
-4. REST、SSE、MCP、事件、错误码和幂等契约。
-5. TCC、Saga、账本、终态发布、恢复和对账机制。
-6. RBAC、数据归属、敏感信息、审计和可观测性规则。
-7. 分阶段开发顺序、测试策略和发布门禁。
+## 1. 文档目的、范围与标准项
 
-本文不包含前端页面视觉实现，不接入真实人民币支付渠道，不建设真实征信、清结算、银行卡和商户入驻系统。
+本文是总体系统分析的后端派生设计，回答系统事实如何落到 Java 模块、类、端口、事务、持久化、配置和测试中。本文不重新定义业务状态、物理字段或 HTTP Schema；引用与专项事实冲突时，按第 0 章列出的权威文件修正后再编码。
 
-## 2. 当前代码基线
+### 1.1 标准系分覆盖矩阵
 
-当前已搭建：
+| 标准项 | 本文位置 | 完成判定 |
+|---|---|---|
+| 文档目标、范围、假设和约束 | 第 1、2 章 | 范围及非目标明确 |
+| 当前系统与差距 | 第 2 章 | 已实现和目标设计分离 |
+| 系统架构、部署和依赖 | 第 3 章 | 部署单元、调用方向和禁止依赖明确 |
+| 领域模型和数据模型 | 第 4 章 | 聚合、端口、数据所有权和一致性边界明确 |
+| 功能模块和应用设计 | 第 5、7 章 | 可定位到包、类、方法和事务入口 |
+| 主流程、异常和恢复流程 | 第 6、10 章 | 正常、拒绝、超时、补偿和人工路径明确 |
+| 外部接口与集成 | 第 8 章 | OpenAPI 就绪状态、Controller 映射和契约门禁明确 |
+| 数据访问与事务 | 第 9、10 章 | Repository、CAS、幂等、TCC、Outbox 明确 |
+| 安全与可观测性 | 第 11、12 章 | 代码、通信、存储、审计和 Trace 明确 |
+| 用例和测试 | 第 13 章 | 正常、异常、并发、故障和安全场景有追踪 |
+| 实施和验收 | 第 14 章及附录 | 开发顺序、完成定义和检查表明确 |
 
-- Java 21 Maven 父工程与 `platform-common`、`gateway`、`user-center`、`business-center`、`account-center`、`ai-service`。
-- Spring Cloud Gateway 路由、`X-Request-Id`、安全响应头和统一网关异常响应。
-- 通用 `ApiResponse`、`ErrorCode`、`BusinessException`、`RequestIdGenerator`。
-- 用户、交易、账户、账本、TCC、信用和 AI 工具风险基础枚举。
-- MySQL、Redis、Seata 本地 Docker Compose 基线。
+### 1.2 范围边界
 
-尚未实现：
+- 覆盖 `gateway`、`user-center`、`business-center`、`account-center`、`ai-service` 和 `platform-common`。
+- 覆盖注册、支付密码、模拟充值、转账、扫码、C2C、Mini 花呗、Agent、监控和恢复。
+- 不接入真实人民币通道、真实 KYC、真实征信或生产级多地域容灾。
+- 浏览器只能访问网关；跨上下文只通过版本化契约或 Outbox 事件交互。
+- 只有 `account-center` 可以修改余额、额度、应收、凭证和分录。
 
-- 业务 Controller、应用服务、聚合根、仓储、Mapper 和 Flyway 业务迁移。
-- 登录鉴权、支付密码、确认令牌、模拟充值和交易主流程。
-- Seata TCC 分支、Outbox/Inbox、复式账本、恢复和对账。
-- AI Agent、MCP 工具、SSE、监控事件和离线分析。
-- 网关现有前缀尚未覆盖 `/recharges`、`/transfer-drafts`、`/confirmations`、`/payment-password`、`/merchants`、`/manual-cases` 和 `/ops`；这些路由必须与 Controller、OpenAPI 和契约测试同时补齐，当前不得视为可联调接口。
-- 当前 `ApiResponse` 只有 `requestId`，本设计要求同时返回 `traceId`；实现 API 前必须同步修改通用响应类和 OpenAPI，不能只改文档或前端类型。
-- 当前 `UserStatus` 只有 `ACTIVE/LOCKED/DISABLED`，无法表达跨服务开户中的不可登录状态；注册实现前必须增加 `PROVISIONING` 及其恢复测试。
+## 2. 当前实现基线与设计差距
 
-## 3. 总体后端架构
+### 2.1 已实现事实
 
-采用“逻辑微服务、MVP 有限合并部署”。服务边界、数据所有权和接口契约按微服务设计，相关子域在两周阶段合并进五个进程。
+- Maven 父工程和六个模块已经建立，Java 版本为 21。
+- 五个后端进程可启动，默认端口为 8080 至 8084。
+- 网关已有基础路由、`X-Request-Id`、安全响应头和统一异常响应。
+- `platform-common` 已有 `ApiResponse`、错误接口和请求 ID 生成器。
+- 各业务模块只有启动类、少量状态枚举、包占位和领域枚举测试。
+- Docker Compose 已提供 MySQL、Redis 和 Seata；尚未提供 OTel 监控栈。
+
+### 2.2 实现阻断项
+
+| 编号 | 当前差距 | 影响 | 完成条件 |
+|---|---|---|---|
+| GAP-01 | OpenAPI 仅有 `/actuator/health` | 业务 Controller、DTO 和前端联调无可执行契约 | 每个纵向切片先补 OpenAPI、校验和契约测试 |
+| GAP-02 | 未集成 Flyway、数据访问框架和 Testcontainers | 表结构、Mapper 和数据库测试不可落地 | 父 POM 锁定依赖并建立迁移测试 |
+| GAP-03 | 未集成 Seata 客户端和 TCC 屏障 | 资金主流程不可编码 | 内部 TCC 契约、分支表和故障测试就绪 |
+| GAP-04 | `UserStatus` 仍含 `LOCKED` 且缺 `PROVISIONING` | 注册恢复与登录锁定事实冲突 | 对齐为 `PROVISIONING/ACTIVE/DISABLED` |
+| GAP-05 | `TransactionStatus` 仍含 `FAILED` 且缺 `MANUAL_REVIEW` | 已受理资金交易可能错误终止 | 对齐总体状态并增加迁移/状态测试 |
+| GAP-06 | `ApiResponse` 与总体 HTTP 结构存在 `requestId/traceId` 差异 | 网关、服务和契约不一致 | 先统一 OpenAPI和响应类型再实现业务接口 |
+| GAP-07 | 无 Controller、Application Service、聚合、Repository 和业务迁移 | 业务能力尚未实现 | 按第 14 章逐个纵向切片交付 |
+
+“文档已设计”不等于“代码已实现”。完成状态必须同时满足源码、OpenAPI、Flyway 和自动化测试。
+
+## 3. 后端架构与应用依赖
+
+### 3.1 系统上下文与部署单元
 
 ```mermaid
 flowchart LR
-    C["C 端 H5/商户端"] --> G["API Gateway"]
-    B["B 端运营后台"] --> G
-    G --> U["user-center"]
-    G --> BS["business-center"]
-    G --> A["account-center"]
-    G --> AI["ai-service"]
-    BS -->|"用户/联系人查询"| U
-    BS -->|"TCC/账户查询"| A
-    AI -->|"受控工具 API"| U
-    AI -->|"受控工具 API"| BS
-    AI -->|"只读账户 API"| A
-    U --> DBU[("user_db")]
-    BS --> DBB[("business_db/metrics_db")]
-    A --> DBA[("account_db/ledger_db")]
-    AI --> DBI[("agent_db")]
+    C["Web / H5"] --> G["gateway :8080"]
+    O["运营后台"] --> G
+    G --> U["user-center :8081"]
+    G --> B["business-center :8082"]
+    G --> A["account-center :8083"]
+    G --> AI["ai-service :8084"]
+    AI -->|"受控工具调用"| U
+    AI -->|"受控工具调用"| B
+    AI -->|"只读账户调用"| A
+    B -->|"用户解析"| U
+    B -->|"账户查询 / TCC"| A
+    B --> S["Seata :8091"]
     U --> R[("Redis")]
-    BS --> R
+    B --> R
     AI --> R
-    BS --> S["Redis Streams"]
-    A --> S
-    S --> O["监控/离线消费者"]
+    U --> UDB[("user_db")]
+    B --> BDB[("business_db / metrics_db")]
+    A --> ADB[("account_db / ledger_db")]
+    AI --> IDB[("agent_db")]
 ```
 
-### 3.1 服务职责
+### 3.2 模块职责与依赖
 
-| 服务 | 主要职责 | 禁止事项 |
-|---|---|---|
-| `gateway` | 认证入口、路由、限流、CSRF/CORS、安全头、请求 ID | 不保存业务事实、不编排资金 |
-| `user-center` | 用户、登录、支付密码、角色、联系人、会话 | 不保存余额、交易和账本 |
-| `business-center` | 草稿、交易、充值订单、扫码、C2C、风控、工单、终态、监控投影 | 不直接写账户与账本表 |
-| `account-center` | 账户、余额、TCC 分支、账本、信用额度、账单、还款 | 不处理页面交互和 AI 意图 |
-| `ai-service` | Agent 会话、记忆、意图、MCP、工具策略、调用留痕 | 不持有资金写权限、不保存支付密码 |
+| 模块 | 负责 | 允许依赖 | 禁止事项 |
+|---|---|---|---|
+| `gateway` | 鉴权入口、路由、限流、CSRF/CORS、Trace | `platform-common`、Redis、各服务 HTTP | 业务编排和数据持久化 |
+| `user-center` | 用户、凭证、会话、联系人、角色 | `platform-common`、`account-center` 内部开户 API、事件 | 余额、交易和账本事实 |
+| `business-center` | 草稿、确认、交易、扫码、C2C、风控、恢复、监控 | 用户/账户 API、Seata、Redis Streams | 直接修改账户或账本表 |
+| `account-center` | 账户、余额、额度、应收、账单、还款、账本、TCC 分支 | `platform-common`、Seata、事件 | AI 意图和页面流程 |
+| `ai-service` | 会话、意图、Memory、Tool Router、MCP | 三中心契约、LLM、Redis | 持有确认句柄或直接写资金事实 |
+| `platform-common` | API 包装、错误接口、Trace 技术类型 | Java 标准库和必要技术库 | 任何用户、账户、交易、金额或持久化领域类型 |
 
-### 3.2 五步执行链路
-
-所有功能统一按“入口层、编排层、领域服务、资金执行、事件与监控”五步实现。五步不是五个独立进程，而是一次请求从接入到结果可追溯的职责划分：
-
-| 步骤 | 所在模块 | 输入 | 核心职责 | 输出 |
-|---|---|---|---|---|
-| 入口层 | Gateway、各服务 `interfaces` | HTTP/SSE/MCP 请求 | 鉴权、限流、CSRF、参数校验、请求 ID、DTO 转换 | 经认证的命令/查询 |
-| 编排层 | `application.service` | 命令、当前主体、幂等键 | 组织用例、加载聚合、调用外部端口、确定本地事务边界 | 受理结果或领域错误 |
-| 领域服务 | `domain` | 聚合和值对象 | 执行业务不变量、状态迁移、风险策略和账本模板选择 | 新聚合状态、领域事件 |
-| 资金执行 | business-center + account-center + Seata | 已确认的资金命令 | 创建主单、TCC Try/Confirm/Cancel、余额/额度/应收/账本更新 | 可验证的资金事实 |
-| 事件与监控 | Outbox、Streams、指标投影、Trace | 已提交事实事件 | 可靠投递、SSE、统计、告警、审计、离线分析和对账 | 用户结果、运营视图和处置工单 |
-
-```mermaid
-flowchart LR
-    Request["HTTP/SSE/MCP 请求"] --> Entry["入口层\n鉴权、限流、参数校验"]
-    Entry --> App["编排层\n用例、幂等、本地事务"]
-    App --> Domain["领域服务\n不变量、状态机、风控"]
-    Domain --> Funds["资金执行\nTCC、余额、信用、账本"]
-    Funds --> Finalizer["终态发布器\n事实一致性校验"]
-    Finalizer --> Event["事件与监控\nOutbox、SSE、指标、告警"]
-    Event --> Result["C/B 端结果与运营处置"]
-```
-
-入口层不能编排资金，领域层不能依赖网络和数据库实现，监控投影不能反向决定资金终态。只有终态发布器完成事实核验后，事件与监控层才能对外传播 `SUCCESS`。
-
-### 3.3 后端技术选型
-
-| 层次 | 选型 | 本项目约束 |
-|---|---|---|
-| 语言与构建 | Java 21、Maven 多模块 | 统一 UTF-8；金额使用 `long` 分；父 POM 统一依赖版本 |
-| Web 框架 | Spring Boot 3.3.4 | 用户、业务、账户和 AI 服务使用 MVC；健康检查使用 Actuator |
-| 网关与服务调用 | Spring Cloud 2023.0.3、Spring Cloud Gateway、OpenFeign/HTTP Client | 浏览器只访问网关；内部 API 使用服务鉴权和超时预算 |
-| 数据访问 | MyBatis-Plus 或 Spring JDBC、Flyway | 显式 SQL/条件更新和版本 CAS；禁止字符串拼接 SQL |
-| 主数据库 | MySQL 8.0、InnoDB | MVP 单实例多 Schema；生产可拆实例；资金事实只在 MySQL |
-| 缓存与事件 | Redis 7、Redis Streams | 会话、限流、短期 H5 会话、Outbox 投递和指标消费；不决定资金结果 |
-| 分布式事务 | Seata TCC + Saga 恢复 | 真实执行 Try/Confirm/Cancel；屏障、恢复、冲正和对账必须可演示 |
-| AI 工程 | Spring AI、MCP Server | Agent 与 MCP 同进程；高风险工具必须使用可信确认上下文 |
-| 可观测性 | Micrometer、OpenTelemetry、Prometheus、Tempo、Grafana | Trace、指标、日志和业务 ID 关联；演示资金链路 100% 采样 |
-| 测试 | JUnit 5、Spring Boot Test、Testcontainers、契约/E2E 测试 | 资金断言必须覆盖主单、余额、分支和借贷平衡 |
-| 部署 | Docker Compose、Nginx | 两周演示环境一键启动；后续可迁移 Kubernetes |
-
-当前 POM 只具备 Java、Spring Boot、Spring Cloud 和基础 Web/测试依赖；MyBatis、Flyway、Seata、Spring AI、OTel 和 Testcontainers 仍为待集成技术，不得因本节选型而标记为已实现。
-
-## 4. Maven 模块与包结构
+### 3.3 服务内部依赖规则
 
 ```text
-backend/
-├── platform-common/
-├── gateway/
-├── user-center/
-├── business-center/
-├── account-center/
-└── ai-service/
+interfaces -> application -> domain <- infrastructure
 ```
 
-每个业务服务统一使用：
+- `interfaces` 把 HTTP、SSE、MCP、消息和调度输入转换为应用命令。
+- `application` 负责用例编排、本地事务、权限主体和端口调用。
+- `domain` 只包含聚合、值对象、领域策略、事件和 Repository 端口。
+- `infrastructure` 实现数据库、缓存、HTTP、Seata、消息和配置适配器。
+- Spring MVC、MyBatis、Feign、Redis 和 Seata 类型不得进入 `domain`。
+- ArchUnit 必须验证分层方向、跨服务持久化隔离和 `platform-common` 边界。
+
+### 3.4 目标包结构
 
 ```text
 com.minialalipay.<context>/
-├── interfaces/
-│   ├── web/                 # 外部 REST/SSE
-│   ├── internal/            # 服务间/TCC 接口
-│   ├── messaging/           # 事件消费者
-│   └── scheduler/           # 恢复、账单、对账任务
-├── application/
-│   ├── command/             # 命令与处理器
-│   ├── query/               # 查询服务与投影 DTO
-│   ├── service/             # 用例编排与事务边界
-│   └── port/                # 外部上下文端口
-├── domain/
-│   ├── model/               # 聚合根、实体和值对象
-│   ├── service/             # 领域服务
-│   ├── repository/          # 仓储接口
-│   ├── event/               # 领域事件
-│   └── policy/              # 风控和状态策略
-└── infrastructure/
-    ├── persistence/         # PO、Mapper、仓储实现、Flyway
-    ├── client/              # HTTP 客户端
-    ├── messaging/           # Outbox/Inbox/Streams
-    ├── cache/               # Redis
-    └── config/              # Spring、Seata、OTel
+├── interfaces/web|internal|messaging|scheduler
+├── application/command|query|service|port
+├── domain/<aggregate>/model|repository|service|event|policy
+└── infrastructure/persistence|client|messaging|cache|config
 ```
 
-依赖方向为 `interfaces -> application -> domain <- infrastructure`。`domain` 不依赖 Spring MVC、MyBatis、Redis、Feign 或其他服务的领域类型。
+## 4. 领域模型与数据模型落地
 
-### 4.1 各服务内部模块
+### 4.1 限界上下文和聚合
 
-| 服务 | 领域子包 | 应用服务 | 主要接口适配器 | 基础设施适配器 |
+| 上下文 | 聚合根 | Java 目标包 | 权威数据 | 关键不变量 |
 |---|---|---|---|---|
-| user-center | `user`、`credential`、`contact`、`authorization` | 注册、登录、密码校验、常用收款人投影与偏好 | Auth/User/Contact Controller、内部用户查询 | MyBatis、密码哈希、会话 Redis、审计 Outbox |
-| business-center | `recharge`、`transfer`、`transaction`、`qrpay`、`collection`、`risk`、`monitoring` | 草稿、确认、资金受理、终态发布、恢复、统计查询 | C 端 Controller、运营 Controller、SSE、TCC 发起器 | MyBatis、Seata Client、中心间 Client、Outbox/Inbox、调度器 |
-| account-center | `account`、`ledger`、`credit`、`tcc`、`reconciliation` | 开户、余额查询、TCC 参与、记账、出账、还款分配 | 账户 API、内部 TCC Controller | MyBatis、Seata Participant、Flyway、账本模板 |
-| ai-service | `agent`、`memory`、`intent`、`tool`、`policy` | 消息处理、上下文压缩、工具路由、结果解释 | Agent Controller/SSE、MCP Server | LLM Client、三中心 API Client、Redis 会话、工具审计 |
-| gateway | `filter`、`security`、`ratelimit`、`error` | 无领域用例 | 全局过滤器、统一网关异常处理 | Redis 限流、路由配置、OTel |
+| Identity | `User`、`Credential` | `user.domain.user/credential` | `app_user`、`credential` | 开户前不可登录；两套密码独立锁定 |
+| Contact | `Contact` | `user.domain.contact` | `contact` | 只由成功转账形成；所有者修改需 CAS |
+| Transfer | `TransferDraft` | `business.domain.transfer` | `transfer_draft` | 已确认字段变化必须使旧确认失效 |
+| Transaction | `FundTransaction` | `business.domain.transaction` | `fund_transaction` | 来源唯一；未核验全部事实不得成功 |
+| QR Payment | `QrPayOrder` | `business.domain.qrpay` | `qr_pay_order` | 余额与信用资金来源竞争只能一方成功 |
+| P2P Collection | `PersonalCode`、`CollectionRequest`、`CollectionOrder` | `business.domain.collection` | 对应三张业务表 | 长期码可并发多单；固定请求最多一笔成功 |
+| Risk | `RiskDecision`、`ManualCase` | `business.domain.risk/manualcase` | 风控和工单表 | 人工批准后必须重新确认 |
+| Account | `Account`、`Balance`、`FreezeRecord` | `account.domain.account` | `account`、`account_balance`、`freeze_record` | 可用和冻结非负；版本 CAS |
+| Credit | `CreditAccount`、`CreditBill`、`CreditRepayment` | `account.domain.credit` | 额度、应收、账单和还款表 | 总额=可用+已用+冻结；已用=应收 |
+| Ledger | `LedgerVoucher` | `account.domain.ledger` | 凭证和分录 | 借贷相等；分录只增不改 |
+| Agent | `AgentSession` | `ai.domain.agent` | 会话、消息和工具日志 | 同会话串行；模型结果不是资金事实 |
 
-每个模块的命令与查询分离：写操作必须进入聚合和事务；页面列表、统计和回执可由 `application.query` 读取专用投影，不要求加载完整聚合，也不得把查询 DTO 回写为领域对象。
-
-## 5. 限界上下文与聚合
-
-| 上下文 | 主要聚合根 | 关键不变量 |
-|---|---|---|
-| 用户 | `User`、`Credential`；`FrequentPayeeProjection` 为查询投影 | 登录名唯一；密码强哈希；常用收款人只由成功转账生成并归属本人 |
-| 账户 | `Account` | 可用/冻结金额非负；只有 ACTIVE 可扣款；版本 CAS |
-| 充值 | `RechargeOrder` | 服务端生成结果；同幂等键最多一次入账；限额有效 |
-| 转账 | `TransferDraft`、`FundTransaction` | 字段版本锁定；同来源订单最多一笔资金交易 |
-| 扫码 | `QrPayOrder` | 商户、金额创建后锁定；余额/信用只能成功一种 |
-| C2C 收款 | `PersonalCollectionCode`、`CollectionRequest`、`CollectionOrder` | 长期码可多笔；固定请求最多一笔成功 |
-| 账本 | `LedgerVoucher` | 借贷合计相等；已过账分录不可改删 |
-| 信用 | `CreditAccount`、`CreditBill`、`CreditRepayment` | 总额度=可用+已用+冻结；已用额度=信用应收 |
-| 风控 | `RiskDecision`、`ManualCase` | 审批不能改变交易关键字段；批准后重新确认 |
-| AI | `AgentSession`、`ToolCall` | 高风险工具需要可信确认；不保存支付密码 |
-
-跨聚合使用应用服务、TCC 或事件；禁止把所有交易、账本和历史明细加载进账户聚合。
-
-## 6. 统一金额、时间和标识规范
-
-- 金额使用 `long amountFen`，数据库使用 `BIGINT` 分；禁止 `float/double`。
-- 展示元时由边界层使用 `BigDecimal` 转换。
-- 时间使用 `Instant` 保存，API 使用 ISO-8601 带时区文本。
-- 业务 ID 使用服务端生成的不可枚举字符串，如 `txn_`、`draft_`、`qr_`、`rch_`。
-- 每个 HTTP 请求使用 `X-Request-Id`；每条链路使用 `traceId`；每笔资金交易使用 `transactionId`。
-- 可变聚合包含 `version BIGINT`，更新 SQL 必须带原版本条件。
-
-## 7. 核心业务流程
-
-### 7.1 注册与零余额开户
+### 4.2 关键领域依赖
 
 ```mermaid
-sequenceDiagram
-    participant C as C端
-    participant G as Gateway
-    participant U as UserCenter
-    participant A as AccountCenter
-    C->>G: POST /auth/register
-    G->>U: 注册命令
-    U->>U: 登录名唯一、密码哈希
-    U->>A: 幂等创建余额账户和演示信用账户
-    A->>A: balance(0,0) + credit(total=500000)
-    A-->>U: accountId、creditAccountId
-    U->>U: 激活用户
-    U-->>C: 会话、0元余额和5000元信用额度摘要
+classDiagram
+    class TransferDraft
+    class Confirmation
+    class FundTransaction
+    class QrPayOrder
+    class CollectionOrder
+    class Account
+    class FreezeRecord
+    class CreditAccount
+    class LedgerVoucher
+    TransferDraft --> Confirmation : subjectId/version/hash
+    QrPayOrder --> FundTransaction : sourceOrderId
+    CollectionOrder --> FundTransaction : sourceOrderId
+    FundTransaction ..> Account : TCC port
+    Account --> FreezeRecord
+    FundTransaction ..> CreditAccount : credit TCC port
+    FundTransaction ..> LedgerVoucher : ledger TCC port
 ```
 
-注册不得赠送虚拟金、不得生成充值分录。注册请求先创建 `PROVISIONING` 用户，以 `registrationId` 作为账户中心开户幂等键；余额账户和符合条件的普通演示用户信用账户都创建成功后才 CAS 激活。若账户已创建但激活失败，恢复任务按 `registrationId` 查询既有账户后继续激活，不重复开户或发放额度；超过恢复阈值转人工，用户在此期间不能登录。
+跨上下文关系只保存稳定 ID，不在 Java 中直接持有其他服务的聚合对象。物理字段、键和索引以[数据库设计](./minialalipay-database-design.md)为准。
 
-### 7.2 模拟充值
+### 4.3 数据模型合理性结论
 
-```mermaid
-sequenceDiagram
-    participant C as C端
-    participant B as BusinessCenter
-    participant A as AccountCenter
-    participant L as Ledger
-    C->>B: POST /recharges + Idempotency-Key
-    B->>B: 限额、限流、账户与幂等校验
-    B->>A: TCC Try 用户入账预占
-    A->>L: Try 充值凭证
-    B->>A: Confirm
-    A->>L: 过账
-    B->>B: 发布RECHARGE SUCCESS
-    B-->>C: 充值回执
-```
+- 数据按服务独占 Schema，符合限界上下文和最小写权限原则。
+- 余额、冻结、额度、应收和复式账本分离，能表达资金事实与恢复状态。
+- `source_type + source_order_id`、幂等记录、版本列和 TCC 屏障构成多层防重。
+- 交易、账本、TCC、Outbox、审计和对账数据不可物理删除。
+- 禁止跨 Schema 外键和联表；跨服务引用通过 API、事件和对账验证。
+- 实施前仍必须为每张表生成 Flyway，并用 Testcontainers 验证唯一键、检查约束和索引路径。
 
-模拟充值只计入资金流入，不计入个人收入；采用“虚拟资金发行/权益账户 → 用户余额负债”平衡分录。
+## 5. 功能模块与代码单元设计
 
-### 7.3 普通转账
+### 5.1 用户中心
 
-```mermaid
-sequenceDiagram
-    participant C as C端/AI
-    participant B as BusinessCenter
-    participant U as UserCenter
-    participant R as Risk
-    participant A as AccountCenter
-    participant L as Ledger
-    C->>B: 创建/修改草稿
-    B->>U: 查询脱敏收款人
-    B->>R: 预检
-    C->>U: 校验支付密码
-    C->>B: 创建确认令牌并提交
-    B->>B: 消费令牌、幂等受理、创建PROCESSING
-    B->>A: TCC Try 付款冻结/收款预占
-    A->>L: Try 账本凭证
-    alt 全部分支成功
-      B->>A: Confirm
-      A->>L: Confirm过账
-      B->>B: 终态校验后SUCCESS
-    else 分支失败
-      B->>A: Cancel
-      A->>L: Cancel待过账凭证
-      B->>B: FAILED/COMPENSATING/MANUAL_REVIEW
-    end
-```
+| 用例 | Application Service | 命令/查询 | 端口与仓储 | 主要结果 |
+|---|---|---|---|---|
+| 注册开户 | `RegisterUserService` | `RegisterUserCommand` | `UserRepository`、`CredentialRepository`、`AccountProvisioningPort` | `RegistrationResult` |
+| 注册恢复 | `RecoverRegistrationService` | `RecoverRegistrationCommand` | 开户/信用查询端口、工单端口 | 激活或保持 `PROVISIONING` |
+| 登录退出 | `SessionService` | `LoginCommand`、`LogoutCommand` | 凭证、会话、审计端口 | 会话 DTO |
+| 支付密码 | `PaymentPasswordService` | 设置、修改、验证命令 | 哈希、证明、撤销端口 | 一次性支付证明 |
+| 搜索联系人 | `PayeeQueryService`、`ContactService` | 搜索/分页/修改命令 | 用户和联系人仓储 | 脱敏候选与联系人页 |
 
-### 7.4 商户扫码支付
+`RegisterUserService.handle` 的本地事务只创建 `PROVISIONING` 用户、凭证和 Outbox；跨服务开户失败不回滚已提交用户，而由 `RegistrationRecoveryScheduler` 按 `registrationId` 接续。核验余额账户和适用信用账户后，以旧状态和 `version` CAS 激活。
 
-商户 C 端创建锁定金额订单和短期二维码令牌；H5 通过同源 POST 交换令牌建立受限会话，用户选择余额或 Mini 花呗并确认。同一 `source_order_id` 通过唯一约束保证 `QR_PAY` 与 `CREDIT_PAY` 最多成功一种。
+### 5.2 业务中心
 
-```mermaid
-sequenceDiagram
-    participant M as 商户C端
-    participant B as BusinessCenter
-    participant H as 付款H5
-    participant U as UserCenter
-    participant A as AccountCenter
-    M->>B: 创建金额锁定的QR订单
-    B-->>M: orderId、短期不透明令牌、SSE地址
-    H->>B: GET落地页（不消费令牌）
-    H->>B: POST token-exchanges
-    B->>B: 绑定bootstrap会话并清除URL令牌
-    H->>B: POST /orders/{id}/scan
-    B-->>M: SSE SCANNED
-    H->>B: 提交支付密码和资金来源
-    B->>U: 校验支付密码
-    B->>B: 风控并签发一次性确认令牌
-    H->>B: POST /orders/{id}/pay
-    B->>B: 消费令牌、CAS订单、创建PROCESSING主单
-    B->>A: 执行QR_PAY或CREDIT_PAY TCC
-    A-->>B: 分支事实
-    B->>B: Finalizer核验并发布终态
-    B-->>H: 查询返回真实回执
-    B-->>M: SSE SUCCESS/FAILED
-```
-
-二维码 URL 只包含高熵不透明令牌，不包含金额、商户账号或内部订单号。匿名 GET 只建立 bootstrap 会话并返回 H5 壳；真正的令牌消费必须由同源 POST 完成，以避免浏览器预取、链接预览和安全扫描提前烧毁二维码。
-
-### 7.5 个人收款
-
-- 长期个人码：每次扫码创建独立 `CollectionOrder`，不同付款互不覆盖。
-- 固定金额请求：并发付款通过 `CollectionRequest.version` 与 `active_order_id` CAS 抢占，最多一笔进入资金处理。
-- 两类付款最终均形成 `TRANSFER`，仅允许余额，手续费为 0。
-
-```mermaid
-sequenceDiagram
-    participant P as 付款人H5
-    participant B as BusinessCenter
-    participant A as AccountCenter
-    participant R as 收款人C端
-    P->>B: 交换个人码/固定请求令牌
-    B-->>P: 创建或恢复CollectionOrder
-    opt 长期个人码
-      P->>B: CAS锁定金额和备注
-    end
-    P->>B: 密码校验、风控、创建确认令牌
-    P->>B: 提交付款
-    alt 固定金额请求
-      B->>B: CAS OPEN→PROCESSING并抢占activeOrderId
-    else 长期个人码
-      B->>B: 仅CAS当前独立订单
-    end
-    B->>B: 插入TRANSFER主单并写Outbox
-    B->>A: TRANSFER TCC
-    A-->>B: 分支事实
-    B->>B: Finalizer发布终态
-    B-->>P: 本人订单结果
-    B-->>R: SSE/轮询收款结果
-```
-
-固定请求的竞争失败订单不得进入 TCC。若抢占订单的 TCC 完整 Cancel，只有在冻结为 0、收款未入账、账本无过账残片后才允许清空 `active_order_id` 并按是否过期恢复为 `OPEN`；事实未知时保持 `MANUAL_REVIEW`，不能接受第二笔付款。
-
-### 7.6 Mini 花呗
-
-- 信用支付 Try 冻结额度、预占商户入账与账本凭证。
-- Confirm 增加已用额度和信用应收，商户余额增加。
-- 还款使用本人余额，减少余额负债与信用应收并恢复额度。
-- 逾期暂停新增信用消费，继续允许查询和还款。
-
-```mermaid
-sequenceDiagram
-    participant C as 用户C端
-    participant B as BusinessCenter
-    participant A as AccountCenter
-    participant L as Ledger
-    C->>B: 创建还款草稿(amountFen)
-    B->>A: 查询本人余额和应收
-    A-->>B: 逾期→已出账→未出账分配预览
-    B-->>C: draftId、allocationHash、version
-    C->>B: 密码确认后提交CREDIT_REPAY
-    B->>B: 锁定草稿和分配快照
-    B->>A: TCC Try冻结余额、预占应收减少
-    A->>L: Try还款凭证
-    B->>A: Confirm扣减余额、减少应收、恢复额度
-    A->>L: Confirm过账
-    B->>B: Finalizer核验账单、额度、应收和账本
-    B-->>C: 还款终态与额度恢复结果
-```
-
-### 7.7 通用失败处理
-
-| 失败阶段 | 是否创建资金主单 | 用户侧状态 | 后端动作 |
-|---|---:|---|---|
-| 参数、权限、密码或风控拒绝 | 否 | 明确失败/需人工审核 | 不冻结资金；记录脱敏审计 |
-| 受理本地事务回滚 | 否 | 可按原幂等键重试 | 令牌、来源状态、主单和 Outbox 全部回滚 |
-| 主单已提交但 TCC 未启动 | 是 | `PROCESSING` | 恢复任务按主单启动或接管全局事务 |
-| Try 任一分支失败 | 是 | `COMPENSATING` | Cancel 已成功分支并校验冻结释放 |
-| Confirm 暂时失败 | 是 | `PROCESSING` | 协调器幂等重试，不提前冲正或宣告失败 |
-| 分支事实冲突或长期未知 | 是 | `MANUAL_REVIEW` | 冻结保护、告警和人工工单；禁止重复付款 |
-| 已成功后需要修正 | 是 | `REVERSED` | 新建反向凭证和补偿交易，不改删原账 |
-
-## 8. 交易状态与终态发布
-
-| 状态 | 含义 | 是否终态 | 用户展示 |
-|---|---|---:|---|
-| `PROCESSING` | 已受理，资金处理中 | 否 | 处理中，不允许重复付款 |
-| `COMPENSATING` | 自动补偿/冲正中 | 否 | 处理中，说明资金正在恢复 |
-| `MANUAL_REVIEW` | 结果未知或需人工核实 | 否 | 人工处理中 |
-| `SUCCESS` | TCC、余额、账本全部确认 | 是 | 成功回执 |
-| `FAILED` | 未扣款或已完整回滚 | 是 | 失败原因与下一步 |
-| `CANCELLED` | 确认前取消或完整撤销 | 是 | 已取消 |
-| `REVERSED` | 原成功交易被反向冲正 | 是 | 已冲正 |
-
-终态发布器必须同时验证：全局事务状态、全部 TCC 分支、账户余额版本、账本凭证状态和借贷平衡。HTTP 超时不能直接判定失败或成功。
-
-## 9. TCC 与一致性设计
-
-### 9.1 分支设计
-
-| 业务 | TCC 分支 |
-|---|---|
-| `TRANSFER` | 付款冻结/扣款、收款预占/入账、账本凭证 |
-| `RECHARGE` | 用户入账预占、发行账户凭证 |
-| `QR_PAY` | 用户冻结/扣款、商户预占/入账、账本凭证 |
-| `CREDIT_PAY` | 额度冻结/占用、信用应收、商户入账、账本凭证 |
-| `CREDIT_REPAY` | 用户余额冻结/扣款、信用应收减少、额度恢复、账本凭证 |
-
-### 9.2 分支屏障
-
-每个资源分支只保留一行权威 `tcc_branch` 记录，以 `(xid, branch_type, resource_id)` 唯一键和 `barrier_version` CAS 驱动状态迁移，处理：
-
-- 幂等：重复 Try/Confirm/Cancel 根据当前分支状态返回既有结果。
-- 空回滚：Try 未执行时 Cancel 插入 `CANCELLED` 分支行并安全返回。
-- 防悬挂：迟到 Try 读到 `CANCELLED` 后拒绝冻结；Confirm 只允许从 `TRIED` 迁移。
-- 超时恢复：恢复任务根据全局状态继续 Confirm、Cancel 或转人工。
-
-Redis 不参加资金事实提交，余额、冻结、交易和账本均以 MySQL 本地事务事实为准。
-
-### 9.3 Try、Confirm、Cancel 语义
-
-| 资源分支 | Try | Confirm | Cancel |
+| 用例 | Application Service | 核心端口 | 本地事务责任 |
 |---|---|---|---|
-| 付款余额 | 条件扣减可用、增加冻结，创建 `freeze_record` | 扣减冻结，冻结记录置确认 | 释放冻结回可用 |
-| 收款余额 | 创建与交易唯一的入账预占 | 增加可用余额并确认预占 | 取消预占，不改变余额 |
-| 信用额度 | 条件减少可用、增加冻结 | 冻结转已用 | 释放冻结回可用 |
-| 信用应收 | 预占应收增加或减少 | 确认应收和账单分配变化 | 撤销预占 |
-| 账本凭证 | 预留凭证号、业务键和分录模板 | 原子写入完整借贷分录并过账 | 取消未过账预留；已过账只能反向冲正 |
+| 转账草稿 | `TransferDraftService` | 用户解析、账户预检、风控 | 草稿版本和风险快照 |
+| 确认 | `ConfirmationService` | 支付证明校验、摘要和时钟 | 活动槽位、令牌摘要和过期时间 |
+| 资金受理 | `TransactionAcceptanceService` | 幂等、来源聚合、TCC、Outbox | 消费确认、来源 CAS、主单、受理事件 |
+| 终态发布 | `TransactionFinalizerService` | 全局/分支/余额/账本查询 | 核验后 CAS 终态并写终态 Outbox |
+| 扫码 | `QrPayOrderService` | 令牌交换、会话、账户、SSE | 订单状态、令牌摘要和交易关联 |
+| C2C | `CollectionService` | 个人码、请求、订单、TCC | 活动码槽位或请求抢占和订单关联 |
+| 风控工单 | `RiskService`、`ManualCaseService` | 规则、权限、审计 | 决策快照和工单 CAS |
+| 模拟充值 | `RechargeService` | 策略、日额度、账户/账本 TCC、Outbox | 额度预占、充值订单、交易主单和受理事件 |
+| 恢复对账 | `TransactionRecoveryService` | 租约、Seata、账户/账本查询 | 接管、重试、补偿或建工单 |
+| 监控投影 | `MetricsProjectionService` | Inbox、口径、质量和告警 | 去重与投影同事务 |
 
-每个分支的方法签名必须至少携带 `xid`、`branchId`、`transactionId`、资源 ID、`amountFen` 和请求摘要。分支在单个本地事务内完成屏障检查、资源条件更新、分支状态和本地 Outbox；不得先更新余额再另起事务写屏障。
+### 5.3 账户中心
 
-### 9.4 主单受理与终态发布事务
+| 用例 | 应用组件 | 关键方法 | 本地事务责任 |
+|---|---|---|---|
+| 幂等开户 | `AccountProvisioningService` | `provision`、`findByRegistrationId` | 账户、零余额行和信用账户 |
+| 余额查询 | `AccountQueryService` | `getBalance`、`listEntries` | 强一致余额和游标明细 |
+| 余额 TCC | `BalanceTccParticipant` | `tryFreeze`、`confirmTransfer`、`cancelFreeze` | 屏障、冻结、余额、分支、Outbox |
+| 信用 TCC | `CreditTccParticipant` | `tryCredit`、`confirmCredit`、`cancelCredit` | 额度、应收、消费、分支 |
+| 账本 TCC | `LedgerTccParticipant` | `prepareVoucher`、`postVoucher`、`cancelVoucher` | 预制凭证、平衡校验和过账 |
+| 出账还款 | `CreditBillingService`、`CreditRepaymentService` | `runStatement`、`applyAllocation` | 账期幂等和不可变分配 |
+| 对账 | `AccountReconciliationService` | `verifyTransaction` | 余额、冻结、应收和账本证据 |
 
-业务中心先在一个 `business_db` 本地事务中完成：
+### 5.4 AI 服务
 
-1. 条件消费当前有效确认令牌。
-2. CAS 来源聚合到 `PROCESSING`。
-3. 插入 `fund_transaction` 和 `tcc_global`。
-4. 回填来源聚合的 `transaction_id`。
-5. 写入受理 Outbox。
-
-任一步失败则整体回滚。该事务提交后即使进程崩溃，恢复任务也能从 `PROCESSING` 主单继续启动 TCC。TCC 全局完成不等于可以展示成功；Finalizer 必须按 `transactionId` 核验交易级 `freeze_record`、收款预占、信用冻结/应收变化、账本凭证和每个分支结果快照，而不是要求账户当前版本仍等于交易完成时版本，因为同一账户可能已有后续合法交易。全部交易级事实一致后，Finalizer 才在另一个 `business_db` 本地事务中 CAS 更新主单、同步来源订单和写终态 Outbox。
-
-### 9.5 一致性公式
-
-- 账户金额：`available_fen >= 0`、`frozen_fen >= 0`。
-- 单凭证平衡：`sum(DEBIT.amount_fen) = sum(CREDIT.amount_fen)`。
-- 余额转账：付款方减少额 = 收款方增加额，手续费固定为 0。
-- 信用额度：`total_limit_fen = available_limit_fen + used_limit_fen + frozen_limit_fen`。
-- 信用支付：用户余额不变，已用额度、信用应收和商户余额等额增加。
-- 信用还款：用户余额、信用应收和已用额度等额减少，可用额度等额恢复。
-- 成功条件：主单 `SUCCESS`、全局事务完成、全部分支 `CONFIRMED`、凭证已过账且平衡、来源聚合为成功。
-- 失败条件：未发生扣款，或所有已执行资金动作已完整释放/冲正；否则只能保持处理中或转人工。
-
-## 10. 幂等、并发和可靠事件
-
-### 10.1 HTTP 幂等
-
-- 写接口使用 `Idempotency-Key`。
-- `idempotency_record` 保存主体、接口、键、请求摘要、资源 ID 和响应摘要。
-- 同键同摘要返回原结果；同键不同摘要返回 `IDEMPOTENCY_CONFLICT`。
-
-### 10.2 数据库并发
-
-- 聚合更新使用 `WHERE id=? AND version=?`。
-- 交易唯一键：`source_type + source_order_id`。
-- 固定请求使用条件更新抢占 `OPEN -> PROCESSING`。
-- 账本使用 `voucher_no` 和业务来源唯一约束。
-
-### 10.3 Outbox/Inbox
-
-业务数据与 Outbox 在同一本地事务提交；发布器投递 Redis Streams；消费者以 `event_id` 写 Inbox 去重。事件失败不回滚已确认资金，但必须告警并重试。
-
-## 11. 数据库归属与核心表
-
-| Schema | 所有者 | 核心表 |
+| 组件 | 目标位置 | 责任 |
 |---|---|---|
-| `user_db` | user-center | `user`、`credential`、`contact`、`role`、`audit_log` |
-| `business_db` | business-center | `recharge_order`、`transfer_draft`、`fund_transaction`、`qr_pay_order`、`qr_pay_token`、`personal_collection_code`、`collection_request`、`collection_order`、`confirmation_subject`、`confirmation`、`risk_decision`、`manual_case`、`tcc_global`、`idempotency_record`、`audit_log`、`outbox_event` |
-| `account_db` | account-center | `account`、`account_balance`、`freeze_record`、`tcc_branch`、`credit_account`、`credit_freeze`、`credit_receivable`、`credit_purchase`、`credit_bill`、`credit_bill_item`、`credit_repayment`、`credit_repayment_allocation`、`reconciliation_diff` |
-| `ledger_db` | account-center | `ledger_account`、`ledger_voucher`、`ledger_entry` |
-| `agent_db` | ai-service | `agent_session`、`agent_message`、`tool_call_log`、`preference` |
-| `metrics_db` | business-center/监控模块 | `inbox`、`metric_definition`、`minute_metric`、`daily_metric`、`quality_result`、`monitor_alert` |
+| `AgentMessageService` | `application/service` | 会话串行、上下文压缩、意图和响应编排 |
+| `IntentValidator` | `domain/agent` | 结构化 Schema 和槽位校验 |
+| `ToolPolicyService` | `application/service` | 主体、风险级别、确认上下文和工具白名单 |
+| `McpToolAdapter` | `interfaces/mcp` | 只暴露批准的工具 Schema |
+| 三中心客户端 | `infrastructure/client` | 使用生成契约、超时预算和错误映射 |
+| `ToolCallAuditRepository` | `infrastructure/persistence` | 保存脱敏摘要、结果、耗时和 Trace |
 
-数据库迁移使用 Flyway，命名为 `VYYYYMMDDHHMM__description.sql`。已执行迁移不可修改；禁止跨 Schema 外键和跨服务直接写表。
+## 6. 后端主流程设计
 
-### 11.1 核心实体关系
+### 6.1 统一资金受理主流程
 
 ```mermaid
-erDiagram
-    USER ||--o{ ACCOUNT : owns
-    USER ||--o{ CONTACT : maintains
-    USER ||--o{ TRANSFER_DRAFT : creates
-    USER ||--o| PERSONAL_COLLECTION_CODE : owns
-    PERSONAL_COLLECTION_CODE ||--o{ COLLECTION_ORDER : creates
-    USER ||--o{ COLLECTION_REQUEST : creates
-    COLLECTION_REQUEST ||--o{ COLLECTION_ORDER : attempts
-    TRANSFER_DRAFT ||--o| FUND_TRANSACTION : accepts
-    QR_PAY_ORDER ||--o| FUND_TRANSACTION : accepts
-    COLLECTION_ORDER ||--o| FUND_TRANSACTION : accepts
-    FUND_TRANSACTION ||--|| TCC_GLOBAL : coordinates
-    FUND_TRANSACTION ||--o{ FREEZE_RECORD : freezes
-    FUND_TRANSACTION ||--|| LEDGER_VOUCHER : posts
-    LEDGER_VOUCHER ||--|{ LEDGER_ENTRY : contains
-    USER ||--o| CREDIT_ACCOUNT : owns
-    CREDIT_ACCOUNT ||--o{ CREDIT_PURCHASE : records
-    CREDIT_ACCOUNT ||--o{ CREDIT_BILL : generates
-    CREDIT_BILL ||--|{ CREDIT_BILL_ITEM : contains
-    CREDIT_ACCOUNT ||--o{ CREDIT_REPAYMENT : receives
-    FUND_TRANSACTION ||--o{ OUTBOX_EVENT : emits
+sequenceDiagram
+    actor C as 可信客户端
+    participant G as Gateway
+    participant S as 来源 Application Service
+    participant P as 支付证明/确认服务
+    participant DB as business_db
+    participant T as Seata TCC
+    participant A as Account/Ledger
+    participant F as Finalizer
+    participant Q as 查询/SSE
+    C->>G: 写请求 + Idempotency-Key
+    G->>S: 已认证主体 + requestId/traceId
+    S->>P: 校验支付证明、确认摘要和用途
+    S->>DB: 本地事务：幂等、确认消费、来源 CAS、主单、Outbox
+    S-->>C: 返回 transactionId + PROCESSING
+    S->>T: 异步启动或恢复接管全局事务
+    T->>A: Try
+    alt Try 全部成功
+        T->>A: Confirm
+    else 任一 Try 失败
+        T->>A: Cancel
+    end
+    T-->>F: 全局事务完成回调
+    F->>A: 查询分支、冻结、余额、应收和凭证
+    F->>DB: CAS 终态 + 终态 Outbox
+    DB-->>Q: 查询或事件投影
+    Q-->>C: SUCCESS / CANCELLED / MANUAL_REVIEW
 ```
 
-图中的跨 Schema 关系仅表示业务 ID 关联，不建立跨 Schema 外键。查询关联信息时通过内部 API 或事件投影获得，禁止业务中心直接联表查询账户库和账本库。
+首次受理通常返回 `PROCESSING`，不等待全局事务完成。协调器回调只触发 Finalizer；回调丢失时由恢复调度器扫描接管。客户端超时只允许按原幂等键查询或重试，不得推断成功。业务中心只有在 Finalizer 核验后才能发布成功事件和回执。
 
-### 11.2 关键表与约束
+### 6.2 注册与恢复
 
-| 表 | 关键字段 | 必须约束/索引 |
+```mermaid
+sequenceDiagram
+    actor C as 用户
+    participant U as RegisterUserService
+    participant UDB as user_db
+    participant A as AccountProvisioningPort
+    participant R as RegistrationRecoveryScheduler
+    C->>U: 注册命令
+    U->>UDB: 创建 registrationId、PROVISIONING 用户和凭证
+    U->>A: 幂等开户
+    alt 开户事实完整
+        U->>UDB: CAS PROVISIONING -> ACTIVE
+        U-->>C: 注册成功
+    else 超时或部分失败
+        U-->>C: 返回可查询的注册受理结果
+        R->>A: 按 registrationId 查询或补建
+        R->>UDB: 核验后激活，超阈值只建人工工单
+    end
+```
+
+### 6.3 转账、扫码、C2C 和信用差异
+
+| 来源 | 来源聚合 | 资金类型 | 受理前必须校验 | 特殊并发控制 |
+|---|---|---|---|---|
+| 主动转账 | `TransferDraft` | `TRANSFER` | 草稿版本、收款人、余额、风控、确认 | 草稿来源唯一 |
+| 商户余额码 | `QrPayOrder` | `QR_PAY` | H5 会话、订单金额、商户、余额、确认 | 订单 CAS + 跨资金来源唯一 |
+| 商户信用码 | `QrPayOrder` | `CREDIT_PAY` | 同上并校验额度/逾期 | 与余额支付竞争同一来源键 |
+| 长期个人码 | `CollectionOrder` | `TRANSFER` | 服务端收款人、锁定金额、余额、禁止自付 | 每次扫码独立订单 |
+| 固定请求 | `CollectionRequest` + `CollectionOrder` | `TRANSFER` | 固定金额、余额、禁止自付 | `active_order_id` 只允许一个处理中 |
+| 信用还款 | `CreditRepaymentDraft` | `CREDIT_REPAY` | 余额、应收、分配哈希、确认 | Confirm 不得重新计算分配 |
+
+### 6.4 异常与恢复决策
+
+```mermaid
+flowchart TD
+    A["受理后发现超时或异常"] --> B{"主单是否存在"}
+    B -->|否| C["按幂等记录返回拒绝或重新受理"]
+    B -->|是| D{"全局和分支事实是否确定"}
+    D -->|全部 Confirm 且账本平衡| E["Finalizer 发布 SUCCESS"]
+    D -->|全部 Cancel 且资源恢复| F["发布 CANCELLED / 来源安全重开"]
+    D -->|可重试| G["租约接管并重试 Confirm/Cancel"]
+    D -->|未知或超阈值| H["MANUAL_REVIEW + 人工工单"]
+```
+
+### 6.5 模拟充值
+
+```mermaid
+sequenceDiagram
+    actor C as 用户
+    participant R as RechargeService
+    participant DB as business_db
+    participant T as Seata TCC
+    participant A as Account/Ledger
+    C->>R: 金额 + Idempotency-Key
+    R->>DB: 本地事务：策略、日额度、充值订单、主单、Outbox
+    R-->>C: rechargeOrderId + PROCESSING
+    R->>T: 异步启动 RECHARGE 全局事务
+    T->>A: Try 预占用户入账并准备发行权益凭证
+    alt Confirm
+        T->>A: 增加余额并过账平衡凭证
+        T-->>R: 触发终态核验
+    else Cancel
+        T->>A: 取消预占和预制凭证
+        T-->>R: 释放日额度或转人工
+    end
+```
+
+充值使用 `recharge_policy`、`recharge_daily_usage`、`recharge_order` 和 `fund_transaction`；开户不得借充值流程创建初始资金。结果未知时保留日额度占用并进入人工处理，禁止释放后创建第二笔充值。
+
+## 7. Application Service、端口和事务规范
+
+### 7.1 命令与结果约定
+
+```java
+public record CommandContext(
+        String principalId,
+        String requestId,
+        String traceId,
+        String idempotencyKey,
+        Instant requestedAt) {}
+```
+
+- 金额命令统一使用 `long amountFen`，时间使用 `Instant` 或 `OffsetDateTime`。
+- Controller 不能把客户端提交的 `userId/accountId/merchantId` 当作权限主体。
+- 写命令返回资源 ID、当前状态和版本；未知资金结果必须返回交易 ID。
+- Application Service 捕获基础设施异常后转换为明确的应用错误，不泄露 SQL、令牌或内部地址。
+
+### 7.2 端口调用策略
+
+| 端口类型 | 超时/重试 | 降级 | 禁止行为 |
+|---|---|---|---|
+| 只读用户/账户查询 | 短超时；仅幂等重试 | 返回暂不可用或回源权威库 | 用缓存余额决定支付 |
+| 开户命令 | 以 `registrationId` 幂等重试 | 查询既有资源 | 生成新幂等键重复开户 |
+| 资金写命令 | 不在 HTTP 客户端盲重试 | 按交易号查询并由恢复任务接管 | 超时后创建第二笔主单 |
+| LLM 调用 | 超时、熔断、并发限制 | 降级传统表单 | 降级时放宽确认和权限 |
+| 事件发布 | Outbox 后台重试 | 保留待发送状态 | 数据库提交后直接尽力发送 |
+
+## 8. 对外接口与集成设计
+
+### 8.1 契约完整性结论
+
+当前 OpenAPI 仅定义 `GET /actuator/health`，因此所有业务接口的参数、返回结果和错误 Schema **尚未达到可编码状态**。总体系统分析第 12 章的端点目录是架构输入，不替代 OpenAPI。任何业务 Controller 开发前必须在同一纵向切片中完成：
+
+1. OpenAPI path、`operationId`、请求头、请求/响应 Schema 和错误响应。
+2. `additionalProperties: false`、金额范围、版本和游标约束。
+3. 生成或严格对齐的 API DTO，以及请求/响应契约测试。
+4. 网关路由、Controller 和对象级授权测试。
+
+### 8.2 接口所有权与当前就绪度
+
+| 路径组 | 所有者 | 目标 Controller | 当前 OpenAPI | 编码结论 |
+|---|---|---|---|---|
+| `/actuator/health` | gateway | Actuator | 已定义 | 可联调 |
+| `/api/v1/auth/**`、`users/**`、`contacts/**`、`payment-password` | user-center | `AuthController` 等 | 未定义 | 禁止实现业务 Controller |
+| `/api/v1/transfer-drafts/**`、`transfers/**`、`confirmations` | business-center | `TransferController` 等 | 未定义 | 先补契约 |
+| `/api/v1/qr-pay/**`、`p2p-collections/**` | business-center | `QrPayController`、`CollectionController` | 未定义 | 先补契约与网关路由 |
+| `/api/v1/recharges/**`、`manual-cases/**`、`ops/**` | business-center | 对应用途 Controller | 未定义 | 先补契约与网关路由 |
+| `/api/v1/accounts/**`、`credit/**` | account-center | `AccountController`、`CreditController` | 未定义 | 先补契约 |
+| `/api/v1/agent/**` | ai-service | `AgentController` | 未定义 | 先补契约 |
+
+### 8.3 接口定义目录
+
+下表明确后端设计使用的 DTO、主要参数和返回数据。字段约束必须原样写入 OpenAPI 后才可生成客户端；客户端未列出的身份和账户字段一律不得提交。
+
+#### 8.3.1 身份、用户、账户与充值
+
+| 方法与路径 | 请求参数/DTO | 成功返回 `data` | 主要错误 |
+|---|---|---|---|
+| `POST /api/v1/auth/register` | `RegisterRequest(loginName,password,paymentPassword,nickname)`；三种密码字段只存在于请求边界 | `RegistrationView(registrationId,userId,status,accountId,creditAccountId)` | `LOGIN_NAME_EXISTS`、`PASSWORD_POLICY_VIOLATION`、`REGISTRATION_PROCESSING` |
+| `POST /api/v1/auth/login` | `LoginRequest(loginName,password)` | `SessionView(userId,displayName,roles,expiresAt)`；会话令牌通过安全 Cookie 或认证头返回 | `LOGIN_INVALID`、`LOGIN_LOCKED` |
+| `POST /api/v1/auth/logout` | 无请求体 | `OperationResult(success=true)` | `AUTH_REQUIRED` |
+| `PUT /api/v1/payment-password` | `SetPaymentPasswordRequest(paymentPassword)` | `PasswordVersionView(version,updatedAt)` | `PAYMENT_PASSWORD_ALREADY_SET` |
+| `PATCH /api/v1/payment-password` | `ChangePaymentPasswordRequest(loginPassword,newPaymentPassword)` | `PasswordVersionView` | `LOGIN_INVALID`、`PAYMENT_LOCKED` |
+| `POST /api/v1/payment-password/verify` | `VerifyPaymentPasswordRequest(paymentPassword,purpose)` | `PaymentProofView(proofToken,expiresAt,passwordVersion)`；令牌只返回一次 | `PAY_PASSWORD_INVALID`、`PAYMENT_LOCKED` |
+| `GET /api/v1/users/search` | 查询参数 `q`，长度 1..64，最多返回 10 条 | `PayeeCandidateList(items[userId,displayName,loginNameMasked,phoneTail])` | `AUTH_REQUIRED`、`RATE_LIMITED` |
+| `GET /api/v1/contacts` | `cursor`、`limit<=100` | `ContactPage(items,nextCursor)` | `AUTH_REQUIRED` |
+| `PATCH /api/v1/contacts/{payeeUserId}` | 路径 `payeeUserId`；`UpdateContactRequest(alias,pinned,hidden,version)` | `ContactView(...,version)` | `CONTACT_NOT_FOUND`、`VERSION_CONFLICT` |
+| `GET /api/v1/accounts/me` | 无业务参数，用户由会话派生 | `AccountSummaryView(accountId,status,availableFen,frozenFen,version)` | `ACCOUNT_UNAVAILABLE` |
+| `GET /api/v1/accounts/me/entries` | `cursor`、`limit<=100`、可选 `businessType` | `LedgerEntryPage(items,nextCursor)` | `INVALID_CURSOR` |
+| `POST /api/v1/recharges` | `Idempotency-Key`；`CreateRechargeRequest(amountFen)`，范围 1..5000000 | `RechargeView(rechargeOrderId,transactionId,amountFen,status,createdAt)` | `RECHARGE_LIMIT_EXCEEDED`、`IDEMPOTENCY_CONFLICT` |
+
+#### 8.3.2 转账与确认
+
+| 方法与路径 | 请求参数/DTO | 成功返回 `data` | 主要错误 |
+|---|---|---|---|
+| `POST /api/v1/transfer-drafts` | `Idempotency-Key`；`CreateTransferDraftRequest(payeeUserId,amountFen,subject)` | `TransferDraftView(draftId,payee,amountFen,subject,status,version,expiresAt)` | `PAYEE_NOT_FOUND`、`SELF_PAYMENT_FORBIDDEN` |
+| `GET /api/v1/transfer-drafts/{id}` | 草稿 ID | `TransferDraftView` | `DRAFT_NOT_FOUND` |
+| `PATCH /api/v1/transfer-drafts/{id}` | `UpdateTransferDraftRequest(payeeUserId,amountFen,subject,version)` | 新版本 `TransferDraftView` | `VERSION_CONFLICT`、`DRAFT_NOT_EDITABLE` |
+| `POST /api/v1/transfer-drafts/{id}/validate` | `ValidateDraftRequest(version)` | `DraftValidationView(valid,riskAction,balanceFen,confirmationRequired,violations[])` | `INSUFFICIENT_BALANCE`、`RISK_REJECTED` |
+| `POST /api/v1/confirmations` | `CreateConfirmationRequest(subjectType,subjectId,subjectVersion,paymentProofToken)` | `ConfirmationView(confirmationToken,expiresAt,subjectHash)`；令牌只返回可信 UI | `CONFIRMATION_MISMATCH`、`PAYMENT_PROOF_INVALID` |
+| `POST /api/v1/transfers` | `Idempotency-Key`；`SubmitTransferRequest(draftId,confirmationToken)` | `TransactionView(transactionId,businessType,amountFen,status,createdAt)` | `IDEMPOTENCY_CONFLICT`、`CONFIRMATION_EXPIRED` |
+| `GET /api/v1/transfers/{id}` | 交易 ID | `TransactionView` | `TRANSACTION_NOT_FOUND` |
+| `GET /api/v1/transfers/{id}/receipt` | 交易 ID | `ReceiptView(transactionId,payerMasked,payeeMasked,amountFen,status,completedAt)` | `RECEIPT_NOT_READY` |
+
+#### 8.3.3 扫码、C2C 与信用
+
+| 方法与路径 | 请求参数/DTO | 成功返回 `data` | 主要错误 |
+|---|---|---|---|
+| `POST /api/v1/qr-pay/orders` | `Idempotency-Key`；`CreateQrOrderRequest(amountFen,subject)`；商户由会话派生 | `QrOrderView(orderId,amountFen,status,qrUrl,expiresAt,version)` | `MERCHANT_REQUIRED` |
+| `POST /api/v1/qr-pay/token-exchanges` | `QrTokenExchangeRequest(token,bootstrapSessionId)` | 脱敏 `QrOrderView` + `h5SessionId` | `QR_TOKEN_INVALID`、`ORDER_EXPIRED` |
+| `POST /api/v1/qr-pay/orders/{id}/confirmations` | `QrConfirmationRequest(fundingSource,paymentProofToken,orderVersion)` | `ConfirmationView` | `INSUFFICIENT_BALANCE`、`INSUFFICIENT_CREDIT` |
+| `POST /api/v1/qr-pay/orders/{id}/pay` | `Idempotency-Key`；`QrPayRequest(confirmationToken)`，禁止提交金额和双方账户 | `TransactionView` | `ORDER_ALREADY_CLAIMED`、`CONFIRMATION_MISMATCH` |
+| `GET /api/v1/qr-pay/orders/{id}` | 订单 ID；主体由商户、付款人或 H5 会话校验 | `QrOrderView`，处理中后包含 `transactionId` | `ORDER_NOT_FOUND` |
+| `GET /api/v1/p2p-collections/codes/me` | 无业务参数 | `PersonalCodeView(codeId,status,qrUrl,version)` 或空状态 | `AUTH_REQUIRED` |
+| `POST /api/v1/p2p-collections/codes/me/regenerations` | `Idempotency-Key`；可选 `version` | 新 `PersonalCodeView` | `VERSION_CONFLICT` |
+| `POST /api/v1/p2p-collections/requests` | `Idempotency-Key`；`CreateCollectionRequest(amountFen,subject)` | `CollectionRequestView(requestId,amountFen,subject,status,qrUrl,expiresAt,version)` | `AMOUNT_OUT_OF_RANGE` |
+| `POST /api/v1/p2p-collections/token-exchanges` | `CollectionTokenExchangeRequest(token,bootstrapSessionId)` | `CollectionOrderView(orderId,mode,payeeMasked,amountFen,status,h5SessionId,version)` | `COLLECTION_TOKEN_INVALID` |
+| `PATCH /api/v1/p2p-collections/orders/{id}` | `LockCollectionOrderRequest(amountFen,subject,version)`；仅个人码草稿 | `CollectionOrderView` | `ORDER_NOT_EDITABLE`、`VERSION_CONFLICT` |
+| `POST /api/v1/p2p-collections/orders/{id}/confirmations` | `CollectionConfirmationRequest(paymentProofToken,orderVersion)`；资金来源固定 `BALANCE` | `ConfirmationView` | `SELF_PAYMENT_FORBIDDEN`、`FUNDING_SOURCE_NOT_ALLOWED` |
+| `POST /api/v1/p2p-collections/orders/{id}/pay` | `Idempotency-Key`；`CollectionPayRequest(confirmationToken)` | `TransactionView` | `ORDER_ALREADY_CLAIMED`、`IDEMPOTENCY_CONFLICT` |
+| `GET /api/v1/credit/me` | 用户由会话派生 | `CreditSummaryView(totalLimitFen,availableFen,usedFen,frozenFen,status)` | `CREDIT_ACCOUNT_NOT_FOUND` |
+| `GET /api/v1/credit/bills` | `cursor`、`limit<=100`、可选 `status` | `CreditBillPage(items,nextCursor)` | `INVALID_CURSOR` |
+| `POST /api/v1/credit/repayment-drafts` | `Idempotency-Key`；`CreateRepaymentDraftRequest(amountFen)` | `RepaymentDraftView(draftId,amountFen,allocationPreview,allocationHash,version,expiresAt)` | `REPAYMENT_AMOUNT_EXCEEDED` |
+| `POST /api/v1/credit/repayments` | `Idempotency-Key`；`SubmitRepaymentRequest(draftId,confirmationToken)` | `TransactionView(businessType=CREDIT_REPAY)` | `CONFIRMATION_MISMATCH`、`IDEMPOTENCY_CONFLICT` |
+
+#### 8.3.4 Agent、运营与事件流
+
+| 方法与路径 | 请求参数/DTO | 成功返回 `data` | 主要错误 |
+|---|---|---|---|
+| `POST /api/v1/agent/messages` | `AgentMessageRequest(sessionId,message,clientMessageId)`；同会话串行 | `AgentMessageView(sessionId,messageId,reply,cards[],toolStatus,createdAt)` | `AGENT_BUSY`、`TOOL_UNAVAILABLE`、`PROMPT_INJECTION_REJECTED` |
+| `GET /api/v1/ops/realtime-metrics` | `metricCode`、`from`、`to`、`cursor` | `MetricPage(items,definitionVersion,nextCursor)` | `INVALID_TIME_RANGE` |
+| `GET /api/v1/ops/alerts` | `severity`、`status`、`cursor`、`limit` | `AlertPage(items,nextCursor)` | `OPS_PERMISSION_REQUIRED` |
+| `POST /api/v1/ops/alerts/{id}/acknowledge` | `AlertDecisionRequest(version,comment)` | `AlertView(id,status,assigneeId,version,updatedAt)` | `VERSION_CONFLICT`、`ALERT_STATE_INVALID` |
+| `POST /api/v1/ops/alerts/{id}/resolve` | `ResolveAlertRequest(version,comment,evidenceRefs[])` | `AlertView` | `EVIDENCE_REQUIRED` |
+| `GET /api/v1/qr-pay/orders/{id}/events` | 路径 `id`；请求头 `Last-Event-ID` | `text/event-stream`：`eventId,eventType,resourceId,status,occurredAt,traceId` | `EVENT_CURSOR_EXPIRED`；客户端转订单查询 |
+| `GET /api/v1/p2p-collections/requests/{id}/events` | 路径 `id`；请求头 `Last-Event-ID` | 同一 SSE 事件结构 | `EVENT_CURSOR_EXPIRED`；客户端转请求查询 |
+
+#### 8.3.5 其余查询、取消与运营接口
+
+| 方法与路径 | 请求参数/DTO | 成功返回 `data` | 主要错误 |
+|---|---|---|---|
+| `GET /api/v1/accounts/me/analytics` | `range=7d/30d/month` | `PersonalAnalyticsView(range,definitionVersion,incomeFen,expenseFen,balanceFlow,creditFlow,counterparties[])` | `RANGE_NOT_SUPPORTED` |
+| `GET /api/v1/merchants/me/analytics` | `range=today/month` | `MerchantAnalyticsView(receiptFen,orderCount,refundFen,netReceiptFen,fundingBreakdown,reconciliation)` | `MERCHANT_REQUIRED` |
+| `GET /api/v1/transfers/{id}/trace` | 交易 ID | `TraceView(traceId,transactionId,spans[],masked=true)` | `OPS_PERMISSION_REQUIRED` |
+| `GET /api/v1/manual-cases` | `status,type,cursor,limit` | `ManualCasePage(items,nextCursor)` | `OPS_PERMISSION_REQUIRED` |
+| `POST /api/v1/manual-cases/{id}/decisions` | `ManualCaseDecisionRequest(decision,comment,version)` | `ManualCaseView(id,status,decision,version,updatedAt)` | `CASE_STATE_INVALID`、`VERSION_CONFLICT` |
+| `GET /api/v1/qr-pay/orders/by-token` | 查询参数 `t`，只建立 bootstrap 会话 | `BootstrapView(bootstrapSessionId,expiresAt)`，不返回订单业务数据 | `QR_TOKEN_INVALID` |
+| `POST /api/v1/qr-pay/orders/{id}/scan` | `QrScanRequest(h5SessionId,version)` | `QrOrderView` | `ORDER_STATE_INVALID` |
+| `DELETE /api/v1/qr-pay/orders/{id}` | 可选 `version` | `QrOrderView(status=CANCELLED)` | `ORDER_NOT_CANCELLABLE` |
+| `GET /api/v1/credit/purchases` | `status,cursor,limit` | `CreditPurchasePage(items,nextCursor)` | `CREDIT_ACCOUNT_NOT_FOUND` |
+| `GET /api/v1/credit/bills/{id}` | 账单 ID | `CreditBillDetailView(bill,items,repaymentAllocations)` | `BILL_NOT_FOUND` |
+| `GET /api/v1/credit/repayments/{id}` | 还款 ID | `RepaymentView(repaymentId,transactionId,amountFen,status,allocations[])` | `REPAYMENT_NOT_FOUND` |
+| `POST /api/v1/p2p-collections/codes/me/disable` | `DisableCodeRequest(version)` | `PersonalCodeView(status=DISABLED)` | `VERSION_CONFLICT` |
+| `GET /api/v1/p2p-collections/requests/{id}` | 请求 ID | `CollectionRequestView` + 当前主体可见的本人尝试 | `REQUEST_NOT_FOUND` |
+| `POST /api/v1/p2p-collections/requests/{id}/cancel` | `CancelCollectionRequest(version)` | `CollectionRequestView` | `REQUEST_NOT_CANCELLABLE` |
+| `GET /api/v1/p2p-collections/by-token` | 查询参数 `t`，只建立 bootstrap 会话 | `BootstrapView` | `COLLECTION_TOKEN_INVALID` |
+| `GET /api/v1/p2p-collections/orders/{id}` | 订单 ID | `CollectionOrderView`，处理中后包含真实 `transactionId/status` | `ORDER_NOT_FOUND` |
+| `GET /api/v1/agent/sessions/{id}` | 会话 ID | `AgentSessionView(sessionId,status,messages[],toolTraces[])`，不返回内部推理 | `SESSION_NOT_FOUND` |
+| `DELETE /api/v1/agent/sessions/{id}/memory` | 会话 ID | `OperationResult(success=true)` | `SESSION_NOT_FOUND` |
+| `GET /api/v1/ops/daily-reports` | `businessDate,metricCode,cursor` | `DailyReportPage(items,definitionVersion,qualityStatus,nextCursor)` | `REPORT_NOT_PUBLISHED` |
+| `GET /api/v1/ops/data-quality` | `businessDate,jobType,status,cursor` | `QualityResultPage(items,nextCursor)` | `OPS_PERMISSION_REQUIRED` |
+| `GET /api/v1/ops/metric-definitions` | `metricCode,version,cursor` | `MetricDefinitionPage(items,nextCursor)` | `OPS_PERMISSION_REQUIRED` |
+| `POST /api/v1/ops/alerts/{id}/close` | `CloseAlertRequest(version,comment)` | `AlertView(status=CLOSED)` | `ALERT_STATE_INVALID`、`VERSION_CONFLICT` |
+| `POST /api/v1/ops/credit/statement-runs` | `CreditJobRunRequest(businessDate)` | `CreditJobRunView(runId,jobType,businessDate,status)` | `JOB_ALREADY_RUNNING` |
+| `POST /api/v1/ops/credit/due-check-runs` | `CreditJobRunRequest(businessDate)` | `CreditJobRunView` | `JOB_ALREADY_RUNNING` |
+
+### 8.4 通用请求和返回结构
+
+| 字段 | 类型与约束 | 说明 |
 |---|---|---|
-| `user` | `user_id`、`login_name`、`status`、`version` | `login_name` 唯一；状态和版本条件更新 |
-| `credential` | `user_id`、`login_hash`、`pay_hash`、失败次数、锁定时间 | 用户唯一；两类密码独立计数和锁定；哈希不可回显 |
-| `contact` | `owner_user_id`、`payee_user_id`、成功次数、最近成功时间、置顶、隐藏、备注 | `(owner_user_id,payee_user_id)` 唯一；仅成功转账事件创建/累计，搜索不写入 |
-| `account` | `account_id`、`owner_id`、`account_type`、`status` | `(owner_id,account_type,currency)` 唯一 |
-| `account_balance` | `account_id`、`available_fen`、`frozen_fen`、`version` | 金额非负；所有写入带 `version` |
-| `freeze_record` | `transaction_id`、`account_id`、`purpose`、`amount_fen`、`status` | `(transaction_id,account_id,purpose)` 唯一 |
-| `transfer_draft` | 双方 ID、金额、备注、`status`、`version`、`expires_at` | 所有者索引；修改和确认使用版本 CAS |
-| `fund_transaction` | 类型、来源、双方账户、金额、状态、幂等键 | `(payer_account_id,idempotency_key)`、`(source_type,source_order_id)` 唯一 |
-| `confirmation` | 主体、主体哈希、令牌摘要、状态、过期/消费时间 | 令牌摘要唯一；同主体最多一个有效槽位 |
-| `qr_pay_order` | 商户、付款人、金额、资金来源、交易 ID、状态、版本 | 交易 ID 唯一；金额创建后不可修改；状态版本 CAS |
-| `qr_pay_token` | `token_digest`、订单、bootstrap/H5 会话、状态 | 只存摘要；令牌唯一；交换和会话绑定原子提交 |
-| `personal_collection_code` | 所有人、收款账户、令牌摘要、状态、活动槽、版本 | 每个用户最多一个 `ACTIVE`；换码撤销旧令牌 |
-| `collection_request` | 收款人、金额、`active_order_id`、状态、版本、过期时间 | 金额不可变；CAS 保证首个有效订单抢占 |
-| `collection_order` | 模式、请求/码、双方、金额、会话、交易 ID、状态 | H5 会话幂等；每订单最多一个 `TRANSFER` |
-| `tcc_global`/`tcc_branch` | `xid`、交易、分支类型、资源、状态、`barrier_version`、重试时间 | `(xid,branch_type,resource_id)` 唯一；状态 CAS；按状态和下次重试时间建索引 |
-| `ledger_voucher` | 交易、类型、冲正序号、借贷总额、状态 | `(transaction_id,type,reversal_no)` 唯一；借贷总额相等 |
-| `ledger_entry` | 凭证、科目、借贷方向、金额 | 凭证索引；只允许插入，不更新或物理删除 |
-| `credit_account` | 总/可用/已用/冻结额度、状态、版本 | 用户唯一；额度恒等式；条件更新 |
-| `credit_bill` | 信用账户、账期、总额、已还、未还、到期日、状态 | `(credit_account_id,period)` 唯一 |
-| `credit_repayment` | 交易、信用账户、金额、状态 | 交易唯一；分配明细合计等于还款金额 |
-| `idempotency_record` | 主体、接口、键、请求摘要、响应摘要 | `(principal_key,api_code,idempotency_key)` 唯一 |
-| `outbox_event` | 事件、聚合、类型、版本、负载、重试信息 | `event_id` 唯一；待发布扫描索引 |
-| `inbox_event` | 消费者、事件、处理状态 | `(consumer_name,event_id)` 唯一 |
-
-### 11.3 字段与迁移规则
-
-- 业务主键使用服务端生成的 `CHAR(26)` ULID 或同等不可枚举 ID；禁止数据库自增 ID 暴露给客户端。
-- 金额使用 `BIGINT` 分，时间使用 `DATETIME(3)` 并按 UTC 写入，状态使用受控 `VARCHAR`。
-- 可变聚合包含 `version BIGINT NOT NULL DEFAULT 0`、`created_at` 和 `updated_at`；不可变账本分录仅记录创建时间。
-- 高频查询必须建立“对象归属 + 状态 + 时间”组合索引；恢复任务建立“状态 + next_retry_at”索引。
-- Flyway 文件放在所属服务的 `src/main/resources/db/migration/`，一条迁移只修改一个服务拥有的 Schema。
-- 已执行迁移只允许新增向前修复脚本，不修改、删除或重命名旧脚本；涉及金额/状态/唯一键时必须增加容器集成测试。
-
-## 12. API 设计
-
-### 12.1 通用请求头
-
-| 请求头 | 用途 |
-|---|---|
-| `Authorization` | 登录会话/JWT |
-| `X-Request-Id` | 请求关联 |
-| `Idempotency-Key` | 写接口防重 |
-| `X-CSRF-Token` | Cookie 会话写操作防 CSRF |
-| `Last-Event-ID` | SSE 断线续传 |
-
-### 12.2 统一响应
+| `*Id` | `string`，26 位 ULID | 客户端不得伪造权限主体 ID |
+| `amountFen` | `int64`，1..5000000 | 单位为分，禁止小数金额 |
+| `version` | `int64`，最小 0 | 写入时用于 CAS |
+| `subject` | `string`，最长 50 | 移除控制字符，输出时转义 |
+| `cursor` | `string`，最长 256 | 不透明游标，不允许客户端解析 |
+| `limit` | `integer`，1..100 | 默认值由具体接口契约定义 |
+| `Idempotency-Key` | 请求头字符串，16..64 | 同主体同接口保留至少 24 小时 |
+| 密码字段 | 请求体字符串，禁止回显 | 不进入日志、Trace、事件或浏览器存储 |
+| 原始令牌 | 高熵字符串，只返回一次 | 服务端只持久化 HMAC-SHA-256 摘要 |
 
 ```json
 {
   "code": "OK",
   "message": "成功",
-  "requestId": "req_xxx",
+  "requestId": "req_01K1...",
   "traceId": "6f8b0f0a0ad64fd1b9eb5be13e146a82",
   "data": {}
 }
 ```
 
-错误响应不得包含堆栈、SQL、密码、令牌或完整账号。
+错误响应保持相同外壳，`data` 只包含安全、可操作的冲突信息，例如原资源 ID、当前版本或锁定截止时间；不得包含堆栈、SQL、内部地址、密码和原始令牌。
 
-### 12.3 核心端点
+### 8.5 统一协议规则
 
-#### 12.3.1 身份、账户和联系人
+- JSON 请求使用 UTF-8；写请求按契约携带 `Idempotency-Key`。
+- 网关生成或透传 `X-Request-Id`，服务端统一传播 `traceId`。
+- 创建返回 201；查询和受理返回 200；异步资金先返回 `PROCESSING`。
+- 400 表示格式错误，401 未认证，403 无权限，404 不可感知资源，409 并发/幂等冲突，422 业务拒绝，429 限流，503 依赖不可用。
+- SSE 只推送已持久化事件，支持 `Last-Event-ID`；断线后可回源查询。
+- 密码、支付证明、确认令牌和二维码原始令牌不得进入 URL、日志、SSE 或错误详情。
 
-| 方法 | 路径 | 权限 | 行为 | 幂等/并发 |
-|---|---|---|---|---|
-| `POST` | `/api/v1/auth/register` | 匿名 | 注册并自动创建 0 余额账户 | `Idempotency-Key`；登录名唯一 |
-| `POST` | `/api/v1/auth/login` | 匿名 | 校验登录密码并建立会话 | IP + 登录名限流 |
-| `POST` | `/api/v1/auth/logout` | 登录用户 | 销毁当前会话 | 重复退出成功 |
-| `PUT` | `/api/v1/payment-password` | 首次注册/登录用户 | 设置 6 位数字支付密码 | 只存强哈希；已有密码时拒绝覆盖 |
-| `PATCH` | `/api/v1/payment-password` | 登录用户 | 验证登录密码后修改支付密码 | 原子更新并撤销全部活动确认令牌 |
-| `POST` | `/api/v1/payment-password/verify` | 登录用户 | 校验支付密码并返回 2 分钟一次性证明 | 错误次数原子累加、锁定 |
-| `GET` | `/api/v1/users/search?q=` | 登录用户 | 按登录名/昵称搜索最多 10 个脱敏用户 | 只读限流 |
-| `GET` | `/api/v1/contacts` | 登录用户 | 查询由成功转账历史生成的常用收款人 | 次数、最近成功时间和置顶排序 |
-| `PATCH` | `/api/v1/contacts/{payeeUserId}` | 联系人所有者 | 设置置顶、隐藏或备注 | 只能修改已由成功转账生成的记录；`version` CAS |
-| `GET` | `/api/v1/accounts/me` | 登录用户 | 权威余额和账户状态 | 不用缓存判断余额 |
-| `POST` | `/api/v1/recharges` | 登录用户 | 受控模拟充值 | 幂等键、单笔/单日限额 |
-| `GET` | `/api/v1/accounts/me/entries` | 登录用户 | 本人资金明细 | 游标分页，`limit<=100` |
-| `GET` | `/api/v1/accounts/me/analytics` | 登录用户 | 个人收支、资金流和信用分析 | 返回口径版本 |
-| `GET` | `/api/v1/merchants/me/analytics` | 商户用户 | 本商户收款和经营统计 | 服务端派生商户账户 |
+## 9. 持久化、幂等与并发设计
 
-#### 12.3.2 转账和交易
+### 9.1 Repository 与 Mapper 语义
 
-| 方法 | 路径 | 权限 | 行为 | 幂等/并发 |
-|---|---|---|---|---|
-| `POST` | `/api/v1/transfer-drafts` | 登录用户 | 创建本人转账草稿 | `Idempotency-Key` |
-| `GET` | `/api/v1/transfer-drafts/{id}` | 草稿所有者 | 返回确认前快照 | 对象级权限 |
-| `PATCH` | `/api/v1/transfer-drafts/{id}` | 草稿所有者 | 修改收款人、金额或备注 | `version` CAS |
-| `POST` | `/api/v1/transfer-drafts/{id}/validate` | 草稿所有者 | 余额/账户/风控预检，不冻结资金 | `version` 必须匹配 |
-| `POST` | `/api/v1/confirmations` | 登录用户、可信 UI | 将密码证明与不可变业务快照绑定 | 同主体单一活动令牌 |
-| `POST` | `/api/v1/transfers` | 可信确认流程 | 消费令牌并异步受理 `TRANSFER` | 幂等键 + 来源唯一键 |
-| `GET` | `/api/v1/transfers/{id}` | 交易双方 | 返回权威交易状态 | 不从 SSE/缓存猜测 |
-| `GET` | `/api/v1/transfers/{id}/receipt` | 交易双方 | 返回脱敏回执 | 只对确定终态生成 |
+| 能力 | Repository 方法语义 | Mapper/SQL 要求 |
+|---|---|---|
+| 聚合读取 | 按 ID 和所有者读取 | 对象权限条件进入查询，不先查后判 |
+| 状态迁移 | `compareAndSetStatus(id, old, next, version)` | WHERE 同时包含 ID、旧状态和版本，检查影响行数 |
+| 幂等受理 | `findOrReserve(principal, scope, key, digest)` | 唯一键抢占；同键异参返回冲突 |
+| 来源防重 | `insertTransaction(sourceType, sourceOrderId)` | 来源联合唯一键，冲突后读取原交易 |
+| TCC 屏障 | `recordBranch(xid, branchType, resourceId, action)` | 唯一键覆盖重复、空回滚和防悬挂 |
+| Outbox | 与业务事实同事务插入 | 按状态和 `next_retry_at` 索引扫描 |
+| Inbox | 消费者名和事件 ID 去重 | 插入成功后才更新投影并同事务提交 |
 
-#### 12.3.3 商户扫码支付
+### 9.2 HTTP 幂等算法
 
-| 方法 | 路径 | 权限 | 行为 | 幂等/并发 |
-|---|---|---|---|---|
-| `POST` | `/api/v1/qr-pay/orders` | 商户用户 | 创建金额锁定订单和动态码 | 幂等键；商户身份服务端派生 |
-| `GET` | `/api/v1/qr-pay/orders/by-token?t=` | 匿名 H5 | 返回无业务数据的落地壳 | `no-store`；不消费令牌 |
-| `POST` | `/api/v1/qr-pay/token-exchanges` | bootstrap 会话 | 交换令牌并绑定受限 H5 会话 | Origin/CSRF/Fetch Metadata |
-| `POST` | `/api/v1/qr-pay/orders/{id}/scan` | 绑定 H5 会话 | `CREATED→SCANNED` | 状态 CAS，重复成功 |
-| `POST` | `/api/v1/qr-pay/orders/{id}/confirmations` | 登录付款人 + H5 | 密码、风控和资金来源确认 | 绑定订单版本和快照哈希 |
-| `POST` | `/api/v1/qr-pay/orders/{id}/pay` | 已确认付款人 | 受理 `QR_PAY` 或 `CREDIT_PAY` | 跨资金来源共享来源唯一键 |
-| `GET` | `/api/v1/qr-pay/orders/{id}` | 交易相关方 | 查询订单和真实资金结果 | 处理中回源主单 |
-| `DELETE` | `/api/v1/qr-pay/orders/{id}` | 创建商户/付款人 | 取消未进入资金处理的订单 | 前置状态 CAS |
-| `GET` | `/api/v1/qr-pay/orders/{id}/events` | 商户/付款人 | SSE 订阅订单变化 | `Last-Event-ID` 续传 |
+1. 以认证主体、API scope 和 `Idempotency-Key` 组成唯一边界。
+2. 对规范化请求体计算摘要，不包含 Trace、时间戳等易变字段。
+3. 首次请求抢占 `PROCESSING` 记录；提交业务资源后保存资源 ID 和响应快照。
+4. 同键同摘要返回原资源；同键异摘要返回 `IDEMPOTENCY_CONFLICT`。
+5. 响应未知但主单存在时返回原交易状态，不重新创建业务资源。
 
-#### 12.3.4 个人收款和 Mini 花呗
+### 9.3 本地事务边界
 
-| 方法 | 路径 | 权限 | 行为 | 幂等/并发 |
-|---|---|---|---|---|
-| `GET` | `/api/v1/p2p-collections/codes/me` | 普通用户本人 | 查询当前长期个人码 | 只读 |
-| `POST` | `/api/v1/p2p-collections/codes/me/regenerations` | 普通用户本人 | 首次生成或原子换码 | 幂等键 + 活动槽唯一 |
-| `POST` | `/api/v1/p2p-collections/codes/me/disable` | 普通用户本人 | 停用当前码 | `version` CAS |
-| `POST` | `/api/v1/p2p-collections/requests` | 普通用户本人 | 创建 30 分钟固定金额请求 | 金额/备注创建后不可变 |
-| `GET` | `/api/v1/p2p-collections/requests/{id}` | 创建者/关联付款人 | 查询脱敏请求和本人尝试 | 付款人不可见他人订单 |
-| `POST` | `/api/v1/p2p-collections/requests/{id}/cancel` | 请求创建者 | 取消未受理请求或记录取消意图 | `version` CAS；处理中不猜测结果 |
-| `GET` | `/api/v1/p2p-collections/by-token?t=` | 匿名 H5 | 返回不消费令牌的落地壳 | `no-store/no-referrer` |
-| `POST` | `/api/v1/p2p-collections/token-exchanges` | bootstrap 会话 | 创建或恢复付款订单 | 同会话幂等 |
-| `PATCH` | `/api/v1/p2p-collections/orders/{id}` | 付款人 + H5 | 长期码订单锁定金额/备注 | 只允许 `DRAFT`，`version` CAS |
-| `POST` | `/api/v1/p2p-collections/orders/{id}/confirmations` | 付款人 + H5 | 密码/余额/风控确认 | 资金来源固定 `BALANCE` |
-| `POST` | `/api/v1/p2p-collections/orders/{id}/pay` | 已确认付款人 | 受理统一 `TRANSFER` | 请求抢占 + 来源唯一 |
-| `GET` | `/api/v1/p2p-collections/orders/{id}` | 交易双方/H5 会话 | 查询本人订单真实资金状态 | 处理中回源主单 |
-| `GET` | `/api/v1/p2p-collections/requests/{id}/events` | 请求创建者 | SSE 订阅固定请求状态 | `Last-Event-ID` 续传 |
-| `GET` | `/api/v1/credit/me` | 登录用户本人 | 查询额度和应收摘要 | 权威回源 |
-| `GET` | `/api/v1/credit/purchases` | 登录用户本人 | 查询未出账和历史信用消费 | 游标分页、状态筛选 |
-| `GET` | `/api/v1/credit/bills` | 登录用户本人 | 查询账单列表 | 账期/状态/游标分页 |
-| `GET` | `/api/v1/credit/bills/{id}` | 账单所有者 | 查询账单和分配明细 | 对象级权限 |
-| `POST` | `/api/v1/credit/repayment-drafts` | 登录用户本人 | 生成还款分配预览 | 幂等键 + `allocationHash` |
-| `POST` | `/api/v1/credit/repayments` | 可信确认流程 | 受理 `CREDIT_REPAY` | 密码、令牌、幂等、TCC |
-| `GET` | `/api/v1/credit/repayments/{id}` | 还款用户本人 | 查询还款和额度恢复结果 | 回源统一交易事实 |
+- 注册：用户、凭证、注册 Outbox 同事务；跨服务开户不放入本地事务。
+- 资金受理：幂等记录、确认消费、来源 CAS、`PROCESSING` 主单和受理 Outbox 同一业务库事务提交，此阶段不写尚未取得 XID 的 `tcc_global`。
+- TCC 启动：受理事务提交后创建或接管 Seata 全局事务；取得 XID 后在独立本地事务幂等写入 `tcc_global`，再调用参与者。若在两阶段之间崩溃，恢复任务扫描“存在 `PROCESSING` 主单但无 `tcc_global`”的记录并接管。
+- TCC 分支：屏障、资源条件更新、分支状态和分支 Outbox 同事务。
+- 终态发布：事实核验结果、主单 CAS 和终态 Outbox 同事务。
+- 人工处置：工单 CAS、决策、审计和后续命令 Outbox 同事务。
 
-#### 12.3.5 AI、运营和监控
+## 10. TCC、可靠事件、恢复与对账
 
-| 方法 | 路径 | 权限 | 行为 |
+### 10.1 TCC 分支职责
+
+| 分支 | Try | Confirm | Cancel |
 |---|---|---|---|
-| `POST` | `/api/v1/agent/messages` | 登录用户 | 处理一轮消息并返回回复、确认卡片或工具结果 |
-| `GET` | `/api/v1/agent/sessions/{id}` | 会话所有者 | 查询脱敏对话和工具轨迹，不返回内部推理 |
-| `GET` | `/api/v1/transfers/{id}/trace` | 运营/观察者 | 查询按角色裁剪的交易链路 |
-| `GET` | `/api/v1/manual-cases` | 运营/风控 | 条件检索人工工单 |
-| `POST` | `/api/v1/manual-cases/{id}/decisions` | 对应审核角色 | 版本 CAS 审批并写审计；不能修改资金字段 |
-| `GET` | `/api/v1/ops/realtime-metrics` | 运营/观察者 | 查询分钟级实时指标 |
-| `GET` | `/api/v1/ops/daily-reports` | 运营/观察者 | 查询带口径和质量版本的 T+1 报表 |
-| `GET` | `/api/v1/ops/alerts` | 运营/观察者 | 查询告警；观察者只读 |
-| `POST` | `/api/v1/ops/alerts/{id}/acknowledge` | 运营 | CAS 确认告警并填写说明 |
-| `POST` | `/api/v1/ops/alerts/{id}/resolve` | 运营 | 标记已解决并提交证据 |
-| `POST` | `/api/v1/ops/alerts/{id}/close` | 运营 | 仅允许 `RESOLVED→CLOSED` |
-| `GET` | `/api/v1/ops/data-quality` | 运营/观察者 | 查询质量检查结果 |
-| `GET` | `/api/v1/ops/metric-definitions` | 运营/观察者 | 查询指标口径历史版本 |
-| `POST` | `/api/v1/ops/credit/statement-runs` | 演示管理员 | 受审计触发指定演示日期出账 |
-| `POST` | `/api/v1/ops/credit/due-check-runs` | 演示管理员 | 受审计触发指定演示日期到期检查 |
+| 付款余额 | 建冻结记录并减少可用 | 冻结转已扣 | 释放冻结一次 |
+| 收款余额 | 建入账预占 | 增加可用余额 | 取消预占 |
+| 信用额度 | 支付时增加冻结；还款时预占额度恢复 | 支付时冻结转已用；还款时减少已用并恢复可用 | 撤销预占，额度回到动作前 |
+| 信用应收 | 预占应收增加或减少 | 支付增加应收；还款按已持久化分配减少应收 | 撤销预占，不改变确定应收 |
+| 还款分配 | 固化账单/消费分配明细 | 按原分配更新账单、消费已还金额 | 撤销未确认分配 |
+| 账本 | 创建 `PREPARED` 平衡凭证 | 校验后 `POSTED` | 取消未过账预制凭证 |
 
-前端只能访问网关 8080，服务间内部接口禁止暴露给浏览器。
+每个动作先写或检查屏障再操作资源。Confirm/Cancel 可重复调用；Cancel 早于 Try 时记录空回滚，后到 Try 必须被防悬挂规则拒绝。
 
-### 12.4 请求字段与 HTTP 语义
+### 10.2 恢复调度器
 
-- 金额统一为 `amountFen: int64`；转账、扫码和 C2C 范围为 `1..5000000` 分，禁止小数金额。
-- C2C `subject` 最长 50 个字符并移除控制字符；分页 `limit` 最大 100。
-- 客户端不得提交 `payerAccountId`、本人 `userId`、商户账户、信用账户或账单分配结果，这些字段由服务端从身份和来源对象派生。
-- 创建资源成功返回 201；普通查询返回 200；资金受理返回 200/202 且业务状态通常为 `PROCESSING`。
-- 参数错误返回 400，未登录/无权限返回 401/403，版本或幂等冲突返回 409，业务规则拒绝返回 422，关键依赖暂不可用返回 503。
-- 503 或客户端超时但主单可能已创建时，响应必须携带 `transactionId` 和查询地址；不得把未知结果包装成 `FAILED`。
+| 调度器 | 扫描条件 | 动作 | 超阈值 |
+|---|---|---|---|
+| `RegistrationRecoveryScheduler` | 长时间 `PROVISIONING` | 查询/补建账户并尝试激活 | 创建活动人工工单 |
+| `TransactionRecoveryScheduler` | 主单处理中且超过重试时间 | 租约接管，查询 Seata/分支并重试 | `MANUAL_REVIEW` |
+| `OutboxPublisherScheduler` | 待发送且到达重试时间 | 发布并更新状态 | 告警，不删除事件 |
+| `OrderExpiryScheduler` | 前置状态且已过期 | CAS 过期 | 处理中只记录意图 |
+| `CreditJobScheduler` | 业务日期未成功 | 幂等出账/逾期检查 | 告警并可接续 |
+| `ReconciliationScheduler` | 终态或日切范围 | 核对证、账、实和事件 | 差异工单和发布阻断 |
 
-### 12.5 关键请求示例
+## 11. 错误处理与安全设计
 
-```http
-POST /api/v1/transfers
-Authorization: Bearer <session-token>
-Idempotency-Key: 69bb4c20-281c-45dc-b777-da54dbe62023
-Content-Type: application/json
+### 11.1 错误处理
 
-{
-  "draftId": "01K1DRAFT02GH3JK4MN5PQRSTV",
-  "confirmationToken": "cfm_opaque_once_value"
-}
+- 领域拒绝使用稳定错误码，不以异常消息作为客户端逻辑。
+- 预期业务拒绝不创建资金主单；已受理后的失败必须通过状态和恢复表达。
+- 未分类异常映射为 500，只返回错误码、中文消息和 Trace 关联字段。
+- 下游超时若可能已产生副作用，返回资源 ID 和 `PROCESSING`，禁止包装成普通失败。
+
+### 11.2 分层安全
+
+| 安全维度 | 设计要求 | 验证方式 |
+|---|---|---|
+| 代码安全 | 参数校验、参数化 SQL、依赖版本锁定、禁止反序列化任意类型 | SAST、依赖扫描、恶意输入测试 |
+| 身份与授权 | 网关认证 + 服务端角色/对象授权；主体从会话派生 | 越权、ID 枚举和角色矩阵测试 |
+| 通信安全 | 外部 HTTPS；内部服务认证；超时预算；CSRF/CORS/Fetch Metadata | 代理配置和协议测试 |
+| 密码安全 | 登录/支付密码独立强哈希；失败计数原子更新 | 哈希配置、锁定并发和敏感字段检查 |
+| 令牌安全 | 高熵、用途隔离、短期、一次性、只存摘要 | 重放、过期、篡改和日志扫描 |
+| 存储安全 | Schema 最小账号权限；凭据环境注入；备份加密；资金表不可删 | 权限检查、Secret 扫描和恢复演练 |
+| AI 安全 | Schema、工具白名单、提示注入隔离、写操作需可信确认 | 注入和越权工具测试 |
+| 审计安全 | 登录、密码、确认、交易、TCC、工单、冲正和配置追加留痕 | 审计完整性和操作者追踪 |
+
+## 12. 配置、调度与可观测性
+
+### 12.1 必需配置组
+
+| 配置组 | 所属模块 | 必须显式配置 |
+|---|---|---|
+| 数据源/Flyway | 各事实服务 | URL、Schema、凭据引用、迁移开关 |
+| HTTP 客户端 | 三中心、AI | connect/read timeout、连接池、内部认证 |
+| Seata | business/account | 事务组、超时、重试和协调器地址 |
+| 幂等/令牌 | user/business | TTL、摘要密钥引用、最大重试次数 |
+| 恢复任务 | user/business/account | 批次、租约、退避、阈值 |
+| Redis/Streams | user/business/ai | consumer group、claim idle、重试 |
+| OTel | 全部模块 | service name、采样率、导出端点 |
+
+凭据和密钥不得有可提交默认值。配置键加入后必须同步 Docker Compose、环境示例、健康检查和配置测试。
+
+### 12.2 Trace 与日志
+
+- 网关、HTTP 客户端、TCC、Outbox、SSE 和 MCP 传播 `requestId/traceId`。
+- 资金日志必须包含业务类型、资源 ID、旧/新状态、结果码和耗时，不记录敏感原文。
+- 交易、来源订单、TCC 分支、凭证、Outbox 和人工工单可通过同一 Trace 关联。
+- 指标投影不能反向决定资金终态；实时和离线指标都只消费确定性事件。
+
+## 13. 设计用例与测试覆盖
+
+### 13.1 用例覆盖矩阵
+
+| 场景组 | 正常场景 | 异常/边界 | 并发/故障 |
+|---|---|---|---|
+| 注册登录 | 注册、开户、登录、退出 | 登录名重复、开户失败、密码锁定 | 重复注册、恢复并发、服务重启 |
+| 模拟充值 | 受控充值、余额和回执 | 单笔/日限额、策略拒绝、非法金额 | 重复提交、TCC 失败、结果未知不释放额度 |
+| 转账 | 草稿、确认、成功、回执 | 重名、余额不足、字段变化、风控拒绝 | 100 次重复提交、Confirm 超时、Cancel 失败 |
+| 扫码 | 建码、交换、确认、余额/信用支付、SSE | 过期、篡改、自付、账户冻结 | 余额/信用竞争、支付/取消/过期竞争、响应丢失 |
+| C2C | 长期码多笔、固定请求首笔成功 | 非余额资金、旧码、金额篡改、余额不足 | 双付款并发、100 路请求竞争、未知结果不重开 |
+| Mini 花呗 | 开户、消费、出账、部分/全额还款 | 额度不足、逾期、还款超额 | 重复出账、重复还款、分支部分成功 |
+| AI | 意图、槽位、草稿、结果解释 | 歧义、Schema 失败、提示注入、LLM 超时 | 同会话并发、工具超时、无确认写调用 |
+| 监控恢复 | Outbox、指标、告警、对账 | 事件缺失、借贷不平、权限拒绝 | 重复事件、Redis 丢失、数据库/服务重启 |
+
+### 13.2 测试落点
+
+```text
+<service>/src/test/java/com/minialalipay/<context>/
+├── domain/          # 不变量和状态迁移
+├── application/     # 编排、权限、幂等和失败处理
+├── infrastructure/  # Flyway、唯一键、CAS、Outbox、TCC
+├── interfaces/      # OpenAPI、Controller、SSE、MCP
+└── architecture/    # ArchUnit
+tests/api|e2e|performance|fault-injection/
 ```
 
-```json
-{
-  "code": "OK",
-  "message": "已受理",
-  "requestId": "req_01K1REQUEST2GH3JK4MN5PQRSTV",
-  "traceId": "6f8b0f0a0ad64fd1b9eb5be13e146a82",
-  "data": {
-    "transactionId": "01K1TX0002GH3JK4MN5PQRSTV",
-    "businessType": "TRANSFER",
-    "status": "PROCESSING",
-    "statusUrl": "/api/v1/transfers/01K1TX0002GH3JK4MN5PQRSTV"
-  }
-}
-```
+- 领域测试覆盖所有合法/非法迁移和金额不变量。
+- Testcontainers 验证真实唯一键、乐观锁、迁移和分支屏障。
+- 契约测试以 OpenAPI 为输入，验证 DTO、状态码、错误码和额外字段拒绝。
+- 跨服务测试验证受理原子性、Try/Confirm/Cancel、恢复和终态只发布一次。
+- 安全测试覆盖越权、重放、CSRF、注入、令牌泄露和敏感日志。
+- 性能测试至少覆盖 100 QPS 查询、20 TPS 资金和固定请求 100 路竞争。
 
-同一主体以相同幂等键和相同请求摘要重试时返回同一 `transactionId`；相同键但摘要不同返回 409 `IDEMPOTENCY_CONFLICT`。确认令牌只保存摘要，原文不得进入数据库明文字段、URL、日志、Trace 或埋点。
+## 14. 编码顺序、追踪与完成定义
 
-### 12.6 SSE 契约
+### 14.1 纵向切片顺序
 
-扫码订单和固定收款请求通过 SSE 推送 `eventId`、`eventType`、业务 ID、可展示状态、发生时间和 `traceId`。服务端只在终态 Outbox 已持久化后推送 `SUCCESS`；断线按 `Last-Event-ID` 补发，历史窗口外则通知客户端回源查询。前端每 2 秒轮询作为降级方案，进入终态后立即停止。
+1. 技术基线：OpenAPI 生成、统一响应、认证、Flyway、Testcontainers、Trace、幂等和 Outbox/Inbox。
+2. 注册、开户、支付密码、登录会话。
+3. 模拟充值、余额、账本明细和对账基线。
+4. 转账草稿、风控、确认、普通转账、终态和恢复。
+5. 商户扫码、H5 令牌交换、余额支付、SSE。
+6. 长期个人码、固定请求和并发仲裁。
+7. 信用支付、账单、还款和逾期。
+8. Agent/MCP、指标、告警、T+1 和质量门禁。
 
-## 13. 角色与权限
+每个切片必须按“OpenAPI/事件 Schema -> 领域测试 -> 应用服务 -> Flyway/Repository -> Controller/适配器 -> 集成/E2E”交付，不允许先建空 Controller 返回假数据。
 
-采用 RBAC + 对象归属 + 资金二次确认。
+### 14.2 需求到实现追踪
 
-| 角色 | 权限范围 |
-|---|---|
-| 普通用户 | 本人账户、充值、转账、收款、账单、AI 和个人统计 |
-| 商户用户 | 本人商户订单、二维码、收款结果和经营统计 |
-| 运营人员 | 脱敏用户、交易、充值、Trace 和告警查询 |
-| 风控审核员 | 风险工单审核；不能修改金额、双方和余额 |
-| 财务/对账 | 账本、对账差异和冲正建议；不能改原分录 |
-| 系统管理员 | 角色、权限和非资金配置；无资金写权限 |
-| 观察者 | 脱敏只读大盘 |
+| 需求域 | 主要模块 | 核心实现单元 | 验证 |
+|---|---|---|---|
+| FR-UC/AC-001 | user/account | 注册、会话、密码、开户和恢复 | AT-13、AT-14、AT-15、AT-16；登录/退出补充契约用例 |
+| FR-AC-007 | business/account | 充值策略、日额度、充值主单、余额和账本 | 正常、限额、重复提交、TCC/恢复专项用例 |
+| FR-TR/RC/TX | business/account | 草稿、确认、风控、交易、TCC、Finalizer | AT-03、AT-04、AT-05、AT-06、AT-08、AT-09、AT-10、AT-12、AT-14、AT-15 |
+| FR-SP | business/account | 扫码订单、令牌交换、余额/信用分支、SSE | AT-19 至 AT-24、AT-32 至 AT-40、AT-44、AT-45 |
+| FR-CR | account/business | 额度、应收、账单、还款草稿和分配 | AT-41 至 AT-53 |
+| FR-PC | business/account | 个人码、请求、订单、CAS、余额 TCC | AT-54 至 AT-68 |
+| FR-AI | ai/business/user/account | Agent、Tool Policy、三中心客户端 | AT-01、AT-02、AT-07、AT-18、AT-52 |
+| FR-OB | business/全部服务 | Outbox/Inbox、Trace、指标、告警和对账 | AT-17、AT-25 至 AT-31、AT-53 |
 
-服务端从登录主体派生 `userId/accountId/merchantAccountId`，拒绝客户端覆盖。运营和管理员不能通过后台直接修改余额、额度、账本或成功状态。
+### 14.3 完成定义
 
-### 13.1 角色码与数据域
+- 需求、总体流程、OpenAPI、数据库设计、代码和测试可双向追踪。
+- Controller 只使用契约 DTO；无跨服务 Mapper、PO 或聚合依赖。
+- 所有写接口有幂等、对象授权、审计和可观测字段。
+- 所有资金状态有 TCC、复式记账、恢复和对账证据。
+- 正常、异常、并发、故障和安全用例均有自动化断言。
+- 受影响 Maven 测试、契约校验、迁移测试和文档链接检查通过。
 
-| 角色码 | 角色 | 数据域 |
-|---|---|---|
-| `CUSTOMER` | 普通用户 | 本人用户 ID 和本人个人账户 |
-| `MERCHANT` | 商户用户 | 已授权的商户账户；不自动获得其他商户数据 |
-| `OPERATOR` | 运营人员 | 全平台脱敏运营数据和告警处置 |
-| `RISK_REVIEWER` | 风控审核员 | 风险工单和必要的脱敏交易快照 |
-| `FINANCE_RECONCILER` | 财务/对账 | 账本、对账差异和冲正建议 |
-| `SYSTEM_ADMIN` | 系统管理员 | 角色、权限、演示任务和非资金配置 |
-| `OBSERVER` | 观察者 | 脱敏只读指标、报表和 Trace 摘要 |
+## 附录 A：后端系分评审清单
 
-一个用户可以同时拥有 `CUSTOMER` 和 `MERCHANT`，但请求必须选择明确身份上下文。个人账户查询始终按 `userId` 派生，商户订单和经营统计始终按授权 `merchantAccountId` 派生；两类数据不能因同一登录主体而合并。运营角色与 C 端角色同时存在时，进入 B 端仍只获得对应后台权限，不能借运营身份操作个人或商户资金。
+- [x] 标准章节包含目标、范围、基线、架构、领域、数据、模块、流程、接口、事务、安全、测试和实施。
+- [x] 主流程区分受理、TCC、终态核验和异常恢复，未把客户端超时当作失败。
+- [x] 数据模型明确所有权、聚合映射、唯一键、CAS、账本和事件边界。
+- [x] 应用依赖明确服务间、分层和禁止依赖。
+- [x] 功能模块可追踪到 Application Service、端口、Repository、调度器和测试。
+- [ ] 业务接口参数和响应尚未进入 OpenAPI；完成 GAP-01 前不得声称接口定义完整。
+- [x] 用例覆盖正常、异常、并发、故障恢复和安全场景。
+- [x] 幂等、事务一致性、代码安全、通信安全和存储安全均有实现与验证要求。
 
-## 14. AI Agent 与 MCP
+## 附录 B：维护规则
 
-AI 工具分级：
-
-- 只读：查用户候选、余额、明细、交易状态、账单。
-- 低风险写：创建/修改草稿，不改变资金。
-- 高风险写：提交资金交易，只允许调用统一提交入口，必须携带可信确认上下文。
-
-用户拥有一个支付密码，由 user-center 保存强哈希；Agent 会话、Memory、MCP 参数、Trace 和日志均不得保存、回显或推断支付密码。
-
-### 14.1 Agent 执行链路
-
-```mermaid
-sequenceDiagram
-    participant C as 用户C端
-    participant AI as AIService
-    participant MCP as ToolPolicy/MCP
-    participant B as BusinessCenter
-    participant U as UserCenter
-    C->>AI: 消息+sessionId+clientMessageId
-    AI->>AI: 加载本人会话并串行化本轮
-    AI->>AI: 意图识别、参数提取、敏感信息过滤
-    AI->>MCP: 调用只读查询或草稿工具
-    MCP->>B: 版本化受控API
-    B->>U: 必要的脱敏用户解析
-    B-->>MCP: 确定性业务结果
-    MCP-->>AI: 工具结果+traceId
-    alt 仅查询或信息不足
-      AI-->>C: 结果解释或澄清问题
-    else 涉及资金
-      AI-->>C: 不可变确认卡片
-      C->>B: 可信UI完成密码校验和确认
-      B-->>C: PROCESSING交易号
-      AI->>B: 只读查询交易终态
-      B-->>AI: 权威结果
-      AI-->>C: 基于权威状态解释结果
-    end
-```
-
-### 14.2 工具权限模型
-
-| 风险级别 | 示例工具 | Agent 可否直接调用 | 约束 |
-|---|---|---:|---|
-| 只读 | 用户候选、余额、明细、交易、额度、账单查询 | 是 | 只能查当前主体或脱敏公开候选；限流和审计 |
-| 低风险写 | 创建/修改转账草稿、生成确认卡片 | 是 | 不冻结、不扣款；返回版本和过期时间 |
-| 高风险写 | 转账、扫码支付、信用还款提交 | 否 | 必须跳转可信 UI 完成密码与一次性确认令牌；Agent 不接触密码和令牌 |
-| 管理操作 | 余额、额度、账本、角色或成功状态修改 | 否 | 不提供 MCP 工具；只能走受控后台流程或根本禁止 |
-
-每次工具调用记录 `sessionId`、`messageId`、`toolName`、Schema 版本、脱敏参数摘要、调用主体、结果码、耗时、`traceId` 和风险等级。不得记录模型内部推理文本；工具返回的业务状态必须原样保留，结果解释不能把 `PROCESSING` 改写成成功或失败。
-
-## 15. 个人与商户统计设计
-
-### 15.1 普通用户
-
-- 收到成功转账计收入；主动转账和余额扫码计支出。
-- Mini 花呗消费计消费支出，余额不变。
-- Mini 花呗还款计偿债资金流，不重复计消费。
-- 模拟充值计资金流入，不计收入。
-- 退款冲减原支出；非确定终态不计成功金额。
-
-### 15.2 商户
-
-- 成功收款只统计 `SUCCESS QR_PAY/CREDIT_PAY` 并按来源订单去重。
-- 退款金额和净收款字段属于 `FR-SP-005` 的 P0 统计契约；净收款=成功收款-成功退款。真实原路退款和商户主动退款入口不在本期范围，接口仍必须返回 `refundAmountFen` 和 `netReceiptAmountFen`。只有明确分类为 `REFUND` 且终态成功的事实才计入退款；TCC Cancel、失败补偿和技术冲正不算商户退款。本期没有退款事实时退款金额真实返回 0，并携带口径版本，禁止伪造退款订单。
-- 统计按服务端派生 `merchant_account_id` 隔离。
-- 同一自然人的个人账户与商户账户分开统计。
-
-统计查询走投影/指标库，不加载账户聚合，也不作为资金事实来源。
-
-## 16. 错误码与失败处理
-
-| 类别 | 示例 | HTTP |
-|---|---|---:|
-| 参数 | `COMMON_INVALID_REQUEST` | 400 |
-| 身份 | `UNAUTHORIZED`、`FORBIDDEN` | 401/403 |
-| 业务 | `BALANCE_INSUFFICIENT`、`ACCOUNT_FROZEN` | 409/422 |
-| 幂等 | `IDEMPOTENCY_CONFLICT` | 409 |
-| 并发 | `VERSION_CONFLICT`、`REQUEST_ALREADY_CLAIMED` | 409 |
-| 风控 | `RISK_REVIEW_REQUIRED` | 202 |
-| 系统 | `TRANSACTION_PROCESSING`、`INTERNAL_ERROR` | 202/500 |
-
-失败响应要说明是否扣款、是否已恢复和下一步；未知状态返回处理中并提供查询入口，不得提前返回失败或成功。
-
-### 16.1 风控规则与执行顺序
-
-| 规则 | 条件 | 结果 |
-|---|---|---|
-| `R-01` | 可用余额小于余额支付金额 | 拒绝 |
-| `R-02` | 单笔金额大于 5,000,000 分 | 拒绝 |
-| `R-03` | 1 分钟内发起超过 5 笔 | 转人工确认 |
-| `R-04` | 金额大于等于 500,000 分 | 强风险提示、单独勾选、仍需支付密码 |
-| `R-05` | 首次向该对象支付且金额大于等于 100,000 分 | 强风险提示 |
-| `R-06` | 30 秒内向同一对象发起相同金额 | 强提示并重新确认 |
-| `R-07` | 任一账户冻结或注销 | 拒绝 |
-| `R-08` | Mini 花呗可用额度不足 | 拒绝信用支付 |
-| `R-09` | 存在逾期账单或信用账户非 `ACTIVE` | 拒绝信用支付，允许查询和还款 |
-
-执行顺序为：参数/对象归属 → 账户状态 → 余额/额度 → 限额/频率 → 对手与重复特征 → 决策聚合。草稿确认前执行预检，提交资金前使用相同 `ruleVersion` 和最新事实再次执行；两次结果取更严格者。`PASS` 才可签发普通确认，`ENHANCED_CONFIRMATION` 绑定风险提示勾选，`MANUAL_REVIEW` 创建 `RISK_PRECHECK` 工单且不创建资金主单，`REJECT` 直接拒绝。
-
-人工批准不能替用户付款，只允许来源对象返回待确认状态；用户必须重新输入支付密码并生成新确认令牌。人工驳回将来源对象置 `REJECTED`。`risk_decision` 保存规则版本、命中规则、脱敏输入摘要和决策，`manual_case` 通过版本 CAS 记录审批人、理由和审计时间。
-
-### 16.2 支付密码闭环
-
-注册必须设置独立 6 位数字支付密码，登录密码与支付密码使用不同盐和强哈希。连续 5 次支付密码错误后锁定支付能力 10 分钟，但查询能力保持可用。修改支付密码必须先验证登录密码，并在同一安全流程中撤销该用户所有未消费的支付证明和确认令牌。业务中心只接收短期 `paymentProof`，不能接触或保存密码明文。
-
-## 17. 可观测性与审计
-
-- 网关生成/透传 `X-Request-Id`，OTel 生成 `traceId/spanId`。
-- 交易日志关联 `transactionId/sourceOrderId/xid/branchId`。
-- 指标覆盖 API、交易、TCC、账本、信用、Agent、SSE、对账和数据质量。
-- 资金链路演示环境 100% Trace 采样。
-- 审计登录失败、密码校验结果、确认令牌、交易状态、风控审批、TCC、补偿、冲正、充值、配置和导出。
-- 日志和 Trace 禁止记录支付密码、确认令牌、二维码原始令牌和完整账号。
-
-### 17.1 监控数据流
-
-```mermaid
-flowchart LR
-    S["各后端服务"] -->|OTel Trace/Metric| O["OpenTelemetry Collector"]
-    S -->|业务事实+Outbox| RS["Redis Streams"]
-    O --> T["Tempo/Prometheus"]
-    RS --> I["Inbox去重与Schema校验"]
-    I --> RT["分钟级实时聚合"]
-    I --> DL["离线明细/日聚合"]
-    RT --> M[("metrics_db")]
-    DL --> Q["数据质量检查"]
-    Q -->|通过| D["T+1报表发布"]
-    Q -->|失败| A["告警与隔离队列"]
-    T --> B["B端监控/Trace查询"]
-    M --> B
-    D --> B
-    A --> W["处置工单"]
-```
-
-### 17.2 指标、告警与质量
-
-| 领域 | 实时指标 | 关键告警 |
-|---|---|---|
-| API | QPS、错误率、P95/P99、限流数 | 5xx/超时突增、鉴权异常、限流持续 |
-| 交易 | 受理/成功/失败/处理中数量与金额 | 重复来源、处理超时、终态发布失败 |
-| TCC/Saga | Try/Confirm/Cancel、重试、冻结年龄 | 分支不一致、悬挂、补偿失败 |
-| 账本/对账 | 凭证数、借贷差、证账实差异 | 任一不平凭证、余额/账本不一致 |
-| 信用 | 额度使用、应收、账单、还款、逾期 | 额度恒等式破坏、应收与账本不一致 |
-| AI | 会话、工具调用、确认转化、错误率、耗时 | 工具越权、敏感信息命中、模型/工具超时 |
-| 事件 | Outbox 积压、最大年龄、Inbox 重复、隔离数 | 关键事件超时、Schema 不兼容、消费停滞 |
-
-实时大盘以分钟级投影为准，T+1 报表只在完整性、唯一性、及时性和一致性检查通过后发布。指标库、Trace 和报表均是观测事实，不得作为扣款、额度判断或交易终态的权威来源。
-
-### 17.3 Trace 关联字段
-
-网关创建或透传 `traceId` 和 `X-Request-Id`；跨服务 HTTP、Seata 分支、Outbox 事件、SSE 和 Agent 工具调用必须继续携带关联信息。资金链路最少可按以下键检索：`traceId`、`requestId`、`transactionId`、`sourceOrderId`、`xid`、`branchId`、`eventId`。B 端只展示脱敏 Span 属性，并按角色限制账户、用户和工具参数可见范围。
-
-## 18. 缓存与限流
-
-Redis 用于登录会话、短期 H5 会话、限流、只读缓存和事件流；不得作为余额、额度、账本或交易终态唯一事实。
-
-限流至少覆盖登录、用户搜索、模拟充值、支付密码、二维码交换、确认、交易提交和 AI 消息。资金接口限流后必须返回可解释错误，不能造成已受理交易丢失。
-
-## 19. 任务调度
-
-| 任务 | 周期 | 约束 |
-|---|---|---|
-| 事务恢复 | 5-10 秒 | 带租约抢占、幂等恢复 |
-| Outbox 发布 | 1 秒 | 批量、重试、告警 |
-| 二维码/请求过期 | 10 秒 | CAS，不回滚已确认资金 |
-| 对账 | 1 分钟/日终 | 证账实差异为 0 |
-| 信用出账 | 每月 1 日 | 账期唯一、重复执行幂等 |
-| 逾期检查 | 每日 | 到期日后暂停信用消费 |
-| T+1 报表 | 每日 01:00 | 数据质量通过后发布 |
-
-## 20. 配置与部署
-
-| 进程 | 默认端口 |
-|---|---:|
-| Gateway | 8080 |
-| User Center | 8081 |
-| Business Center | 8082 |
-| Account Center | 8083 |
-| AI Service | 8084 |
-| Seata | 8091 |
-| MySQL | 3306 |
-| Redis | 6379 |
-
-配置通过环境变量注入，生产密钥不得提交。MVP 使用 Docker Compose；MySQL 可单实例多 Schema，但服务数据库账号只能访问所属 Schema。生产拆分时接口和数据所有权保持不变。
-
-## 21. 测试策略
-
-| 层次 | 内容 |
-|---|---|
-| 单元测试 | 聚合不变量、状态机、金额、额度、账本模板 |
-| 应用测试 | 权限、幂等、确认令牌、失败编排 |
-| 集成测试 | MySQL、Redis、Outbox、TCC、Flyway |
-| 契约测试 | OpenAPI、错误码、事件 Schema、SSE |
-| E2E | 充值、转账、扫码、C2C、信用、AI |
-| 故障注入 | 超时、重启、重复请求、Try/Confirm/Cancel 失败 |
-| 对账测试 | 双方余额、交易、账本、信用应收和统计口径 |
-
-资金测试不能只断言 HTTP 成功，必须同时断言交易终态、账户余额、TCC 分支和借贷平衡。
-
-## 22. 推荐开发顺序
-
-1. Flyway、认证、错误码、Trace、Outbox/Inbox 和 TCC 屏障。
-2. 注册、零余额开户、支付密码、模拟充值和余额查询。
-3. 用户搜索、草稿、风控、确认、普通转账、账本、回执和失败恢复。
-4. 商户扫码订单、H5 令牌交换、扫码余额支付和 SSE。
-5. Agent 多轮意图、查询工具、草稿工具和确定性结果解释。
-6. 长期个人码、固定请求、CAS 抢占和 C2C 对账。
-7. 信用额度、信用支付、账单、还款和逾期。
-8. 个人/商户统计、实时大盘、离线报表、数据质量和发布门禁。
-9. P1：模拟身份、智能纠错、偏好、销户、热点缓存、AI 测试辅助和信用 AI 查询。
-
-## 23. 发布门禁
-
-- Java 21 全量编译和测试通过。
-- OpenAPI、事件 Schema、数据库迁移和代码一致。
-- P0 资金场景通过，重复扣款和账本不平数量为 0。
-- TCC 空回滚、悬挂、重复 Confirm/Cancel 和服务重启测试通过。
-- 交易、余额、账本、信用与统计口径对账通过。
-- 高危越权、密码/令牌泄露和 AI 绕过确认数量为 0。
-- 失败交易具备可解释结果或人工处理入口。
-
-## 24. 需求到模块映射
-
-| 需求组 | 后端模块 |
-|---|---|
-| `FR-UC-*` | user-center，开户调用 account-center |
-| `FR-AC-*` | account-center；充值订单与统计编排在 business-center |
-| `FR-TR-*` | business-center + account-center |
-| `FR-RC-*` | business-center 风控 + user-center 密码 |
-| `FR-TX-*` | business-center 协调 + account-center TCC/账本 |
-| `FR-SP-*` | business-center + account-center |
-| `FR-PC-*` | business-center + account-center |
-| `FR-CR-*` | account-center + business-center 商户订单 |
-| `FR-AI-*` | ai-service，经受控 API 调用三中心 |
-| `FR-OB-*` | 各服务埋点 + business-center 监控/指标模块 |
-| `FR-QA-*` | tests 与 AI 辅助，不进入生产资金路径 |
-
-## 附录 A：后端不变量清单
-
-1. 注册开户余额为 0，注册不得产生充值分录。
-2. 模拟充值服务端受控，幂等且借贷平衡。
-3. 余额、冻结、额度和应收不得为负。
-4. 每个来源订单最多一笔成功资金交易。
-5. 固定收款请求最多一笔成功，长期个人码可多笔独立成功。
-6. `QR_PAY` 与 `CREDIT_PAY` 对同一扫码订单互斥成功。
-7. 成功交易的全部 TCC 分支必须 Confirm，账本必须过账且借贷平衡。
-8. AI、前端、运营和管理员均不能直接修改资金事实。
-9. Redis 缓存不能决定余额是否足够。
-10. 未确定资金结果只能展示处理中或人工处理。
+1. 业务流程、状态和不变量变化先修改总体系统分析，再更新本文实现落点。
+2. HTTP 路径、字段和响应只在 OpenAPI 定义，本文维护所有权、Controller 和就绪状态。
+3. 物理字段、索引和约束只在数据库设计定义，本文维护 Repository、Mapper 和事务语义。
+4. 当前代码与目标设计必须分别陈述，禁止把目标类名写成已实现事实。
+5. 新增行为必须在同一修改中补齐契约、测试、迁移、错误处理、可观测性和安全检查。

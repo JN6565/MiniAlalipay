@@ -6,8 +6,7 @@
 | 文档版本 | V2.7 |
 | 修订日期 | 2026-07-30 |
 | 需求基线 | PRD V1.8 |
-| 系统分析基线 | 系统分析 V1.10 |
-| 补充基线 | `2026-07-30-minialalipay-system-analysis-change-record.md` |
+| 系统分析基线 | 系统分析 V1.11 |
 | 数据库 | MySQL 8.0 / InnoDB |
 | 金额单位 | 人民币分，`BIGINT UNSIGNED` |
 | 时间标准 | UTC `DATETIME(3)`，API 转 ISO 8601 |
@@ -17,7 +16,7 @@
 
 本版统一 PRD、系统分析和原库表设计中的数据口径，可作为建表脚本、实体模型和迁移脚本的设计基线。完整 DDL 应由本文件生成并纳入代码仓库版本管理，不再由两份文档分别维护同一张表。
 
-基线识别说明：PRD 变更记录已更新到 V1.8，且系统分析 V1.10 明确以 PRD V1.8 为需求基线；PRD“文档信息”中的版本号仍误写为 V1.6，本设计按其最新变更记录和实际新增内容采用 V1.8，不回退到旧版本。系统分析正文已应用 2026-07-30 修改记录但未提升文档版本，因此该修改记录作为 V1.10 的补充基线一并约束本设计。
+基线识别说明：PRD 变更记录已更新到 V1.8，且系统分析 V1.11 明确以 PRD V1.8 为需求基线；PRD“文档信息”中的版本号仍误写为 V1.6，本设计按其最新变更记录和实际新增内容采用 V1.8，不回退到旧版本。过程修改记录不作为独立基线，已批准内容必须合并到总体系统分析后再由本设计引用。
 
 本次修订重点如下：
 
@@ -39,6 +38,7 @@
 16. 消除退款重试基数、统计主体 ID、信用退款账单、用户角色来源和还款分配粒度之间的表述冲突。
 17. 对齐系统分析补充修改记录：统一联系人字段和索引，补齐改密撤销闭环及演示信用任务运行记录。
 18. 统一第 5 至 12 章的库表表达：每张表均按“功能与归属、字段设计、键与索引、写入规则”描述，并为字段补充业务功能。
+19. 对齐系统分析 V1.11：增加注册 `registration_id` 和 `PROVISIONING` 状态，支持跨服务开户幂等恢复。
 19. 基于 PRD V1.8 和系统分析 V1.10 补充按逻辑库拆分的 ER 图，区分同库物理外键与跨库逻辑引用，并覆盖业务、信用、账本、事件和统计投影关系。
 
 ## 1. 设计原则
@@ -364,146 +364,6 @@ erDiagram
     }
 ```
 
-说明：`credit_account` 位于 `account_db`，其余信用应收和账单事实位于 `ledger_db`，因此前四条关系为跨库逻辑关系。`credit_bill_item.purchase_id` 的唯一约束保证一笔信用消费最多进入一个账期。一级还款分配的 `target_type + target_id` 是多态目标，二级明细再落到具体消费，并在已出账时关联账单。原交易可产生原始凭证和后续冲正凭证，因此 `FUND_TRANSACTION -> LEDGER_VOUCHER` 为一对多，而不是一对一。
-
-### 4.4 AI 会话、事件与统计投影
-
-```mermaid
-erDiagram
-    APP_USER ||--o{ AGENT_SESSION : logically_starts
-    AGENT_SESSION ||--o{ AGENT_MESSAGE : contains
-    AGENT_SESSION ||--o{ TOOL_CALL_LOG : records
-    APP_USER ||--o{ PREFERENCE : logically_owns
-
-    OUTBOX_EVENT ||--o{ INBOX_EVENT : consumed_as
-    OUTBOX_EVENT ||--o| ANALYTICS_EVENT : normalized_as
-    OUTBOX_EVENT ||--o{ QUARANTINED_EVENT : may_quarantine
-    METRIC_DEFINITION ||--o{ MINUTE_METRIC : defines
-    METRIC_DEFINITION ||--o{ DAILY_METRIC : defines
-    ANALYTICS_EVENT }o--o{ PERSONAL_CASHFLOW_DAILY : projects
-    ANALYTICS_EVENT }o--o{ PERSONAL_COUNTERPARTY_STAT : projects
-    ANALYTICS_EVENT }o--o{ MERCHANT_BUSINESS_DAILY : projects
-    MERCHANT_BUSINESS_DAILY ||--o{ MERCHANT_RECONCILIATION_DAILY : reconciles
-    RECONCILIATION_DIFF ||--o{ MERCHANT_RECONCILIATION_DAILY : referenced_by
-    QUALITY_RESULT ||--o{ MONITOR_ALERT : may_trigger
-
-    AGENT_SESSION {
-        char26 session_id PK
-        char26 user_id FK "logical reference"
-    }
-    AGENT_MESSAGE {
-        char26 message_id PK
-        char26 session_id FK
-    }
-    TOOL_CALL_LOG {
-        char26 tool_call_id PK
-        char26 session_id FK
-    }
-    PREFERENCE {
-        char26 preference_id PK
-        char26 user_id FK "logical reference"
-    }
-    OUTBOX_EVENT {
-        char26 event_id PK
-        varchar aggregate_type
-        char26 aggregate_id
-    }
-    INBOX_EVENT {
-        varchar consumer_name PK
-        char26 event_id PK
-    }
-    ANALYTICS_EVENT {
-        char26 event_id PK
-        char26 transaction_id FK "logical reference"
-    }
-    QUARANTINED_EVENT {
-        varchar consumer_name PK
-        char26 event_id PK
-    }
-    METRIC_DEFINITION {
-        varchar metric_code PK
-        int version PK
-    }
-    MINUTE_METRIC {
-        varchar metric_code PK
-        datetime bucket_at PK
-        binary dimension_hash PK
-    }
-    DAILY_METRIC {
-        varchar metric_code PK
-        date business_date PK
-        binary dimension_hash PK
-    }
-    PERSONAL_CASHFLOW_DAILY {
-        char26 account_id PK "logical reference"
-        date stat_date PK
-        int definition_version PK
-    }
-    PERSONAL_COUNTERPARTY_STAT {
-        char26 account_id PK "logical reference"
-        char26 counterparty_account_id PK "logical reference"
-        date period_start PK
-    }
-    MERCHANT_BUSINESS_DAILY {
-        char26 merchant_account_id PK "logical reference"
-        date stat_date PK
-        int definition_version PK
-    }
-    MERCHANT_RECONCILIATION_DAILY {
-        char26 merchant_account_id PK "logical reference"
-        date biz_date PK
-        char26 reconciliation_diff_id FK "logical reference"
-    }
-    QUALITY_RESULT {
-        char26 result_id PK
-        varchar task_code UK
-        date data_date UK
-        varchar rule_code UK
-    }
-    MONITOR_ALERT {
-        char26 alert_id PK
-        varchar subject_id
-    }
-```
-
-说明：Outbox 和 Inbox 在各自 Schema 独立部署，图中关系表示事件传播和消费，不表示共享表或数据库外键。分析事件通过 `event_id` 保持幂等，个人与商户日表是事件驱动投影；一个事件可能更新多个统计粒度，一条投影也由多个事件累计，因此采用多对多语义。指标定义通过 `metric_code + version` 约束分钟和日指标口径，质量结果失败可触发告警，但告警仍保留独立生命周期。
-
-### 4.5 通用支撑表关系
-
-```mermaid
-erDiagram
-    BUSINESS_AGGREGATE ||--o{ IDEMPOTENCY_RECORD : accepts_idempotently
-    BUSINESS_AGGREGATE ||--o{ OUTBOX_EVENT : emits
-    BUSINESS_AGGREGATE ||--o{ AUDIT_LOG : audited_by
-    OUTBOX_EVENT ||--o{ INBOX_EVENT : deduplicated_by
-
-    IDEMPOTENCY_RECORD {
-        char26 record_id PK
-        varchar principal_key UK
-        varchar api_scope UK
-        varchar idempotency_key UK
-        char26 resource_id FK "logical reference"
-    }
-    OUTBOX_EVENT {
-        char26 event_id PK
-        varchar aggregate_type
-        char26 aggregate_id FK "logical reference"
-        bigint aggregate_version
-    }
-    INBOX_EVENT {
-        varchar consumer_name PK
-        char26 event_id PK
-    }
-    AUDIT_LOG {
-        bigint audit_id PK
-        varchar target_type
-        varchar target_id FK "logical reference"
-        char32 trace_id
-    }
-```
-
-`BUSINESS_AGGREGATE` 是对用户、账户、草稿、订单、交易、账单和 AI 会话等聚合的逻辑统称，不是物理表。`idempotency_record.resource_id`、`outbox_event.aggregate_id` 和 `audit_log.target_id` 均为多态逻辑引用，由对应所有者 Schema 在本地事务内维护。跨 Schema 的事件关系依靠全局唯一 `event_id`、聚合版本和消费者去重约束实现。
-
 ## 5. 用户中心表
 
 本章表均归属 `user_db`，由 `user-center` 独占写入。表结构统一使用以下四部分；跨库 ID 只作逻辑引用。
@@ -515,18 +375,19 @@ erDiagram
 | 字段 | 类型 | 必填/默认 | 功能 |
 | --- | --- | --- | --- |
 | `user_id` | `CHAR(26)` | PK，必填 | 用户 ULID，跨模块引用用户的稳定标识 |
+| `registration_id` | `CHAR(26)` | 必填 | 用户中心生成的注册幂等键，用于开户恢复和既有资源查询 |
 | `login_name` | `VARCHAR(64)` | 必填 | 规范化登录名，用于登录和唯一识别 |
 | `nickname` | `VARCHAR(64)` | 必填 | 可重复的展示名称和模糊搜索条件 |
 | `phone_tail` | `CHAR(4)` | 可空 | 手机号尾号，仅用于辅助检索和脱敏展示 |
 | `identity_status` | `VARCHAR(16)` | 必填 | 演示身份状态，不代表真实 KYC |
-| `status` | `VARCHAR(16)` | `ACTIVE` | 用户可用状态：`ACTIVE/LOCKED/CLOSED` |
+| `status` | `VARCHAR(16)` | `PROVISIONING` | 用户状态：`PROVISIONING/ACTIVE/DISABLED` |
 | `version` | `BIGINT UNSIGNED` | `0` | 用户资料和状态的 CAS 版本 |
 | `created_at` | `DATETIME(3)` | 必填 | 用户注册时间 |
 | `updated_at` | `DATETIME(3)` | 必填 | 最近资料或状态变更时间 |
 
-**键与索引**：UK `(login_name)`；索引 `(nickname,status)`、`(status,created_at)`。
+**键与索引**：UK `(registration_id)`、UK `(login_name)`；索引 `(nickname,status)`、`(status,created_at)`。
 
-**写入规则**：注册事务创建用户后触发开户，但不得写初始资金；RBAC 角色只写 `role_assignment`，不得在本表重复保存 `user_type`。
+**写入规则**：注册事务以 `PROVISIONING` 创建用户并触发开户，但不得写初始资金；账户中心以 `registration_id` 作为开户幂等键，用户中心核验余额账户和适用的信用账户后才能 CAS 更新为 `ACTIVE`。恢复期间禁止登录，超过自动恢复阈值后仍保持 `PROVISIONING` 并创建人工工单。临时登录锁定只更新 `credential.login_fail_count/login_lock_until`，不修改用户状态；管理停用使用 `DISABLED`。RBAC 角色只写 `role_assignment`，不得在本表重复保存 `user_type`。
 
 ### 5.2 `credential`
 
@@ -616,6 +477,7 @@ erDiagram
 | --- | --- | --- | --- |
 | `account_id` | `CHAR(26)` | PK，必填 | 虚拟账户 ID |
 | `user_id` | `CHAR(26)` | 必填 | 账户所有者，跨 `user_db` 逻辑引用 |
+| `registration_id` | `CHAR(26)` | UK，必填 | 开户请求幂等和恢复查询键，由用户中心生成 |
 | `account_type` | `VARCHAR(16)` | 必填 | `PERSONAL/MERCHANT` 等账户类型 |
 | `currency` | `CHAR(3)` | `CNY` | 账户币种，MVP 固定人民币 |
 | `status` | `VARCHAR(16)` | `ACTIVE` | `ACTIVE/FROZEN/CLOSED` |
@@ -623,9 +485,9 @@ erDiagram
 | `created_at` | `DATETIME(3)` | 必填 | 开户时间 |
 | `updated_at` | `DATETIME(3)` | 必填 | 最近状态更新时间 |
 
-**键与索引**：UK `(user_id,account_type,currency)`；索引 `(status,updated_at)`。
+**键与索引**：UK `(registration_id)`、UK `(user_id,account_type,currency)`；索引 `(status,updated_at)`。
 
-**写入规则**：注册只创建账户和零余额行，不创建初始化资金凭证；余额只能由成功充值、成功收款或受控退款增加。
+**写入规则**：注册只创建账户和零余额行，不创建初始化资金凭证；重复 `registration_id` 必须返回既有账户，不得重复开户。余额只能由成功充值、成功收款或受控退款增加。
 
 ### 6.2 `account_balance`
 
