@@ -3,7 +3,7 @@
 | 项目 | 内容 |
 | --- | --- |
 | 产品 | MiniAlalipay |
-| 文档版本 | V2.6 |
+| 文档版本 | V2.7 |
 | 修订日期 | 2026-07-30 |
 | 需求基线 | PRD V1.8 |
 | 系统分析基线 | 系统分析 V1.10 |
@@ -39,6 +39,7 @@
 16. 消除退款重试基数、统计主体 ID、信用退款账单、用户角色来源和还款分配粒度之间的表述冲突。
 17. 对齐系统分析补充修改记录：统一联系人字段和索引，补齐改密撤销闭环及演示信用任务运行记录。
 18. 统一第 5 至 12 章的库表表达：每张表均按“功能与归属、字段设计、键与索引、写入规则”描述，并为字段补充业务功能。
+19. 基于 PRD V1.8 和系统分析 V1.10 补充按逻辑库拆分的 ER 图，区分同库物理外键与跨库逻辑引用，并覆盖业务、信用、账本、事件和统计投影关系。
 
 ## 1. 设计原则
 
@@ -85,38 +86,423 @@ MVP 可以把这些 Schema 部署在同一个 MySQL 实例，但仍应使用不�
 | 排序规则 | `utf8mb4_0900_ai_ci` |
 | 删除策略 | 配置类数据允许软删除；资金事实和审计数据禁止删除 |
 
-## 4. 核心关系
+## 4. 实体关系设计
+
+本章 ER 图以 PRD V1.8 的业务对象和系统分析 V1.10 的限界上下文为输入，并以本文件后续字段、主键和唯一约束为准。为保证图可读性，按逻辑库和业务域拆分展示。
+
+关系实现规则：同一 Schema 内的稳定实体关系优先使用物理外键；跨 Schema 关系只保存业务 ID，属于逻辑引用，不创建跨库外键；`subject_type + subject_id`、`target_type + target_id` 等多态关系由应用校验，不能误建为指向单表的外键。各 Schema 内重复部署的 `outbox_event`、`inbox_event`、`idempotency_record` 和 `audit_log` 在 4.5 节统一表示。
+
+### 4.1 用户、账户与额度主体
 
 ```mermaid
 erDiagram
-    APP_USER ||--o{ ACCOUNT : owns
+    APP_USER ||--|| CREDENTIAL : has
+    APP_USER ||--o{ PAYMENT_PROOF : obtains
+    APP_USER ||--o{ ROLE_ASSIGNMENT : receives
+    APP_USER ||--o{ CONTACT : owns_list
+    APP_USER ||--o{ CONTACT : appears_as_payee
+
+    APP_USER ||--o{ ACCOUNT : logically_owns
     ACCOUNT ||--|| ACCOUNT_BALANCE : has
-    ACCOUNT ||--o{ FREEZE_RECORD : freezes
-    APP_USER ||--o| CREDIT_ACCOUNT : owns
-    CREDIT_ACCOUNT ||--o{ CREDIT_FREEZE : freezes
-    CREDIT_ACCOUNT ||--|| CREDIT_RECEIVABLE : summarizes
-    CREDIT_ACCOUNT ||--o{ CREDIT_PURCHASE : purchases
-    CREDIT_ACCOUNT ||--o{ CREDIT_BILL : generates
-    CREDIT_BILL ||--o{ CREDIT_BILL_ITEM : contains
-    CREDIT_PURCHASE ||--o| CREDIT_BILL_ITEM : billed_once
-    CREDIT_ACCOUNT ||--o{ CREDIT_REPAYMENT : repays
-    CREDIT_REPAYMENT ||--o{ CREDIT_REPAYMENT_ALLOCATION : allocates
-    CREDIT_REPAYMENT_ALLOCATION ||--|{ CREDIT_REPAYMENT_ALLOCATION_DETAIL : expands
-    CREDIT_PURCHASE ||--o{ CREDIT_REPAYMENT_ALLOCATION_DETAIL : receives_repayment
-    FUND_TRANSACTION ||--o| LEDGER_VOUCHER : posts
-    LEDGER_VOUCHER ||--|{ LEDGER_ENTRY : contains
-    APP_USER ||--o{ RECHARGE_ORDER : creates
+    ACCOUNT ||--o{ FREEZE_RECORD : has_freezes
+    APP_USER ||--o| CREDIT_ACCOUNT : logically_owns
+    CREDIT_ACCOUNT ||--o{ CREDIT_FREEZE : has_freezes
+
+    APP_USER {
+        char26 user_id PK
+        varchar login_name UK
+        varchar status
+    }
+    CREDENTIAL {
+        char26 user_id PK FK
+        bigint pay_password_version
+    }
+    PAYMENT_PROOF {
+        char26 proof_id PK
+        char26 user_id FK
+        binary token_digest UK
+    }
+    CONTACT {
+        char26 owner_user_id PK FK
+        char26 payee_user_id PK FK
+    }
+    ROLE_ASSIGNMENT {
+        char26 user_id PK FK
+        varchar role_code PK
+    }
+    ACCOUNT {
+        char26 account_id PK
+        char26 user_id FK "logical reference"
+        varchar account_type
+    }
+    ACCOUNT_BALANCE {
+        char26 account_id PK FK
+        bigint available_fen
+        bigint frozen_fen
+    }
+    FREEZE_RECORD {
+        char26 freeze_id PK
+        char26 transaction_id FK "logical reference"
+        char26 account_id FK
+    }
+    CREDIT_ACCOUNT {
+        char26 credit_account_id PK
+        char26 user_id UK "logical reference"
+        bigint used_fen
+        bigint frozen_fen
+    }
+    CREDIT_FREEZE {
+        char26 credit_freeze_id PK
+        char26 transaction_id FK "logical reference"
+        char26 credit_account_id FK
+    }
+```
+
+说明：`APP_USER -> ACCOUNT/CREDIT_ACCOUNT` 跨 `user_db` 与 `account_db`，是逻辑关系；`CONTACT` 的所有者和收款人均指向 `app_user`，组成单向联系人关系，不表示好友关系。一个用户可按账户类型拥有多个账户，但最多拥有一个信用账户。
+
+### 4.2 业务来源、确认与统一资金交易
+
+```mermaid
+erDiagram
+    RECHARGE_POLICY ||--o{ RECHARGE_ORDER : governs
     RECHARGE_ORDER ||--o| FUND_TRANSACTION : creates
-    FUND_TRANSACTION ||--o{ REFUND_ORDER : refund_attempts
-    REFUND_ORDER ||--o| FUND_TRANSACTION : creates_refund
     TRANSFER_DRAFT ||--o| FUND_TRANSACTION : creates
     CREDIT_REPAYMENT_DRAFT ||--o| FUND_TRANSACTION : creates
+    QR_PAY_ORDER ||--|| QR_PAY_TOKEN : exposes
     QR_PAY_ORDER ||--o| FUND_TRANSACTION : creates
-    COLLECTION_ORDER ||--o| FUND_TRANSACTION : creates
     PERSONAL_COLLECTION_CODE ||--o{ COLLECTION_ORDER : accepts
-    COLLECTION_REQUEST ||--o{ COLLECTION_ORDER : attempts
+    COLLECTION_REQUEST ||--o{ COLLECTION_ORDER : has_attempts
+    COLLECTION_ORDER ||--o| FUND_TRANSACTION : creates
+
+    CONFIRMATION_SUBJECT ||--o{ CONFIRMATION : rotates
+    PAYMENT_PROOF ||--o| CONFIRMATION : authorizes
+
     FUND_TRANSACTION ||--|| TCC_GLOBAL : coordinates
+    FUND_TRANSACTION ||--o{ REFUND_ORDER : has_refund_attempts
+    REFUND_ORDER ||--o| FUND_TRANSACTION : creates_refund
+    FUND_TRANSACTION ||--o{ RISK_DECISION : evaluated_by
+    FUND_TRANSACTION ||--o{ MANUAL_CASE : may_open
+
+    RECHARGE_POLICY {
+        char26 policy_id PK
+        varchar policy_code UK
+        bigint version UK
+    }
+    RECHARGE_ORDER {
+        char26 recharge_order_id PK
+        char26 policy_id FK
+        char26 transaction_id UK
+    }
+    TRANSFER_DRAFT {
+        char26 draft_id PK
+        char26 payer_user_id FK "logical reference"
+        char26 payee_user_id FK "logical reference"
+    }
+    CREDIT_REPAYMENT_DRAFT {
+        char26 repayment_draft_id PK
+        char26 credit_account_id FK "logical reference"
+        binary allocation_hash
+    }
+    QR_PAY_ORDER {
+        char26 qr_order_id PK
+        char26 transaction_id UK
+        char26 merchant_account_id FK "logical reference"
+    }
+    QR_PAY_TOKEN {
+        binary token_digest PK
+        char26 qr_order_id UK FK
+    }
+    PERSONAL_COLLECTION_CODE {
+        char26 code_id PK
+        char26 owner_user_id FK "logical reference"
+        char26 active_owner_key UK
+    }
+    COLLECTION_REQUEST {
+        char26 request_id PK
+        char26 active_order_id FK
+        char26 transaction_id UK
+    }
+    COLLECTION_ORDER {
+        char26 order_id PK
+        char26 code_id FK
+        char26 request_id FK
+        char26 transaction_id UK
+    }
+    CONFIRMATION_SUBJECT {
+        varchar subject_type PK
+        char26 subject_id PK
+        char26 current_confirmation_id UK
+    }
+    CONFIRMATION {
+        char26 confirmation_id PK
+        char26 payment_proof_id UK "logical reference"
+        varchar subject_type
+        char26 subject_id
+    }
+    FUND_TRANSACTION {
+        char26 transaction_id PK
+        varchar source_type UK
+        char26 source_order_id UK
+        char26 related_transaction_id FK "logical reference"
+    }
+    REFUND_ORDER {
+        char26 refund_order_id PK
+        char26 original_transaction_id FK
+        char26 transaction_id UK
+    }
+    TCC_GLOBAL {
+        char26 transaction_id PK FK
+        varchar xid UK
+    }
+    RISK_DECISION {
+        char26 decision_id PK
+        char26 transaction_id FK
+        varchar subject_type
+        char26 subject_id
+    }
+    MANUAL_CASE {
+        char26 case_id PK
+        char26 transaction_id FK
+        varchar subject_type
+        char26 subject_id
+    }
 ```
+
+说明：`fund_transaction(source_type,source_order_id)` 将不同来源对象映射为最多一笔统一资金交易。`confirmation`、`risk_decision` 和 `manual_case` 对来源对象使用多态逻辑引用；图中只展示其可选交易关联。`collection_request.active_order_id` 表示当前抢占者，和“一请求多尝试”关系共同保证同时最多一笔付款进入资金处理。`refund_order` 同时关联原支付交易和新建退款交易；失败或完整取消的退款尝试允许保留并重试。
+
+### 4.3 信用应收、账单、还款与账本
+
+```mermaid
+erDiagram
+    CREDIT_ACCOUNT ||--|| CREDIT_RECEIVABLE : logically_summarizes
+    CREDIT_ACCOUNT ||--o{ CREDIT_PURCHASE : logically_owns
+    CREDIT_ACCOUNT ||--o{ CREDIT_BILL : logically_generates
+    CREDIT_ACCOUNT ||--o{ CREDIT_REPAYMENT : logically_repaid_by
+
+    QR_PAY_ORDER ||--o| CREDIT_PURCHASE : originates
+    FUND_TRANSACTION ||--o| CREDIT_PURCHASE : records_credit_pay
+    CREDIT_BILL ||--|{ CREDIT_BILL_ITEM : contains
+    CREDIT_PURCHASE ||--o| CREDIT_BILL_ITEM : billed_once
+
+    CREDIT_REPAYMENT_DRAFT ||--o| CREDIT_REPAYMENT : originates
+    FUND_TRANSACTION ||--o| CREDIT_REPAYMENT : records_repayment
+    CREDIT_REPAYMENT ||--|{ CREDIT_REPAYMENT_ALLOCATION : allocates
+    CREDIT_REPAYMENT_ALLOCATION ||--|{ CREDIT_REPAYMENT_ALLOCATION_DETAIL : expands
+    CREDIT_PURCHASE ||--o{ CREDIT_REPAYMENT_ALLOCATION_DETAIL : receives_repayment
+    CREDIT_BILL ||--o{ CREDIT_REPAYMENT_ALLOCATION_DETAIL : groups_billed_detail
+
+    FUND_TRANSACTION ||--o{ LEDGER_VOUCHER : posts_or_reverses
+    LEDGER_VOUCHER ||--|{ LEDGER_ENTRY : contains
+    LEDGER_VOUCHER ||--o{ LEDGER_VOUCHER : reversed_by
+    LEDGER_ACCOUNT ||--o{ LEDGER_ENTRY : receives
+    FUND_TRANSACTION ||--o{ TCC_BRANCH : has_local_branches
+    FUND_TRANSACTION ||--o{ RECONCILIATION_DIFF : reconciled_by
+    RECONCILIATION_DIFF ||--o| MANUAL_CASE : opens_logical_case
+
+    CREDIT_RECEIVABLE {
+        char26 credit_account_id PK "logical reference"
+        bigint unbilled_fen
+        bigint billed_fen
+        bigint overdue_fen
+    }
+    CREDIT_PURCHASE {
+        char26 purchase_id PK
+        char26 credit_transaction_id UK "logical reference"
+        char26 credit_account_id FK "logical reference"
+        char26 qr_order_id FK "logical reference"
+    }
+    CREDIT_BILL {
+        char26 bill_id PK
+        char26 credit_account_id FK "logical reference"
+        char7 period UK
+    }
+    CREDIT_BILL_ITEM {
+        char26 bill_id PK FK
+        char26 purchase_id PK FK UK
+    }
+    CREDIT_REPAYMENT {
+        char26 repayment_id PK
+        char26 repayment_draft_id UK "logical reference"
+        char26 transaction_id UK "logical reference"
+    }
+    CREDIT_REPAYMENT_ALLOCATION {
+        char26 repayment_id PK FK
+        smallint sequence_no PK
+        varchar target_type
+        char26 target_id
+    }
+    CREDIT_REPAYMENT_ALLOCATION_DETAIL {
+        char26 repayment_id PK FK
+        smallint sequence_no PK FK
+        smallint detail_no PK
+        char26 purchase_id FK
+        char26 bill_id FK
+    }
+    LEDGER_ACCOUNT {
+        char26 ledger_account_id PK
+        varchar account_code UK
+    }
+    LEDGER_VOUCHER {
+        char26 voucher_id PK
+        char26 transaction_id FK "logical reference"
+        char26 original_voucher_id FK
+    }
+    LEDGER_ENTRY {
+        bigint entry_id PK
+        char26 voucher_id FK
+        char26 ledger_account_id FK
+    }
+    TCC_BRANCH {
+        char26 branch_id PK
+        char26 transaction_id FK "logical reference"
+        varchar xid
+    }
+    RECONCILIATION_DIFF {
+        char26 diff_id PK
+        char26 transaction_id FK "logical reference"
+        char26 manual_case_id FK "logical reference"
+    }
+```
+
+说明：`credit_account` 位于 `account_db`，其余信用应收和账单事实位于 `ledger_db`，因此前四条关系为跨库逻辑关系。`credit_bill_item.purchase_id` 的唯一约束保证一笔信用消费最多进入一个账期。一级还款分配的 `target_type + target_id` 是多态目标，二级明细再落到具体消费，并在已出账时关联账单。原交易可产生原始凭证和后续冲正凭证，因此 `FUND_TRANSACTION -> LEDGER_VOUCHER` 为一对多，而不是一对一。
+
+### 4.4 AI 会话、事件与统计投影
+
+```mermaid
+erDiagram
+    APP_USER ||--o{ AGENT_SESSION : logically_starts
+    AGENT_SESSION ||--o{ AGENT_MESSAGE : contains
+    AGENT_SESSION ||--o{ TOOL_CALL_LOG : records
+    APP_USER ||--o{ PREFERENCE : logically_owns
+
+    OUTBOX_EVENT ||--o{ INBOX_EVENT : consumed_as
+    OUTBOX_EVENT ||--o| ANALYTICS_EVENT : normalized_as
+    OUTBOX_EVENT ||--o{ QUARANTINED_EVENT : may_quarantine
+    METRIC_DEFINITION ||--o{ MINUTE_METRIC : defines
+    METRIC_DEFINITION ||--o{ DAILY_METRIC : defines
+    ANALYTICS_EVENT }o--o{ PERSONAL_CASHFLOW_DAILY : projects
+    ANALYTICS_EVENT }o--o{ PERSONAL_COUNTERPARTY_STAT : projects
+    ANALYTICS_EVENT }o--o{ MERCHANT_BUSINESS_DAILY : projects
+    MERCHANT_BUSINESS_DAILY ||--o{ MERCHANT_RECONCILIATION_DAILY : reconciles
+    RECONCILIATION_DIFF ||--o{ MERCHANT_RECONCILIATION_DAILY : referenced_by
+    QUALITY_RESULT ||--o{ MONITOR_ALERT : may_trigger
+
+    AGENT_SESSION {
+        char26 session_id PK
+        char26 user_id FK "logical reference"
+    }
+    AGENT_MESSAGE {
+        char26 message_id PK
+        char26 session_id FK
+    }
+    TOOL_CALL_LOG {
+        char26 tool_call_id PK
+        char26 session_id FK
+    }
+    PREFERENCE {
+        char26 preference_id PK
+        char26 user_id FK "logical reference"
+    }
+    OUTBOX_EVENT {
+        char26 event_id PK
+        varchar aggregate_type
+        char26 aggregate_id
+    }
+    INBOX_EVENT {
+        varchar consumer_name PK
+        char26 event_id PK
+    }
+    ANALYTICS_EVENT {
+        char26 event_id PK
+        char26 transaction_id FK "logical reference"
+    }
+    QUARANTINED_EVENT {
+        varchar consumer_name PK
+        char26 event_id PK
+    }
+    METRIC_DEFINITION {
+        varchar metric_code PK
+        int version PK
+    }
+    MINUTE_METRIC {
+        varchar metric_code PK
+        datetime bucket_at PK
+        binary dimension_hash PK
+    }
+    DAILY_METRIC {
+        varchar metric_code PK
+        date business_date PK
+        binary dimension_hash PK
+    }
+    PERSONAL_CASHFLOW_DAILY {
+        char26 account_id PK "logical reference"
+        date stat_date PK
+        int definition_version PK
+    }
+    PERSONAL_COUNTERPARTY_STAT {
+        char26 account_id PK "logical reference"
+        char26 counterparty_account_id PK "logical reference"
+        date period_start PK
+    }
+    MERCHANT_BUSINESS_DAILY {
+        char26 merchant_account_id PK "logical reference"
+        date stat_date PK
+        int definition_version PK
+    }
+    MERCHANT_RECONCILIATION_DAILY {
+        char26 merchant_account_id PK "logical reference"
+        date biz_date PK
+        char26 reconciliation_diff_id FK "logical reference"
+    }
+    QUALITY_RESULT {
+        char26 result_id PK
+        varchar task_code UK
+        date data_date UK
+        varchar rule_code UK
+    }
+    MONITOR_ALERT {
+        char26 alert_id PK
+        varchar subject_id
+    }
+```
+
+说明：Outbox 和 Inbox 在各自 Schema 独立部署，图中关系表示事件传播和消费，不表示共享表或数据库外键。分析事件通过 `event_id` 保持幂等，个人与商户日表是事件驱动投影；一个事件可能更新多个统计粒度，一条投影也由多个事件累计，因此采用多对多语义。指标定义通过 `metric_code + version` 约束分钟和日指标口径，质量结果失败可触发告警，但告警仍保留独立生命周期。
+
+### 4.5 通用支撑表关系
+
+```mermaid
+erDiagram
+    BUSINESS_AGGREGATE ||--o{ IDEMPOTENCY_RECORD : accepts_idempotently
+    BUSINESS_AGGREGATE ||--o{ OUTBOX_EVENT : emits
+    BUSINESS_AGGREGATE ||--o{ AUDIT_LOG : audited_by
+    OUTBOX_EVENT ||--o{ INBOX_EVENT : deduplicated_by
+
+    IDEMPOTENCY_RECORD {
+        char26 record_id PK
+        varchar principal_key UK
+        varchar api_scope UK
+        varchar idempotency_key UK
+        char26 resource_id FK "logical reference"
+    }
+    OUTBOX_EVENT {
+        char26 event_id PK
+        varchar aggregate_type
+        char26 aggregate_id FK "logical reference"
+        bigint aggregate_version
+    }
+    INBOX_EVENT {
+        varchar consumer_name PK
+        char26 event_id PK
+    }
+    AUDIT_LOG {
+        bigint audit_id PK
+        varchar target_type
+        varchar target_id FK "logical reference"
+        char32 trace_id
+    }
+```
+
+`BUSINESS_AGGREGATE` 是对用户、账户、草稿、订单、交易、账单和 AI 会话等聚合的逻辑统称，不是物理表。`idempotency_record.resource_id`、`outbox_event.aggregate_id` 和 `audit_log.target_id` 均为多态逻辑引用，由对应所有者 Schema 在本地事务内维护。跨 Schema 的事件关系依靠全局唯一 `event_id`、聚合版本和消费者去重约束实现。
 
 ## 5. 用户中心表
 
