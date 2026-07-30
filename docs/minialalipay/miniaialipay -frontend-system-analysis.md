@@ -1,12 +1,10 @@
 # MiniAlalipay 前端系统分析文档
-
 ## 0. 文档信息
-
 | 项目 | 内容 |
 | --- | --- |
 | 产品名称 | MiniAlalipay — AI 加持的确定性金融信任平台 |
 | 文档类型 | 前端系统分析文档 |
-| 文档版本 | V1.5 |
+| 文档版本 | V1.6 |
 | 编制日期 | 2026-07-29 |
 | 需求基线 | MiniAlalipay PRD V1.8 |
 | 后端系分基线 | MiniAlalipay 系统分析文档 V1.10 |
@@ -26,7 +24,8 @@
 | V1.2 | 2026-07-30 | 项目组 | 对齐 PRD V1.8 + 后端 V1.10：新增商户经营统计和商户订单与对账页面、个人收支统计口径、商户经营统计 API |
 | V1.3 | 2026-07-30 | 项目组 | 为全部 29 个页面补充"前端逻辑"条目式描述（业务规则/校验/安全约束/状态处理/权限边界） |
 | V1.4 | 2026-07-30 | 项目组 | 以后端系分 V1.10 为基准修正前后端冲突：删除 rerun 残留、工单内联查询、订单 FAILED、标注 3 个待补充端点、修正登录误用码与锁定/充值/风控阈值表述 |
-| V1.5 | 2026-07-30 | 项目组 | 对齐后端系分变更：注册移除支付密码改为登录后 PUT 设置；新增 2.3.2 支付密码设置与修改页（PUT/PATCH /payment-password）；2.3.5 常用收款人改为成功转账历史生成+置顶/隐藏/备注（PATCH /contacts）；新增 2.3.31 演示任务触发页（statement-runs/due-check-runs） |
+| V1.5 | 2026-07-30 | 项目组 | 对齐后端系分变更：注册移除支付密码改为登录后 PUT 设置；新增 2.3.2 支付密码设置与修改页；2.3.5 常用收款人改为成功转账历史生成+置顶/隐藏/备注；新增 2.3.31 演示任务触发页 |
+| V1.6 | 2026-07-30 | 项目组 | 补充标准系分章节：新增 2.3.0 全局交互流程图、2.6 接口规约、2.7 数据模型与状态设计、2.8 边界与异常处理、2.9 非功能性设计 |
 
 
 ---
@@ -274,6 +273,50 @@ minialalipay/
 
 ### 2.3 迭代具体描述
 本次迭代实现 PRD V1.8 全部 31 个 P0/P1 页面，覆盖 C 端 H5（19 页）和 B 端 Web（12 页）。以下按页面逐一描述 UI&交互时序图、前端逻辑字段表、操作按钮和所需 API。
+
+#### 2.3.0 全局交互流程
+**C 端 H5 用户主流程**
+
+```mermaid
+flowchart LR
+    A[注册 2.3.1] --> B[登录 2.3.3]
+    B --> C[首页 2.3.4]
+    C --> D[传统转账 2.3.5]
+    C --> E[AI Talk 2.3.7]
+    C --> F[账户明细 2.3.15]
+    C --> G[资产分析 2.3.16]
+    C --> H[Mini 花呗 2.3.14]
+    C --> I[个人收款 2.3.11]
+    C --> J[扫码支付 2.3.9]
+    D --> K[转账确认 2.3.6]
+    E --> K
+    K --> L[结果/回执 2.3.8]
+    J --> M[支付回执 2.3.10]
+    I --> N[C2C 收款 2.3.12]
+    H --> O[花呗账单 2.3.18]
+    H --> P[花呗还款 2.3.19]
+    B -.未设置支付密码.-> Q[支付密码设置 2.3.2]
+    Q --> C
+```
+
+**B 端 Web 页面结构（按角色分流）**
+
+<!-- 这是一张图片，ocr 内容为： -->
+![](https://cdn.nlark.com/yuque/__mermaid_v3/7511dd892d6b7a201d564efee1d51ba2.svg)
+
+**前端交易状态流转（统一展示映射）**
+
+| 后端状态 | 前端展示 | 文案 | 可操作入口 |
+| --- | --- | --- | --- |
+| `PROCESSING` | 处理中 | "交易处理中，请稍候" | 轮询/手动刷新 |
+| `COMPENSATING` | 补偿中 | "交易异常，正在自动补偿" | 查看明细 |
+| `MANUAL_REVIEW` | 人工审核 | "人工审核中，请等待" | 联系客服 |
+| `SUCCESS` | 成功 | "交易成功" | 查看明细/回执 |
+| `REVERSED` | 已冲正 | "交易已冲正，资金已恢复" | 查看明细 |
+| `CANCELLED` | 已取消 | "交易已取消" | 重新转账 |
+| `REJECTED` | 已拒绝 | "交易被拒绝" | 修改重试 |
+| `EXPIRED` | 已过期 | "交易已过期" | 重新发起 |
+
 
 ---
 
@@ -1868,7 +1911,8 @@ sequenceDiagram
 
 **UI&交互**
 
->Web: {totalReceiptFen, orderCount, avgOrderFen, payMethodBreakdown, refundFen, netReceiptFen, reconciliationStatus, trend[]}
+> Web: {totalReceiptFen, orderCount, avgOrderFen, payMethodBreakdown, refundFen, netReceiptFen, reconciliationStatus, trend[]}
+>
 
 ```plain
 Web-->>M: 今日收款概览卡片+趋势图
@@ -2084,6 +2128,444 @@ gantt
 | B 端后台 | 人工确认台/看板/报表/告警/数据质量/用户/交易查询/链路追溯 | 2.5 | 1 | 0.5 | 前端 | 后端 |
 | 商户经营 | 商户经营统计/商户订单与对账 | 1.5 | 0.5 | 0.5 | 前端 | 后端 |
 | 联调与稳定性 | 全链路联调/缺陷收敛/性能优化 | — | 1 | 1 | 前端 | 后端 |
+
+
+---
+
+### 2.6 接口规约
+#### 2.6.1 统一响应格式
+所有 REST 接口遵循统一响应结构，前端 `src/services` 层统一归一化处理：
+
+| 场景 | HTTP | 响应体 |
+| --- | --- | --- |
+| 成功（查询/受理） | 200 | `{ "code": "OK", "data": <T>, "message": "success", "traceId": "..." }` |
+| 创建成功 | 201 | `{ "code": "OK", "data": <T>, "message": "success", "traceId": "..." }` |
+| 已受理（处理中） | 202 | `{ "code": "TRANSACTION_PENDING", "data": { "transactionId": "...", "status": "PROCESSING" }, "message": "...", "traceId": "..." }` |
+| 格式错误 | 400 | `{ "code": "<ERROR_CODE>", "message": "...", "data": { ... }, "traceId": "..." }` |
+| 未鉴权 | 401 | `{ "code": "AUTH_REQUIRED", "message": "...", "data": null, "traceId": "..." }` |
+| 权限/CSRF 拒绝 | 403 | `{ "code": "<ERROR_CODE>", "message": "...", "data": null, "traceId": "..." }` |
+| 资源不存在 | 404 | `{ "code": "<ERROR_CODE>", "message": "...", "data": null, "traceId": "..." }` |
+| 冲突 | 409 | `{ "code": "<ERROR_CODE>", "message": "...", "data": { ... }, "traceId": "..." }` |
+| 业务拒绝 | 422 | `{ "code": "<ERROR_CODE>", "message": "...", "data": { ... }, "traceId": "..." }` |
+| 限流 | 429 | `{ "code": "RATE_LIMITED", "message": "...", "data": { "retryAfter": 60 }, "traceId": "..." }` |
+| 服务异常 | 500/503 | `{ "code": "INTERNAL_ERROR", "message": "...", "data": null, "traceId": "..." }` |
+
+
+前端处理：`code === "OK"` 取 `data`；`code !== "OK"` 按 2.2.5 错误码表处理，错误详情取 `data` 字段；`traceId` 用于全链路追踪（可展示供客服查询）；HTTP 5xx 统一提示"服务异常，请稍后重试"。创建接口返回 201。（对齐后端 12.8.2/12.8.3）
+
+#### 2.6.2 通用 HTTP 契约
+**请求头**
+
+| 请求头 | 说明 | 必填 | 适用场景 |
+| --- | --- | --- | --- |
+| `Authorization` | `Bearer <session-token>` | 登录后必填 | 所有需鉴权接口 |
+| `X-Request-ID` | 请求追踪 ID（ULID），前端生成 | 推荐 | 全部接口，用于全链路追踪；缺失时网关生成 |
+| `Idempotency-Key` | 幂等键，16-64 位随机字符串 | 资金类必填 | POST 转账/充值/还款/创建订单/换码/创建固定请求 |
+| `X-CSRF-Token` | CSRF 令牌 | Cookie 会话写请求必填 | 同站 Cookie 模式下的写操作 |
+| `Last-Event-ID` | SSE 断线续传事件 ID | SSE 重连时 | `GET .../events` |
+
+
+**响应头**：`X-Request-ID` 回传用于追踪；`Retry-After`（429 限流倒计时秒数）。
+
+#### 2.6.3 分页规范
+游标分页，适用于列表类接口（工单、告警、账单、明细、订单列表等）：
+
+| 项 | 说明 |
+| --- | --- |
+| 请求参数 | `?cursor=<opaque>&limit=<1-100>`，cursor 为空表示首页，limit 最大 100 |
+| 响应结构 | `{ "items": [...], "nextCursor": "<opaque |
+| 终止条件 | `nextCursor` 为 `null` 表示无更多数据 |
+| 排序 | 默认创建时间倒序，可在 `sort` 参数覆盖 |
+
+
+#### 2.6.4 SSE 事件结构
+```plain
+event: qr-pay-status
+id: <eventId>
+data: { "orderId": "...", "status": "PROCESSING", "summary": "支付处理中", "occurredAt": "2026-07-30T10:00:00+08:00" }
+```
+
+| 事件类型 | 订阅端点 | 订阅权限 | 终态 |
+| --- | --- | --- | --- |
+| `qr-pay-status` | `GET /qr-pay/orders/{id}/events` | 商户/付款人 | SUCCESS/REJECTED/CANCELLED/EXPIRED 后关闭 |
+| `p2p-collection-status` | `GET /p2p-collections/requests/{id}/events` | 请求创建者 | SUCCESS/CANCELLED/EXPIRED 后关闭 |
+
+
++ `Last-Event-ID` 请求头用于断线续传，服务端从该 ID 之后推送
++ SSE 不传递支付密码、确认令牌、二维码原始令牌或完整账号
++ 断线超过阈值（默认 10 秒无重连）前端降级为 2 秒轮询
+
+#### 2.6.5 核心 API 请求/响应字段
+**POST /api/v1/auth/register**
+
+| 请求字段 | 类型 | 必填 | 约束 |
+| --- | --- | --- | --- |
+| `loginName` | string | Y | 4-20 位字母/数字/下划线 |
+| `loginPassword` | string | Y | 8-32 位，含字母+数字 |
+
+
+| 响应字段 | 类型 | 说明 |
+| --- | --- | --- |
+| `userId` | string(ULID) | 用户 ID |
+| `sessionId` | string | 会话 ID |
+| `token` | string | 会话令牌（写入 HttpOnly Cookie） |
+
+
+**POST /api/v1/payment-password/verify**
+
+| 请求字段 | 类型 | 必填 | 约束 |
+| --- | --- | --- | --- |
+| `paymentPassword` | string | Y | 6 位数字，不进日志/埋点 |
+| `purpose` | string | Y | `TRANSFER_CONFIRM` / `QR_PAY_CONFIRM` / `C2P_CONFIRM` / `CREDIT_REPAY` |
+
+
+| 响应字段 | 类型 | 说明 |
+| --- | --- | --- |
+| `paymentProof` | string | 一次性短期凭证，通过请求体传递给 confirmations |
+
+
+**POST /api/v1/transfer-drafts**
+
+| 请求字段 | 类型 | 必填 | 约束 |
+| --- | --- | --- | --- |
+| `payeeUserId` | string(ULID) | Y | 收款人用户 ID |
+| `amountFen` | integer | Y | 1-5000000（0.01-50000.00 元） |
+| `remark` | string | N | ≤50 字符，过滤控制字符 |
+
+
+| 响应字段 | 类型 | 说明 |
+| --- | --- | --- |
+| `draftId` | string(ULID) | 草稿 ID |
+| `version` | integer | 乐观锁版本号 |
+| `expiresAt` | datetime | 草稿过期时间（30 分钟） |
+
+
+**POST /api/v1/confirmations**
+
+| 请求字段 | 类型 | 必填 | 约束 |
+| --- | --- | --- | --- |
+| `subjectType` | string | Y | `TRANSFER_DRAFT` / `QR_PAY_ORDER` / `COLLECTION_ORDER` / `CREDIT_REPAYMENT_DRAFT` |
+| `subjectId` | string(ULID) | Y | 草稿/订单 ID |
+| `subjectVersion` | integer | Y | 主体版本号 |
+| `paymentProof` | string | Y | payment-password/verify 返回的凭证 |
+
+
+| 响应字段 | 类型 | 说明 |
+| --- | --- | --- |
+| `confirmationToken` | string | 一次性确认令牌，2 分钟有效，通过请求体传递给支付 API |
+
+
+**POST /api/v1/transfers**
+
+| 请求字段 | 类型 | 必填 | 约束 |
+| --- | --- | --- | --- |
+| `draftId` | string(ULID) | Y | 转账草稿 ID |
+| `confirmationToken` | string | Y | 确认令牌 |
+
+
+| 响应字段 | 类型 | 说明 |
+| --- | --- | --- |
+| `transactionId` | string(ULID) | 交易 ID |
+| `status` | string | `PROCESSING` / `RISK_REVIEW` |
+| `businessType` | string | `TRANSFER` |
+
+
+---
+
+### 2.7 前端数据模型与状态设计
+#### 2.7.1 TypeScript 核心类型定义
+核心领域模型类型统一放在 `frontend-h5/src/types` 和 `frontend-admin/src/types`（Monorepo 共享 `contracts/types`）：
+
+```typescript
+/** 用户与会话 */
+interface UserSummary { userId: string; loginName: string; nickname: string; hasPaymentPassword: boolean; }
+interface Session { sessionId: string; token: string; user: UserSummary; }
+
+/** 账户与额度 */
+interface Account { accountId: string; availableFen: number; frozenFen: number; version: number; }
+interface CreditAccount {
+  creditAccountId: string; totalLimitFen: number; usedFen: number; frozenFen: number;
+  availableFen: number; status: 'ACTIVE' | 'SUSPENDED' | 'CLOSED'; version: number;
+}
+
+/** 交易 */
+interface Transaction {
+  transactionId: string; businessType: 'TRANSFER' | 'QR_PAY' | 'CREDIT_PAY' | 'CREDIT_REPAY';
+  status: 'DRAFT' | 'PENDING_CONFIRMATION' | 'RISK_REVIEW' | 'PROCESSING' | 'COMPENSATING'
+        | 'MANUAL_REVIEW' | 'SUCCESS' | 'REVERSED' | 'CANCELLED' | 'REJECTED' | 'EXPIRED';
+  amountFen: number; sourceType: string; sourceOrderId: string; fundingSource: string;
+  createdAt: string; traceId: string;
+}
+
+/** 转账草稿 */
+interface TransferDraft {
+  draftId: string; payeeUserId: string; payeeDisplayName: string; amountFen: number;
+  remark: string; version: number; expiresAt: string; status: string;
+}
+
+/** 扫码订单 */
+interface QrPayOrder {
+  qrOrderId: string; merchantAccountId: string; amountFen: number; subject: string;
+  fundingSource: 'BALANCE' | 'MINI_CREDIT'; status: string; version: number;
+  expiresAt: string; transactionId?: string;
+}
+
+/** 花呗账单 */
+interface CreditBill {
+  billId: string; billPeriod: string; totalAmountFen: number; paidAmountFen: number;
+  status: 'OPEN' | 'PARTIALLY_PAID' | 'OVERDUE' | 'PAID'; dueDate: string; version: number;
+}
+
+/** 个人收款 */
+interface CollectionRequest {
+  requestId: string; amountFen: number; subject: string; status: string;
+  expiresAt: string; activeOrderId?: string; version: number;
+}
+interface Contact {
+  payeeUserId: string; alias: string; successCount: number; lastSuccessAt: string;
+  pinned: boolean; hidden: boolean; version: number;
+}
+
+/** B 端运营 */
+interface ManualCase { caseId: string; transactionId?: string; status: 'OPEN' | 'ACKNOWLEDGED' | 'RESOLVED' | 'CLOSED'; type: string; reason: string; version: number; }
+interface Alert { alertId: string; level: 'P0' | 'P1' | 'P2'; status: 'OPEN' | 'ACKNOWLEDGED' | 'RESOLVED' | 'CLOSED'; title: string; occurredAt: string; }
+
+/** 统一分页响应 */
+interface PageResult<T> { items: T[]; nextCursor: string | null; }
+/** 统一 API 响应 */
+interface ApiResponse<T> { code: string; data: T | null; message: string; traceId: string; }
+```
+
+#### 2.7.2 Zustand Store 结构
+Zustand 仅保存客户端状态，禁止复制服务端资金终态：
+
+```typescript
+/** authStore — 登录态与权限 */
+interface AuthStore {
+  user: UserSummary | null;
+  isAuthenticated: boolean;
+  roles: string[];
+  setUser: (user: UserSummary) => void;
+  logout: () => void;
+}
+
+/** uiStore — 全局 UI 状态 */
+interface UiStore {
+  theme: 'light' | 'dark';
+  globalLoading: boolean;
+  online: boolean;              // 网络在线状态
+  setTheme: (t: 'light' | 'dark') => void;
+  setGlobalLoading: (v: boolean) => void;
+  setOnline: (v: boolean) => void;
+}
+
+/** sessionStore — 跨页面会话状态（受控持久化，排除敏感令牌） */
+interface SessionStore {
+  activeTransferDraftId: string | null;   // 当前转账草稿
+  activeQrOrderId: string | null;          // 当前扫码订单
+  aiSessionId: string | null;              // AI Talk 会话
+  filters: Record<string, unknown>;        // 列表筛选条件
+  setActiveTransferDraft: (id: string | null) => void;
+  setActiveQrOrder: (id: string | null) => void;
+}
+```
+
+#### 2.7.3 TanStack Query queryKey 规范与缓存策略
+**queryKey 命名规范**：`[domain, resource, ...params]`
+
+| queryKey | 说明 | staleTime | 刷新时机 |
+| --- | --- | --- | --- |
+| `['auth', 'me']` | 当前用户信息 | 5min | 登录/登出/支付密码变更 |
+| `['account', 'me']` | 账户余额 | 0（始终过期） | 转账/充值/还款成功后 invalidate |
+| `['credit', 'me']` | 花呗额度 | 0 | 消费/还款成功后 invalidate |
+| `['account', 'entries', { cursor, limit, direction, status }]` | 账本明细 | 30s | 新交易成功后 invalidate |
+| `['account', 'analytics', { range }]` | 收支分析 | 60s | 维度切换重新查询 |
+| `['transfers', id]` | 交易详情 | 0 | 轮询期间自动刷新 |
+| `['credit', 'bills', { cursor }]` | 账单列表 | 30s | 还款成功后 invalidate |
+| `['contacts', { cursor }]` | 常用收款人 | 60s | 转账成功后 invalidate |
+| `['manual-cases', { status, type, cursor }]` | 工单列表 | 10s | 决策后 invalidate |
+| `['ops', 'alerts', { cursor, level }]` | 告警列表 | 10s | 处置后 invalidate |
+
+
+**缓存策略**：
+
++ 余额、额度、交易终态 `staleTime: 0`（始终回源），禁止用 Zustand 复制
++ 列表类 `staleTime: 10-60s`，操作后主动 `invalidateQueries`
++ `gcTime: 5min`（默认垃圾回收）
++ `retry: 1`（失败重试 1 次，资金类不自动重试，按幂等键手动重试）
+
+#### 2.7.4 状态流转设计
+**转账流程状态机（前端视角）**
+
+```mermaid
+stateDiagram-v2
+    [*] --> 填写草稿
+    填写草稿 --> 风控预检: 创建草稿+validate
+    风控预检 --> 确认页: PASS
+    风控预检 --> 人工审核提示: MANUAL(RISK_MANUAL_REVIEW)
+    确认页 --> 处理中: 输密码+确认令牌+执行
+    确认页 --> 填写草稿: 返回修改(旧令牌失效)
+    处理中 --> 成功: SUCCESS
+    处理中 --> 失败终态: REVERSED/CANCELLED/REJECTED/EXPIRED
+    处理中 --> 人工审核: MANUAL_REVIEW
+    成功 --> [*]
+    失败终态 --> [*]
+    人工审核 --> [*]
+```
+
+**扫码支付流程状态机（前端视角）**
+
+```mermaid
+stateDiagram-v2
+    [*] --> 扫码落地
+    扫码落地 --> 绑定令牌: token-exchanges
+    绑定令牌 --> 待确认: 展示脱敏订单
+    待确认 --> 处理中: 输密码+确认令牌+pay
+    处理中 --> 成功: SUCCESS(QR_PAY/CREDIT_PAY)
+    处理中 --> 补偿中: COMPENSATING
+    处理中 --> 人工审核: MANUAL_REVIEW
+    处理中 --> 失败终态: REJECTED/CANCELLED/EXPIRED
+    成功 --> [*]
+    补偿中 --> [*]
+    人工审核 --> [*]
+    失败终态 --> [*]
+```
+
+---
+
+### 2.8 边界与异常处理
+#### 2.8.1 全局错误处理
+| 层级 | 机制 | 说明 |
+| --- | --- | --- |
+| API 拦截器 | `src/services` 统一响应归一化 | `code === 0` 取 data；`code !== 0` 按 2.2.5 错误码表分发处理；5xx 统一 Toast |
+| ErrorBoundary | React ErrorBoundary 包裹路由级组件 | 捕获渲染异常，展示兜底页 + "刷新重试"按钮，上报 `error.render` 埋点 |
+| 兜底页 | 404 页 / 500 页 / 网络错误页 | 路由不匹配 → 404；渲染异常 → 500；断网 → 网络错误页 |
+
+
+#### 2.8.2 loading / 骨架屏统一策略
+| 场景 | 策略 |
+| --- | --- |
+| 页面首次加载 | 骨架屏（Skeleton）占位，匹配页面布局 |
+| 按钮提交 | `disabled + loading`，防止重复点击 |
+| 列表加载 | Skeleton 列表项占位 |
+| 全局请求 | 顶部进度条（NProgress） |
+| 轮询中 | 保持上次数据展示 + 局部 loading 指示，不闪烁清空 |
+
+
+#### 2.8.3 空状态统一策略
+| 场景 | 展示 |
+| --- | --- |
+| 列表为空 | `<Empty>` 组件 + 引导文案（如"暂无交易记录"） |
+| 图表无数据 | `<Empty>` + "暂无数据"，不绘制虚假趋势 |
+| 无权限 | `<Empty>` + "您无权访问此页面" + 返回首页入口 |
+| 搜索无结果 | `<Empty>` + "未找到匹配的收款人" |
+
+
+#### 2.8.4 网络异常 / 断网 / 弱网
+| 场景 | 处理 |
+| --- | --- |
+| 断网 | `navigator.onLine` + online/offline 事件监听；断网时全局 Toast "网络已断开"，恢复时 Toast "网络已恢复" |
+| 请求超时 | 按接口超时配置（见 2.9.5）；资金类不自动重试，提示"处理中，请查询状态" |
+| 弱网 | TanStack Query `retry: 1`；SSE 断线降级 2 秒轮询；轮询间隔递增（2s→5s→10s） |
+| 5xx 服务异常 | Toast "服务异常，请稍后重试"；不改变本地资金状态 |
+
+
+#### 2.8.5 会话过期 / 401 统一拦截
+| 场景 | 处理 |
+| --- | --- |
+| 401 `AUTH_REQUIRED` | 拦截器统一处理：清除 authStore 登录态 → 跳转 `/h5/login` 或 `/admin/login` → 保留 `redirect` 安全回跳 |
+| 登录态恢复 | 登录成功后读取 `redirect` 参数回跳原页面，回跳地址须校验同站白名单 |
+| Cookie 过期 | 后端返回 401，前端按上述流程处理 |
+
+
+#### 2.8.6 重复提交防护
+| 场景 | 策略 |
+| --- | --- |
+| 资金类提交（转账/支付/还款/充值） | `Idempotency-Key` + 按钮 `disabled + loading`；超时只按原键重试或查询状态，禁止创建新键 |
+| 搜索输入 | 防抖 300ms（aHooks `useDebounce`） |
+| 列表分页 | 节流，避免快速翻页重复请求 |
+| 处理中交易 | 禁用提交按钮，跳转结果页轮询 |
+
+
+#### 2.8.7 表单校验统一规范
+| 维度 | 规范 |
+| --- | --- |
+| 校验时机 | 失焦校验（onBlur）+ 提交校验（onSubmit）双重校验 |
+| 错误展示 | 字段下方红色文案；金额类同时标注范围 |
+| 提交控制 | 任一字段校验未通过禁用提交按钮 |
+| 密码类 | 独立安全输入组件，不进入普通表单状态；确认密码与原密码一致性校验 |
+| 金额类 | 校验范围 0.01-50000.00 元，仅两位小数；失焦格式化 |
+| 备注类 | 过滤脚本和控制字符，≤50 字符 |
+
+
+---
+
+### 2.9 非功能性设计
+#### 2.9.1 浏览器兼容性矩阵
+| 端 | 浏览器 | 最低版本 | 说明 |
+| --- | --- | --- | --- |
+| C 端 H5 | Chrome | 90+ | 移动端主流 |
+| C 端 H5 | Safari (iOS) | 14+ | 安全区适配 |
+| C 端 H5 | Edge | 90+ | — |
+| B 端 Web | Chrome | 90+ | 桌面端主流 |
+| B 端 Web | Edge | 90+ | — |
+| B 端 Web | Firefox | 88+ | — |
+
+
++ 不支持 IE；ES2020+ 语法，Vite/Babel 按目标浏览器自动 polyfill
++ H5 适配 375px-428px 主流宽度，安全区 `env(safe-area-inset-*)`
+
+#### 2.9.2 性能预算
+| 指标 | C 端 H5 | B 端 Web |
+| --- | --- | --- |
+| 首屏 LCP | < 2s | < 3s |
+| FID | < 100ms | < 100ms |
+| CLS | < 0.1 | < 0.1 |
+| 主包体积（gzip） | < 300KB | < 500KB |
+| 接口响应 P95 | < 500ms | < 500ms |
+| 路由切换 | < 200ms | < 300ms |
+
+
++ 性能监控见 3.1（H5 首屏 P95 > 2s 触发 P1 告警）
++ 超预算时优先优化：路由懒加载分包、图片压缩、接口合并
+
+#### 2.9.3 骨架屏 / 占位 UI
+| 场景 | 组件 |
+| --- | --- |
+| 首页/明细首屏 | 卡片骨架屏（匹配余额区/列表布局） |
+| 列表加载 | 列表项骨架屏（Ant Design Mobile / Ant Design Skeleton） |
+| 图表加载 | 图表区占位 Skeleton |
+| 详情页 | 详情卡片骨架屏 |
+
+
+#### 2.9.4 资源优化策略
+| 策略 | 说明 |
+| --- | --- |
+| 路由级懒加载 | `React.lazy` + `Suspense`，B/C 端分别按路由分包 |
+| 图片懒加载 | `loading="lazy"`；二维码图片由服务端生成，前端不本地存储 |
+| 字体子集化 | 仅打包实际使用的字重和字符集 |
+| 依赖按需引入 | Lodash 按需、AntV 按图表类型引入、Ant Design Mobile 按需 |
+| Tree Shaking | Vite 生产构建自动摇树，确保无未使用代码 |
+
+
+#### 2.9.5 接口超时与重试配置
+| 接口类型 | 超时 | 重试 | 说明 |
+| --- | --- | --- | --- |
+| 普通查询 | 10s | 1 次 | TanStack Query retry: 1 |
+| 资金类（转账/支付/还款/充值） | 15s | 0（手动） | 超时只按原 Idempotency-Key 重试或查询状态 |
+| SSE 订阅 | 30s 无数据重连 | 自动 | 携带 Last-Event-ID 续传；超阈值降级 2s 轮询 |
+| 轮询 | 按间隔 | 持续 | 2s→5s→10s 递增，终态停止 |
+| 文件/流式 | 30s | 0 | Axios 单独配置 |
+
+
+#### 2.9.6 防抖 / 节流策略
+| 场景 | 策略 | 说明 |
+| --- | --- | --- |
+| 收款人搜索 | 防抖 300ms | aHooks `useDebounce`，避免频繁请求 |
+| 按钮点击 | 节流 500ms | 防止快速双击 |
+| 轮询间隔 | 递增 2s→5s→10s | PROCESSING 状态自动轮询，间隔逐步增大 |
+| 窗口 resize | 防抖 200ms | 图表重绘 |
+| 页面滚动 | 节流 100ms | 列表无限滚动加载 |
 
 
 ---
