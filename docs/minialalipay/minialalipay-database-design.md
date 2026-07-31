@@ -3,8 +3,8 @@
 | 项目 | 内容 |
 | --- | --- |
 | 产品 | MiniAlalipay |
-| 文档版本 | V2.8 |
-| 修订日期 | 2026-07-30 |
+| 文档版本 | V2.9 |
+| 修订日期 | 2026-07-31 |
 | 需求基线 | PRD V1.9 |
 | 系统分析基线 | 系统分析 V1.12 |
 | 数据库 | MySQL 8.0 / InnoDB |
@@ -41,6 +41,7 @@
 19. 对齐系统分析 V1.11：增加注册 `registration_id` 和 `PROVISIONING` 状态，支持跨服务开户幂等恢复。
 20. 基于 PRD V1.8 和系统分析 V1.11 补充按逻辑库拆分的 ER 图，区分同库物理外键与跨库逻辑引用，并覆盖业务、信用、账本、事件和统计投影关系。
 21. 对齐 PRD V1.9 和系统分析 V1.12：不变更已部署物理结构；明确 `merchant_*` 与 `MERCHANT` 是兼容标识，业务统一解释为普通用户的扫码收款数据，禁止据此授予 B 端权限或创建第二账户。
+22. 补齐任务运行、充值日额度、通用可靠性、监控统计与 AI 会话 ER 图，使第 5 至 12 章定义的 59 类实体均在第 4 章展示；本次仅完善图示，不修改任何物理表结构。
 
 ## 1. 设计原则
 
@@ -365,6 +366,242 @@ erDiagram
         char26 diff_id PK
         char26 transaction_id FK "logical reference"
         char26 manual_case_id FK "logical reference"
+    }
+```
+
+### 4.4 任务运行与充值日额度
+
+本图补充批处理任务和模拟充值额度控制实体。`recharge_daily_usage` 与充值订单通过 `user_id + business_date` 形成同库逻辑关联；`credit_job_run` 通过任务类型、业务日期和信用账户游标驱动批量扫描，不为每个被扫描账户建立物理外键。
+
+```mermaid
+erDiagram
+    APP_USER ||..o{ RECHARGE_DAILY_USAGE : uses_daily_quota_logically
+    RECHARGE_DAILY_USAGE ||..o{ RECHARGE_ORDER : constrains_orders_logically
+    CREDIT_JOB_RUN }o..o{ CREDIT_ACCOUNT : scans_accounts_logically
+
+    RECHARGE_DAILY_USAGE {
+        char26 user_id PK "logical reference"
+        date business_date PK
+        bigint processing_fen
+        bigint success_fen
+        int processing_count
+        int success_count
+        bigint version
+    }
+    CREDIT_JOB_RUN {
+        char26 run_id PK
+        varchar job_type UK
+        date business_date UK
+        varchar status
+        char26 cursor_credit_account_id "logical reference"
+        varchar trigger_type
+        bigint version
+    }
+```
+
+### 4.5 幂等、事件与审计通用实体
+
+本图表示各 Schema 按需独立部署的通用表模板，不表示跨 Schema 共用同一张物理表。一次 Outbox 事件可被多个消费者分别写入自己的 Inbox；二者通过全局 `event_id` 形成逻辑关联。幂等记录通过多态的 `resource_type + resource_id` 绑定本地资源，审计记录通过 `target_type + target_id` 和 `trace_id` 关联操作对象，因此不建立指向单一业务表的外键。
+
+```mermaid
+erDiagram
+    OUTBOX_EVENT ||..o{ INBOX_EVENT : delivered_to_logically
+    OUTBOX_EVENT }o..o{ AUDIT_LOG : correlates_by_trace
+
+    IDEMPOTENCY_RECORD {
+        char26 record_id PK
+        varchar principal_key UK
+        varchar api_scope UK
+        varchar idempotency_key UK
+        binary request_digest
+        varchar resource_type
+        char26 resource_id "polymorphic reference"
+        varchar status
+    }
+    OUTBOX_EVENT {
+        char26 event_id PK
+        varchar aggregate_type UK
+        char26 aggregate_id UK
+        bigint aggregate_version UK
+        varchar event_type UK
+        char26 transaction_id "logical reference"
+        char32 trace_id
+        varchar status
+    }
+    INBOX_EVENT {
+        varchar consumer_name PK
+        char26 event_id PK "logical reference"
+        varchar status
+        datetime received_at
+        datetime updated_at
+    }
+    AUDIT_LOG {
+        bigint audit_id PK
+        varchar actor_type
+        varchar actor_id
+        varchar action
+        varchar target_type
+        varchar target_id "polymorphic reference"
+        char32 trace_id
+        datetime occurred_at
+    }
+```
+
+### 4.6 监控、指标与统计投影
+
+本图展示 `metrics_db` 从事件接入到实时指标、离线指标、个人统计、扫码收款统计、质量门禁和告警处置的关系。除指标定义与分钟/日指标之间存在同库物理外键外，其余连线均表示由 `event_id`、账户路由键、日期、口径版本或证据字段形成的逻辑投影关系。
+
+```mermaid
+erDiagram
+    INBOX_EVENT ||..o| ANALYTICS_EVENT : materializes_logically
+    INBOX_EVENT ||..o| QUARANTINED_EVENT : quarantines_logically
+
+    ANALYTICS_EVENT }o..o{ MINUTE_METRIC : aggregates_to
+    ANALYTICS_EVENT }o..o{ DAILY_METRIC : aggregates_to
+    ANALYTICS_EVENT }o..o{ PERSONAL_CASHFLOW_DAILY : projects_to
+    ANALYTICS_EVENT }o..o{ PERSONAL_COUNTERPARTY_STAT : projects_to
+    ANALYTICS_EVENT }o..o{ MERCHANT_BUSINESS_DAILY : projects_to
+    ANALYTICS_EVENT }o..o{ MERCHANT_RECONCILIATION_DAILY : reconciles_to
+
+    METRIC_DEFINITION ||--o{ MINUTE_METRIC : defines
+    METRIC_DEFINITION ||--o{ DAILY_METRIC : defines
+    QUALITY_RESULT ||..o{ MONITOR_ALERT : may_trigger
+    RECONCILIATION_DIFF o|..o| MERCHANT_RECONCILIATION_DAILY : evidences_logically
+
+    ANALYTICS_EVENT {
+        char26 event_id PK
+        varchar event_type
+        varchar business_type
+        char26 transaction_id "logical reference"
+        char26 account_id "logical route key"
+        char26 merchant_account_id "historical payee route key"
+        int definition_version
+        char32 trace_id
+    }
+    QUARANTINED_EVENT {
+        varchar consumer_name PK, FK
+        char26 event_id PK, FK
+        varchar reason_code
+        smallint schema_version
+        varchar status
+    }
+    METRIC_DEFINITION {
+        varchar metric_code PK
+        int version PK
+        varchar name
+        text formula
+        varchar status
+    }
+    MINUTE_METRIC {
+        varchar metric_code PK, FK
+        datetime bucket_at PK
+        binary dimension_hash PK
+        int definition_version PK, FK
+        decimal value_decimal
+        varchar quality_status
+    }
+    DAILY_METRIC {
+        varchar metric_code PK, FK
+        date business_date PK
+        binary dimension_hash PK
+        int definition_version PK, FK
+        decimal value_decimal
+        varchar quality_status
+    }
+    QUALITY_RESULT {
+        char26 result_id PK
+        varchar task_code UK
+        date data_date UK
+        varchar rule_code UK
+        varchar status
+    }
+    MONITOR_ALERT {
+        char26 alert_id PK
+        varchar rule_code
+        varchar severity
+        varchar status
+        varchar subject_id "polymorphic reference"
+        char26 assignee_id "logical reference"
+    }
+    PERSONAL_CASHFLOW_DAILY {
+        char26 account_id PK "logical route key"
+        date stat_date PK
+        int definition_version PK
+        bigint transfer_income_fen
+        bigint transfer_expense_fen
+        varchar quality_status
+    }
+    PERSONAL_COUNTERPARTY_STAT {
+        char26 account_id PK "logical route key"
+        char26 counterparty_account_id PK "logical reference"
+        varchar period_type PK
+        date period_start PK
+        int definition_version PK
+    }
+    MERCHANT_BUSINESS_DAILY {
+        char26 merchant_account_id PK "historical payee route key"
+        date stat_date PK
+        int definition_version PK
+        bigint success_receipt_fen
+        bigint refund_fen
+        bigint net_receipt_fen
+        varchar quality_status
+    }
+    MERCHANT_RECONCILIATION_DAILY {
+        char26 merchant_account_id PK "historical payee route key"
+        date biz_date PK
+        int definition_version PK
+        char26 reconciliation_diff_id "logical reference"
+        bigint expected_net_fen
+        bigint ledger_net_fen
+        bigint diff_fen
+        varchar status
+    }
+```
+
+### 4.7 AI 会话、消息与工具留痕
+
+本图展示 `agent_db` 的会话上下文、脱敏消息、工具调用和用户偏好。会话与消息、工具调用使用同库物理外键；用户归属是对 `user_db.app_user` 的跨库逻辑引用，工具调用与审计记录仅通过 `trace_id` 关联，不保存敏感请求原文。
+
+```mermaid
+erDiagram
+    APP_USER ||..o{ AGENT_SESSION : owns_logically
+    APP_USER ||..o{ PREFERENCE : configures_logically
+    AGENT_SESSION ||--o{ AGENT_MESSAGE : contains
+    AGENT_SESSION ||--o{ TOOL_CALL_LOG : invokes
+    TOOL_CALL_LOG }o..o{ AUDIT_LOG : correlates_by_trace
+
+    AGENT_SESSION {
+        char26 session_id PK
+        char26 user_id FK "logical reference"
+        varchar status
+        bigint version
+        datetime last_active_at
+    }
+    AGENT_MESSAGE {
+        char26 message_id PK
+        char26 session_id FK
+        varchar client_message_id UK
+        varchar role UK
+        text content_redacted
+        datetime created_at
+    }
+    TOOL_CALL_LOG {
+        char26 tool_call_id PK
+        char26 session_id FK
+        varchar tool_name
+        binary request_digest
+        varchar result_code
+        char32 trace_id
+        datetime occurred_at
+    }
+    PREFERENCE {
+        char26 preference_id PK
+        char26 user_id UK "logical reference"
+        varchar preference_type UK
+        varbinary value_encrypted
+        varchar consent_version
+        varchar status
     }
 ```
 
