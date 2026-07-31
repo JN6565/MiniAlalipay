@@ -4,8 +4,8 @@
 
 | 项目 | 内容 |
 |---|---|
-| 文档版本 | V2.1 |
-| 修订日期 | 2026-07-30 |
+| 文档版本 | V2.2 |
+| 修订日期 | 2026-07-31 |
 | 需求基线 | [MiniAlalipay PRD](./minialalipay-prd.md) |
 | 架构事实 | [MiniAlalipay 总体系统分析](./minialalipay-system-analysis.md) |
 | 物理数据事实 | [MiniAlalipay 数据库设计](./minialalipay-database-design.md) |
@@ -21,6 +21,7 @@
 | V1.1 | 2026-07-30 | 明确派生文档定位，删除重复系统事实 |
 | V2.0 | 2026-07-30 | 按标准系分补齐架构、依赖、领域落点、主流程、接口就绪、事务、安全、异常用例和编码追踪 |
 | V2.1 | 2026-07-30 | 对齐 PRD V1.9 与总体系统分析 V1.12：删除独立商户权限主体，扫码订单收款用户及本人账户统一从普通用户会话派生 |
+| V2.2 | 2026-07-31 | 按调用端拆分 C 端、B 端、AI/MCP 和内部服务接口边界，补充端侧权限、OpenAPI 标记及 B 端契约缺口 |
 
 ## 1. 文档目的、范围与标准项
 
@@ -385,17 +386,69 @@ public record CommandContext(
 3. 生成或严格对齐的 API DTO，以及请求/响应契约测试。
 4. 网关路由、Controller 和对象级授权测试。
 
-### 8.2 接口所有权与当前就绪度
+### 8.2 B 端、C 端与非页面接口边界
 
-| 路径组 | 所有者 | 目标 Controller | 当前 OpenAPI | 编码结论 |
-|---|---|---|---|---|
-| `/actuator/health` | gateway | Actuator | 已定义 | 可联调 |
-| `/api/v1/auth/**`、`users/**`、`contacts/**`、`payment-password` | user-center | `AuthController` 等 | 未定义 | 禁止实现业务 Controller |
-| `/api/v1/transfer-drafts/**`、`transfers/**`、`confirmations` | business-center | `TransferController` 等 | 未定义 | 先补契约 |
-| `/api/v1/qr-pay/**`、`p2p-collections/**` | business-center | `QrPayController`、`CollectionController` | 未定义 | 先补契约与网关路由 |
-| `/api/v1/recharges/**`、`manual-cases/**`、`ops/**` | business-center | 对应用途 Controller | 未定义 | 先补契约与网关路由 |
-| `/api/v1/accounts/**`、`credit/**` | account-center | `AccountController`、`CreditController` | 未定义 | 先补契约 |
-| `/api/v1/agent/**` | ai-service | `AgentController` | 未定义 | 先补契约 |
+#### 8.2.1 调用端定义
+
+| 调用端 | 使用者与工程 | 接口数据范围 | 权限原则 |
+|---|---|---|---|
+| C 端 | 普通用户，`frontend-h5/` | 当前用户本人、本人参与的交易及绑定的 H5 会话资源 | 默认从会话派生用户和账户；使用 `/me` 或对象级授权，禁止查询全局数据 |
+| B 端 | 运营、观察者、演示管理员，`frontend-admin/` | 脱敏全局运营数据、工单、告警、质量、任务和 Trace | 必须校验运营角色、操作权限和数据范围；所有写操作记录审计 |
+| AI/MCP | `ai-service`、MCP Tool Router | 当前普通用户授权范围内的查询和业务草稿 | 只能通过网关或公开契约调用；不得持有资金执行权限或运营权限 |
+| 内部服务 | `user-center`、`business-center`、`account-center` 之间 | 开户、用户解析、TCC 分支、终态核验等服务间能力 | 不向浏览器暴露；使用服务身份、版本化契约、幂等和最小权限 |
+
+B 端和 C 端共用 `gateway` 和统一响应外壳，但不能因后端服务相同而共用权限语义。路径中没有 `/b`、`/c` 前缀时，仍必须通过 OpenAPI 操作标记、角色校验和对象级授权区分调用端。`/api/v1/auth/login`、`/api/v1/auth/logout` 可以作为 B/C 共用会话入口；注册、支付密码和本人资金能力只属于 C 端。
+
+#### 8.2.2 C 端 API 设计目录
+
+| 能力 | 路径组 | C 端调用主体 | 关键边界 |
+|---|---|---|---|
+| 注册与会话 | `/api/v1/auth/register`、`auth/login`、`auth/logout` | 匿名用户或当前会话用户 | 注册只创建普通用户；登录后按角色进入对应前端，不信任客户端角色字段 |
+| 支付密码 | `/api/v1/payment-password/**` | 当前普通用户 | 密码和短期支付证明不得回显、记录或进入浏览器存储 |
+| 用户与联系人 | `/api/v1/users/search`、`contacts/**` | 当前普通用户 | 搜索结果脱敏；联系人只能操作本人列表 |
+| 本人账户与统计 | `/api/v1/accounts/me/**` | 当前普通用户 | 账户由会话派生；禁止提交 `accountId` 覆盖权限主体 |
+| 模拟充值 | `/api/v1/recharges/**` | 当前普通用户 | 限额、幂等、虚拟资金声明和账本入账 |
+| 主动转账 | `/api/v1/transfer-drafts/**`、`confirmations`、`transfers/**`（不含 `trace`） | 草稿所有者、付款人或收款人 | 写操作只允许可信确认流程；详情和回执按交易参与者授权 |
+| 动态扫码收付款 | `/api/v1/qr-pay/**` | 收款创建用户、付款用户或绑定 H5 会话 | 收款账户由创建者会话派生；付款阶段禁止客户端覆盖金额和双方账户 |
+| C2C 个人收款 | `/api/v1/p2p-collections/**` | 收款请求创建者、付款人或绑定 H5 会话 | 仅余额资金来源；付款人不能枚举其他付款尝试 |
+| Mini 花呗 | `/api/v1/credit/**` | 当前普通用户 | 只操作本人信用账户；额度、应收和还款分配由服务端计算 |
+| AI Talk | `/api/v1/agent/**` | 当前普通用户 | 会话隔离；只返回工具结果和解释，不返回内部推理或确认句柄 |
+| C 端 SSE | `/api/v1/qr-pay/orders/{id}/events`、`p2p-collections/requests/{id}/events` | 资源参与者 | 只推送已持久化且脱敏的状态事件，断线后回源查询 |
+
+#### 8.2.3 B 端 API 设计目录
+
+| 能力 | 路径组 | B 端角色 | 关键边界 |
+|---|---|---|---|
+| 人工工单 | `/api/v1/manual-cases/**` | 运营人员 | 查询脱敏工单；决定操作要求 `version`、说明和完整审计 |
+| 实时监控与报表 | `/api/v1/ops/realtime-metrics`、`ops/daily-reports` | 运营、观察者 | 观察者只读；返回指标定义和质量版本 |
+| 告警闭环 | `/api/v1/ops/alerts/**` | 运营、观察者 | 观察者只读；确认、解决和关闭使用状态 CAS |
+| 数据质量与指标口径 | `/api/v1/ops/data-quality`、`ops/metric-definitions` | 运营、观察者 | 不允许通过监控接口直接修改业务库或资金事实 |
+| 信用演示任务 | `/api/v1/ops/credit/statement-runs`、`ops/credit/due-check-runs` | 演示管理员 | 只触发受审计任务，不允许直接修改额度、应收和账单金额 |
+| 链路追溯 | `/api/v1/transfers/{id}/trace` | 运营、观察者 | 返回脱敏 Span；普通 C 端用户无权访问 |
+
+B 端页面中以下能力已由 PRD 和前端系分提出，但当前总体端点目录和 OpenAPI 尚未形成可编码契约：用户管理、全局交易列表与详情、全局电子回执查询。实现前必须明确 path、角色矩阵、查询条件、分页、脱敏字段、响应 DTO 和错误码；在契约完成前禁止前端自行假设 `/api/v1/ops/users` 或 `/api/v1/ops/transactions` 等路径。
+
+#### 8.2.4 AI/MCP 与内部服务接口
+
+- `/api/v1/agent/**` 是 C 端 AI Talk 的页面接口，不是资金内部接口。
+- MCP 工具调用必须携带当前用户授权上下文，查询或创建草稿后仍由 C 端可信 UI 完成支付确认。
+- 开户、用户解析、TCC Try/Confirm/Cancel、账本核验和交易终态查询属于内部服务能力，不进入 B/C 前端客户端包。
+- 内部接口不得仅依赖网络隔离，应校验服务身份、调用方、幂等键、全局事务号和对象所有权。
+
+#### 8.2.5 接口所有权与当前就绪度
+
+| 路径组 | 调用端 | 所有者 | 目标 Controller | 当前 OpenAPI | 编码结论 |
+|---|---|---|---|---|---|
+| `/actuator/health` | 运维探针 | gateway | Actuator | 已定义 | 可联调 |
+| `/api/v1/auth/**`、`users/**`、`contacts/**`、`payment-password` | C；登录/退出为 B/C 共用 | user-center | `AuthController` 等 | 未定义 | 禁止实现业务 Controller |
+| `/api/v1/transfer-drafts/**`、`transfers/**`、`confirmations` | C；Trace 为 B | business-center | `TransferController` 等 | 未定义 | 先补契约 |
+| `/api/v1/qr-pay/**`、`p2p-collections/**` | C | business-center | `QrPayController`、`CollectionController` | 未定义 | 先补契约与网关路由 |
+| `/api/v1/recharges/**` | C | business-center | `RechargeController` | 未定义 | 先补契约与网关路由 |
+| `/api/v1/manual-cases/**`、`ops/**` | B | business-center | 对应用途 Controller | 未定义 | 先补契约与网关路由 |
+| `/api/v1/accounts/**`、`credit/**` | C | account-center | `AccountController`、`CreditController` | 未定义 | 先补契约 |
+| `/api/v1/agent/**` | C | ai-service | `AgentController` | 未定义 | 先补契约 |
+
+新增 OpenAPI 操作时必须标记调用端，例如使用 `x-client-scope: C|B|SHARED|INTERNAL`，并通过 `tags` 和安全要求声明角色。`x-client-scope` 只用于生成客户端和评审，服务端仍必须执行真实鉴权，不能信任前端声明。
 
 ### 8.3 接口定义目录
 
