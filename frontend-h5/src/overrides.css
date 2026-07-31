@@ -1,0 +1,111 @@
+/* 支付宝设计风格 - 全局样式变量 */
+:root {
+  /* 支付宝品牌色 */
+  --color-primary: #1677ff;
+  --color-primary-light: #4096ff;
+  --color-primary-dark: #0958d9;
+  --color-primary-bg: rgba(22, 119, 255, 0.08);
+
+  /* 功能色 */
+  --color-success: #00b578;
+  --color-success-bg: #e6fffb;
+  --color-danger: #ff3141;
+  --color-danger-bg: #fff2f0;
+  --color-warning: #ff8f1f;
+  --color-warning-bg: #fff7e6;
+
+  /* 文字色 - 支付宝风格 */
+  --color-text: #1a1a1a;
+  --color-text-regular: #333333;
+  --color-text-secondary: #666666;
+  --color-text-tertiary: #999999;
+  --color-text-placeholder: #cccccc;
+
+  /* 背景色 */
+  --color-bg: #f5f5f5;
+  --color-bg-white: #ffffff;
+  --color-bg-hover: #f7f8fa;
+
+  /* 边框 */
+  --color-border: #eeeeee;
+  --color-divider: #f0f0f0;
+
+  /* 阴影 - 支付宝风格轻阴影 */
+  --shadow-xs: 0 1px 2px rgba(0, 0, 0, 0.03);
+  --shadow-sm: 0 2px 8px rgba(0, 0, 0, 0.04);
+  --shadow-md: 0 4px 16px rgba(0, 0, 0, 0.06);
+  --shadow-lg: 0 8px 24px rgba(0, 0, 0, 0.08);
+
+  /* 圆角 - 支付宝风格大圆角 */
+  --radius-xs: 4px;
+  --radius-sm: 8px;
+  --radius-md: 12px;
+  --radius-lg: 16px;
+  --radius-xl: 20px;
+  --radius-2xl: 24px;
+  --radius-full: 9999px;
+
+  /* 安全区域 */
+  --safe-area-top: env(safe-area-inset-top, 0px);
+  --safe-area-bottom: env(safe-area-inset-bottom, 0px);
+}
+
+/* 重置样式 */
+* {
+  margin: 0;
+  padding: 0;
+  box-sizing: border-box;
+  -webkit-tap-highlight-color: transparent;
+}
+
+html {
+  font-size: 16px;
+  -webkit-text-size-adjust: 100%;
+}
+
+body {
+  font-family: -apple-system, BlinkMacSystemFont, 'Helvetica Neue', 'PingFang SC',
+    'Microsoft YaHei', 'Source Han Sans SC', sans-serif;
+  background-color: var(--color-bg);
+  color: var(--color-text);
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  line-height: 1.5;
+}
+
+/* 支付宝风格数字字体 */
+.amount-text {
+  font-family: 'Helvetica Neue', 'DIN Alternate', 'Roboto', monospace;
+  font-variant-numeric: tabular-nums;
+  letter-spacing: -0.5px;
+}
+
+/* 链接样式 */
+a {
+  color: var(--color-primary);
+  text-decoration: none;
+}
+
+a:hover {
+  color: var(--color-primary-light);
+}
+
+/* 按钮样式 */
+button {
+  border: none;
+  outline: none;
+  cursor: pointer;
+}
+
+/* 输入框样式 */
+input {
+  outline: none;
+  border: none;
+}
+
+/* 列表样式 */
+ul, ol {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+}
