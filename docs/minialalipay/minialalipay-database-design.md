@@ -117,7 +117,7 @@ erDiagram
         varchar status
     }
     CREDENTIAL {
-        char26 user_id PK FK
+        char26 user_id PK, FK
         bigint pay_password_version
     }
     PAYMENT_PROOF {
@@ -126,11 +126,11 @@ erDiagram
         binary token_digest UK
     }
     CONTACT {
-        char26 owner_user_id PK FK
-        char26 payee_user_id PK FK
+        char26 owner_user_id PK, FK
+        char26 payee_user_id PK, FK
     }
     ROLE_ASSIGNMENT {
-        char26 user_id PK FK
+        char26 user_id PK, FK
         varchar role_code PK
     }
     ACCOUNT {
@@ -140,7 +140,7 @@ erDiagram
         varchar account_type
     }
     ACCOUNT_BALANCE {
-        char26 account_id PK FK
+        char26 account_id PK, FK
         bigint available_fen
         bigint frozen_fen
     }
@@ -214,7 +214,7 @@ erDiagram
     }
     QR_PAY_TOKEN {
         binary token_digest PK
-        char26 qr_order_id UK FK
+        char26 qr_order_id UK, FK
     }
     PERSONAL_COLLECTION_CODE {
         char26 code_id PK
@@ -255,7 +255,7 @@ erDiagram
         char26 transaction_id UK
     }
     TCC_GLOBAL {
-        char26 transaction_id PK FK
+        char26 transaction_id PK, FK
         varchar xid UK
     }
     RISK_DECISION {
@@ -321,8 +321,8 @@ erDiagram
         char7 period UK
     }
     CREDIT_BILL_ITEM {
-        char26 bill_id PK FK
-        char26 purchase_id PK FK UK
+        char26 bill_id PK, FK
+        char26 purchase_id PK, FK, UK
     }
     CREDIT_REPAYMENT {
         char26 repayment_id PK
@@ -330,14 +330,14 @@ erDiagram
         char26 transaction_id UK "logical reference"
     }
     CREDIT_REPAYMENT_ALLOCATION {
-        char26 repayment_id PK FK
+        char26 repayment_id PK, FK
         smallint sequence_no PK
         varchar target_type
         char26 target_id
     }
     CREDIT_REPAYMENT_ALLOCATION_DETAIL {
-        char26 repayment_id PK FK
-        smallint sequence_no PK FK
+        char26 repayment_id PK, FK
+        smallint sequence_no PK, FK
         smallint detail_no PK
         char26 purchase_id FK
         char26 bill_id FK
