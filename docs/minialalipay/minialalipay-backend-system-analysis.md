@@ -69,8 +69,6 @@
 | GAP-01 | OpenAPI 仅有 `/actuator/health` | 业务 Controller、DTO 和前端联调无可执行契约 | 每个纵向切片先补 OpenAPI、校验和契约测试 |
 | GAP-02 | 未集成 Flyway、数据访问框架和 Testcontainers | 表结构、Mapper 和数据库测试不可落地 | 父 POM 锁定依赖并建立迁移测试 |
 | GAP-03 | 未集成 Seata 客户端和 TCC 屏障 | 资金主流程不可编码 | 内部 TCC 契约、分支表和故障测试就绪 |
-| GAP-04 | `UserStatus` 仍含 `LOCKED` 且缺 `PROVISIONING` | 注册恢复与登录锁定事实冲突 | 对齐为 `PROVISIONING/ACTIVE/DISABLED` |
-| GAP-05 | `TransactionStatus` 仍含 `FAILED` 且缺 `MANUAL_REVIEW` | 已受理资金交易可能错误终止 | 对齐总体状态并增加迁移/状态测试 |
 | GAP-06 | `ApiResponse` 与总体 HTTP 结构存在 `requestId/traceId` 差异 | 网关、服务和契约不一致 | 先统一 OpenAPI和响应类型再实现业务接口 |
 | GAP-07 | 无 Controller、Application Service、聚合、Repository 和业务迁移 | 业务能力尚未实现 | 按第 14 章逐个纵向切片交付 |
 

@@ -303,7 +303,7 @@ flowchart TB
 
 #### 业务中心
 
-- 统一交易主单，业务类型包括 `TRANSFER`、`QR_PAY`、`CREDIT_PAY`、`CREDIT_REPAY`。
+- 统一交易主单，业务类型包括 `TRANSFER`、`QR_PAY`、`CREDIT_PAY`、`CREDIT_REPAY`、`RECHARGE`、`REFUND`。
 - 转账草稿、确认、风控、幂等、动态扫码收款订单、个人码、固定请求/尝试、人工工单。
 - TCC 全局事务发起、Saga 恢复、定时扫描和对账编排。
 - 不直接修改账户余额和账本分录。
@@ -386,7 +386,7 @@ flowchart TB
 
 | 决策 | 选择 | 原因 |
 |---|---|---|
-| 资金核心 | 统一交易模型 | 四类业务共享幂等、风控、TCC、终态发布、账本和恢复 |
+| 资金核心 | 统一交易模型 | 六类业务共享幂等、风控、TCC、终态发布、账本和恢复 |
 | 分布式事务 | TCC 主路径 + Saga 异常恢复 | 确定性强，便于展示 Try/Confirm/Cancel 和补偿 |
 | 账本 | 不可变复式账本 | 可审计、可冲正、可对账，避免直接改余额 |
 | AI 权限 | Agent 无资金权限 | 模型只理解/编排，策略网关和交易服务持有执行权 |
@@ -404,7 +404,7 @@ flowchart TB
 3. 任何资金执行必须持有未过期、未消费且字段完全匹配的确认令牌。
 4. AI、前端、运营后台都不能直接修改余额或账本。
 5. 交易状态未确定时只能展示处理中、补偿中或人工确认，不能提前显示成功。
-6. 四类业务都进入交易、账本、Trace 和对账；C2C 统一记为 `TRANSFER`，只按 `source_type` 拆渠道且不得重复统计金额。
+6. 六类业务都进入交易、账本、Trace 和对账；C2C 统一记为 `TRANSFER`，充值和退款分别记为 `RECHARGE`、`REFUND`，只按 `source_type` 拆渠道且不得重复统计金额。
 7. 原始账本、审计、告警和人工处置记录不可物理删除。
 8. 只有终态发布器验证全局事务、全部 TCC 分支、余额版本和账本凭证后，才能原子发布 `SUCCESS`。
 9. 资金事实与关键事件使用本地事务 Outbox 同步提交，监控消费者使用 Inbox 去重，禁止提交数据库后直接“尽力而为”发送事件。
@@ -1429,7 +1429,7 @@ flowchart TD
     Consistent -- 否 --> Manual
 ```
 
-### 9.8 统一资金交易活动流程图
+### 9.8 交互式支付统一资金活动流程图
 
 ```mermaid
 flowchart TD
@@ -1482,7 +1482,7 @@ flowchart TD
     Reconcile --> EndState([收敛到确定终态])
 ```
 
-该流程按来源聚合和资金来源选择 TCC 分支，但共享受理、确认、恢复与终态发布模板。主动转账、个人码和固定请求都创建 `TRANSFER`；收款用户余额/信用扫码分别创建 `QR_PAY`/`CREDIT_PAY`；还款创建 `CREDIT_REPAY`。任何拒绝或前置人工审核都不创建资金交易；只有进入 `PROCESSING` 后才可能出现余额或额度冻结。
+该图只展开需要收款人/订单校验和用户可信确认的四类交互式支付：主动转账、个人码和固定请求创建 `TRANSFER`，收款用户余额/信用扫码分别创建 `QR_PAY`/`CREDIT_PAY`，还款创建 `CREDIT_REPAY`。模拟充值在充值策略、日额度和模拟渠道结果通过后以 `RECHARGE_ORDER` 创建 `RECHARGE`；受控退款在原支付、退款资格和并发占用校验通过后以 `REFUND_ORDER` 创建 `REFUND`。六类交易从创建 `PROCESSING` 主单起共享 TCC、恢复、终态发布、Trace 和对账模板。任何拒绝或前置人工审核都不创建资金交易；只有进入 `PROCESSING` 后才可能出现余额、额度或发行/退款资源预留。
 
 ## 10. 状态模型分析
 
@@ -1545,12 +1545,15 @@ stateDiagram-v2
     INIT --> CANCELLED: Cancel 先到/空回滚
     TRIED --> CONFIRMED: Confirm
     TRIED --> CANCELLED: Cancel
+    TRIED --> MANUAL_REVIEW: 分支结果未知
+    MANUAL_REVIEW --> CONFIRMED: 人工核验已确认
+    MANUAL_REVIEW --> CANCELLED: 人工核验已取消
     CONFIRMED --> [*]
     CANCELLED --> [*]
 ```
 
 - 同一 `xid + branch_type + resource_id` 唯一。
-- `CONFIRMED`、`CANCELLED` 为分支终态，重复调用返回原结果。
+- `CONFIRMED`、`CANCELLED` 为分支终态，重复调用返回原结果；`MANUAL_REVIEW` 必须保留资源占用和恢复证据，不能推断为成功或取消。
 - Cancel 先到时记录空回滚屏障；晚到 Try 发现屏障后拒绝执行。
 
 ### 10.4 告警状态
@@ -1886,17 +1889,21 @@ CREATE TABLE fund_transaction (
   CONSTRAINT ck_tx_amount CHECK (amount_fen > 0),
   CONSTRAINT ck_tx_accounts CHECK (payer_account_id <> payee_account_id),
   CONSTRAINT ck_tx_type CHECK (
-    business_type IN ('TRANSFER', 'QR_PAY', 'CREDIT_PAY', 'CREDIT_REPAY')
+    business_type IN ('TRANSFER', 'QR_PAY', 'CREDIT_PAY', 'CREDIT_REPAY',
+                      'RECHARGE', 'REFUND')
   ),
   CONSTRAINT ck_tx_source_type CHECK (
     source_type IN ('TRANSFER_DRAFT', 'QR_PAY_ORDER', 'PERSONAL_QR_ORDER',
-                    'COLLECTION_REQUEST_ORDER', 'CREDIT_REPAYMENT')
+                    'COLLECTION_REQUEST_ORDER', 'CREDIT_REPAYMENT',
+                    'RECHARGE_ORDER', 'REFUND_ORDER')
   ),
   CONSTRAINT ck_tx_business_source CHECK (
     (business_type = 'TRANSFER' AND source_type IN
       ('TRANSFER_DRAFT', 'PERSONAL_QR_ORDER', 'COLLECTION_REQUEST_ORDER')) OR
     (business_type IN ('QR_PAY', 'CREDIT_PAY') AND source_type = 'QR_PAY_ORDER') OR
-    (business_type = 'CREDIT_REPAY' AND source_type = 'CREDIT_REPAYMENT')
+    (business_type = 'CREDIT_REPAY' AND source_type = 'CREDIT_REPAYMENT') OR
+    (business_type = 'RECHARGE' AND source_type = 'RECHARGE_ORDER') OR
+    (business_type = 'REFUND' AND source_type = 'REFUND_ORDER')
   ),
   CONSTRAINT ck_tx_status CHECK (
     status IN ('PROCESSING', 'COMPENSATING', 'MANUAL_REVIEW',
@@ -3159,7 +3166,7 @@ SSE 只在终态发布事务的 Outbox 事件投递后发送 `SUCCESS`。断线�
 | 信用应收（`CREDIT_PAY`/`CREDIT_REPAY`） | 预占增加/减少 | 增加消费应收或减少应收 | 取消预占 |
 | 还款分配（仅 `CREDIT_REPAY`） | 锁定逾期→已出账→未出账分配计划 | 更新账单/明细并恢复额度 | 取消分配预占 |
 
-业务主单不是负责发布成功的普通 TCC 分支。四类交易受理时均已在 `business_db` 创建 `PROCESSING` 主单；TCC 完成后由独立终态发布器按业务类型验证余额或信用事实、账本及来源聚合，再更新主单和来源状态。
+业务主单不是负责发布成功的普通 TCC 分支。六类交易受理时均已在 `business_db` 创建 `PROCESSING` 主单；TCC 完成后由独立终态发布器按业务类型验证余额、信用、发行权益、退款及账本事实和来源聚合，再更新主单和来源状态。
 
 ### 13.2 TCC 执行规则
 
@@ -3346,7 +3353,7 @@ https://<h5-host>/h5/qr-pay?t=<opaque-random-token>
 |---|---|---|
 | 基础设施 | CPU、内存、连接池、Redis、事件总线 | 使用率、延迟、积压、错误 |
 | API | 网关和核心接口 | QPS、成功率、P95、限流、错误码 |
-| 资金 | 四类交易 | 笔数、金额、成功率、在途、重复扣款，按 business_type/source_type 分维度 |
+| 资金 | 六类交易 | 笔数、金额、成功率、在途、重复扣款，按 business_type/source_type 分维度 |
 | 信用 | 额度、应收、账单、还款 | 额度利用率、信用支付/还款成功率、逾期、三方差异 |
 | TCC/Saga | 全局与分支事务 | Try/Confirm/Cancel、重试、补偿、人工 |
 | 账本 | 凭证、分录、对账 | 借贷不平、冻结未释放、差异 |
@@ -3393,7 +3400,7 @@ flowchart LR
 
 ### 16.4 T+1 分析
 
-离线指标包括登录成功率、注册转化率、四类交易成功率与金额、余额不足/额度不足占比、AI 转账完成率、信用额度利用率/应收/逾期、TCC 补偿成功率、动态扫码成功率、个人码转化率及固定请求支付/过期率。任务 01:00 启动、02:00 前完成，失败重试两次。
+离线指标包括登录成功率、注册转化率、六类交易成功率与金额、余额不足/额度不足占比、AI 转账完成率、信用额度利用率/应收/逾期、TCC 补偿成功率、动态扫码成功率、个人码转化率、固定请求支付/过期率以及充值和退款金额。任务 01:00 启动、02:00 前完成，失败重试两次。
 
 个人收款生命周期事件固定为：`P2P_COLLECTION_CODE_CREATED`、`P2P_COLLECTION_CODE_REVOKED`、`P2P_COLLECTION_REQUEST_CREATED`、`P2P_COLLECTION_REQUEST_CANCELLED`、`P2P_COLLECTION_REQUEST_EXPIRED`、`P2P_COLLECTION_ORDER_ACCEPTED`、`P2P_COLLECTION_ORDER_SUCCEEDED`、`P2P_COLLECTION_ORDER_FAILED`。所有事件携带 `traceId`、`sourceType`、来源 ID、订单 ID 和可选交易 ID，不携带原始令牌或完整账户。
 
@@ -3806,7 +3813,7 @@ P2P Collection 验收映射：
 1. 详细实施计划与任务拆分。
 2. 按第 12 章的接口架构约束，在 OpenAPI 3.1 文件和 MCP Tool Schema 中定义并校验可执行契约。
 3. 按第 11 章的数据架构约束及数据库设计，编写数据库迁移、回滚说明和初始化脚本，并通过容器实测约束。
-4. 四类交易的 TCC 分支接口、屏障表、信用还款分配和固定请求安全重开详细设计。
+4. 六类交易的 TCC 分支接口、屏障表、信用还款分配、充值/退款参与者和固定请求安全重开详细设计。
 5. 动态扫码、Mini 花呗、个人码、固定请求和跨端回执的前端原型与状态组件。
 6. `P2P_COLLECTION_*`、信用事件 Schema、source_type 指标字典和告警规则配置。
 7. 覆盖 AT-01 至 AT-68 的自动化测试、故障注入和演示数据方案。
