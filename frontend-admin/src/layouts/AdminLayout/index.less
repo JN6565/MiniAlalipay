@@ -1,0 +1,125 @@
+.shell {
+  min-height: 100vh;
+}
+
+.sider {
+  position: sticky !important;
+  top: 0;
+  z-index: 5;
+  height: 100vh;
+  overflow: hidden;
+  border-right: 1px solid var(--admin-border-soft);
+  background: var(--admin-sider-bg) !important;
+}
+
+.brand {
+  display: flex;
+  align-items: center;
+  height: 72px;
+  padding: 0 20px;
+  color: var(--admin-text-strong);
+}
+
+.brandMark {
+  display: grid;
+  flex: 0 0 38px;
+  width: 38px;
+  height: 38px;
+  place-items: center;
+  border-radius: 10px;
+  color: #fff;
+  background: linear-gradient(135deg, var(--admin-primary) 0%, #59a5f6 100%);
+  box-shadow: 0 6px 14px rgba(47, 127, 242, 22%);
+  font-weight: 800;
+  font-size: 18px;
+}
+
+.brandText {
+  display: flex;
+  min-width: 0;
+  margin-left: 12px;
+  flex-direction: column;
+}
+
+.brandText strong {
+  color: var(--admin-text-strong);
+  font-size: 15px;
+  line-height: 20px;
+}
+
+.brandText span {
+  color: #6d85a2;
+  font-size: 12px;
+  line-height: 18px;
+}
+
+.menu {
+  padding: 8px 10px;
+  color: #49617e;
+  background: transparent !important;
+  border-inline-end: 0 !important;
+}
+
+.menu :global(.ant-menu-item) {
+  margin-block: 4px;
+  border-radius: 8px;
+}
+
+.menu :global(.ant-menu-item-selected) {
+  color: var(--admin-primary-strong) !important;
+  background: #e3f0fe !important;
+  font-weight: 600;
+}
+
+.environment {
+  position: absolute;
+  right: 16px;
+  bottom: 18px;
+  left: 16px;
+  display: flex;
+  padding: 12px 12px 12px 14px;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  border: 1px solid var(--admin-border-soft);
+  border-radius: 8px;
+  background: #f2f8ff;
+  color: var(--admin-text-secondary);
+  font-size: 12px;
+}
+
+.header {
+  position: sticky;
+  z-index: 10;
+  top: 0;
+  display: flex;
+  min-width: 0;
+  height: 64px;
+  padding: 0 24px !important;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  border-bottom: 1px solid var(--admin-border-soft);
+  background: rgba(255, 255, 255, 96%) !important;
+  backdrop-filter: blur(8px);
+}
+
+.headerAvatar {
+  flex: 0 0 auto;
+}
+
+.content {
+  min-width: 0;
+  padding: 24px;
+  background: var(--admin-bg);
+}
+
+@media (max-width: 768px) {
+  .header {
+    padding: 0 12px !important;
+  }
+
+  .content {
+    padding: 16px;
+  }
+}

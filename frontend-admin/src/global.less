@@ -1,0 +1,66 @@
+/* B 端「晴空」主题的全局色板，与 src/theme.ts 保持同源。 */
+:root {
+  --admin-primary: #2f7ff2;
+  --admin-primary-strong: #1d6de3;
+  --admin-teal: #0e8f83;
+  --admin-amber: #b26a00;
+  --admin-cyan: #0a8ba6;
+  --admin-bg: #f2f7fc;
+  --admin-surface: #fff;
+  --admin-border: #d5e5f7;
+  --admin-border-soft: #e4eef9;
+  --admin-text: #1b2a41;
+  --admin-text-strong: #16314f;
+  --admin-text-secondary: #5b6b82;
+  --admin-sider-bg: #f8fbff;
+}
+
+html,
+body,
+#root {
+  min-height: 100%;
+  margin: 0;
+}
+
+body {
+  color: var(--admin-text);
+  background: var(--admin-bg);
+  font-family: Inter, 'PingFang SC', 'Microsoft YaHei', system-ui, -apple-system, sans-serif;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+button,
+input,
+textarea,
+select {
+  font: inherit;
+}
+
+::selection {
+  color: #0b3b77;
+  background: #cfe6fd;
+}
+
+::-webkit-scrollbar {
+  width: 10px;
+  height: 10px;
+}
+
+::-webkit-scrollbar-thumb {
+  border: 2px solid transparent;
+  border-radius: 8px;
+  background: #b9cfe9;
+  background-clip: padding-box;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: #9cbce2;
+  background-clip: padding-box;
+}
+
+::-webkit-scrollbar-track {
+  background: transparent;
+}

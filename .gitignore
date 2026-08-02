@@ -24,8 +24,11 @@ test-results/
 **/.umi/
 **/.umi-production/
 **/.cache/
+**/.npm-cache/
 *.tsbuildinfo
 npm-debug.log*
+dev-*.log
+dev-*.err.log
 yarn-debug.log*
 yarn-error.log*
 pnpm-debug.log*

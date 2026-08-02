@@ -1,0 +1,35 @@
+.header {
+  position: relative;
+  display: flex;
+  padding-left: 14px;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 24px;
+}
+
+.header::before {
+  position: absolute;
+  top: 5px;
+  bottom: 5px;
+  left: 0;
+  width: 4px;
+  border-radius: 4px;
+  background: linear-gradient(180deg, var(--admin-primary) 0%, #69b3f8 100%);
+  content: '';
+}
+
+.header :global(.ant-typography) {
+  margin-top: 0;
+  margin-bottom: 4px;
+}
+
+.alert {
+  margin-top: 20px;
+  border-radius: 8px;
+}
+
+@media (max-width: 768px) {
+  .header {
+    flex-direction: column;
+  }
+}

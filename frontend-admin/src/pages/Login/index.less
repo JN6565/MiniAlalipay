@@ -1,0 +1,50 @@
+.page {
+  display: grid;
+  min-height: 100vh;
+  padding: 32px;
+  place-items: center;
+  background-color: #eef5fc;
+  background-image:
+    linear-gradient(rgba(47, 127, 242, 6%) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(47, 127, 242, 6%) 1px, transparent 1px);
+  background-size: 28px 28px;
+}
+
+.loginPanel {
+  width: min(420px, 100%);
+  padding: 32px;
+  border: 1px solid #d8e6f6;
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 98%);
+  box-shadow: 0 12px 32px rgba(27, 72, 133, 8%);
+}
+
+.brandMark {
+  display: grid;
+  width: 46px;
+  height: 46px;
+  margin-bottom: 20px;
+  place-items: center;
+  border-radius: 10px;
+  color: #fff;
+  background: linear-gradient(135deg, var(--admin-primary) 0%, #59a5f6 100%);
+  box-shadow: 0 6px 14px rgba(47, 127, 242, 20%);
+  font-weight: 800;
+  font-size: 22px;
+}
+
+.notice {
+  display: block;
+  margin-top: 20px;
+  font-size: 12px;
+}
+
+@media (max-width: 480px) {
+  .page {
+    padding: 16px;
+  }
+
+  .loginPanel {
+    padding: 24px;
+  }
+}

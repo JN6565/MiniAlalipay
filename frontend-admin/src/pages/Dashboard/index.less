@@ -1,0 +1,120 @@
+.page {
+  display: flex;
+  max-width: 1440px;
+  margin: 0 auto;
+  flex-direction: column;
+  gap: 20px;
+}
+
+.heading {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+}
+
+.heading :global(.ant-typography) {
+  margin-top: 0;
+  margin-bottom: 4px;
+}
+
+.page :global(.ant-card) {
+  height: 144px;
+  border: 1px solid var(--admin-border-soft);
+  border-radius: 8px;
+  box-shadow: 0 1px 2px rgba(23, 58, 108, 4%);
+}
+
+.metricCard {
+  overflow: hidden;
+}
+
+.metricCard :global(.ant-card-body) {
+  display: flex;
+  height: 100%;
+  padding: 20px;
+  align-items: center;
+}
+
+.metricBody {
+  display: flex;
+  min-width: 0;
+  flex: 1;
+  align-items: center;
+  gap: 14px;
+}
+
+.metricBody :global(.ant-statistic) {
+  min-width: 0;
+}
+
+.metricBody :global(.ant-statistic-title) {
+  color: var(--admin-text-secondary);
+  font-size: 13px;
+}
+
+.metricBody :global(.ant-statistic-content) {
+  color: var(--admin-text-strong);
+  font-size: 26px;
+  font-weight: 600;
+}
+
+.metricIcon {
+  display: grid;
+  flex: 0 0 42px;
+  width: 42px;
+  height: 42px;
+  place-items: center;
+  border-radius: 10px;
+  font-size: 20px;
+}
+
+.metricIconBlue {
+  color: var(--admin-primary-strong);
+  background: #e3f0fe;
+}
+
+.metricIconTeal {
+  color: var(--admin-teal);
+  background: #e0f5f2;
+}
+
+.metricIconAmber {
+  color: var(--admin-amber);
+  background: #fff2dc;
+}
+
+.metricIconCyan {
+  color: var(--admin-cyan);
+  background: #ddf4fa;
+}
+
+.readiness {
+  display: flex;
+  min-height: 160px;
+  padding: 24px;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 24px;
+  border: 1px solid var(--admin-border-soft);
+  border-radius: 8px;
+  background: var(--admin-surface);
+  box-shadow: 0 1px 2px rgba(23, 58, 108, 4%);
+}
+
+.readiness :global(.ant-typography) {
+  max-width: 720px;
+  margin-top: 0;
+}
+
+.checkedAt {
+  display: block;
+  margin-top: 8px;
+  font-size: 12px;
+}
+
+@media (max-width: 768px) {
+  .heading,
+  .readiness {
+    flex-direction: column;
+  }
+}

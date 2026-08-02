@@ -1,0 +1,54 @@
+.page {
+  display: flex;
+  width: 100%;
+  max-width: 1440px;
+  margin: 0 auto;
+  flex-direction: column;
+  gap: 20px;
+}
+
+.toolbar {
+  display: flex;
+  padding: 16px;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 12px;
+  border: 1px solid var(--admin-border-soft);
+  border-radius: 8px;
+  background: var(--admin-surface);
+  box-shadow: 0 1px 2px rgba(23, 58, 108, 4%);
+}
+
+.panel {
+  padding: 20px;
+  border: 1px solid var(--admin-border-soft);
+  border-radius: 8px;
+  background: var(--admin-surface);
+  box-shadow: 0 1px 2px rgba(23, 58, 108, 4%);
+}
+
+.panelTitle {
+  margin-top: 0 !important;
+}
+
+.searchInput {
+  width: min(480px, 100%);
+}
+
+.grow {
+  flex: 1 1 240px;
+}
+
+@media (max-width: 768px) {
+  .toolbar {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .toolbar :global(.ant-picker),
+  .toolbar :global(.ant-select),
+  .toolbar :global(.ant-input-search),
+  .toolbar :global(.ant-input-group-wrapper) {
+    width: 100% !important;
+  }
+}
