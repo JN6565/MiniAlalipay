@@ -72,6 +72,8 @@
 
 项目采用 Monorepo：后端使用 Maven 多模块，B 端和 C 端使用两个独立 Umi 工程并分别构建、部署；代码仓库形态不改变数据所有权。`gateway` 不拥有业务数据库，`business-center` 内部包含收款、风控、运营和监控投影，`account-center` 内部包含余额、账本和 Mini 花呗。
 
+`/api/v1/credit/**` 的外部 Controller 由 `account-center` 承载，但这不改变 `credit_repayment_draft` 和统一资金主单归 `business_db` 所有的事实。账户中心通过版本化内部契约把还款分配哈希和确认上下文提交给业务中心；业务中心在自己的本地事务内持久化草稿、确认消费、资金主单和 Outbox，双方禁止跨库直写。
+
 MVP 可以把这些 Schema 部署在同一个 MySQL 实例，但仍应使用不同数据库用户或代码层访问策略维持所有权边界。不能利用同实例条件把跨服务流程退化成跨 Schema 本地事务。
 
 ## 3. 通用字段与命名规范

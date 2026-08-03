@@ -1,47 +1,179 @@
 openapi: 3.1.0
 info:
   title: MiniAlalipay API
-  version: 0.1.0
-  description: Foundation contract. Business endpoints are added only with their acceptance tests and ownership rules.
+  version: 0.2.0
+  description: MiniAlalipay 对外 HTTP 契约。业务操作只有在本文件中具备完整 Schema 后才允许实现。
 servers:
   - url: http://localhost:8080
+    description: 本地网关
+x-p0-interface-catalog: ./p0-interface-catalog.yaml
 paths:
   /actuator/health:
     get:
-      summary: Gateway health check
+      summary: 网关健康检查
       operationId: gatewayHealth
+      x-client-scope: SHARED
+      security: []
       responses:
         '200':
-          description: Gateway is available
+          description: 网关可用
           content:
             application/json:
               schema:
                 $ref: '#/components/schemas/HealthResponse'
         '500':
-          description: Standard gateway failure
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/ErrorResponse'
+          $ref: '#/components/responses/InternalError'
 components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: 会话令牌
+      description: 由网关验证的会话令牌，不得写入日志或 URL。
+    cookieAuth:
+      type: apiKey
+      in: cookie
+      name: MINIALALIPAY_SESSION
+      description: HttpOnly、Secure、SameSite Cookie；写请求同时校验 CSRF 令牌。
+  parameters:
+    RequestIdHeader:
+      name: X-Request-Id
+      in: header
+      required: false
+      description: 客户端请求编号；缺失或不合法时由网关生成。
+      schema:
+        type: string
+        minLength: 1
+        maxLength: 128
+        pattern: '^[A-Za-z0-9._:-]+$'
+    IdempotencyKeyHeader:
+      name: Idempotency-Key
+      in: header
+      required: true
+      description: 写操作幂等键，同一主体和接口作用域至少保留 24 小时。
+      schema:
+        type: string
+        minLength: 16
+        maxLength: 64
+        pattern: '^[A-Za-z0-9._:-]+$'
+    CsrfTokenHeader:
+      name: X-CSRF-Token
+      in: header
+      required: true
+      description: Cookie 会话写请求使用的会话绑定防跨站请求伪造令牌。
+      schema:
+        type: string
+        minLength: 16
+        maxLength: 256
+    LastEventIdHeader:
+      name: Last-Event-ID
+      in: header
+      required: false
+      description: SSE 断线续传游标。
+      schema:
+        type: string
+        maxLength: 128
   schemas:
     HealthResponse:
       type: object
+      additionalProperties: false
       required: [status]
       properties:
         status:
           type: string
           example: UP
-    ErrorResponse:
+    ApiResponse:
       type: object
-      required: [code, message]
+      additionalProperties: false
+      required: [code, message, requestId, traceId, data]
       properties:
         code:
           type: string
-          example: COMMON_INTERNAL_ERROR
+          description: 稳定的机器可读结果码。
+          example: OK
         message:
           type: string
-          example: Internal server error
+          description: 面向调用方的中文说明。
+          example: 成功
         requestId:
           type: string
-          example: req_9c3bd41f
+          description: 一次网关请求的编号。
+          example: req_01K1ABCDEF2GH3JK4MN5PQRSTV
+        traceId:
+          type: [string, 'null']
+          description: 跨服务链路编号；链路尚未建立时为空。
+          example: 6f8b0f0a0ad64fd1b9eb5be13e146a82
+        data:
+          description: 业务数据；错误响应只允许包含安全、可操作的冲突信息。
+    ErrorResponse:
+      allOf:
+        - $ref: '#/components/schemas/ApiResponse'
+        - type: object
+          properties:
+            data:
+              type: [object, 'null']
+              additionalProperties: true
+  responses:
+    BadRequest:
+      description: 请求格式或字段不合法
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+    Unauthorized:
+      description: 未认证或会话失效
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+    Forbidden:
+      description: CSRF、角色或对象级权限拒绝
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+    Conflict:
+      description: 幂等、版本、状态或唯一约束冲突
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+    NotFound:
+      description: 资源不存在或调用方无权感知
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+    Gone:
+      description: 订单、请求或事件游标已经过期
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+    UnprocessableEntity:
+      description: 可理解的业务规则拒绝
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+    TooManyRequests:
+      description: 请求超过频率或安全尝试限制
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+    InternalError:
+      description: 未分类内部错误，不返回内部细节
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+    ServiceUnavailable:
+      description: TCC、模型或关键依赖暂不可用
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+security:
+  - bearerAuth: []
+  - cookieAuth: []

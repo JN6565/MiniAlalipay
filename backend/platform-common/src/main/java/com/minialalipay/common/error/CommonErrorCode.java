@@ -7,29 +7,31 @@ package com.minialalipay.common.error;
  */
 public enum CommonErrorCode implements ErrorCode {
     /** 请求处理成功。 */
-    SUCCESS("OK", "OK"),
+    SUCCESS("OK", "成功", 200),
 
     /** 请求参数、格式或通用校验不合法。 */
-    INVALID_REQUEST("COMMON_INVALID_REQUEST", "Invalid request"),
+    INVALID_REQUEST("COMMON_INVALID_REQUEST", "请求参数不合法", 400),
 
     /** 请求缺少有效身份认证。 */
-    UNAUTHORIZED("COMMON_UNAUTHORIZED", "Authentication required"),
+    UNAUTHORIZED("COMMON_UNAUTHORIZED", "需要身份认证", 401),
 
     /** 当前主体已经认证，但没有访问目标资源的权限。 */
-    FORBIDDEN("COMMON_FORBIDDEN", "Access denied"),
+    FORBIDDEN("COMMON_FORBIDDEN", "无权访问该资源", 403),
 
     /** 请求的资源不存在，或为避免越权而按不存在处理。 */
-    NOT_FOUND("COMMON_NOT_FOUND", "Resource not found"),
+    NOT_FOUND("COMMON_NOT_FOUND", "资源不存在", 404),
 
     /** 未映射的服务端内部异常，响应不得暴露堆栈和敏感信息。 */
-    INTERNAL_ERROR("COMMON_INTERNAL_ERROR", "Internal server error");
+    INTERNAL_ERROR("COMMON_INTERNAL_ERROR", "系统内部错误", 500);
 
     private final String code;
     private final String message;
+    private final int httpStatus;
 
-    CommonErrorCode(String code, String message) {
+    CommonErrorCode(String code, String message, int httpStatus) {
         this.code = code;
         this.message = message;
+        this.httpStatus = httpStatus;
     }
 
     /**
@@ -50,5 +52,15 @@ public enum CommonErrorCode implements ErrorCode {
     @Override
     public String message() {
         return message;
+    }
+
+    /**
+     * 返回该错误的标准 HTTP 状态码。
+     *
+     * @return HTTP 状态码
+     */
+    @Override
+    public int httpStatus() {
+        return httpStatus;
     }
 }
