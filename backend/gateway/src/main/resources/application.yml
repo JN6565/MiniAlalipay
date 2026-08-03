@@ -6,9 +6,9 @@ spring:
     name: minialalipay-gateway
   data:
     redis:
-      host: ${REDIS_HOST:39.107.95.141}
+      host: ${REDIS_HOST:localhost}
       port: ${REDIS_PORT:6379}
-      password: ${REDIS_PASSWORD:123456}
+      password: ${REDIS_PASSWORD:}
       timeout: 2000ms
       lettuce:
         pool:
@@ -156,6 +156,18 @@ spring:
                 redis-rate-limiter.replenishRate: 30
                 redis-rate-limiter.burstCapacity: 60
                 redis-rate-limiter.requestedTokens: 1
+        # 信用运维任务由账户中心拥有，必须先于通配 ops 路由匹配
+        - id: account-center-credit-ops
+          uri: ${ACCOUNT_CENTER_URI:http://localhost:8083}
+          predicates:
+            - Path=/api/v1/ops/credit/**
+          filters:
+            - name: RequestRateLimiter
+              args:
+                key-resolver: "#{@userKeyResolver}"
+                redis-rate-limiter.replenishRate: 10
+                redis-rate-limiter.burstCapacity: 20
+                redis-rate-limiter.requestedTokens: 1
         - id: business-center-ops
           uri: ${BUSINESS_CENTER_URI:http://localhost:8082}
           predicates:
@@ -196,6 +208,7 @@ spring:
 
       # 全局默认过滤器
       default-filters:
+        - RateLimitResponse
         - DedupeResponseHeader=Access-Control-Allow-Origin Access-Control-Allow-Credentials
 
 management:

@@ -10,6 +10,7 @@ import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.slf4j.MDC;
 import org.springframework.core.Ordered;
 import org.springframework.stereotype.Component;
 
@@ -27,6 +28,8 @@ public final class RequestIdFilter implements Filter, Ordered {
     private static final Logger log = LoggerFactory.getLogger(RequestIdFilter.class);
 
     public static final String HEADER_NAME = "X-Request-Id";
+    public static final String REQUEST_ATTRIBUTE = "minialalipay.requestId";
+    public static final String MDC_KEY = "requestId";
 
     private final RequestIdGenerator requestIdGenerator;
 
@@ -42,13 +45,24 @@ public final class RequestIdFilter implements Filter, Ordered {
 
         String clientHeader = httpRequest.getHeader(HEADER_NAME);
         String requestId = requestIdGenerator.resolve(clientHeader);
+        String previousRequestId = MDC.get(MDC_KEY);
 
         if (clientHeader != null && !clientHeader.equals(requestId)) {
             log.warn("请求编号格式不安全，已替换: requestId={}", requestId);
         }
 
+        httpRequest.setAttribute(REQUEST_ATTRIBUTE, requestId);
         httpResponse.setHeader(HEADER_NAME, requestId);
-        chain.doFilter(request, response);
+        MDC.put(MDC_KEY, requestId);
+        try {
+            chain.doFilter(request, response);
+        } finally {
+            if (previousRequestId == null) {
+                MDC.remove(MDC_KEY);
+            } else {
+                MDC.put(MDC_KEY, previousRequestId);
+            }
+        }
     }
 
     @Override

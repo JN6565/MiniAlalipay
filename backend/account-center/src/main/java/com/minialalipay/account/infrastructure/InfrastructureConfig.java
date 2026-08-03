@@ -1,8 +1,6 @@
 package com.minialalipay.account.infrastructure;
 
-import com.minialalipay.common.error.CommonExceptionMapper;
 import com.minialalipay.common.idempotency.IdempotencyKeyValidator;
-import com.minialalipay.common.trace.RequestIdGenerator;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.context.annotation.Bean;
 
@@ -14,22 +12,6 @@ import org.springframework.context.annotation.Bean;
  */
 @Configuration
 public class InfrastructureConfig {
-
-    /**
-     * 异常映射器 Bean。
-     */
-    @Bean
-    public CommonExceptionMapper commonExceptionMapper() {
-        return new CommonExceptionMapper();
-    }
-
-    /**
-     * 请求编号生成器 Bean。
-     */
-    @Bean
-    public RequestIdGenerator requestIdGenerator() {
-        return new RequestIdGenerator();
-    }
 
     /**
      * 幂等键校验器 Bean。

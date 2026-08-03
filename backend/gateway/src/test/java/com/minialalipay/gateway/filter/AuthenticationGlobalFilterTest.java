@@ -76,6 +76,28 @@ class AuthenticationGlobalFilterTest {
     }
 
     @Test
+    @DisplayName("登录路径的相似前缀不能绕过认证")
+    void loginLookalikePathRequiresAuthentication() {
+        MockServerWebExchange exchange = MockServerWebExchange.from(
+                MockServerHttpRequest.post("/api/v1/auth/login-anything"));
+
+        filter.filter(exchange, downstream -> Mono.empty()).block();
+
+        assertThat(exchange.getResponse().getStatusCode()).isEqualTo(HttpStatus.UNAUTHORIZED);
+    }
+
+    @Test
+    @DisplayName("注册路径的下级路径不能绕过认证")
+    void registerSubPathRequiresAuthentication() {
+        MockServerWebExchange exchange = MockServerWebExchange.from(
+                MockServerHttpRequest.post("/api/v1/auth/register/anything"));
+
+        filter.filter(exchange, downstream -> Mono.empty()).block();
+
+        assertThat(exchange.getResponse().getStatusCode()).isEqualTo(HttpStatus.UNAUTHORIZED);
+    }
+
+    @Test
     @DisplayName("缺少 Authorization 头返回 401")
     void missingAuthorizationHeaderReturns401() {
         MockServerWebExchange exchange = MockServerWebExchange.from(

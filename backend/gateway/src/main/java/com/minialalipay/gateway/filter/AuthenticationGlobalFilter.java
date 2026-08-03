@@ -47,9 +47,8 @@ public final class AuthenticationGlobalFilter implements GlobalFilter, Ordered {
 
     private static final Logger log = LoggerFactory.getLogger(AuthenticationGlobalFilter.class);
 
-    /** 不需要认证的白名单路径前缀。 */
-    private static final List<String> WHITELIST_PATHS = List.of(
-            "/actuator/",
+    /** 不需要认证且必须精确匹配的路径。 */
+    private static final List<String> EXACT_WHITELIST_PATHS = List.of(
             "/api/v1/auth/register",
             "/api/v1/auth/login"
     );
@@ -135,10 +134,8 @@ public final class AuthenticationGlobalFilter implements GlobalFilter, Ordered {
         if (path == null) {
             return false;
         }
-        for (String whitelistPath : WHITELIST_PATHS) {
-            if (path.startsWith(whitelistPath)) {
-                return true;
-            }
+        if (EXACT_WHITELIST_PATHS.contains(path)) {
+            return true;
         }
         if ("GET".equalsIgnoreCase(method)) {
             for (String getPath : GET_WHITELIST_PATHS) {

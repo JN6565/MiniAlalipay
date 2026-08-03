@@ -30,8 +30,17 @@ public enum CommonErrorCode implements ErrorCode {
     /** 请求正文使用了接口不支持的媒体类型。 */
     UNSUPPORTED_MEDIA_TYPE("COMMON_UNSUPPORTED_MEDIA_TYPE", "请求媒体类型不受支持", 415),
 
+    /** 请求频率超过网关或业务接口允许的限流阈值。 */
+    RATE_LIMITED("RATE_LIMITED", "请求过于频繁", 429),
+
     /** 未映射的服务端内部异常，响应不得暴露堆栈和敏感信息。 */
-    INTERNAL_ERROR("COMMON_INTERNAL_ERROR", "系统内部错误", 500);
+    INTERNAL_ERROR("COMMON_INTERNAL_ERROR", "系统内部错误", 500),
+
+    /** 依赖服务当前不可连接或暂时无法处理请求。 */
+    SERVICE_UNAVAILABLE("COMMON_SERVICE_UNAVAILABLE", "服务暂时不可用", 503),
+
+    /** 网关等待下游服务响应超时。 */
+    GATEWAY_TIMEOUT("COMMON_GATEWAY_TIMEOUT", "请求处理超时", 504);
 
     private final String code;
     private final String message;

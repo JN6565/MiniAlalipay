@@ -25,7 +25,7 @@ public class AiServiceExceptionHandler {
     @ExceptionHandler(IllegalArgumentException.class)
     public ResponseEntity<ApiResponse<Void>> handleIllegalArgument(
             IllegalArgumentException ex, HttpServletRequest request) {
-        String requestId = request.getHeader(RequestIdFilter.HEADER_NAME);
+        String requestId = resolveRequestId(request);
         log.info("请求参数不合法: requestId={}", requestId);
         return ResponseEntity.status(HttpStatus.BAD_REQUEST)
                 .body(ApiResponse.failure(CommonErrorCode.INVALID_REQUEST, requestId));
@@ -34,9 +34,16 @@ public class AiServiceExceptionHandler {
     @ExceptionHandler(Exception.class)
     public ResponseEntity<ApiResponse<Void>> handleUncaught(
             Exception ex, HttpServletRequest request) {
-        String requestId = request.getHeader(RequestIdFilter.HEADER_NAME);
+        String requestId = resolveRequestId(request);
         log.error("AI 服务未预期异常: requestId={}, error={}", requestId, ex.getMessage(), ex);
         return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
                 .body(ApiResponse.failure(CommonErrorCode.INTERNAL_ERROR, requestId));
+    }
+
+    private String resolveRequestId(HttpServletRequest request) {
+        Object requestId = request.getAttribute(RequestIdFilter.REQUEST_ATTRIBUTE);
+        return requestId instanceof String value
+                ? value
+                : request.getHeader(RequestIdFilter.HEADER_NAME);
     }
 }

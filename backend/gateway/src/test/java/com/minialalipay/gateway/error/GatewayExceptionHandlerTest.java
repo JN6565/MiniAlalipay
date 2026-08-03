@@ -102,7 +102,7 @@ class GatewayExceptionHandlerTest {
 
         assertThat(exchange.getResponse().getStatusCode()).isEqualTo(HttpStatus.TOO_MANY_REQUESTS);
         assertThat(getResponseBody(exchange)).contains("RATE_LIMITED");
-        assertThat(getResponseBody(exchange)).contains("请求频率超限");
+        assertThat(getResponseBody(exchange)).contains("请求过于频繁");
     }
 
     @Test

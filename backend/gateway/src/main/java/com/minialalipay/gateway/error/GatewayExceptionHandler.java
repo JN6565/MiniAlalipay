@@ -46,13 +46,6 @@ public final class GatewayExceptionHandler implements WebExceptionHandler, Order
 
     private static final Logger log = LoggerFactory.getLogger(GatewayExceptionHandler.class);
 
-    private static final String RATE_LIMITED_CODE = "RATE_LIMITED";
-    private static final String RATE_LIMITED_MESSAGE = "请求频率超限，请稍后重试";
-    private static final String SERVICE_UNAVAILABLE_CODE = "COMMON_SERVICE_UNAVAILABLE";
-    private static final String SERVICE_UNAVAILABLE_MESSAGE = "服务暂时不可用，请稍后重试";
-    private static final String GATEWAY_TIMEOUT_CODE = "COMMON_GATEWAY_TIMEOUT";
-    private static final String GATEWAY_TIMEOUT_MESSAGE = "请求处理超时，请查询原状态后重试";
-
     private final ObjectMapper objectMapper;
 
     public GatewayExceptionHandler(ObjectMapper objectMapper) {
@@ -81,11 +74,11 @@ public final class GatewayExceptionHandler implements WebExceptionHandler, Order
         } else if (throwable instanceof ConnectException) {
             log.warn("下游服务连接失败: requestId={}", requestId);
             httpStatus = HttpStatus.SERVICE_UNAVAILABLE;
-            body = buildErrorBody(SERVICE_UNAVAILABLE_CODE, SERVICE_UNAVAILABLE_MESSAGE, 503, requestId, traceId);
+            body = ApiResponse.failure(CommonErrorCode.SERVICE_UNAVAILABLE, requestId, traceId);
         } else if (throwable instanceof TimeoutException) {
             log.warn("请求超时: requestId={}", requestId);
             httpStatus = HttpStatus.GATEWAY_TIMEOUT;
-            body = buildErrorBody(GATEWAY_TIMEOUT_CODE, GATEWAY_TIMEOUT_MESSAGE, 504, requestId, traceId);
+            body = ApiResponse.failure(CommonErrorCode.GATEWAY_TIMEOUT, requestId, traceId);
         } else if (throwable instanceof IllegalArgumentException) {
             log.info("请求参数不合法: requestId={}", requestId);
             httpStatus = HttpStatus.BAD_REQUEST;
@@ -155,8 +148,8 @@ public final class GatewayExceptionHandler implements WebExceptionHandler, Order
                 String code = reason != null && !reason.isBlank() ? reason : "COMMON_UNPROCESSABLE";
                 yield buildErrorBody(code, "请求无法处理", 422, requestId, traceId);
             }
-            case 429 -> buildErrorBody(RATE_LIMITED_CODE, RATE_LIMITED_MESSAGE, 429, requestId, traceId);
-            case 503 -> buildErrorBody(SERVICE_UNAVAILABLE_CODE, SERVICE_UNAVAILABLE_MESSAGE, 503, requestId, traceId);
+            case 429 -> ApiResponse.failure(CommonErrorCode.RATE_LIMITED, requestId, traceId);
+            case 503 -> ApiResponse.failure(CommonErrorCode.SERVICE_UNAVAILABLE, requestId, traceId);
             default -> {
                 if (statusCode >= 500) {
                     yield ApiResponse.failure(CommonErrorCode.INTERNAL_ERROR, requestId, traceId);

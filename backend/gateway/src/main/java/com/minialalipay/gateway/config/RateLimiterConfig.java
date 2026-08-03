@@ -1,8 +1,6 @@
 package com.minialalipay.gateway.config;
 
 import com.minialalipay.gateway.filter.GatewayAuthContext;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
 import org.springframework.cloud.gateway.filter.ratelimit.KeyResolver;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
@@ -30,14 +28,11 @@ import reactor.core.publisher.Mono;
  * {@link com.minialalipay.gateway.filter.AuthenticationGlobalFilter} 写入）。
  * 未认证时降级为 IP 维度限流。</p>
  *
- * <p>Redis 故障时降级为粗粒度内存限流（允许通过），记录告警日志，
- * 禁止因限流故障而全部拒绝。</p>
+ * <p>Redis 故障时使用 Spring Cloud Gateway 的容错语义临时放行并记录错误日志，
+ * 禁止因限流依赖故障而把全部业务请求错误拒绝。该策略不等同于内存限流。</p>
  */
 @Configuration(proxyBeanMethods = false)
 public class RateLimiterConfig {
-
-    @SuppressWarnings("unused")
-    private static final Logger log = LoggerFactory.getLogger(RateLimiterConfig.class);
 
     /** 默认用户限流键：优先从 Reactor Context 读取 principalId，未认证时使用 IP。 */
     @Bean
