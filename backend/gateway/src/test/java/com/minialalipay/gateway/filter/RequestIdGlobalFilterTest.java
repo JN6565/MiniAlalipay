@@ -8,6 +8,7 @@ import org.springframework.mock.web.server.MockServerWebExchange;
 import org.springframework.web.server.ServerWebExchange;
 import reactor.test.StepVerifier;
 
+import java.util.Optional;
 import java.util.concurrent.atomic.AtomicReference;
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -91,9 +92,9 @@ class RequestIdGlobalFilterTest {
 
         filter.filter(exchange, downstream -> reactor.core.publisher.Mono.empty()).block();
 
-        assertThat(exchange.getAttribute(RequestIdGlobalFilter.ATTR_REQUEST_ID)).isNotNull();
+        assertThat(Optional.ofNullable(exchange.getAttribute(RequestIdGlobalFilter.ATTR_REQUEST_ID))).isNotNull();
         assertThat(exchange.getAttribute(RequestIdGlobalFilter.ATTR_REQUEST_ID).toString()).startsWith("req_");
-        assertThat(exchange.getAttribute(RequestIdGlobalFilter.ATTR_TRACE_ID)).isNotNull();
+        assertThat(Optional.ofNullable(exchange.getAttribute(RequestIdGlobalFilter.ATTR_TRACE_ID))).isNotNull();
     }
 
     @Test
