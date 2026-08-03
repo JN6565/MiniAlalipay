@@ -6,6 +6,7 @@ import org.slf4j.LoggerFactory;
 import org.springframework.cloud.gateway.filter.ratelimit.KeyResolver;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
+import org.springframework.context.annotation.Primary;
 import org.springframework.web.server.ServerWebExchange;
 import reactor.core.publisher.Mono;
 
@@ -44,8 +45,9 @@ public class RateLimiterConfig {
         return exchange -> resolvePrincipalOrIp(exchange, "rate:user", "rate:anonymous");
     }
 
-    /** IP 限流键。 */
+    /** IP 限流键，作为 RequestRateLimiter 的默认 KeyResolver。 */
     @Bean
+    @Primary
     public KeyResolver ipKeyResolver() {
         return exchange -> ipBasedKey(exchange, "rate:ip");
     }
