@@ -4,28 +4,149 @@ server:
 spring:
   application:
     name: minialalipay-gateway
+  data:
+    redis:
+      host: ${REDIS_HOST:localhost}
+      port: ${REDIS_PORT:6379}
+      timeout: 2000ms
+      lettuce:
+        pool:
+          max-active: 8
+          max-idle: 8
+          min-idle: 2
   cloud:
     gateway:
       routes:
-        - id: user-center
+        # ========== 用户中心路由 ==========
+        - id: user-center-auth
           uri: ${USER_CENTER_URI:http://localhost:8081}
           predicates:
-            - Path=/api/v1/auth/**,/api/v1/users/**,/api/v1/contacts/**
-        - id: business-center
+            - Path=/api/v1/auth/**
+          filters:
+            - name: RequestRateLimiter
+              args:
+                key-resolver: "#{@loginKeyResolver}"
+                redis-rate-limiter.replenishRate: 10
+                redis-rate-limiter.burstCapacity: 20
+                redis-rate-limiter.requestedTokens: 1
+        - id: user-center-api
+          uri: ${USER_CENTER_URI:http://localhost:8081}
+          predicates:
+            - Path=/api/v1/users/**,/api/v1/contacts/**
+          filters:
+            - name: RequestRateLimiter
+              args:
+                key-resolver: "#{@userKeyResolver}"
+                redis-rate-limiter.replenishRate: 60
+                redis-rate-limiter.burstCapacity: 120
+                redis-rate-limiter.requestedTokens: 1
+        # 支付密码校验使用更严格的用户维度限流
+        - id: user-center-password
+          uri: ${USER_CENTER_URI:http://localhost:8081}
+          predicates:
+            - Path=/api/v1/payment-password/**
+          filters:
+            - name: RequestRateLimiter
+              args:
+                key-resolver: "#{@paymentPasswordKeyResolver}"
+                redis-rate-limiter.replenishRate: 5
+                redis-rate-limiter.burstCapacity: 10
+                redis-rate-limiter.requestedTokens: 1
+
+        # ========== 业务中心路由 ==========
+        - id: business-center-transfers
           uri: ${BUSINESS_CENTER_URI:http://localhost:8082}
           predicates:
-            - Path=/api/v1/transfers/**,/api/v1/qr-pay/**,/api/v1/p2p-collections/**,/api/v1/transactions/**,/api/v1/monitoring/**
+            - Path=/api/v1/transfers/**
+          filters:
+            - name: RequestRateLimiter
+              args:
+                key-resolver: "#{@userKeyResolver}"
+                redis-rate-limiter.replenishRate: 60
+                redis-rate-limiter.burstCapacity: 120
+                redis-rate-limiter.requestedTokens: 1
+        # 二维码令牌交换使用独立限流
+        - id: business-center-qrpay
+          uri: ${BUSINESS_CENTER_URI:http://localhost:8082}
+          predicates:
+            - Path=/api/v1/qr-pay/**
+          filters:
+            - name: RequestRateLimiter
+              args:
+                key-resolver: "#{@qrTokenKeyResolver}"
+                redis-rate-limiter.replenishRate: 20
+                redis-rate-limiter.burstCapacity: 40
+                redis-rate-limiter.requestedTokens: 1
+        - id: business-center-p2p
+          uri: ${BUSINESS_CENTER_URI:http://localhost:8082}
+          predicates:
+            - Path=/api/v1/p2p-collections/**
+          filters:
+            - name: RequestRateLimiter
+              args:
+                key-resolver: "#{@qrTokenKeyResolver}"
+                redis-rate-limiter.replenishRate: 20
+                redis-rate-limiter.burstCapacity: 40
+                redis-rate-limiter.requestedTokens: 1
+        - id: business-center-transactions
+          uri: ${BUSINESS_CENTER_URI:http://localhost:8082}
+          predicates:
+            - Path=/api/v1/transactions/**
+          filters:
+            - name: RequestRateLimiter
+              args:
+                key-resolver: "#{@userKeyResolver}"
+                redis-rate-limiter.replenishRate: 60
+                redis-rate-limiter.burstCapacity: 120
+                redis-rate-limiter.requestedTokens: 1
+        - id: business-center-monitoring
+          uri: ${BUSINESS_CENTER_URI:http://localhost:8082}
+          predicates:
+            - Path=/api/v1/monitoring/**
+          filters:
+            - name: RequestRateLimiter
+              args:
+                key-resolver: "#{@userKeyResolver}"
+                redis-rate-limiter.replenishRate: 30
+                redis-rate-limiter.burstCapacity: 60
+                redis-rate-limiter.requestedTokens: 1
+
+        # ========== 账户中心路由 ==========
         - id: account-center
           uri: ${ACCOUNT_CENTER_URI:http://localhost:8083}
           predicates:
             - Path=/api/v1/accounts/**,/api/v1/credit/**,/api/v1/bills/**
+          filters:
+            - name: RequestRateLimiter
+              args:
+                key-resolver: "#{@userKeyResolver}"
+                redis-rate-limiter.replenishRate: 60
+                redis-rate-limiter.burstCapacity: 120
+                redis-rate-limiter.requestedTokens: 1
+
+        # ========== AI 服务路由 ==========
         - id: ai-service
           uri: ${AI_SERVICE_URI:http://localhost:8084}
           predicates:
             - Path=/api/v1/agent/**
+          filters:
+            - name: RequestRateLimiter
+              args:
+                key-resolver: "#{@agentKeyResolver}"
+                redis-rate-limiter.replenishRate: 20
+                redis-rate-limiter.burstCapacity: 40
+                redis-rate-limiter.requestedTokens: 1
+
+      # 全局默认过滤器
+      default-filters:
+        - DedupeResponseHeader=Access-Control-Allow-Origin Access-Control-Allow-Credentials
 
 management:
   endpoints:
     web:
       exposure:
         include: health,info
+
+logging:
+  level:
+    com.minialalipay.gateway: DEBUG
