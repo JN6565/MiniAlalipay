@@ -1,2 +1,2 @@
-/** Persistence and outbound adapters for account and ledger capabilities. */
+/** 账户中心出站适配层，负责持久化、远程调用和技术配置。 */
 package com.minialalipay.account.infrastructure;

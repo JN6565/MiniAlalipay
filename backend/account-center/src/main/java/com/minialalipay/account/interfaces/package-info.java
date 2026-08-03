@@ -1,2 +1,2 @@
-/** Inbound adapters for account and ledger capabilities. */
+/** 账户中心入站适配层，负责 HTTP DTO 转换和参数校验。 */
 package com.minialalipay.account.interfaces;
