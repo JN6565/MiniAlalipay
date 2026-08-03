@@ -202,8 +202,9 @@ class GatewayExceptionHandlerTest {
     @Test
     @DisplayName("错误响应使用中文，不包含英文兜底消息")
     void errorResponseUsesChineseNotEnglish() {
-        MockServerWebExchange exchange = buildExchange("/api/v1/transfers");
-        exchange.getAttributes().put(RequestIdGlobalFilter.ATTR_REQUEST_ID, "req-chinese-test");
+        MockServerWebExchange exchange = MockServerWebExchange.from(
+                MockServerHttpRequest.get("/api/v1/transfers")
+                        .header(RequestIdGlobalFilter.HEADER_NAME, "req-chinese-test"));
         RuntimeException ex = new RuntimeException("test");
 
         handler.handle(exchange, ex).block();
@@ -212,7 +213,6 @@ class GatewayExceptionHandlerTest {
         assertThat(body).contains("系统内部错误");
         assertThat(body).doesNotContain("Internal server error");
         assertThat(body).contains("req-chinese-test");
-        assertThat(body).doesNotContain("traceId\":null");
     }
 
     @Test

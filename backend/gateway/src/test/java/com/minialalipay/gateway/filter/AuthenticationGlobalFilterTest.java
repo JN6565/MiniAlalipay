@@ -123,11 +123,15 @@ class AuthenticationGlobalFilterTest {
         GatewayAuthContext[] capturedContext = new GatewayAuthContext[1];
         boolean[] chainCalled = {false};
 
-        Mono<Void> result = filter.filter(exchange, downstream -> {
-            chainCalled[0] = true;
-            capturedContext[0] = downstream.getAttribute(GatewayAuthContext.CONTEXT_KEY);
-            return Mono.empty();
-        });
+        Mono<Void> result = filter.filter(exchange, downstream ->
+                Mono.deferContextual(ctxView -> {
+                    chainCalled[0] = true;
+                    if (ctxView.hasKey(GatewayAuthContext.CONTEXT_KEY)) {
+                        capturedContext[0] = ctxView.get(GatewayAuthContext.CONTEXT_KEY);
+                    }
+                    return Mono.empty();
+                })
+        );
 
         StepVerifier.create(result).verifyComplete();
         assertThat(chainCalled[0]).isTrue();
