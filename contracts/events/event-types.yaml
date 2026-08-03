@@ -1,0 +1,33 @@
+version: 1.0.0
+status: FROZEN
+events:
+  user.registered: {version: '1.0', producer: user-center}
+  account.opened: {version: '1.0', producer: account-center}
+  virtual_fund.initialized: {version: '1.0', producer: account-center}
+  transfer.draft.validated: {version: '1.0', producer: business-center}
+  transaction.status.changed: {version: '1.0', producer: business-center}
+  qr_pay.order.created: {version: '1.0', producer: business-center}
+  qr_pay.order.scanned: {version: '1.0', producer: business-center}
+  qr_pay.order.status_changed: {version: '1.0', producer: business-center}
+  credit.account.opened: {version: '1.0', producer: account-center}
+  credit.limit.changed: {version: '1.0', producer: account-center}
+  credit.purchase.posted: {version: '1.0', producer: account-center}
+  credit.bill.generated: {version: '1.0', producer: account-center}
+  credit.bill.overdue: {version: '1.0', producer: account-center}
+  credit.repayment.status_changed: {version: '1.0', producer: account-center}
+  P2P_COLLECTION_CODE_CREATED: {version: '1.0', producer: business-center}
+  P2P_COLLECTION_CODE_REVOKED: {version: '1.0', producer: business-center}
+  P2P_COLLECTION_REQUEST_CREATED: {version: '1.0', producer: business-center}
+  P2P_COLLECTION_REQUEST_CANCELLED: {version: '1.0', producer: business-center}
+  P2P_COLLECTION_REQUEST_EXPIRED: {version: '1.0', producer: business-center}
+  P2P_COLLECTION_ORDER_ACCEPTED: {version: '1.0', producer: business-center}
+  P2P_COLLECTION_ORDER_SUCCEEDED: {version: '1.0', producer: business-center}
+  P2P_COLLECTION_ORDER_FAILED: {version: '1.0', producer: business-center}
+  tcc.branch.changed: {version: '1.0', producer: account-center}
+  ledger.voucher.posted: {version: '1.0', producer: account-center}
+  reconciliation.diff.detected: {version: '1.0', producer: account-center}
+  agent.intent.recognized: {version: '1.0', producer: ai-service}
+  mcp.tool.completed: {version: '1.0', producer: ai-service}
+  risk.decision.created: {version: '1.0', producer: business-center}
+  alert.status.changed: {version: '1.0', producer: business-center}
+  data_quality.check.completed: {version: '1.0', producer: business-center}

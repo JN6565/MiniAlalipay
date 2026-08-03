@@ -1,0 +1,25 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://minialalipay.local/contracts/events/event-envelope.schema.json",
+  "title": "MiniAlalipay 事件 Envelope",
+  "description": "跨上下文 Outbox 事件的统一外壳。",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["eventId", "eventType", "eventVersion", "occurredAt", "producer", "traceId", "payload"],
+  "properties": {
+    "eventId": {"type": "string", "pattern": "^[0-9A-HJKMNP-TV-Z]{26}$"},
+    "eventType": {"type": "string", "minLength": 3, "maxLength": 128},
+    "eventVersion": {"type": "string", "pattern": "^[1-9][0-9]*\\.[0-9]+$"},
+    "occurredAt": {"type": "string", "format": "date-time"},
+    "producer": {"type": "string", "enum": ["user-center", "business-center", "account-center", "ai-service", "gateway"]},
+    "requestId": {"type": ["string", "null"], "maxLength": 128},
+    "traceId": {"type": "string", "minLength": 16, "maxLength": 64},
+    "businessType": {"type": ["string", "null"], "enum": ["TRANSFER", "RECHARGE", "REFUND", "QR_PAY", "CREDIT_PAY", "CREDIT_REPAY", null]},
+    "sourceType": {"type": ["string", "null"], "maxLength": 64},
+    "sourceOrderId": {"type": ["string", "null"], "pattern": "^[0-9A-HJKMNP-TV-Z]{26}$"},
+    "fundingSource": {"type": ["string", "null"], "enum": ["BALANCE", "MINI_CREDIT", null]},
+    "transactionId": {"type": ["string", "null"], "pattern": "^[0-9A-HJKMNP-TV-Z]{26}$"},
+    "userIdHash": {"type": ["string", "null"], "maxLength": 128},
+    "payload": {"type": "object"}
+  }
+}

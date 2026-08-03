@@ -1,0 +1,79 @@
+version: 1.0.0
+status: FROZEN
+description: P0 方法、路径、所有者和调用端目录。它不替代具体操作的请求与响应 Schema。
+idempotencyPolicies:
+  READ_ONLY: {headerRequired: false, rule: 只读操作不得产生业务副作用}
+  REQUIRED: {headerRequired: true, rule: 使用主体、operationId 和 Idempotency-Key 防重}
+  VERSION_CAS: {headerRequired: true, rule: 同时校验 Idempotency-Key 和资源 version}
+  NATURAL: {headerRequired: false, rule: 操作按资源当前状态天然可重复，重复调用返回当前结果}
+  SESSION_SCOPED: {headerRequired: false, rule: 使用 bootstrap 会话和令牌摘要恢复同一交换结果}
+  CLIENT_MESSAGE_ID: {headerRequired: false, rule: 使用 sessionId 和 clientMessageId 防止重复消息}
+  BUSINESS_DATE: {headerRequired: true, rule: 同时使用 Idempotency-Key 和业务日期唯一键}
+  NONE: {headerRequired: false, rule: 仅允许无可恢复业务副作用的登录入口使用}
+operations:
+  - {method: POST, path: /api/v1/auth/register, operationId: register, owner: user-center, clientScope: C, idempotency: REQUIRED}
+  - {method: POST, path: /api/v1/auth/login, operationId: login, owner: user-center, clientScope: SHARED, idempotency: NONE}
+  - {method: POST, path: /api/v1/auth/logout, operationId: logout, owner: user-center, clientScope: SHARED, idempotency: NATURAL}
+  - {method: PUT, path: /api/v1/payment-password, operationId: setPaymentPassword, owner: user-center, clientScope: C, idempotency: REQUIRED}
+  - {method: PATCH, path: /api/v1/payment-password, operationId: changePaymentPassword, owner: user-center, clientScope: C, idempotency: REQUIRED}
+  - {method: POST, path: /api/v1/payment-password/verify, operationId: verifyPaymentPassword, owner: user-center, clientScope: C, idempotency: REQUIRED}
+  - {method: GET, path: /api/v1/users/search, operationId: searchUsers, owner: user-center, clientScope: C, idempotency: READ_ONLY}
+  - {method: GET, path: /api/v1/contacts, operationId: listContacts, owner: user-center, clientScope: C, idempotency: READ_ONLY}
+  - {method: PATCH, path: '/api/v1/contacts/{payeeUserId}', operationId: updateContact, owner: user-center, clientScope: C, idempotency: VERSION_CAS}
+  - {method: GET, path: /api/v1/accounts/me, operationId: getMyAccount, owner: account-center, clientScope: C, idempotency: READ_ONLY}
+  - {method: GET, path: /api/v1/accounts/me/entries, operationId: listMyEntries, owner: account-center, clientScope: C, idempotency: READ_ONLY}
+  - {method: GET, path: /api/v1/accounts/me/analytics, operationId: getMyAnalytics, owner: account-center, clientScope: C, idempotency: READ_ONLY}
+  - {method: GET, path: /api/v1/accounts/me/qr-collection-analytics, operationId: getMyQrCollectionAnalytics, owner: account-center, clientScope: C, idempotency: READ_ONLY}
+  - {method: POST, path: /api/v1/recharges, operationId: createRecharge, owner: business-center, clientScope: C, idempotency: REQUIRED}
+  - {method: POST, path: /api/v1/transfer-drafts, operationId: createTransferDraft, owner: business-center, clientScope: C, idempotency: REQUIRED}
+  - {method: GET, path: '/api/v1/transfer-drafts/{id}', operationId: getTransferDraft, owner: business-center, clientScope: C, idempotency: READ_ONLY}
+  - {method: PATCH, path: '/api/v1/transfer-drafts/{id}', operationId: updateTransferDraft, owner: business-center, clientScope: C, idempotency: VERSION_CAS}
+  - {method: POST, path: '/api/v1/transfer-drafts/{id}/validate', operationId: validateTransferDraft, owner: business-center, clientScope: C, idempotency: REQUIRED}
+  - {method: POST, path: /api/v1/confirmations, operationId: createConfirmation, owner: business-center, clientScope: C, idempotency: REQUIRED}
+  - {method: POST, path: /api/v1/transfers, operationId: submitTransfer, owner: business-center, clientScope: C, idempotency: REQUIRED}
+  - {method: GET, path: '/api/v1/transfers/{id}', operationId: getTransfer, owner: business-center, clientScope: C, idempotency: READ_ONLY}
+  - {method: GET, path: '/api/v1/transfers/{id}/receipt', operationId: getTransferReceipt, owner: business-center, clientScope: C, idempotency: READ_ONLY}
+  - {method: GET, path: '/api/v1/transfers/{id}/trace', operationId: getTransferTrace, owner: business-center, clientScope: B, idempotency: READ_ONLY}
+  - {method: GET, path: /api/v1/manual-cases, operationId: listManualCases, owner: business-center, clientScope: B, idempotency: READ_ONLY}
+  - {method: POST, path: '/api/v1/manual-cases/{id}/decisions', operationId: decideManualCase, owner: business-center, clientScope: B, idempotency: VERSION_CAS}
+  - {method: POST, path: /api/v1/qr-pay/orders, operationId: createQrPayOrder, owner: business-center, clientScope: C, idempotency: REQUIRED}
+  - {method: GET, path: /api/v1/qr-pay/orders, operationId: listMyQrPayOrders, owner: business-center, clientScope: C, idempotency: READ_ONLY}
+  - {method: GET, path: /api/v1/qr-pay/orders/by-token, operationId: bootstrapQrPay, owner: business-center, clientScope: C, idempotency: READ_ONLY}
+  - {method: POST, path: /api/v1/qr-pay/token-exchanges, operationId: exchangeQrPayToken, owner: business-center, clientScope: C, idempotency: SESSION_SCOPED}
+  - {method: POST, path: '/api/v1/qr-pay/orders/{id}/scan', operationId: markQrPayOrderScanned, owner: business-center, clientScope: C, idempotency: VERSION_CAS}
+  - {method: POST, path: '/api/v1/qr-pay/orders/{id}/confirmations', operationId: createQrPayConfirmation, owner: business-center, clientScope: C, idempotency: REQUIRED}
+  - {method: POST, path: '/api/v1/qr-pay/orders/{id}/pay', operationId: payQrPayOrder, owner: business-center, clientScope: C, idempotency: REQUIRED}
+  - {method: GET, path: '/api/v1/qr-pay/orders/{id}', operationId: getQrPayOrder, owner: business-center, clientScope: C, idempotency: READ_ONLY}
+  - {method: DELETE, path: '/api/v1/qr-pay/orders/{id}', operationId: cancelQrPayOrder, owner: business-center, clientScope: C, idempotency: VERSION_CAS}
+  - {method: GET, path: '/api/v1/qr-pay/orders/{id}/events', operationId: streamQrPayOrderEvents, owner: business-center, clientScope: C, idempotency: READ_ONLY}
+  - {method: GET, path: /api/v1/credit/me, operationId: getMyCredit, owner: account-center, clientScope: C, idempotency: READ_ONLY}
+  - {method: GET, path: /api/v1/credit/purchases, operationId: listCreditPurchases, owner: account-center, clientScope: C, idempotency: READ_ONLY}
+  - {method: GET, path: /api/v1/credit/bills, operationId: listCreditBills, owner: account-center, clientScope: C, idempotency: READ_ONLY}
+  - {method: GET, path: '/api/v1/credit/bills/{id}', operationId: getCreditBill, owner: account-center, clientScope: C, idempotency: READ_ONLY}
+  - {method: POST, path: /api/v1/credit/repayment-drafts, operationId: createCreditRepaymentDraft, owner: account-center, clientScope: C, idempotency: REQUIRED}
+  - {method: POST, path: /api/v1/credit/repayments, operationId: submitCreditRepayment, owner: account-center, clientScope: C, idempotency: REQUIRED}
+  - {method: GET, path: '/api/v1/credit/repayments/{id}', operationId: getCreditRepayment, owner: account-center, clientScope: C, idempotency: READ_ONLY}
+  - {method: GET, path: /api/v1/p2p-collections/codes/me, operationId: getMyCollectionCode, owner: business-center, clientScope: C, idempotency: READ_ONLY}
+  - {method: POST, path: /api/v1/p2p-collections/codes/me/regenerations, operationId: regenerateMyCollectionCode, owner: business-center, clientScope: C, idempotency: REQUIRED}
+  - {method: POST, path: /api/v1/p2p-collections/codes/me/disable, operationId: disableMyCollectionCode, owner: business-center, clientScope: C, idempotency: VERSION_CAS}
+  - {method: POST, path: /api/v1/p2p-collections/requests, operationId: createCollectionRequest, owner: business-center, clientScope: C, idempotency: REQUIRED}
+  - {method: GET, path: '/api/v1/p2p-collections/requests/{id}', operationId: getCollectionRequest, owner: business-center, clientScope: C, idempotency: READ_ONLY}
+  - {method: POST, path: '/api/v1/p2p-collections/requests/{id}/cancel', operationId: cancelCollectionRequest, owner: business-center, clientScope: C, idempotency: VERSION_CAS}
+  - {method: GET, path: /api/v1/p2p-collections/by-token, operationId: bootstrapP2pCollection, owner: business-center, clientScope: C, idempotency: READ_ONLY}
+  - {method: POST, path: /api/v1/p2p-collections/token-exchanges, operationId: exchangeCollectionToken, owner: business-center, clientScope: C, idempotency: SESSION_SCOPED}
+  - {method: PATCH, path: '/api/v1/p2p-collections/orders/{id}', operationId: lockCollectionOrder, owner: business-center, clientScope: C, idempotency: VERSION_CAS}
+  - {method: POST, path: '/api/v1/p2p-collections/orders/{id}/confirmations', operationId: createCollectionConfirmation, owner: business-center, clientScope: C, idempotency: REQUIRED}
+  - {method: POST, path: '/api/v1/p2p-collections/orders/{id}/pay', operationId: payCollectionOrder, owner: business-center, clientScope: C, idempotency: REQUIRED}
+  - {method: GET, path: '/api/v1/p2p-collections/orders/{id}', operationId: getCollectionOrder, owner: business-center, clientScope: C, idempotency: READ_ONLY}
+  - {method: GET, path: '/api/v1/p2p-collections/requests/{id}/events', operationId: streamCollectionRequestEvents, owner: business-center, clientScope: C, idempotency: READ_ONLY}
+  - {method: POST, path: /api/v1/agent/messages, operationId: sendAgentMessage, owner: ai-service, clientScope: C, idempotency: CLIENT_MESSAGE_ID}
+  - {method: GET, path: /api/v1/ops/realtime-metrics, operationId: listRealtimeMetrics, owner: business-center, clientScope: B, idempotency: READ_ONLY}
+  - {method: GET, path: /api/v1/ops/daily-reports, operationId: listDailyReports, owner: business-center, clientScope: B, idempotency: READ_ONLY}
+  - {method: GET, path: /api/v1/ops/alerts, operationId: listAlerts, owner: business-center, clientScope: B, idempotency: READ_ONLY}
+  - {method: POST, path: '/api/v1/ops/alerts/{id}/acknowledge', operationId: acknowledgeAlert, owner: business-center, clientScope: B, idempotency: VERSION_CAS}
+  - {method: POST, path: '/api/v1/ops/alerts/{id}/resolve', operationId: resolveAlert, owner: business-center, clientScope: B, idempotency: VERSION_CAS}
+  - {method: POST, path: '/api/v1/ops/alerts/{id}/close', operationId: closeAlert, owner: business-center, clientScope: B, idempotency: VERSION_CAS}
+  - {method: GET, path: /api/v1/ops/data-quality, operationId: listDataQualityResults, owner: business-center, clientScope: B, idempotency: READ_ONLY}
+  - {method: GET, path: /api/v1/ops/metric-definitions, operationId: listMetricDefinitions, owner: business-center, clientScope: B, idempotency: READ_ONLY}
+  - {method: POST, path: /api/v1/ops/credit/statement-runs, operationId: runCreditStatement, owner: account-center, clientScope: B, idempotency: BUSINESS_DATE}
+  - {method: POST, path: /api/v1/ops/credit/due-check-runs, operationId: runCreditDueCheck, owner: account-center, clientScope: B, idempotency: BUSINESS_DATE}

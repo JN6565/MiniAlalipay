@@ -20,4 +20,14 @@ class RequestIdGeneratorTest {
         assertThat(requestId).startsWith("req_");
         assertThat(requestId).hasSizeGreaterThan("req_".length());
     }
+
+    @Test
+    void replacesUnsafeOrOversizedClientRequestId() {
+        assertThat(generator.resolve("request\nforged"))
+                .startsWith("req_")
+                .doesNotContain("\n");
+        assertThat(generator.resolve("a".repeat(129)))
+                .startsWith("req_")
+                .hasSizeLessThanOrEqualTo(128);
+    }
 }

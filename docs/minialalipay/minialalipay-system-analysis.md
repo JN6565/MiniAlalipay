@@ -1278,11 +1278,12 @@ sequenceDiagram
     participant A as 余额账户
     participant L as 账本
     participant F as 终态发布器
-    B->>C: 每月 1 日按业务日期生成上月账单
+    C->>C: 每月 1 日按业务日期生成上月账单
     C->>C: 幂等汇总 UNBILLED 明细为 BILLED
-    B->>C: 每月 10 日后检查未还账单并标记 OVERDUE/SUSPENDED
-    U->>B: 提交还款金额 + 支付密码证明
-    B->>C: 生成逾期→已出账→未出账分配计划
+    C->>C: 每月 10 日后检查未还账单并标记 OVERDUE/SUSPENDED
+    U->>C: 经 /credit 外部接口提交还款金额 + 支付密码证明
+    C->>C: 生成逾期→已出账→未出账分配计划
+    C->>B: 内部版本化契约提交草稿/分配哈希和确认上下文
     B->>B: 消费令牌并创建 CREDIT_REPAY
     B->>A: Try 冻结用户虚拟余额
     B->>C: Try 预占应收减少和还款分配
@@ -2331,8 +2332,8 @@ erDiagram
 
 - 路径版本：`/api/v1/...`。
 - 请求身份由网关和服务端会话确定，不信任客户端传入 user_id。
-- 写接口携带 `Idempotency-Key`、CSRF Token 和 Trace ID。
-- 统一响应：`code`、`message`、`data`、`traceId`。
+- 除登录、重复退出和使用 bootstrap 会话防重的令牌交换外，写接口携带 `Idempotency-Key`；Cookie 会话写请求同时携带 CSRF Token，Trace ID 由服务端链路上下文生成和传播。
+- 统一响应：`code`、`message`、`requestId`、`traceId`、`data`；`requestId` 定位单次网关请求，`traceId` 关联跨服务链路。
 - 业务拒绝使用稳定错误码，HTTP 状态表达协议层结果。
 - 错误响应不得返回堆栈、SQL、密钥、密码或完整账号。
 
@@ -2424,7 +2425,7 @@ erDiagram
 
 ### 12.5 事件接口
 
-统一事件至少包含：`eventId`、`eventType`、`eventVersion`、`businessType`、`sourceType`、`sourceOrderId`、`fundingSource`、`occurredAt`、`producer`、`traceId`、`transactionId`、`userIdHash`、`payload`。非资金事件允许交易字段为空；C2C 成功金额只从 `businessType=TRANSFER` 的交易事实聚合一次，`sourceType=PERSONAL_QR_ORDER|COLLECTION_REQUEST_ORDER` 仅作渠道维度，不得重复累加生命周期事件金额。
+统一事件至少包含：`eventId`、`eventType`、`eventVersion`、`occurredAt`、`producer`、`traceId`、`payload`；允许携带 `requestId` 关联入口请求。资金事件还应携带 `businessType`、`sourceType`、`sourceOrderId`、`fundingSource`、`transactionId` 和 `userIdHash`，非资金事件允许这些交易字段为空。C2C 成功金额只从 `businessType=TRANSFER` 的交易事实聚合一次，`sourceType=PERSONAL_QR_ORDER|COLLECTION_REQUEST_ORDER` 仅作渠道维度，不得重复累加生命周期事件金额。
 
 核心事件：
 
@@ -2522,6 +2523,8 @@ erDiagram
 
 Mini 花呗接口只能操作当前登录用户的信用账户。客户端不能提交 `creditAccountId`、收款账户、账单分配结果或额度变更值；动态扫码订单的收款账户由订单创建用户的本人账户派生。还款分配由服务端按“逾期账单、其他已出账、未出账”顺序生成并以 `allocationHash` 绑定确认。
 
+`/api/v1/credit/**` 和 `/api/v1/ops/credit/**` 的外部 Controller 归 `account-center`，与网关信用前缀保持一致；`account-center` 负责本人信用对象授权、分配计划和账单任务。创建 `CREDIT_REPAY` 主单、消费确认令牌和启动统一资金 TCC 仍由 `business-center` 负责，二者通过版本化内部 HTTP 契约交互，禁止跨 Schema 直写。`credit_repayment_draft` 继续由 `business-center` 持久化，外部 Controller 不改变该表所有权。
+
 #### 12.7.5 C2C 个人收款
 
 | 方法 | 路径 | 权限 | 用途 | 幂等/并发要求 |
@@ -2601,7 +2604,8 @@ P1 端点未完成时不得保留返回假数据的空接口；应从前端入�
 ```json
 {
   "code": "OK",
-  "message": "success",
+  "message": "成功",
+  "requestId": "req_01K1ABCDEF2GH3JK4MN5PQRSTV",
   "data": {},
   "traceId": "6f8b0f0a0ad64fd1b9eb5be13e146a82"
 }
@@ -2615,6 +2619,7 @@ P1 端点未完成时不得保留返回假数据的空接口；应从前端入�
 {
   "code": "IDEMPOTENCY_CONFLICT",
   "message": "相同幂等键对应的请求参数不一致",
+  "requestId": "req_01K1ABCDEF2GH3JK4MN5PQRSTV",
   "data": {
     "originalTransactionId": "01K1ABCDEF2GH3JK4MN5PQRSTV"
   },

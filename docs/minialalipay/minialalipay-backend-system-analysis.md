@@ -58,7 +58,7 @@
 - Maven 父工程和六个模块已经建立，Java 版本为 21。
 - 五个后端进程可启动，默认端口为 8080 至 8084。
 - 网关已有基础路由、`X-Request-Id`、安全响应头和统一异常响应。
-- `platform-common` 已有 `ApiResponse`、错误接口和请求 ID 生成器。
+- `platform-common` 已有统一 `ApiResponse`、公共异常映射、错误接口、幂等键校验器和请求 ID 生成器。
 - 各业务模块只有启动类、少量状态枚举、包占位和领域枚举测试。
 - Docker Compose 已提供 MySQL、Redis 和 Seata；尚未提供 OTel 监控栈。
 
@@ -66,10 +66,10 @@
 
 | 编号 | 当前差距 | 影响 | 完成条件 |
 |---|---|---|---|
-| GAP-01 | OpenAPI 仅有 `/actuator/health` | 业务 Controller、DTO 和前端联调无可执行契约 | 每个纵向切片先补 OpenAPI、校验和契约测试 |
+| GAP-01 | OpenAPI 已冻结公共组件和 P0 接口目录，但业务操作尚无完整请求/响应 Schema | 业务 Controller、DTO 和前端联调仍无可执行操作契约 | 每个纵向切片先补 OpenAPI 操作、校验和契约测试 |
 | GAP-02 | 未集成 Flyway、数据访问框架和 Testcontainers | 表结构、Mapper 和数据库测试不可落地 | 父 POM 锁定依赖并建立迁移测试 |
 | GAP-03 | 未集成 Seata 客户端和 TCC 屏障 | 资金主流程不可编码 | 内部 TCC 契约、分支表和故障测试就绪 |
-| GAP-06 | `ApiResponse` 与总体 HTTP 结构存在 `requestId/traceId` 差异 | 网关、服务和契约不一致 | 先统一 OpenAPI和响应类型再实现业务接口 |
+| GAP-06 | 已统一 `ApiResponse`、OpenAPI 与总体 HTTP 结构为 `requestId + traceId` | 基线差异已消除；网关仍需在阶段二接入真实 Trace | 网关异常响应测试同时验证两个标识 |
 | GAP-07 | 无 Controller、Application Service、聚合、Repository 和业务迁移 | 业务能力尚未实现 | 按第 14 章逐个纵向切片交付 |
 
 “文档已设计”不等于“代码已实现”。完成状态必须同时满足源码、OpenAPI、Flyway 和自动化测试。
@@ -377,7 +377,7 @@ public record CommandContext(
 
 ### 8.1 契约完整性结论
 
-当前 OpenAPI 仅定义 `GET /actuator/health`，因此所有业务接口的参数、返回结果和错误 Schema **尚未达到可编码状态**。总体系统分析第 12 章的端点目录是架构输入，不替代 OpenAPI。任何业务 Controller 开发前必须在同一纵向切片中完成：
+当前 OpenAPI 已定义公共响应、请求头、鉴权规则，并通过 `p0-interface-catalog.yaml` 冻结 P0 方法、路径、所有者、调用端和幂等级别；`paths` 中仍只有 `GET /actuator/health` 具备完整可执行操作，因此业务接口的参数、返回结果和错误 Schema **尚未达到可编码状态**。总体系统分析第 12 章和 P0 接口目录都是架构输入，不替代具体 OpenAPI 操作。任何业务 Controller 开发前必须在同一纵向切片中完成：
 
 1. OpenAPI path、`operationId`、请求头、请求/响应 Schema 和错误响应。
 2. `additionalProperties: false`、金额范围、版本和游标约束。
@@ -442,8 +442,8 @@ B 端页面中以下能力已由 PRD 和前端系分提出，但当前总体端�
 | `/api/v1/transfer-drafts/**`、`transfers/**`、`confirmations` | C；Trace 为 B | business-center | `TransferController` 等 | 未定义 | 先补契约 |
 | `/api/v1/qr-pay/**`、`p2p-collections/**` | C | business-center | `QrPayController`、`CollectionController` | 未定义 | 先补契约与网关路由 |
 | `/api/v1/recharges/**` | C | business-center | `RechargeController` | 未定义 | 先补契约与网关路由 |
-| `/api/v1/manual-cases/**`、`ops/**` | B | business-center | 对应用途 Controller | 未定义 | 先补契约与网关路由 |
-| `/api/v1/accounts/**`、`credit/**` | C | account-center | `AccountController`、`CreditController` | 未定义 | 先补契约 |
+| `/api/v1/manual-cases/**`、`/api/v1/ops/**`（不含 `ops/credit/**`） | B | business-center | 对应用途 Controller | 未定义 | 先补契约与网关路由 |
+| `/api/v1/accounts/**`、`/api/v1/credit/**`、`/api/v1/ops/credit/**` | C/B | account-center | `AccountController`、`CreditController`、`CreditJobController` | 未定义 | 先补契约；还款资金执行调用 business-center 内部契约 |
 | `/api/v1/agent/**` | C | ai-service | `AgentController` | 未定义 | 先补契约 |
 
 新增 OpenAPI 操作时必须标记调用端，例如使用 `x-client-scope: C|B|SHARED|INTERNAL`，并通过 `tags` 和安全要求声明角色。`x-client-scope` 只用于生成客户端和评审，服务端仍必须执行真实鉴权，不能信任前端声明。
@@ -489,7 +489,7 @@ B 端页面中以下能力已由 PRD 和前端系分提出，但当前总体端�
 | `POST /api/v1/qr-pay/orders` | `Idempotency-Key`；`CreateQrOrderRequest(amountFen,subject)`；收款用户及本人账户由会话派生 | `QrOrderView(orderId,amountFen,status,qrUrl,expiresAt,version)` | `ACCOUNT_UNAVAILABLE` |
 | `GET /api/v1/qr-pay/orders` | `status,cursor,limit<=100`；服务端从会话派生订单创建者 | `QrOrderPage(items,nextCursor)`，仅返回本人创建的订单 | `AUTH_REQUIRED`、`INVALID_CURSOR` |
 | `POST /api/v1/qr-pay/token-exchanges` | `QrTokenExchangeRequest(token,bootstrapSessionId)` | 脱敏 `QrOrderView` + `h5SessionId` | `QR_TOKEN_INVALID`、`ORDER_EXPIRED` |
-| `POST /api/v1/qr-pay/orders/{id}/confirmations` | `QrConfirmationRequest(fundingSource,paymentProof,orderVersion)`；短期凭证由 `payment-password/verify` 签发，仅通过 HTTPS 请求体传输，禁止记录、存储或回显 | `ConfirmationView` | `INSUFFICIENT_BALANCE`、`INSUFFICIENT_CREDIT` |
+| `POST /api/v1/qr-pay/orders/{id}/confirmations` | `QrConfirmationRequest(fundingSource,paymentProof,orderVersion)`；短期凭证由 `payment-password/verify` 签发，仅通过 HTTPS 请求体传输，禁止记录、存储或回显 | `ConfirmationView` | `INSUFFICIENT_BALANCE`、`CREDIT_LIMIT_INSUFFICIENT` |
 | `POST /api/v1/qr-pay/orders/{id}/pay` | `Idempotency-Key`；`QrPayRequest(confirmationToken)`，禁止提交金额和双方账户 | `TransactionView` | `ORDER_ALREADY_CLAIMED`、`CONFIRMATION_MISMATCH` |
 | `GET /api/v1/qr-pay/orders/{id}` | 订单 ID；主体由订单创建者、付款人或 H5 会话校验 | `QrOrderView`，处理中后包含 `transactionId` | `ORDER_NOT_FOUND` |
 | `GET /api/v1/p2p-collections/codes/me` | 无业务参数 | `PersonalCodeView(codeId,status,qrUrl,version)` 或空状态 | `AUTH_REQUIRED` |
@@ -501,7 +501,7 @@ B 端页面中以下能力已由 PRD 和前端系分提出，但当前总体端�
 | `POST /api/v1/p2p-collections/orders/{id}/pay` | `Idempotency-Key`；`CollectionPayRequest(confirmationToken)` | `TransactionView` | `ORDER_ALREADY_CLAIMED`、`IDEMPOTENCY_CONFLICT` |
 | `GET /api/v1/credit/me` | 用户由会话派生 | `CreditSummaryView(totalLimitFen,availableFen,usedFen,frozenFen,status)` | `CREDIT_ACCOUNT_NOT_FOUND` |
 | `GET /api/v1/credit/bills` | `cursor`、`limit<=100`、可选 `status` | `CreditBillPage(items,nextCursor)` | `INVALID_CURSOR` |
-| `POST /api/v1/credit/repayment-drafts` | `Idempotency-Key`；`CreateRepaymentDraftRequest(amountFen)` | `RepaymentDraftView(draftId,amountFen,allocationPreview,allocationHash,version,expiresAt)` | `REPAYMENT_AMOUNT_EXCEEDED` |
+| `POST /api/v1/credit/repayment-drafts` | `Idempotency-Key`；`CreateRepaymentDraftRequest(amountFen)` | `RepaymentDraftView(draftId,amountFen,allocationPreview,allocationHash,version,expiresAt)` | `REPAYMENT_AMOUNT_INVALID` |
 | `POST /api/v1/credit/repayments` | `Idempotency-Key`；`SubmitRepaymentRequest(draftId,confirmationToken)` | `TransactionView(businessType=CREDIT_REPAY)` | `CONFIRMATION_MISMATCH`、`IDEMPOTENCY_CONFLICT` |
 
 #### 8.3.4 Agent、运营与事件流
