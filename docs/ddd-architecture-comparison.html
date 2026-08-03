@@ -1,0 +1,345 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<title>DDD分层与传统MVC分层架构对比</title>
+<style>
+@page {
+  size: A4;
+  margin: 1.8cm 2cm 2cm 2cm;
+}
+body {
+  font-family: "Microsoft YaHei", "PingFang SC", "SimSun", sans-serif;
+  font-size: 10.5pt;
+  line-height: 1.75;
+  color: #333;
+  margin: 0;
+  padding: 0;
+}
+h1 {
+  font-size: 20pt;
+  text-align: center;
+  color: #1a1a1a;
+  margin-bottom: 4pt;
+  page-break-after: avoid;
+}
+.subtitle {
+  text-align: center;
+  color: #888;
+  font-size: 10pt;
+  margin-bottom: 16pt;
+  border-bottom: 1px solid #e0e0e0;
+  padding-bottom: 10pt;
+}
+h2 {
+  font-size: 14pt;
+  color: #185FA5;
+  border-bottom: 2px solid #B5D4F4;
+  padding-bottom: 3pt;
+  margin-top: 22pt;
+  margin-bottom: 10pt;
+  page-break-after: avoid;
+}
+h3 {
+  font-size: 12pt;
+  color: #444;
+  margin-top: 14pt;
+  margin-bottom: 6pt;
+  page-break-after: avoid;
+}
+p {
+  margin: 5pt 0;
+  text-align: justify;
+}
+strong {
+  font-weight: bold;
+  color: #1a1a1a;
+}
+table {
+  width: 100%;
+  border-collapse: collapse;
+  margin: 8pt 0;
+  font-size: 10pt;
+  page-break-inside: avoid;
+}
+th {
+  background: #E6F1FB;
+  border: 1px solid #85B7EB;
+  padding: 5pt 8pt;
+  text-align: left;
+  font-weight: bold;
+  color: #042C53;
+}
+td {
+  border: 1px solid #ddd;
+  padding: 5pt 8pt;
+  vertical-align: top;
+}
+tr:nth-child(even) td {
+  background: #f8f9fb;
+}
+pre {
+  background: #f6f8fa;
+  border: 1px solid #e1e4e8;
+  border-left: 3px solid #378ADD;
+  border-radius: 4px;
+  padding: 10pt 12pt;
+  font-family: "Consolas", "Courier New", monospace;
+  font-size: 9pt;
+  line-height: 1.55;
+  white-space: pre-wrap;
+  page-break-inside: avoid;
+  margin: 8pt 0;
+}
+code {
+  font-family: "Consolas", "Courier New", monospace;
+  background: #f0f0f0;
+  padding: 1px 3px;
+  border-radius: 3px;
+  font-size: 9.5pt;
+}
+.svg-container {
+  text-align: center;
+  page-break-inside: avoid;
+  margin: 12pt 0;
+}
+.svg-container svg {
+  max-width: 100%;
+  height: auto;
+}
+.highlight-box {
+  background: #EEEDFE;
+  border: 1px solid #AFA9EC;
+  border-radius: 6px;
+  padding: 8pt 12pt;
+  margin: 8pt 0;
+  page-break-inside: avoid;
+  font-size: 10pt;
+}
+.highlight-box strong {
+  color: #3C3489;
+}
+.note-box {
+  background: #E1F5EE;
+  border: 1px solid #5DCAA5;
+  border-radius: 6px;
+  padding: 8pt 12pt;
+  margin: 8pt 0;
+  page-break-inside: avoid;
+  font-size: 10pt;
+}
+.page-break {
+  page-break-before: always;
+}
+</style>
+</head>
+<body>
+
+<h1>DDD 分层与传统 MVC 分层架构对比</h1>
+<p class="subtitle">MiniAIalipay 项目架构分析 &middot; 2026年8月3日</p>
+
+<div class="svg-container">
+<svg viewBox="0 0 680 450" width="100%" role="img">
+  <title>DDD分层 vs 传统MVC分层架构对比</title>
+  <desc>对比传统controller-service-mapper-domain技术分层与DDD interfaces-application-domain-infrastructure领域驱动分层的依赖方向和职责划分</desc>
+  <defs>
+    <marker id="arrow" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
+      <path d="M2 1L8 5L2 9" fill="none" stroke="context-stroke" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
+    </marker>
+  </defs>
+  <text x="340" y="26" text-anchor="middle" font-family="sans-serif" font-size="15" font-weight="500" fill="#2C2C2A">两种分层架构对比</text>
+  <rect x="40" y="46" width="280" height="352" rx="12" fill="#F1EFE8" stroke="#B4B2A9" stroke-width="0.5"/>
+  <text x="180" y="66" text-anchor="middle" font-family="sans-serif" font-size="14" font-weight="500" fill="#444441">传统 MVC 分层（技术分层）</text>
+  <rect x="70" y="82" width="220" height="56" rx="8" fill="#D3D1C7" stroke="#888780" stroke-width="0.5"/>
+  <text x="180" y="104" text-anchor="middle" dominant-baseline="central" font-family="sans-serif" font-size="13" font-weight="500" fill="#444441">controller</text>
+  <text x="180" y="122" text-anchor="middle" dominant-baseline="central" font-family="sans-serif" font-size="12" fill="#5F5E5A">接收HTTP请求, 返回响应</text>
+  <path d="M180 138 L180 156" fill="none" stroke="#888780" stroke-width="1.5" marker-end="url(#arrow)"/>
+  <rect x="70" y="158" width="220" height="56" rx="8" fill="#D3D1C7" stroke="#888780" stroke-width="0.5"/>
+  <text x="180" y="180" text-anchor="middle" dominant-baseline="central" font-family="sans-serif" font-size="13" font-weight="500" fill="#444441">service</text>
+  <text x="180" y="198" text-anchor="middle" dominant-baseline="central" font-family="sans-serif" font-size="12" fill="#5F5E5A">业务逻辑 + 事务编排</text>
+  <path d="M180 214 L180 232" fill="none" stroke="#888780" stroke-width="1.5" marker-end="url(#arrow)"/>
+  <rect x="70" y="234" width="220" height="56" rx="8" fill="#D3D1C7" stroke="#888780" stroke-width="0.5"/>
+  <text x="180" y="256" text-anchor="middle" dominant-baseline="central" font-family="sans-serif" font-size="13" font-weight="500" fill="#444441">mapper / dao</text>
+  <text x="180" y="274" text-anchor="middle" dominant-baseline="central" font-family="sans-serif" font-size="12" fill="#5F5E5A">数据库访问, SQL映射</text>
+  <path d="M180 290 L180 308" fill="none" stroke="#888780" stroke-width="1.5" marker-end="url(#arrow)"/>
+  <text x="195" y="303" font-family="sans-serif" font-size="11" fill="#888780">依赖</text>
+  <rect x="70" y="310" width="220" height="56" rx="8" fill="#D3D1C7" stroke="#888780" stroke-width="0.5"/>
+  <text x="180" y="332" text-anchor="middle" dominant-baseline="central" font-family="sans-serif" font-size="13" font-weight="500" fill="#444441">domain / entity</text>
+  <text x="180" y="350" text-anchor="middle" dominant-baseline="central" font-family="sans-serif" font-size="12" fill="#5F5E5A">数据对象（贫血模型）</text>
+  <rect x="360" y="46" width="280" height="352" rx="12" fill="#E6F1FB" stroke="#85B7EB" stroke-width="0.5"/>
+  <text x="500" y="66" text-anchor="middle" font-family="sans-serif" font-size="14" font-weight="500" fill="#042C53">DDD 领域驱动分层</text>
+  <rect x="390" y="82" width="220" height="56" rx="8" fill="#B5D4F4" stroke="#378ADD" stroke-width="0.5"/>
+  <text x="500" y="104" text-anchor="middle" dominant-baseline="central" font-family="sans-serif" font-size="13" font-weight="500" fill="#0C447C">interfaces</text>
+  <text x="500" y="122" text-anchor="middle" dominant-baseline="central" font-family="sans-serif" font-size="12" fill="#185FA5">Controller, 请求/响应DTO</text>
+  <path d="M500 138 L500 156" fill="none" stroke="#378ADD" stroke-width="1.5" marker-end="url(#arrow)"/>
+  <rect x="390" y="158" width="220" height="56" rx="8" fill="#B5D4F4" stroke="#378ADD" stroke-width="0.5"/>
+  <text x="500" y="180" text-anchor="middle" dominant-baseline="central" font-family="sans-serif" font-size="13" font-weight="500" fill="#0C447C">application</text>
+  <text x="500" y="198" text-anchor="middle" dominant-baseline="central" font-family="sans-serif" font-size="12" fill="#185FA5">应用服务, 用例编排, 事务</text>
+  <path d="M500 214 L500 232" fill="none" stroke="#378ADD" stroke-width="1.5" marker-end="url(#arrow)"/>
+  <text x="515" y="227" font-family="sans-serif" font-size="11" fill="#378ADD">依赖</text>
+  <rect x="390" y="234" width="220" height="56" rx="8" fill="#AFA9EC" stroke="#534AB7" stroke-width="1"/>
+  <text x="500" y="256" text-anchor="middle" dominant-baseline="central" font-family="sans-serif" font-size="13" font-weight="500" fill="#3C3489">domain（核心）</text>
+  <text x="500" y="274" text-anchor="middle" dominant-baseline="central" font-family="sans-serif" font-size="12" fill="#534AB7">聚合根, 实体, 仓储接口</text>
+  <rect x="390" y="310" width="220" height="56" rx="8" fill="#B5D4F4" stroke="#378ADD" stroke-width="0.5"/>
+  <text x="500" y="332" text-anchor="middle" dominant-baseline="central" font-family="sans-serif" font-size="13" font-weight="500" fill="#0C447C">infrastructure</text>
+  <text x="500" y="350" text-anchor="middle" dominant-baseline="central" font-family="sans-serif" font-size="12" fill="#185FA5">仓储实现, Mapper, PO</text>
+  <path d="M440 310 L440 292" fill="none" stroke="#534AB7" stroke-width="1.5" stroke-dasharray="4 3" marker-end="url(#arrow)"/>
+  <text x="435" y="301" text-anchor="end" font-family="sans-serif" font-size="11" fill="#534AB7">依赖倒置</text>
+  <text x="340" y="418" text-anchor="middle" font-family="sans-serif" font-size="12" fill="#5F5E5A">核心区别：传统分层依赖向下流动，领域层被动承载数据；DDD 依赖倒置，领域层居中且零框架依赖</text>
+</svg>
+</div>
+
+<p>上图左半边是本项目当前采用的 DDD 四层架构，右半边是传统 MVC 技术分层。两者看似都有四层，但<strong>分层依据、依赖方向和职责边界</strong>完全不同。下面逐一拆解。</p>
+
+<h2 class="page-break">一、分层依据不同：按技术职责 vs 按领域语义</h2>
+
+<h3>传统 MVC 分层——按技术职责切包</h3>
+<p>每个包对应一种技术关注点：</p>
+<table>
+  <tr><th style="width:30%">包</th><th>职责</th></tr>
+  <tr><td><code>controller</code></td><td>HTTP 入口、参数校验、响应序列化</td></tr>
+  <tr><td><code>service</code></td><td>所有业务逻辑（往往堆积成上帝类）</td></tr>
+  <tr><td><code>mapper</code> / <code>dao</code></td><td>数据库 CRUD</td></tr>
+  <tr><td><code>domain</code> / <code>entity</code></td><td>数据载体（贫血模型，只有 getter/setter）</td></tr>
+</table>
+
+<h3>DDD 四层——按领域语义切层</h3>
+<p>技术细节被推到边缘：</p>
+<table>
+  <tr><th style="width:30%">层</th><th>职责</th></tr>
+  <tr><td><code>interfaces</code></td><td>入站适配器：REST Controller、请求/响应 DTO、全局异常处理</td></tr>
+  <tr><td><code>application</code></td><td>用例编排：应用服务、命令对象、事务边界，<strong>不含业务规则</strong></td></tr>
+  <tr><td><code>domain</code></td><td><strong>核心</strong>：聚合根、实体、值对象、仓储接口、领域错误码，<strong>零框架依赖</strong></td></tr>
+  <tr><td><code>infrastructure</code></td><td>出站适配器：仓储实现、MyBatis Mapper、持久化对象 PO</td></tr>
+</table>
+
+<div class="highlight-box">
+  <strong>关键差异：</strong>传统分层的 domain 只是数据包；DDD 的 domain 是<strong>业务规则的唯一归宿</strong>，包含状态流转、不变量校验、TCC 补偿等全部领域逻辑。
+</div>
+
+<h2 class="page-break">二、依赖方向不同：向下流动 vs 依赖倒置</h2>
+
+<p>这是<strong>最本质的区别</strong>。</p>
+
+<h3>传统分层——依赖向下流动</h3>
+<p>controller &rarr; service &rarr; mapper &rarr; domain。上层直接依赖下层的具体实现，service 直接注入 Mapper 接口并调用。如果 mapper 换技术栈（比如 MyBatis 换 JPA），service 必须跟着改。</p>
+
+<h3>DDD 分层——依赖倒置（DIP）</h3>
+<p>所有箭头指向 domain：</p>
+<ul>
+  <li><code>interfaces</code> 依赖 <code>application</code></li>
+  <li><code>application</code> 依赖 <code>domain</code></li>
+  <li><code>infrastructure</code> 依赖 <code>domain</code>（实现 domain 层定义的仓储接口）</li>
+</ul>
+
+<div class="note-box">
+  <strong>项目实例：</strong>仓储接口 <code>CreditAccountRepository</code> 定义在 <code>domain/credit/</code> 下，它的实现 <code>CreditAccountRepositoryImpl</code> 在 <code>infrastructure/credit/</code> 下，用 <code>@Repository</code> 注解注入 MyBatis Mapper。domain 层<strong>不知道</strong> MyBatis 的存在——它只依赖自己定义的接口。这意味着换掉整个持久化方案，domain 层一行代码都不用改。
+</div>
+
+<h2 class="page-break">三、领域模型不同：贫血 vs 充血</h2>
+
+<h3>传统分层：贫血模型</h3>
+<pre>// 传统写法：entity 只有数据
+public class CreditAccount {
+    private String id;
+    private long creditLimit;
+    // getter / setter ...
+}
+
+// 业务逻辑全在 service
+public class CreditAccountService {
+    public void freeze(CreditAccount account, long amount) {
+        if (account.getCreditLimit() &lt; amount) throw ...;
+        account.setCreditLimit(account.getCreditLimit() - amount);
+    }
+}</pre>
+<p>问题：业务逻辑散落在各个 service 中，同一个实体的规则被多处修改，无法保证不变量。</p>
+
+<h3>DDD 分层：充血模型（聚合根封装业务规则）</h3>
+<pre>// DDD 写法：聚合根封装业务规则，以项目 CreditAccount.java 为例
+public class CreditAccount {
+    private String creditAccountId;
+    private long creditLimit;
+    private long availableLimit;
+    private CreditAccountStatus status;
+    private long version;
+
+    // 业务行为直接在领域对象上
+    public void freeze(long amount) {
+        validateInvariants();              // 不变量校验
+        if (availableLimit &lt; amount)
+            throw new BusinessException(CreditErrorCode.INSUFFICIENT_CREDIT);
+        this.availableLimit -= amount;
+        // 状态流转、TCC 冻结逻辑都在这里
+    }
+}</pre>
+<p>业务规则集中在聚合根内部，application 层只负责"调谁、怎么编排"，不实现规则本身。</p>
+
+<h2 class="page-break">四、对象分离不同：一层到底 vs PO 与 Domain 分离</h2>
+
+<h3>传统分层</h3>
+<p><code>entity</code> 既是数据库映射对象（<code>@Table</code>、<code>@Column</code>），又是业务对象，一层到底。好处是简单，坏处是数据库结构变更直接波及业务逻辑。</p>
+
+<h3>DDD 分层：引入 PO（Persistent Object）做隔离层</h3>
+<p>本项目做法如下：</p>
+<table>
+  <tr><th style="width:35%">对象</th><th style="width:20%">所在层</th><th>用途</th></tr>
+  <tr><td><code>CreditAccount</code>（聚合根）</td><td>domain</td><td>纯业务对象，无任何 ORM 注解</td></tr>
+  <tr><td><code>CreditAccountPO</code></td><td>infrastructure</td><td>数据库映射，对应表结构</td></tr>
+  <tr><td><code>CreditAccountMapper</code></td><td>infrastructure</td><td>MyBatis 注解 SQL</td></tr>
+  <tr><td><code>CreditAccountRepositoryImpl</code></td><td>infrastructure</td><td>负责聚合根 &harr; PO 双向转换（<code>toDomain()</code> / <code>toPO()</code>）</td></tr>
+</table>
+<p>数据库加字段只改 PO 和 Mapper，聚合根和业务逻辑不受影响。</p>
+
+<h2 class="page-break">五、包结构映射对照</h2>
+<table>
+  <tr><th style="width:30%">传统分层</th><th style="width:35%">DDD 分层</th><th>变化</th></tr>
+  <tr><td><code>controller</code></td><td><code>interfaces</code> + <code>interfaces/dto</code></td><td>增加请求 DTO、全局异常处理</td></tr>
+  <tr><td><code>service</code></td><td><code>application</code>（编排）+ <code>domain</code>（规则）</td><td><strong>拆开</strong>：编排和业务规则分离</td></tr>
+  <tr><td><code>mapper</code> / <code>dao</code></td><td><code>infrastructure/mapper</code> + <code>infrastructure/po</code></td><td>增加 PO 隔离层</td></tr>
+  <tr><td><code>entity</code></td><td><code>domain</code>（聚合根/实体）+ <code>infrastructure/po</code>（持久化）</td><td><strong>一分为二</strong></td></tr>
+  <tr><td>无</td><td><code>domain/xxx/Repository</code>（仓储接口）</td><td><strong>新增</strong>：接口在 domain，实现在 infra</td></tr>
+</table>
+
+<h2 class="page-break">六、项目实际落地情况</h2>
+
+<p>从代码看，<code>account-center</code> 是唯一完整实现 DDD 全链路的模块，调用链路为：</p>
+<pre>CreditController (interfaces)
+  &rarr; CreditRepaymentService (application, @Service)
+    &rarr; CreditAccount / CreditRepayment (domain, 聚合根/实体, 纯POJO)
+      &rarr; CreditAccountRepository (domain, 接口)
+        &rarr; CreditAccountRepositoryImpl (infrastructure, @Repository)
+          &rarr; CreditAccountMapper (infrastructure, @Mapper)
+            &rarr; CreditAccountPO (infrastructure, PO)</pre>
+
+<p>account-center 的 domain 层按子域拆分为 6 个子包：</p>
+<table>
+  <tr><th style="width:20%">子域</th><th>包含内容</th></tr>
+  <tr><td><code>account</code></td><td>AccountStatus、AccountType 枚举</td></tr>
+  <tr><td><code>credit</code></td><td>CreditAccount 聚合根、CreditFreeze、CreditPurchase、CreditReceivable、CreditJobRun 实体、TCC 方法、仓储接口、领域错误码</td></tr>
+  <tr><td><code>bill</code></td><td>CreditBill 聚合根、CreditBillItem 实体、账单状态枚举</td></tr>
+  <tr><td><code>repayment</code></td><td>CreditRepayment、CreditRepaymentAllocation、CreditRepaymentDraft 实体及仓储接口</td></tr>
+  <tr><td><code>ledger</code></td><td>LedgerDirection 枚举（账本方向）</td></tr>
+  <tr><td><code>tcc</code></td><td>TccAction、TccBranchStatus 枚举（TCC 事务模型）</td></tr>
+</table>
+
+<p>其余三个服务（user-center、business-center、ai-service）目前只有 domain 层的枚举骨架，application / infrastructure / interfaces 层仅占位 <code>package-info.java</code>。</p>
+
+<h2 class="page-break">七、总结：为什么选 DDD</h2>
+<table>
+  <tr><th style="width:20%">维度</th><th style="width:35%">传统 MVC</th><th style="width:35%">DDD 四层</th></tr>
+  <tr><td><strong>分层依据</strong></td><td>技术职责</td><td>领域语义</td></tr>
+  <tr><td><strong>依赖方向</strong></td><td>向下流动</td><td>依赖倒置，指向 domain</td></tr>
+  <tr><td><strong>领域模型</strong></td><td>贫血（getter/setter）</td><td>充血（封装业务规则）</td></tr>
+  <tr><td><strong>持久化耦合</strong></td><td>entity 直接映射表</td><td>PO 隔离，聚合根不感知数据库</td></tr>
+  <tr><td><strong>可测试性</strong></td><td>难（service 依赖 Mapper）</td><td>高（domain 纯 POJO，可单测）</td></tr>
+  <tr><td><strong>换技术栈成本</strong></td><td>高（波及业务层）</td><td>低（只改 infrastructure）</td></tr>
+  <tr><td><strong>适合场景</strong></td><td>简单 CRUD</td><td><strong>复杂业务（金融、交易）</strong></td></tr>
+</table>
+
+<div class="highlight-box">
+  <strong>结论：</strong>本项目是支付系统，涉及资金、TCC、复式记账、状态流转和幂等——业务复杂度高、不变量多。DDD 的充血模型和依赖倒置能把这些规则集中保护在 domain 层，比传统 MVC 安全得多。代价是<strong>文件更多、转换代码更多</strong>（PO &harr; Domain 转换、仓储接口 + 实现），但对于金融系统来说这个成本是值得的。
+</div>
+
+</body>
+</html>
