@@ -6,8 +6,9 @@ spring:
     name: minialalipay-gateway
   data:
     redis:
-      host: ${REDIS_HOST:localhost}
+      host: ${REDIS_HOST:39.107.95.141}
       port: ${REDIS_PORT:6379}
+      password: ${REDIS_PASSWORD:123456}
       timeout: 2000ms
       lettuce:
         pool:
