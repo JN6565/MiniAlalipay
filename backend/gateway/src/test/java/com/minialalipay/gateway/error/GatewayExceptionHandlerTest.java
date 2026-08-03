@@ -11,7 +11,6 @@ import org.springframework.mock.web.server.MockServerWebExchange;
 import org.springframework.web.server.ResponseStatusException;
 
 import java.net.ConnectException;
-import java.nio.charset.StandardCharsets;
 import java.util.concurrent.TimeoutException;
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -246,10 +245,8 @@ class GatewayExceptionHandlerTest {
     }
 
     private String getResponseBody(MockServerWebExchange exchange) {
-        byte[] content = exchange.getResponse().getBodyAsString()
-                .map(String::getBytes)
-                .defaultIfEmpty(new byte[0])
+        return exchange.getResponse().getBodyAsString()
+                .defaultIfEmpty("")
                 .block();
-        return content != null ? new String(content, StandardCharsets.UTF_8) : "";
     }
 }

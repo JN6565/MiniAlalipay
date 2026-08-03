@@ -61,7 +61,8 @@ public class CorsConfig {
     @Bean
     public CorsWebFilter corsWebFilter() {
         CorsConfiguration config = new CorsConfiguration();
-        config.setAllowedOriginPatterns(List.of(ADMIN_ORIGIN, H5_ORIGIN));
+        config.addAllowedOrigin(ADMIN_ORIGIN);
+        config.addAllowedOrigin(H5_ORIGIN);
         config.setAllowedMethods(ALLOWED_METHODS);
         config.setAllowedHeaders(ALLOWED_HEADERS);
         config.setExposedHeaders(EXPOSED_HEADERS);

@@ -110,6 +110,62 @@ spring:
                 redis-rate-limiter.replenishRate: 30
                 redis-rate-limiter.burstCapacity: 60
                 redis-rate-limiter.requestedTokens: 1
+        # ========== 以下为 P0 接口目录存在但此前缺失的业务中心路由 ==========
+        - id: business-center-recharges
+          uri: ${BUSINESS_CENTER_URI:http://localhost:8082}
+          predicates:
+            - Path=/api/v1/recharges/**
+          filters:
+            - name: RequestRateLimiter
+              args:
+                key-resolver: "#{@userKeyResolver}"
+                redis-rate-limiter.replenishRate: 60
+                redis-rate-limiter.burstCapacity: 120
+                redis-rate-limiter.requestedTokens: 1
+        - id: business-center-transfer-drafts
+          uri: ${BUSINESS_CENTER_URI:http://localhost:8082}
+          predicates:
+            - Path=/api/v1/transfer-drafts/**
+          filters:
+            - name: RequestRateLimiter
+              args:
+                key-resolver: "#{@userKeyResolver}"
+                redis-rate-limiter.replenishRate: 60
+                redis-rate-limiter.burstCapacity: 120
+                redis-rate-limiter.requestedTokens: 1
+        - id: business-center-confirmations
+          uri: ${BUSINESS_CENTER_URI:http://localhost:8082}
+          predicates:
+            - Path=/api/v1/confirmations/**
+          filters:
+            - name: RequestRateLimiter
+              args:
+                key-resolver: "#{@userKeyResolver}"
+                redis-rate-limiter.replenishRate: 30
+                redis-rate-limiter.burstCapacity: 60
+                redis-rate-limiter.requestedTokens: 1
+        - id: business-center-manual-cases
+          uri: ${BUSINESS_CENTER_URI:http://localhost:8082}
+          predicates:
+            - Path=/api/v1/manual-cases/**
+          filters:
+            - name: RequestRateLimiter
+              args:
+                key-resolver: "#{@userKeyResolver}"
+                redis-rate-limiter.replenishRate: 30
+                redis-rate-limiter.burstCapacity: 60
+                redis-rate-limiter.requestedTokens: 1
+        - id: business-center-ops
+          uri: ${BUSINESS_CENTER_URI:http://localhost:8082}
+          predicates:
+            - Path=/api/v1/ops/**
+          filters:
+            - name: RequestRateLimiter
+              args:
+                key-resolver: "#{@userKeyResolver}"
+                redis-rate-limiter.replenishRate: 30
+                redis-rate-limiter.burstCapacity: 60
+                redis-rate-limiter.requestedTokens: 1
 
         # ========== 账户中心路由 ==========
         - id: account-center
