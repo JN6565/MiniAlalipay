@@ -21,6 +21,7 @@ $eventTypePath = Join-Path $RepositoryRoot 'contracts/events/event-types.yaml'
 $eventEnvelopePath = Join-Path $RepositoryRoot 'contracts/events/event-envelope.schema.json'
 $requestIdJavaPath = Join-Path $RepositoryRoot 'backend/platform-common/src/main/java/com/minialalipay/common/trace/RequestIdGenerator.java'
 $idempotencyJavaPath = Join-Path $RepositoryRoot 'backend/platform-common/src/main/java/com/minialalipay/common/idempotency/IdempotencyKeyValidator.java'
+$commonErrorJavaPath = Join-Path $RepositoryRoot 'backend/platform-common/src/main/java/com/minialalipay/common/error/CommonErrorCode.java'
 
 $catalog = Get-Content -Encoding utf8 $catalogPath
 $policyNames = $catalog |
@@ -59,6 +60,25 @@ $errors = foreach ($line in $errorLines) {
 }
 Assert-Contract (($errors | Group-Object Code | Where-Object Count -gt 1).Count -eq 0) '错误码名称重复'
 Assert-Contract (($errors | Group-Object Signature | Where-Object Count -gt 1).Count -eq 0) '存在 HTTP 状态与中文含义完全相同的错误码别名'
+
+$commonErrorLines = Get-Content -Encoding utf8 $commonErrorJavaPath | Where-Object {
+    $_ -match '^\s+[A-Z_]+\("(?:OK|COMMON_[A-Z_]+)",'
+}
+$commonEnumErrors = foreach ($line in $commonErrorLines) {
+    $match = [regex]::Match($line, '^\s+[A-Z_]+\("(OK|COMMON_[A-Z_]+)", "(.+)", ([0-9]+)\)[,;]$')
+    Assert-Contract $match.Success "无法解析公共错误码枚举：$line"
+    [pscustomobject]@{
+        Code = $match.Groups[1].Value
+        Signature = "$($match.Groups[3].Value)|$($match.Groups[2].Value)"
+    }
+}
+$commonContractErrors = $errors | Where-Object { $_.Code -eq 'OK' -or $_.Code.StartsWith('COMMON_') }
+Assert-Contract ($commonEnumErrors.Count -eq $commonContractErrors.Count) '公共错误码枚举与 YAML 数量不一致'
+foreach ($contractError in $commonContractErrors) {
+    $enumError = $commonEnumErrors | Where-Object Code -eq $contractError.Code
+    Assert-Contract ($null -ne $enumError) "公共错误码枚举缺少 $($contractError.Code)"
+    Assert-Contract ($enumError.Signature -eq $contractError.Signature) "公共错误码 $($contractError.Code) 的 message 或 httpStatus 与 YAML 不一致"
+}
 
 $eventLines = Get-Content -Encoding utf8 $eventTypePath | Where-Object { $_ -match '^  [A-Za-z0-9_.]+: \{version:' }
 $eventNames = $eventLines | ForEach-Object { [regex]::Match($_, '^  ([A-Za-z0-9_.]+):').Groups[1].Value }

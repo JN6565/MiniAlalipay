@@ -21,6 +21,15 @@ public enum CommonErrorCode implements ErrorCode {
     /** 请求的资源不存在，或为避免越权而按不存在处理。 */
     NOT_FOUND("COMMON_NOT_FOUND", "资源不存在", 404),
 
+    /** 请求使用了目标资源不支持的 HTTP 方法。 */
+    METHOD_NOT_ALLOWED("COMMON_METHOD_NOT_ALLOWED", "请求方法不受支持", 405),
+
+    /** 服务端无法生成客户端声明可以接收的响应媒体类型。 */
+    NOT_ACCEPTABLE("COMMON_NOT_ACCEPTABLE", "无法生成客户端可接受的响应格式", 406),
+
+    /** 请求正文使用了接口不支持的媒体类型。 */
+    UNSUPPORTED_MEDIA_TYPE("COMMON_UNSUPPORTED_MEDIA_TYPE", "请求媒体类型不受支持", 415),
+
     /** 未映射的服务端内部异常，响应不得暴露堆栈和敏感信息。 */
     INTERNAL_ERROR("COMMON_INTERNAL_ERROR", "系统内部错误", 500);
 

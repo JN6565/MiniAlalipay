@@ -144,6 +144,24 @@ components:
         application/json:
           schema:
             $ref: '#/components/schemas/ErrorResponse'
+    MethodNotAllowed:
+      description: 请求使用了目标资源不支持的 HTTP 方法
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+    NotAcceptable:
+      description: 无法生成客户端声明可以接收的响应格式
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+    UnsupportedMediaType:
+      description: 请求正文使用了接口不支持的媒体类型
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
     Gone:
       description: 订单、请求或事件游标已经过期
       content:

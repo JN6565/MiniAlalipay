@@ -1,4 +1,4 @@
-version: 1.0.0
+version: 1.1.0
 status: FROZEN
 codes:
   OK: {httpStatus: 200, message: 成功}
@@ -6,6 +6,9 @@ codes:
   COMMON_UNAUTHORIZED: {httpStatus: 401, message: 需要身份认证}
   COMMON_FORBIDDEN: {httpStatus: 403, message: 无权访问该资源}
   COMMON_NOT_FOUND: {httpStatus: 404, message: 资源不存在}
+  COMMON_METHOD_NOT_ALLOWED: {httpStatus: 405, message: 请求方法不受支持}
+  COMMON_NOT_ACCEPTABLE: {httpStatus: 406, message: 无法生成客户端可接受的响应格式}
+  COMMON_UNSUPPORTED_MEDIA_TYPE: {httpStatus: 415, message: 请求媒体类型不受支持}
   COMMON_INTERNAL_ERROR: {httpStatus: 500, message: 系统内部错误}
   AUTH_REQUIRED: {httpStatus: 401, message: 会话无效或尚未登录}
   LOGIN_INVALID: {httpStatus: 401, message: 登录名或登录密码错误}

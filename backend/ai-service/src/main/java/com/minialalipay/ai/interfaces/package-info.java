@@ -1,2 +1,21 @@
-/** Inbound HTTP and MCP adapters for the AI bounded context. */
+/**
+ * AI 服务接口层。
+ *
+ * <p>职责：REST 和 MCP 入站适配器，负责协议转换和请求/响应序列化。
+ * 仅接收和返回 OpenAPI DTO，不包含领域逻辑。</p>
+ *
+ * <h3>允许直接依赖</h3>
+ * <ul>
+ *   <li>OpenAPI 生成的 API DTO</li>
+ *   <li>应用服务（application 层）</li>
+ *   <li>入站协议类型（HTTP Request/Response）</li>
+ * </ul>
+ *
+ * <h3>禁止直接依赖</h3>
+ * <ul>
+ *   <li>Repository 实现、Mapper、PO</li>
+ *   <li>其他服务的领域类型或持久化类型</li>
+ *   <li>领域层聚合根和实体（只能通过应用服务操作）</li>
+ * </ul>
+ */
 package com.minialalipay.ai.interfaces;
