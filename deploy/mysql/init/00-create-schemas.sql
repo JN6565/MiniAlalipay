@@ -1,5 +1,9 @@
 -- MiniAlalipay 本地 MySQL 8.0 初始化脚本。
 -- 跨库业务 ID 仅作逻辑引用；外键只约束同一服务拥有的 Schema。
+-- 本脚本用于首次初始化本地开发环境，统一创建逻辑库、开发账号、业务表、索引与约束。
+-- 六个逻辑库按服务职责隔离；同一 MySQL 实例部署不改变各服务的数据所有权边界。
+-- CREATE TABLE IF NOT EXISTS 只保证重复执行不报错，不会更新已经存在的表结构或注释。
+-- 已有数据库需要变更时，应新增向前迁移，不得依赖重复执行本初始化脚本。
 
 CREATE DATABASE IF NOT EXISTS user_db CHARACTER SET utf8mb4 COLLATE utf8mb4_0900_ai_ci;
 CREATE DATABASE IF NOT EXISTS business_db CHARACTER SET utf8mb4 COLLATE utf8mb4_0900_ai_ci;
@@ -8,6 +12,7 @@ CREATE DATABASE IF NOT EXISTS ledger_db CHARACTER SET utf8mb4 COLLATE utf8mb4_09
 CREATE DATABASE IF NOT EXISTS agent_db CHARACTER SET utf8mb4 COLLATE utf8mb4_0900_ai_ci;
 CREATE DATABASE IF NOT EXISTS metrics_db CHARACTER SET utf8mb4 COLLATE utf8mb4_0900_ai_ci;
 
+-- 本地开发账号仅用于容器内联调；生产环境必须改用按服务、按 Schema 最小授权的独立账号。
 CREATE USER IF NOT EXISTS 'mini_app'@'%' IDENTIFIED BY 'mini_app_dev_only';
 GRANT ALL PRIVILEGES ON user_db.* TO 'mini_app'@'%';
 GRANT ALL PRIVILEGES ON business_db.* TO 'mini_app'@'%';
@@ -17,8 +22,10 @@ GRANT ALL PRIVILEGES ON agent_db.* TO 'mini_app'@'%';
 GRANT ALL PRIVILEGES ON metrics_db.* TO 'mini_app'@'%';
 
 -- 用户中心。
+-- 负责身份、凭证、联系人和角色事实，不保存账户余额或资金交易事实。
 USE user_db;
 
+-- 用户主档。注册期间的状态与版本用于支撑跨服务开户恢复，不能据此直接推导资金账户状态。
 CREATE TABLE IF NOT EXISTS app_user (
     user_id CHAR(26) NOT NULL,
     login_name VARCHAR(64) NOT NULL,
@@ -36,6 +43,7 @@ CREATE TABLE IF NOT EXISTS app_user (
     CONSTRAINT ck_app_user_status CHECK (status IN ('ACTIVE', 'LOCKED', 'CLOSED'))
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
 
+-- 登录与支付密码凭证。这里只保存安全摘要和锁定状态，禁止保存任何明文密码。
 CREATE TABLE IF NOT EXISTS credential (
     user_id CHAR(26) NOT NULL,
     login_password_hash VARCHAR(255) NOT NULL,
@@ -53,6 +61,7 @@ CREATE TABLE IF NOT EXISTS credential (
     CONSTRAINT fk_credential_user FOREIGN KEY (user_id) REFERENCES app_user (user_id)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
 
+-- 一次性支付密码证明。令牌只保存摘要，并绑定密码版本以便改密后立即撤销旧授权。
 CREATE TABLE IF NOT EXISTS payment_proof (
     proof_id CHAR(26) NOT NULL,
     token_digest BINARY(32) NOT NULL,
@@ -72,6 +81,7 @@ CREATE TABLE IF NOT EXISTS payment_proof (
     )
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
 
+-- 常用收款人关系。仅由成功转账事实形成，不表示好友关系，也不能授予对方任何权限。
 CREATE TABLE IF NOT EXISTS contact (
     owner_user_id CHAR(26) NOT NULL,
     payee_user_id CHAR(26) NOT NULL,
@@ -91,6 +101,7 @@ CREATE TABLE IF NOT EXISTS contact (
     CONSTRAINT ck_contact_distinct_user CHECK (owner_user_id <> payee_user_id)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
 
+-- 用户角色分配。MERCHANT 为历史兼容值，MVP 不据此建立独立商户身份或客户端。
 CREATE TABLE IF NOT EXISTS role_assignment (
     user_id CHAR(26) NOT NULL,
     role_code VARCHAR(32) NOT NULL,
@@ -103,6 +114,7 @@ CREATE TABLE IF NOT EXISTS role_assignment (
     )
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
 
+-- 用户中心写接口的幂等受理记录。同一主体、接口范围和幂等键只能对应同一请求摘要。
 CREATE TABLE IF NOT EXISTS idempotency_record (
     record_id CHAR(26) NOT NULL,
     principal_key VARCHAR(128) NOT NULL,
@@ -123,6 +135,7 @@ CREATE TABLE IF NOT EXISTS idempotency_record (
     CONSTRAINT ck_idempotency_status CHECK (status IN ('PROCESSING', 'COMPLETED', 'FAILED'))
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
 
+-- 用户中心事件消费去重表。业务投影与 DONE 状态必须在同一本地事务内提交。
 CREATE TABLE IF NOT EXISTS inbox_event (
     consumer_name VARCHAR(64) NOT NULL,
     event_id CHAR(26) NOT NULL,
@@ -134,6 +147,7 @@ CREATE TABLE IF NOT EXISTS inbox_event (
     CONSTRAINT ck_inbox_status CHECK (status IN ('PROCESSING', 'DONE', 'FAILED'))
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
 
+-- 用户中心安全审计日志。只保存脱敏详情，禁止记录密码、原始令牌和完整账号。
 CREATE TABLE IF NOT EXISTS audit_log (
     audit_id BIGINT UNSIGNED NOT NULL,
     actor_type VARCHAR(16) NOT NULL,
@@ -152,6 +166,7 @@ CREATE TABLE IF NOT EXISTS audit_log (
     CONSTRAINT ck_audit_actor_type CHECK (actor_type IN ('USER', 'SYSTEM', 'OPERATOR'))
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
 
+-- 用户中心可靠事件表。业务事实与事件同事务写入，发布失败只能重试，不能重复生成事实。
 CREATE TABLE IF NOT EXISTS outbox_event (
     event_id CHAR(26) NOT NULL,
     aggregate_type VARCHAR(32) NOT NULL,
@@ -190,8 +205,10 @@ CREATE TABLE IF NOT EXISTS outbox_event (
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
 
 -- 账户中心账户与额度模块。
+-- 仅本模块可以维护账户余额、冻结金额和信用额度；其他服务必须通过契约调用。
 USE account_db;
 
+-- 虚拟资金账户主档。user_id 是跨 Schema 逻辑引用，不创建到 user_db 的外键。
 CREATE TABLE IF NOT EXISTS account (
     account_id CHAR(26) NOT NULL,
     user_id CHAR(26) NOT NULL,
@@ -208,6 +225,7 @@ CREATE TABLE IF NOT EXISTS account (
     CONSTRAINT ck_account_status CHECK (status IN ('ACTIVE', 'FROZEN', 'CLOSED'))
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
 
+-- 账户余额事实。available_fen 与 frozen_fen 均以分为单位，变更必须使用 version 条件更新。
 CREATE TABLE IF NOT EXISTS account_balance (
     account_id CHAR(26) NOT NULL,
     available_fen BIGINT UNSIGNED NOT NULL DEFAULT 0,
@@ -219,6 +237,7 @@ CREATE TABLE IF NOT EXISTS account_balance (
     CONSTRAINT fk_account_balance_account FOREIGN KEY (account_id) REFERENCES account (account_id)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
 
+-- 余额 TCC 冻结事实。唯一键防止同一交易、账户和用途重复冻结，释放操作必须幂等。
 CREATE TABLE IF NOT EXISTS freeze_record (
     freeze_id CHAR(26) NOT NULL,
     transaction_id CHAR(26) NOT NULL,
@@ -239,6 +258,7 @@ CREATE TABLE IF NOT EXISTS freeze_record (
     CONSTRAINT ck_freeze_status CHECK (status IN ('FROZEN', 'CONFIRMED', 'RELEASED'))
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
 
+-- Mini 花呗额度账户。额度不是余额，必须始终满足已用额度与冻结额度之和不超过总额度。
 CREATE TABLE IF NOT EXISTS credit_account (
     credit_account_id CHAR(26) NOT NULL,
     user_id CHAR(26) NOT NULL,
@@ -258,6 +278,7 @@ CREATE TABLE IF NOT EXISTS credit_account (
     CONSTRAINT ck_credit_account_status CHECK (status IN ('ACTIVE', 'SUSPENDED', 'CLOSED'))
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
 
+-- 信用支付 TCC 冻结事实。Confirm 转为已用额度，Cancel 只能释放一次且不得形成应收。
 CREATE TABLE IF NOT EXISTS credit_freeze (
     credit_freeze_id CHAR(26) NOT NULL,
     transaction_id CHAR(26) NOT NULL,
@@ -278,6 +299,7 @@ CREATE TABLE IF NOT EXISTS credit_freeze (
     CONSTRAINT ck_credit_freeze_status CHECK (status IN ('FROZEN', 'CONFIRMED', 'RELEASED'))
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
 
+-- 账户侧 TCC 分支屏障。持久化分支状态以保证幂等、空回滚和防悬挂。
 CREATE TABLE IF NOT EXISTS tcc_branch (
     branch_id CHAR(26) NOT NULL,
     xid VARCHAR(128) NOT NULL,
@@ -301,6 +323,7 @@ CREATE TABLE IF NOT EXISTS tcc_branch (
     )
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
 
+-- 账户中心写接口的幂等受理记录，避免重试造成重复余额或额度变更。
 CREATE TABLE IF NOT EXISTS idempotency_record (
     record_id CHAR(26) NOT NULL,
     principal_key VARCHAR(128) NOT NULL,
@@ -321,6 +344,7 @@ CREATE TABLE IF NOT EXISTS idempotency_record (
     CONSTRAINT ck_idempotency_status CHECK (status IN ('PROCESSING', 'COMPLETED', 'FAILED'))
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
 
+-- 账户中心事件消费去重表，防止重复事件再次修改账户或额度事实。
 CREATE TABLE IF NOT EXISTS inbox_event (
     consumer_name VARCHAR(64) NOT NULL,
     event_id CHAR(26) NOT NULL,
@@ -332,6 +356,7 @@ CREATE TABLE IF NOT EXISTS inbox_event (
     CONSTRAINT ck_inbox_status CHECK (status IN ('PROCESSING', 'DONE', 'FAILED'))
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
 
+-- 账户中心资金审计日志。记录操作证据但不保存支付密码、确认令牌等敏感原文。
 CREATE TABLE IF NOT EXISTS audit_log (
     audit_id BIGINT UNSIGNED NOT NULL,
     actor_type VARCHAR(16) NOT NULL,
@@ -350,6 +375,7 @@ CREATE TABLE IF NOT EXISTS audit_log (
     CONSTRAINT ck_audit_actor_type CHECK (actor_type IN ('USER', 'SYSTEM', 'OPERATOR'))
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
 
+-- 账户中心可靠事件表。余额或额度事实与对应事件必须在同一本地事务内提交。
 CREATE TABLE IF NOT EXISTS outbox_event (
     event_id CHAR(26) NOT NULL,
     aggregate_type VARCHAR(32) NOT NULL,
@@ -388,8 +414,10 @@ CREATE TABLE IF NOT EXISTS outbox_event (
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
 
 -- 账户中心账本与信用模块。
+-- 负责复式账本、信用应收、账单和对账证据；已过账凭证及分录只能冲正，不能删除或覆盖。
 USE ledger_db;
 
+-- 账本科目主档。科目性质与正常余额方向共同决定余额解释，不能把会计借贷等同于用户借款。
 CREATE TABLE IF NOT EXISTS ledger_account (
     ledger_account_id CHAR(26) NOT NULL,
     owner_type VARCHAR(24) NOT NULL,
@@ -419,6 +447,7 @@ CREATE TABLE IF NOT EXISTS ledger_account (
     CONSTRAINT ck_ledger_account_status CHECK (status IN ('ACTIVE', 'CLOSED'))
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
 
+-- 账本凭证。只有全部分录借贷平衡后才能过账，冲正必须新建反向凭证并保留原凭证。
 CREATE TABLE IF NOT EXISTS ledger_voucher (
     voucher_id CHAR(26) NOT NULL,
     transaction_id CHAR(26) NOT NULL,
@@ -455,6 +484,7 @@ CREATE TABLE IF NOT EXISTS ledger_voucher (
     )
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
 
+-- 不可变账本分录。金额统一使用分，同一凭证的借方合计必须等于贷方合计。
 CREATE TABLE IF NOT EXISTS ledger_entry (
     entry_id BIGINT UNSIGNED NOT NULL,
     voucher_id CHAR(26) NOT NULL,
@@ -477,6 +507,7 @@ CREATE TABLE IF NOT EXISTS ledger_entry (
     CONSTRAINT ck_ledger_entry_amount CHECK (amount_fen > 0)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
 
+-- 信用应收汇总事实。必须满足已用额度等于未出账、已出账与逾期应收的合计口径。
 CREATE TABLE IF NOT EXISTS credit_receivable (
     credit_account_id CHAR(26) NOT NULL,
     unbilled_fen BIGINT UNSIGNED NOT NULL DEFAULT 0,
@@ -489,6 +520,7 @@ CREATE TABLE IF NOT EXISTS credit_receivable (
     CONSTRAINT ck_credit_receivable_overdue CHECK (overdue_fen <= billed_fen)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
 
+-- 逐笔信用消费事实。每笔成功 CREDIT_PAY 最多生成一条，退款通过状态与冲正事实处理。
 CREATE TABLE IF NOT EXISTS credit_purchase (
     purchase_id CHAR(26) NOT NULL,
     credit_transaction_id CHAR(26) NOT NULL,
@@ -520,6 +552,7 @@ CREATE TABLE IF NOT EXISTS credit_purchase (
     )
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
 
+-- 月度信用账单。账单原始金额必须等于已还、已冲销和未还金额之和。
 CREATE TABLE IF NOT EXISTS credit_bill (
     bill_id CHAR(26) NOT NULL,
     credit_account_id CHAR(26) NOT NULL,
@@ -545,6 +578,7 @@ CREATE TABLE IF NOT EXISTS credit_bill (
     )
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
 
+-- 账单与信用消费的不可变关联。purchase_id 唯一保证一笔消费最多进入一个账期。
 CREATE TABLE IF NOT EXISTS credit_bill_item (
     bill_id CHAR(26) NOT NULL,
     purchase_id CHAR(26) NOT NULL,
@@ -567,6 +601,7 @@ CREATE TABLE IF NOT EXISTS credit_bill_item (
     )
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
 
+-- 信用还款事实。绑定还款草稿和统一资金交易，避免重复确认产生多笔还款。
 CREATE TABLE IF NOT EXISTS credit_repayment (
     repayment_id CHAR(26) NOT NULL,
     repayment_draft_id CHAR(26) NOT NULL,
@@ -586,6 +621,7 @@ CREATE TABLE IF NOT EXISTS credit_repayment (
     )
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
 
+-- 还款分配计划。Try 阶段固化分配顺序与金额，Confirm 阶段不得重新计算。
 CREATE TABLE IF NOT EXISTS credit_repayment_allocation (
     repayment_id CHAR(26) NOT NULL,
     sequence_no SMALLINT UNSIGNED NOT NULL,
@@ -606,6 +642,7 @@ CREATE TABLE IF NOT EXISTS credit_repayment_allocation (
     )
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
 
+-- 还款分配明细。逐笔指向消费及可选账单，父分配金额必须等于其明细合计。
 CREATE TABLE IF NOT EXISTS credit_repayment_allocation_detail (
     repayment_id CHAR(26) NOT NULL,
     sequence_no SMALLINT UNSIGNED NOT NULL,
@@ -628,6 +665,7 @@ CREATE TABLE IF NOT EXISTS credit_repayment_allocation_detail (
     CONSTRAINT ck_credit_repayment_detail_amount CHECK (amount_fen > 0)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
 
+-- 信用批处理运行记录。业务日期唯一约束保证出账或到期任务重复触发时幂等续跑。
 CREATE TABLE IF NOT EXISTS credit_job_run (
     run_id CHAR(26) NOT NULL,
     job_type VARCHAR(16) NOT NULL,
@@ -659,6 +697,7 @@ CREATE TABLE IF NOT EXISTS credit_job_run (
     )
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
 
+-- 账本与信用侧 TCC 分支屏障。分支持久化后才能处理重试、空回滚和晚到请求。
 CREATE TABLE IF NOT EXISTS tcc_branch (
     branch_id CHAR(26) NOT NULL,
     xid VARCHAR(128) NOT NULL,
@@ -682,6 +721,7 @@ CREATE TABLE IF NOT EXISTS tcc_branch (
     )
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
 
+-- 证账实对账差异。只保存差异证据并转人工处置，禁止据此直接修改余额或删除原记录。
 CREATE TABLE IF NOT EXISTS reconciliation_diff (
     diff_id CHAR(26) NOT NULL,
     biz_date DATE NOT NULL,
@@ -702,6 +742,7 @@ CREATE TABLE IF NOT EXISTS reconciliation_diff (
     )
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
 
+-- 账本与信用可靠事件表。凭证、应收或账单事实与事件必须同事务提交。
 CREATE TABLE IF NOT EXISTS outbox_event (
     event_id CHAR(26) NOT NULL,
     aggregate_type VARCHAR(32) NOT NULL,
@@ -740,8 +781,10 @@ CREATE TABLE IF NOT EXISTS outbox_event (
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
 
 -- 业务中心。
+-- 负责编排交易来源、确认、风控与全局 TCC；不直接修改账户余额、额度或账本。
 USE business_db;
 
+-- 模拟充值策略版本。策略控制演示虚拟资金来源，不能代表真实充值通道。
 CREATE TABLE IF NOT EXISTS recharge_policy (
     policy_id CHAR(26) NOT NULL,
     policy_code VARCHAR(32) NOT NULL,
@@ -765,6 +808,7 @@ CREATE TABLE IF NOT EXISTS recharge_policy (
     CONSTRAINT ck_recharge_policy_status CHECK (status IN ('ACTIVE', 'INACTIVE'))
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
 
+-- 用户每日模拟充值额度占用。处理中额度在结果未知时必须保留，避免并发绕过限额。
 CREATE TABLE IF NOT EXISTS recharge_daily_usage (
     user_id CHAR(26) NOT NULL,
     business_date DATE NOT NULL,
@@ -777,6 +821,7 @@ CREATE TABLE IF NOT EXISTS recharge_daily_usage (
     PRIMARY KEY (user_id, business_date)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
 
+-- 模拟充值来源订单。受理后统一进入资金交易与复式账本，不允许直接增加余额。
 CREATE TABLE IF NOT EXISTS recharge_order (
     recharge_order_id CHAR(26) NOT NULL,
     user_id CHAR(26) NOT NULL,
@@ -808,6 +853,7 @@ CREATE TABLE IF NOT EXISTS recharge_order (
     )
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
 
+-- 受控全额虚拟退款订单。同一原支付最多一笔有效退款，业务退款与对账冲正必须区分。
 CREATE TABLE IF NOT EXISTS refund_order (
     refund_order_id CHAR(26) NOT NULL,
     original_transaction_id CHAR(26) NOT NULL,
@@ -850,6 +896,7 @@ CREATE TABLE IF NOT EXISTS refund_order (
     )
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
 
+-- 主动转账草稿。AI 与传统表单共享此结构，但草稿不能替代服务端确认和资金交易事实。
 CREATE TABLE IF NOT EXISTS transfer_draft (
     draft_id CHAR(26) NOT NULL,
     payer_user_id CHAR(26) NOT NULL,
@@ -874,6 +921,7 @@ CREATE TABLE IF NOT EXISTS transfer_draft (
     )
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
 
+-- 信用还款草稿。固化还款金额与分配摘要，确认令牌必须绑定同一快照。
 CREATE TABLE IF NOT EXISTS credit_repayment_draft (
     repayment_draft_id CHAR(26) NOT NULL,
     user_id CHAR(26) NOT NULL,
@@ -898,6 +946,7 @@ CREATE TABLE IF NOT EXISTS credit_repayment_draft (
     )
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
 
+-- 动态扫码收款订单。历史 merchant 字段实际指普通用户本人收款账户，不代表独立商户身份。
 CREATE TABLE IF NOT EXISTS qr_pay_order (
     qr_order_id CHAR(26) NOT NULL,
     merchant_user_id CHAR(26) NOT NULL,
@@ -939,6 +988,7 @@ CREATE TABLE IF NOT EXISTS qr_pay_order (
     )
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
 
+-- 动态码令牌映射。只保存高熵令牌摘要，原始令牌不得进入日志、存储或分析事件。
 CREATE TABLE IF NOT EXISTS qr_pay_token (
     token_digest BINARY(32) NOT NULL,
     qr_order_id CHAR(26) NOT NULL,
@@ -959,6 +1009,7 @@ CREATE TABLE IF NOT EXISTS qr_pay_token (
     )
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
 
+-- 长期个人收款码。活动槽位保证每个普通用户最多一个有效码，换码后旧码不能新建订单。
 CREATE TABLE IF NOT EXISTS personal_collection_code (
     code_id CHAR(26) NOT NULL,
     owner_user_id CHAR(26) NOT NULL,
@@ -980,6 +1031,7 @@ CREATE TABLE IF NOT EXISTS personal_collection_code (
     CONSTRAINT ck_personal_collection_code_status CHECK (status IN ('ACTIVE', 'REVOKED'))
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
 
+-- 固定金额收款请求。active_order_id 配合 version 条件更新保证并发付款最终最多一笔成功。
 CREATE TABLE IF NOT EXISTS collection_request (
     request_id CHAR(26) NOT NULL,
     requester_user_id CHAR(26) NOT NULL,
@@ -1008,6 +1060,7 @@ CREATE TABLE IF NOT EXISTS collection_request (
     )
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
 
+-- 单次个人收款付款尝试。个人码允许多笔独立订单，固定请求仅允许抢占成功的订单进入资金处理。
 CREATE TABLE IF NOT EXISTS collection_order (
     order_id CHAR(26) NOT NULL,
     mode VARCHAR(24) NOT NULL,
@@ -1052,6 +1105,7 @@ CREATE TABLE IF NOT EXISTS collection_order (
     )
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
 
+-- 确认对象活动槽位。每个业务对象同时只能有一个当前有效确认，重新签发会替换旧确认。
 CREATE TABLE IF NOT EXISTS confirmation_subject (
     subject_type VARCHAR(24) NOT NULL,
     subject_id CHAR(26) NOT NULL,
@@ -1063,6 +1117,7 @@ CREATE TABLE IF NOT EXISTS confirmation_subject (
     KEY idx_confirmation_subject_updated (updated_at)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
 
+-- 一次性交易确认。绑定主体、关键资金参数和支付证明，消费后不得再次执行资金动作。
 CREATE TABLE IF NOT EXISTS confirmation (
     confirmation_id CHAR(26) NOT NULL,
     token_digest BINARY(32) NOT NULL,
@@ -1095,6 +1150,7 @@ CREATE TABLE IF NOT EXISTS confirmation (
     )
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
 
+-- 风控决策证据。保存规则结果及版本，不允许由 AI 输出或前端状态替代确定性风控。
 CREATE TABLE IF NOT EXISTS risk_decision (
     decision_id CHAR(26) NOT NULL,
     subject_type VARCHAR(24) NOT NULL,
@@ -1111,6 +1167,7 @@ CREATE TABLE IF NOT EXISTS risk_decision (
     CONSTRAINT ck_risk_decision_action CHECK (action IN ('PASS', 'REJECT', 'REVIEW'))
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
 
+-- 人工处置工单。只推动合法状态流转，运营人员不能通过工单直接修改资金事实。
 CREATE TABLE IF NOT EXISTS manual_case (
     case_id CHAR(26) NOT NULL,
     case_type VARCHAR(32) NOT NULL,
@@ -1138,6 +1195,8 @@ CREATE TABLE IF NOT EXISTS manual_case (
     )
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
 
+-- 统一资金交易事实。source_type 与 source_order_id 唯一，防止更换幂等键导致重复扣款或入账。
+-- 已受理交易必须收敛到成功、撤销、冲正或人工处理，不能用含义不明的 FAILED 终止恢复。
 CREATE TABLE IF NOT EXISTS fund_transaction (
     transaction_id CHAR(26) NOT NULL,
     business_type VARCHAR(16) NOT NULL,
@@ -1213,6 +1272,7 @@ CREATE TABLE IF NOT EXISTS fund_transaction (
     )
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
 
+-- 全局 TCC 协调事实。记录恢复游标和重试状态，只有全部资金及账本分支一致后才能发布成功。
 CREATE TABLE IF NOT EXISTS tcc_global (
     transaction_id CHAR(26) NOT NULL,
     xid VARCHAR(128) NOT NULL,
@@ -1232,6 +1292,7 @@ CREATE TABLE IF NOT EXISTS tcc_global (
     )
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
 
+-- 业务中心写接口幂等记录。同键异参必须冲突，同键同参必须返回原业务结果。
 CREATE TABLE IF NOT EXISTS idempotency_record (
     record_id CHAR(26) NOT NULL,
     principal_key VARCHAR(128) NOT NULL,
@@ -1252,6 +1313,7 @@ CREATE TABLE IF NOT EXISTS idempotency_record (
     CONSTRAINT ck_idempotency_status CHECK (status IN ('PROCESSING', 'COMPLETED', 'FAILED'))
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
 
+-- 业务中心事件消费去重表，避免重复事件再次驱动交易投影或状态流转。
 CREATE TABLE IF NOT EXISTS inbox_event (
     consumer_name VARCHAR(64) NOT NULL,
     event_id CHAR(26) NOT NULL,
@@ -1263,6 +1325,7 @@ CREATE TABLE IF NOT EXISTS inbox_event (
     CONSTRAINT ck_inbox_status CHECK (status IN ('PROCESSING', 'DONE', 'FAILED'))
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
 
+-- 业务中心审计日志。记录交易编排证据，但不得保存支付密码、确认令牌和二维码原始令牌。
 CREATE TABLE IF NOT EXISTS audit_log (
     audit_id BIGINT UNSIGNED NOT NULL,
     actor_type VARCHAR(16) NOT NULL,
@@ -1281,6 +1344,7 @@ CREATE TABLE IF NOT EXISTS audit_log (
     CONSTRAINT ck_audit_actor_type CHECK (actor_type IN ('USER', 'SYSTEM', 'OPERATOR'))
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
 
+-- 业务中心可靠事件表。来源订单、交易终态与事件必须在同一本地事务内一致提交。
 CREATE TABLE IF NOT EXISTS outbox_event (
     event_id CHAR(26) NOT NULL,
     aggregate_type VARCHAR(32) NOT NULL,
@@ -1319,8 +1383,10 @@ CREATE TABLE IF NOT EXISTS outbox_event (
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
 
 -- AI 服务。
+-- 只保存脱敏会话、偏好和工具调用证据；AI 不持有账户写权限，也不能决定资金终态。
 USE agent_db;
 
+-- AI 对话会话。结构化槽位仅用于草稿编排，不能替代业务库中的金额、账户或交易事实。
 CREATE TABLE IF NOT EXISTS agent_session (
     session_id CHAR(26) NOT NULL,
     user_id CHAR(26) NOT NULL,
@@ -1336,6 +1402,7 @@ CREATE TABLE IF NOT EXISTS agent_session (
     CONSTRAINT ck_agent_session_status CHECK (status IN ('ACTIVE', 'CLOSED', 'EXPIRED'))
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
 
+-- 脱敏对话消息。client_message_id 与角色联合唯一，防止重试重复生成同一回复。
 CREATE TABLE IF NOT EXISTS agent_message (
     message_id CHAR(26) NOT NULL,
     session_id CHAR(26) NOT NULL,
@@ -1352,6 +1419,7 @@ CREATE TABLE IF NOT EXISTS agent_message (
     CONSTRAINT ck_agent_message_role CHECK (role IN ('USER', 'ASSISTANT', 'SYSTEM'))
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
 
+-- MCP 工具调用证据。只保存规范化请求摘要和标准结果，不落原始敏感参数。
 CREATE TABLE IF NOT EXISTS tool_call_log (
     tool_call_id CHAR(26) NOT NULL,
     session_id CHAR(26) NOT NULL,
@@ -1368,6 +1436,7 @@ CREATE TABLE IF NOT EXISTS tool_call_log (
         REFERENCES agent_session (session_id)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
 
+-- 用户授权的低敏偏好。偏好只能影响候选排序，不能自动选定收款人、金额或跳过确认。
 CREATE TABLE IF NOT EXISTS preference (
     preference_id CHAR(26) NOT NULL,
     user_id CHAR(26) NOT NULL,
@@ -1383,6 +1452,7 @@ CREATE TABLE IF NOT EXISTS preference (
     CONSTRAINT ck_preference_status CHECK (status IN ('ACTIVE', 'REVOKED'))
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
 
+-- AI 服务写接口幂等记录，避免重复消息或工具编排造成额外业务副作用。
 CREATE TABLE IF NOT EXISTS idempotency_record (
     record_id CHAR(26) NOT NULL,
     principal_key VARCHAR(128) NOT NULL,
@@ -1403,6 +1473,7 @@ CREATE TABLE IF NOT EXISTS idempotency_record (
     CONSTRAINT ck_idempotency_status CHECK (status IN ('PROCESSING', 'COMPLETED', 'FAILED'))
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
 
+-- AI 服务审计日志。detail_json 必须脱敏，禁止记录密码、令牌、完整账号或未脱敏对话。
 CREATE TABLE IF NOT EXISTS audit_log (
     audit_id BIGINT UNSIGNED NOT NULL,
     actor_type VARCHAR(16) NOT NULL,
@@ -1421,6 +1492,7 @@ CREATE TABLE IF NOT EXISTS audit_log (
     CONSTRAINT ck_audit_actor_type CHECK (actor_type IN ('USER', 'SYSTEM', 'OPERATOR'))
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
 
+-- AI 服务可靠事件表。会话事实与事件同事务写入，事件载荷不得包含原始敏感信息。
 CREATE TABLE IF NOT EXISTS outbox_event (
     event_id CHAR(26) NOT NULL,
     aggregate_type VARCHAR(32) NOT NULL,
@@ -1459,8 +1531,10 @@ CREATE TABLE IF NOT EXISTS outbox_event (
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
 
 -- 监控与分析投影。
+-- 仅消费可靠事件形成可重建投影，不作为余额、额度、账本或交易终态的事实来源。
 USE metrics_db;
 
+-- 监控消费者去重表，确保重复投递不会让实时或离线指标重复计数。
 CREATE TABLE IF NOT EXISTS inbox_event (
     consumer_name VARCHAR(64) NOT NULL,
     event_id CHAR(26) NOT NULL,
@@ -1472,6 +1546,7 @@ CREATE TABLE IF NOT EXISTS inbox_event (
     CONSTRAINT ck_inbox_status CHECK (status IN ('PROCESSING', 'DONE', 'FAILED'))
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
 
+-- 不符合事件契约的数据隔离区。问题未解决前不得进入指标计算或报表发布。
 CREATE TABLE IF NOT EXISTS quarantined_event (
     consumer_name VARCHAR(64) NOT NULL,
     event_id CHAR(26) NOT NULL,
@@ -1488,6 +1563,7 @@ CREATE TABLE IF NOT EXISTS quarantined_event (
     )
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
 
+-- 脱敏分析事件明细。用于重建统计投影，不得被资金判断或用户交易状态查询使用。
 CREATE TABLE IF NOT EXISTS analytics_event (
     event_id CHAR(26) NOT NULL,
     event_type VARCHAR(64) NOT NULL,
@@ -1522,6 +1598,7 @@ CREATE TABLE IF NOT EXISTS analytics_event (
     )
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
 
+-- 普通用户日收支投影。按事件 ID 去重，仅统计确定终态并区分转账、消费、还款和充值。
 CREATE TABLE IF NOT EXISTS personal_cashflow_daily (
     account_id CHAR(26) NOT NULL,
     stat_date DATE NOT NULL,
@@ -1543,6 +1620,7 @@ CREATE TABLE IF NOT EXISTS personal_cashflow_daily (
     )
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
 
+-- 普通用户交易对象统计。仅用于本人分析展示，不表示好友关系或授权关系。
 CREATE TABLE IF NOT EXISTS personal_counterparty_stat (
     account_id CHAR(26) NOT NULL,
     counterparty_account_id CHAR(26) NOT NULL,
@@ -1563,6 +1641,7 @@ CREATE TABLE IF NOT EXISTS personal_counterparty_stat (
     CONSTRAINT ck_personal_counterparty_accounts CHECK (account_id <> counterparty_account_id)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
 
+-- 普通用户扫码收款日投影。表名沿用历史 merchant 命名，不代表独立商户身份或 B 端权限。
 CREATE TABLE IF NOT EXISTS merchant_business_daily (
     merchant_account_id CHAR(26) NOT NULL,
     stat_date DATE NOT NULL,
@@ -1591,6 +1670,7 @@ CREATE TABLE IF NOT EXISTS merchant_business_daily (
     )
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
 
+-- 普通用户扫码收款日对账投影。差异非零时不得标记 MATCHED，必须保留差异证据。
 CREATE TABLE IF NOT EXISTS merchant_reconciliation_daily (
     merchant_account_id CHAR(26) NOT NULL,
     biz_date DATE NOT NULL,
@@ -1620,6 +1700,7 @@ CREATE TABLE IF NOT EXISTS merchant_reconciliation_daily (
     )
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
 
+-- 指标口径版本。公式和维度变更必须新增版本，禁止静默覆盖历史报表定义。
 CREATE TABLE IF NOT EXISTS metric_definition (
     metric_code VARCHAR(64) NOT NULL,
     version INT UNSIGNED NOT NULL,
@@ -1634,6 +1715,7 @@ CREATE TABLE IF NOT EXISTS metric_definition (
     CONSTRAINT ck_metric_definition_status CHECK (status IN ('DRAFT', 'ACTIVE', 'RETIRED'))
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
 
+-- 分钟级实时指标投影。质量未通过的数据不得作为可信看板结果发布。
 CREATE TABLE IF NOT EXISTS minute_metric (
     metric_code VARCHAR(64) NOT NULL,
     bucket_at DATETIME(3) NOT NULL,
@@ -1652,6 +1734,7 @@ CREATE TABLE IF NOT EXISTS minute_metric (
     )
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
 
+-- T+1 日指标投影。绑定口径版本并通过质量门禁后才能发布。
 CREATE TABLE IF NOT EXISTS daily_metric (
     metric_code VARCHAR(64) NOT NULL,
     business_date DATE NOT NULL,
@@ -1670,6 +1753,7 @@ CREATE TABLE IF NOT EXISTS daily_metric (
     )
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
 
+-- 数据质量检查结果。保存期望、实际与证据，失败结果用于阻断不可信报表发布。
 CREATE TABLE IF NOT EXISTS quality_result (
     result_id CHAR(26) NOT NULL,
     task_code VARCHAR(64) NOT NULL,
@@ -1686,6 +1770,7 @@ CREATE TABLE IF NOT EXISTS quality_result (
     CONSTRAINT ck_quality_result_status CHECK (status IN ('PASSED', 'FAILED'))
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
 
+-- 监控告警闭环。状态记录确认、解决与关闭过程，不提供任何直接改资金入口。
 CREATE TABLE IF NOT EXISTS monitor_alert (
     alert_id CHAR(26) NOT NULL,
     rule_code VARCHAR(64) NOT NULL,
