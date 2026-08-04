@@ -212,6 +212,7 @@ USE account_db;
 CREATE TABLE IF NOT EXISTS account (
     account_id CHAR(26) NOT NULL,
     user_id CHAR(26) NOT NULL,
+    registration_id CHAR(26) NOT NULL,
     account_type VARCHAR(16) NOT NULL,
     currency CHAR(3) NOT NULL DEFAULT 'CNY',
     status VARCHAR(16) NOT NULL DEFAULT 'ACTIVE',
@@ -220,6 +221,7 @@ CREATE TABLE IF NOT EXISTS account (
     updated_at DATETIME(3) NOT NULL,
     PRIMARY KEY (account_id),
     UNIQUE KEY uk_account_owner_type_currency (user_id, account_type, currency),
+    UNIQUE KEY uk_account_registration (registration_id),
     KEY idx_account_status_updated (status, updated_at),
     CONSTRAINT ck_account_currency CHECK (currency = 'CNY'),
     CONSTRAINT ck_account_status CHECK (status IN ('ACTIVE', 'FROZEN', 'CLOSED'))
@@ -234,7 +236,8 @@ CREATE TABLE IF NOT EXISTS account_balance (
     updated_at DATETIME(3) NOT NULL,
     PRIMARY KEY (account_id),
     KEY idx_account_balance_updated (updated_at),
-    CONSTRAINT fk_account_balance_account FOREIGN KEY (account_id) REFERENCES account (account_id)
+    CONSTRAINT fk_account_balance_account FOREIGN KEY (account_id) REFERENCES account (account_id),
+    CONSTRAINT ck_account_balance_non_negative CHECK (available_fen >= 0 AND frozen_fen >= 0)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
 
 -- 余额 TCC 冻结事实。唯一键防止同一交易、账户和用途重复冻结，释放操作必须幂等。
@@ -255,7 +258,8 @@ CREATE TABLE IF NOT EXISTS freeze_record (
     KEY idx_freeze_status_updated (status, updated_at),
     CONSTRAINT fk_freeze_account FOREIGN KEY (account_id) REFERENCES account (account_id),
     CONSTRAINT ck_freeze_amount CHECK (amount_fen BETWEEN 1 AND 5000000),
-    CONSTRAINT ck_freeze_status CHECK (status IN ('FROZEN', 'CONFIRMED', 'RELEASED'))
+    CONSTRAINT ck_freeze_status CHECK (status IN ('FROZEN', 'CONFIRMED', 'RELEASED')),
+    CONSTRAINT ck_freeze_purpose CHECK (purpose IN ('TRANSFER_OUT', 'CREDIT_REPAYMENT', 'REFUND'))
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
 
 -- Mini 花呗额度账户。额度不是余额，必须始终满足已用额度与冻结额度之和不超过总额度。
@@ -478,9 +482,9 @@ CREATE TABLE IF NOT EXISTS ledger_voucher (
         reversal_reason IS NULL OR
         reversal_reason IN ('BUSINESS_REFUND', 'RECONCILIATION', 'SYSTEM_CORRECTION')
     ),
-    CONSTRAINT ck_ledger_voucher_reversal_reference CHECK (
-        (original_voucher_id IS NULL AND reversal_reason IS NULL) OR
-        (original_voucher_id IS NOT NULL AND reversal_reason IS NOT NULL)
+    CONSTRAINT ck_ledger_voucher_reversal CHECK (
+        (reversal_no = 0 AND original_voucher_id IS NULL AND reversal_reason IS NULL) OR
+        (reversal_no > 0 AND original_voucher_id IS NOT NULL AND reversal_reason IS NOT NULL)
     )
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
 

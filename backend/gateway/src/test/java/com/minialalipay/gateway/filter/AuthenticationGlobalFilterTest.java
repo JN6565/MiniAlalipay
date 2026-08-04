@@ -11,6 +11,9 @@ import org.springframework.mock.web.server.MockServerWebExchange;
 import reactor.core.publisher.Mono;
 import reactor.test.StepVerifier;
 
+import java.util.List;
+import java.util.concurrent.atomic.AtomicReference;
+
 import static org.assertj.core.api.Assertions.assertThat;
 
 /**
@@ -160,6 +163,25 @@ class AuthenticationGlobalFilterTest {
         assertThat(capturedContext[0]).isNotNull();
         assertThat(capturedContext[0].principalId()).isEqualTo("dev-user-001");
         assertThat(capturedContext[0].roles()).contains("USER");
+    }
+
+    @Test
+    @DisplayName("认证主体覆盖客户端伪造的用户身份头")
+    void authenticatedPrincipalOverridesForgedUserHeader() {
+        MockServerWebExchange exchange = MockServerWebExchange.from(
+                MockServerHttpRequest.get("/api/v1/accounts/me")
+                        .header(HttpHeaders.AUTHORIZATION, "Bearer valid-dev-token-12345")
+                        .header(AuthenticationGlobalFilter.USER_ID_HEADER, "forged-user"));
+
+        AtomicReference<List<String>> downstreamUserIds = new AtomicReference<>();
+        Mono<Void> result = filter.filter(exchange, downstream -> {
+            downstreamUserIds.set(downstream.getRequest().getHeaders()
+                    .get(AuthenticationGlobalFilter.USER_ID_HEADER));
+            return Mono.empty();
+        });
+
+        StepVerifier.create(result).verifyComplete();
+        assertThat(downstreamUserIds.get()).containsExactly("dev-user-001");
     }
 
     @Test

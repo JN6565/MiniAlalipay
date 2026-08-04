@@ -60,6 +60,9 @@ public final class AuthenticationGlobalFilter implements GlobalFilter, Ordered {
 
     private static final String BEARER_PREFIX = "Bearer ";
 
+    /** 网关写给下游服务的可信用户身份头，任何客户端同名值都会被覆盖。 */
+    public static final String USER_ID_HEADER = "X-User-Id";
+
     /**
      * 阶段二 Stub：开发阶段使用的测试主体 ID。
      * 后续由用户中心真实会话校验替换。
@@ -101,7 +104,13 @@ public final class AuthenticationGlobalFilter implements GlobalFilter, Ordered {
 
         log.debug("认证成功: principalId={}, roles={}, path={}", authContext.principalId(), authContext.roles(), path);
 
-        return chain.filter(exchange)
+        // 下游 MVC 服务无法读取 Reactor Context，因此必须把已认证主体写入内部请求头。
+        // mutate().headers(set) 会覆盖而不是追加，防止客户端伪造同名身份头越权访问本人资源。
+        ServerWebExchange authenticatedExchange = exchange.mutate()
+                .request(request -> request.headers(headers ->
+                        headers.set(USER_ID_HEADER, authContext.principalId())))
+                .build();
+        return chain.filter(authenticatedExchange)
                 .contextWrite(ctx -> ctx.put(GatewayAuthContext.CONTEXT_KEY, authContext));
     }
 

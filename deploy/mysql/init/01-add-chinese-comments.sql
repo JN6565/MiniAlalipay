@@ -138,6 +138,7 @@ ALTER TABLE `account_db`.`account`
     COMMENT = '保存普通用户虚拟账户的身份、币种与可用状态，不直接保存余额',
     MODIFY COLUMN account_id CHAR(26) NOT NULL COMMENT '虚拟账户 ID',
     MODIFY COLUMN user_id CHAR(26) NOT NULL COMMENT '账户所有者，跨 user_db 逻辑引用',
+    MODIFY COLUMN registration_id CHAR(26) NOT NULL COMMENT '用户注册事件对应的开户幂等编号',
     MODIFY COLUMN account_type VARCHAR(16) NOT NULL COMMENT '物理结构兼容 PERSONAL/MERCHANT；MVP 只允许新建 PERSONAL，MERCHANT 为历史保留值',
     MODIFY COLUMN currency CHAR(3) NOT NULL DEFAULT 'CNY' COMMENT '账户币种，MVP 固定人民币',
     MODIFY COLUMN status VARCHAR(16) NOT NULL DEFAULT 'ACTIVE' COMMENT '取值或格式：ACTIVE/FROZEN/CLOSED',

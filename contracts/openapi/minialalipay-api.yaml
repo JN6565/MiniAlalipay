@@ -23,6 +23,65 @@ paths:
                 $ref: '#/components/schemas/HealthResponse'
         '500':
           $ref: '#/components/responses/InternalError'
+  /api/v1/accounts/me:
+    get:
+      summary: 查询本人账户和实时余额
+      operationId: getMyAccount
+      x-client-scope: C
+      parameters:
+        - $ref: '#/components/parameters/RequestIdHeader'
+      responses:
+        '200':
+          description: 返回本人账户状态和实时余额
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AccountSummaryResponse'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '500':
+          $ref: '#/components/responses/InternalError'
+  /api/v1/accounts/me/entries:
+    get:
+      summary: 查询本人不可变账本明细
+      operationId: listMyEntries
+      x-client-scope: C
+      parameters:
+        - $ref: '#/components/parameters/RequestIdHeader'
+        - name: cursor
+          in: query
+          required: false
+          description: 上一页响应返回的不透明复合游标，内部绑定分录创建时间与分录 ID；首页不传。
+          schema:
+            type: string
+            minLength: 1
+            maxLength: 128
+        - name: limit
+          in: query
+          required: false
+          description: 单页数量，最大 100。
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 100
+            default: 50
+      responses:
+        '200':
+          description: 返回本人账本科目的游标分页明细
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/LedgerEntryPageResponse'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '500':
+          $ref: '#/components/responses/InternalError'
 components:
   securitySchemes:
     bearerAuth:
@@ -113,6 +172,111 @@ components:
             data:
               type: [object, 'null']
               additionalProperties: true
+    AccountSummary:
+      type: object
+      additionalProperties: false
+      required: [accountId, accountType, currency, status, availableFen, frozenFen, totalFen, version]
+      properties:
+        accountId:
+          type: string
+          minLength: 1
+          maxLength: 26
+          description: 本人虚拟账户 ID。
+        accountType:
+          type: string
+          enum: [PERSONAL]
+          description: 账户类型，当前只返回个人账户。
+        currency:
+          type: string
+          enum: [CNY]
+          description: ISO 4217 币种代码，当前固定人民币。
+        status:
+          type: string
+          enum: [ACTIVE, FROZEN, CLOSED]
+          description: 账户生命周期状态。
+        availableFen:
+          type: integer
+          format: int64
+          minimum: 0
+          description: 可用金额，单位分。
+        frozenFen:
+          type: integer
+          format: int64
+          minimum: 0
+          description: TCC Try 已冻结金额，单位分。
+        totalFen:
+          type: integer
+          format: int64
+          minimum: 0
+          description: 总金额，恒等于 availableFen 与 frozenFen 之和。
+        version:
+          type: integer
+          format: int64
+          minimum: 0
+          description: 余额 CAS 版本。
+    AccountSummaryResponse:
+      allOf:
+        - $ref: '#/components/schemas/ApiResponse'
+        - type: object
+          required: [data]
+          properties:
+            data:
+              $ref: '#/components/schemas/AccountSummary'
+    LedgerEntry:
+      type: object
+      additionalProperties: false
+      required: [entryId, transactionId, direction, amountFen, memo, createdAt]
+      properties:
+        entryId:
+          type: integer
+          format: int64
+          minimum: 1
+          description: 不可变分录 ID，与 createdAt 共同组成服务端不透明分页游标。
+        transactionId:
+          type: string
+          minLength: 1
+          maxLength: 26
+          description: 统一资金交易 ID。
+        direction:
+          type: string
+          enum: [DEBIT, CREDIT]
+          description: 会计借贷方向，不代表用户借款。
+        amountFen:
+          type: integer
+          format: int64
+          minimum: 1
+          description: 分录金额，单位分。
+        memo:
+          type: [string, 'null']
+          maxLength: 255
+          description: 已脱敏的分录摘要。
+        createdAt:
+          type: string
+          format: date-time
+          description: 分录创建时间。
+    LedgerEntryPage:
+      type: object
+      additionalProperties: false
+      required: [items, nextCursor]
+      properties:
+        items:
+          type: array
+          maxItems: 100
+          items:
+            $ref: '#/components/schemas/LedgerEntry'
+        nextCursor:
+          type: [string, 'null']
+          minLength: 1
+          maxLength: 128
+          description: 绑定创建时间与分录 ID 的下一页不透明游标；没有更多数据时为空。
+    LedgerEntryPageResponse:
+      allOf:
+        - $ref: '#/components/schemas/ApiResponse'
+        - type: object
+          required: [data]
+          properties:
+            data:
+              $ref: '#/components/schemas/LedgerEntryPage'
   responses:
     BadRequest:
       description: 请求格式或字段不合法
