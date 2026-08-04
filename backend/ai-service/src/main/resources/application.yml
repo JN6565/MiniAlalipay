@@ -3,7 +3,7 @@ server:
 
 spring:
   datasource:
-    url: ${AGENT_DB_URL:jdbc:mysql://localhost:3306/agent_db?useSSL=false&serverTimezone=Asia/Shanghai&allowPublicKeyRetrieval=true&characterEncoding=utf8mb4}
+    url: ${AGENT_DB_URL:jdbc:mysql://121.43.51.164:3306/agent_db?useSSL=false&serverTimezone=Asia/Shanghai&allowPublicKeyRetrieval=true&characterEncoding=UTF-8}
     username: ${AGENT_DB_USERNAME:mini_app}
     password: ${AGENT_DB_PASSWORD:mini_app_dev_only}
     driver-class-name: com.mysql.cj.jdbc.Driver
