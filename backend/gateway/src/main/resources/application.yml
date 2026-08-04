@@ -6,9 +6,9 @@ spring:
     name: minialalipay-gateway
   data:
     redis:
-      host: ${REDIS_HOST:localhost}
+      host: ${REDIS_HOST:39.107.95.141}
       port: ${REDIS_PORT:6379}
-      password: ${REDIS_PASSWORD:}
+      password: ${REDIS_PASSWORD:123456}
       timeout: 2000ms
       lettuce:
         pool:
@@ -20,7 +20,7 @@ spring:
       routes:
         # ========== 用户中心路由 ==========
         - id: user-center-auth
-          uri: ${USER_CENTER_URI:http://localhost:8081}
+          uri: ${USER_CENTER_URI:lb://user-center}
           predicates:
             - Path=/api/v1/auth/**
           filters:
@@ -31,7 +31,7 @@ spring:
                 redis-rate-limiter.burstCapacity: 20
                 redis-rate-limiter.requestedTokens: 1
         - id: user-center-api
-          uri: ${USER_CENTER_URI:http://localhost:8081}
+          uri: ${USER_CENTER_URI:lb://user-center}
           predicates:
             - Path=/api/v1/users/**,/api/v1/contacts/**
           filters:
@@ -43,7 +43,7 @@ spring:
                 redis-rate-limiter.requestedTokens: 1
         # 支付密码校验使用更严格的用户维度限流
         - id: user-center-password
-          uri: ${USER_CENTER_URI:http://localhost:8081}
+          uri: ${USER_CENTER_URI:lb://user-center}
           predicates:
             - Path=/api/v1/payment-password/**
           filters:
@@ -56,7 +56,7 @@ spring:
 
         # ========== 业务中心路由 ==========
         - id: business-center-transfers
-          uri: ${BUSINESS_CENTER_URI:http://localhost:8082}
+          uri: ${BUSINESS_CENTER_URI:lb://business-center}
           predicates:
             - Path=/api/v1/transfers/**
           filters:
@@ -68,7 +68,7 @@ spring:
                 redis-rate-limiter.requestedTokens: 1
         # 二维码令牌交换使用独立限流
         - id: business-center-qrpay
-          uri: ${BUSINESS_CENTER_URI:http://localhost:8082}
+          uri: ${BUSINESS_CENTER_URI:lb://business-center}
           predicates:
             - Path=/api/v1/qr-pay/**
           filters:
@@ -79,7 +79,7 @@ spring:
                 redis-rate-limiter.burstCapacity: 40
                 redis-rate-limiter.requestedTokens: 1
         - id: business-center-p2p
-          uri: ${BUSINESS_CENTER_URI:http://localhost:8082}
+          uri: ${BUSINESS_CENTER_URI:lb://business-center}
           predicates:
             - Path=/api/v1/p2p-collections/**
           filters:
@@ -90,7 +90,7 @@ spring:
                 redis-rate-limiter.burstCapacity: 40
                 redis-rate-limiter.requestedTokens: 1
         - id: business-center-transactions
-          uri: ${BUSINESS_CENTER_URI:http://localhost:8082}
+          uri: ${BUSINESS_CENTER_URI:lb://business-center}
           predicates:
             - Path=/api/v1/transactions/**
           filters:
@@ -101,7 +101,7 @@ spring:
                 redis-rate-limiter.burstCapacity: 120
                 redis-rate-limiter.requestedTokens: 1
         - id: business-center-monitoring
-          uri: ${BUSINESS_CENTER_URI:http://localhost:8082}
+          uri: ${BUSINESS_CENTER_URI:lb://business-center}
           predicates:
             - Path=/api/v1/monitoring/**
           filters:
@@ -113,7 +113,7 @@ spring:
                 redis-rate-limiter.requestedTokens: 1
         # ========== 以下为 P0 接口目录存在但此前缺失的业务中心路由 ==========
         - id: business-center-recharges
-          uri: ${BUSINESS_CENTER_URI:http://localhost:8082}
+          uri: ${BUSINESS_CENTER_URI:lb://business-center}
           predicates:
             - Path=/api/v1/recharges/**
           filters:
@@ -124,7 +124,7 @@ spring:
                 redis-rate-limiter.burstCapacity: 120
                 redis-rate-limiter.requestedTokens: 1
         - id: business-center-transfer-drafts
-          uri: ${BUSINESS_CENTER_URI:http://localhost:8082}
+          uri: ${BUSINESS_CENTER_URI:lb://business-center}
           predicates:
             - Path=/api/v1/transfer-drafts/**
           filters:
@@ -135,7 +135,7 @@ spring:
                 redis-rate-limiter.burstCapacity: 120
                 redis-rate-limiter.requestedTokens: 1
         - id: business-center-confirmations
-          uri: ${BUSINESS_CENTER_URI:http://localhost:8082}
+          uri: ${BUSINESS_CENTER_URI:lb://business-center}
           predicates:
             - Path=/api/v1/confirmations/**
           filters:
@@ -146,7 +146,7 @@ spring:
                 redis-rate-limiter.burstCapacity: 60
                 redis-rate-limiter.requestedTokens: 1
         - id: business-center-manual-cases
-          uri: ${BUSINESS_CENTER_URI:http://localhost:8082}
+          uri: ${BUSINESS_CENTER_URI:lb://business-center}
           predicates:
             - Path=/api/v1/manual-cases/**
           filters:
@@ -158,7 +158,7 @@ spring:
                 redis-rate-limiter.requestedTokens: 1
         # 信用运维任务由账户中心拥有，必须先于通配 ops 路由匹配
         - id: account-center-credit-ops
-          uri: ${ACCOUNT_CENTER_URI:http://localhost:8083}
+          uri: ${ACCOUNT_CENTER_URI:lb://account-center}
           predicates:
             - Path=/api/v1/ops/credit/**
           filters:
@@ -169,7 +169,7 @@ spring:
                 redis-rate-limiter.burstCapacity: 20
                 redis-rate-limiter.requestedTokens: 1
         - id: business-center-ops
-          uri: ${BUSINESS_CENTER_URI:http://localhost:8082}
+          uri: ${BUSINESS_CENTER_URI:lb://business-center}
           predicates:
             - Path=/api/v1/ops/**
           filters:
@@ -182,7 +182,7 @@ spring:
 
         # ========== 账户中心路由 ==========
         - id: account-center
-          uri: ${ACCOUNT_CENTER_URI:http://localhost:8083}
+          uri: ${ACCOUNT_CENTER_URI:lb://account-center}
           predicates:
             - Path=/api/v1/accounts/**,/api/v1/credit/**,/api/v1/bills/**
           filters:
@@ -195,7 +195,7 @@ spring:
 
         # ========== AI 服务路由 ==========
         - id: ai-service
-          uri: ${AI_SERVICE_URI:http://localhost:8084}
+          uri: ${AI_SERVICE_URI:lb://ai-service}
           predicates:
             - Path=/api/v1/agent/**
           filters:

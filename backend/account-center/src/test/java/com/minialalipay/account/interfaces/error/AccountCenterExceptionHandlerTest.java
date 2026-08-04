@@ -15,7 +15,7 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
-@SpringBootTest
+@SpringBootTest(properties = {"spring.cloud.nacos.discovery.enabled=false"})
 @AutoConfigureMockMvc
 @Import(AccountCenterFailingTestController.class)
 class AccountCenterExceptionHandlerTest {

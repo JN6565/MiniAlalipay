@@ -41,6 +41,19 @@ services:
       mysql:
         condition: service_healthy
 
+  nacos:
+    image: nacos/nacos-server:v2.3.2
+    container_name: minialalipay-nacos
+    environment:
+      MODE: standalone
+      PREFER_HOST_MODE: hostname
+    ports:
+      - "${NACOS_PORT:-8848}:8848"
+      - "${NACOS_GRPC_PORT:-9848}:9848"
+    depends_on:
+      mysql:
+        condition: service_healthy
+
 volumes:
   mysql-data:
   redis-data:

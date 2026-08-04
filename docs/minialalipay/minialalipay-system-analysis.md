@@ -520,7 +520,7 @@ flowchart LR
 |---|---|---|
 | 开发语言 | Java 21 | 统一后端运行时，使用强类型 DTO、金额 `long` 分和不可变命令对象 |
 | Web 框架 | Spring Boot 3.x | 用户、业务、账户和 AI 服务；每个逻辑服务独立包和配置 |
-| 服务治理 | Spring Cloud Gateway + OpenFeign/HTTP Client | 网关路由、认证、限流、服务间契约调用；MVP 不引入复杂服务网格 |
+| 服务治理 | Spring Cloud Gateway + Nacos + OpenFeign/HTTP Client | 网关路由、认证、限流、服务间契约调用；MVP 引入 Nacos 做服务注册发现，网关通过 lb:// 动态路由 |
 | 数据访问 | MyBatis-Plus 或 Spring JDBC + Flyway | 参数化 SQL、显式版本 CAS、迁移可回滚；禁止手写字符串拼接 SQL |
 | 主数据库 | MySQL 8.0/InnoDB | 业务事实、账户、账本和信用数据；MVP 单实例多 Schema，保留服务数据所有权 |
 | 缓存/短期状态 | Redis 7 | 会话、限流、只读缓存、短期 H5 会话；不保存资金唯一事实 |

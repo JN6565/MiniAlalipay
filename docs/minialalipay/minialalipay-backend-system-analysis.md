@@ -10,7 +10,7 @@
 | 架构事实 | [MiniAlalipay 总体系统分析](./minialalipay-system-analysis.md) |
 | 物理数据事实 | [MiniAlalipay 数据库设计](./minialalipay-database-design.md) |
 | 可执行接口事实 | [`contracts/openapi/minialalipay-api.yaml`](../../contracts/openapi/minialalipay-api.yaml) |
-| 技术基线 | Java 21、Spring Boot 3.3.4、Spring Cloud 2023.0.3、MySQL 8、Redis 7、Seata 2 |
+| 技术基线 | Java 21、Spring Boot 3.3.4、Spring Cloud 2023.0.3、Spring Cloud Alibaba 2023.0.1.0、MySQL 8、Redis 7、Seata 2、Nacos 2.3 |
 | 目标读者 | 后端、AI、测试、前端联调、运维和技术评审人员 |
 
 ### 0.1 变更记录
@@ -57,10 +57,10 @@
 
 - Maven 父工程和六个模块已经建立，Java 版本为 21。
 - 五个后端进程可启动，默认端口为 8080 至 8084。
-- 网关已有基础路由、`X-Request-Id`、安全响应头和统一异常响应。
+- 网关已有基础路由（Nacos 服务发现 + `lb://` 动态路由）、`X-Request-Id`、安全响应头、统一异常响应和限流。
 - `platform-common` 已有统一 `ApiResponse`、公共异常映射、错误接口、幂等键校验器和请求 ID 生成器。
 - 各业务模块只有启动类、少量状态枚举、包占位和领域枚举测试。
-- Docker Compose 已提供 MySQL、Redis 和 Seata；尚未提供 OTel 监控栈。
+- Docker Compose 已提供 MySQL、Redis、Seata 和 Nacos；尚未提供 OTel 监控栈。
 
 ### 2.2 实现阻断项
 
@@ -105,7 +105,7 @@ flowchart LR
 
 | 模块 | 负责 | 允许依赖 | 禁止事项 |
 |---|---|---|---|
-| `gateway` | 鉴权入口、路由、限流、CSRF/CORS、Trace | `platform-common`、Redis、各服务 HTTP | 业务编排和数据持久化 |
+| `gateway` | 鉴权入口、路由、限流、CSRF/CORS、Trace | `platform-common`、Nacos、Redis、各服务 HTTP | 业务编排和数据持久化 |
 | `user-center` | 用户、凭证、会话、联系人、角色 | `platform-common`、`account-center` 内部开户 API、事件 | 余额、交易和账本事实 |
 | `business-center` | 草稿、确认、交易、扫码、C2C、风控、恢复、监控 | 用户/账户 API、Seata、Redis Streams | 直接修改账户或账本表 |
 | `account-center` | 账户、余额、额度、应收、账单、还款、账本、TCC 分支 | `platform-common`、Seata、事件 | AI 意图和页面流程 |

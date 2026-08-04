@@ -50,6 +50,7 @@ class GatewayRouteForwardingIntegrationTest {
 
     @DynamicPropertySource
     static void downstreamProperties(DynamicPropertyRegistry registry) {
+        registry.add("spring.cloud.nacos.discovery.enabled", () -> "false");
         registry.add("USER_CENTER_URI", () -> uri(USER_SERVER));
         registry.add("BUSINESS_CENTER_URI", () -> uri(BUSINESS_SERVER));
         registry.add("ACCOUNT_CENTER_URI", () -> uri(ACCOUNT_SERVER));

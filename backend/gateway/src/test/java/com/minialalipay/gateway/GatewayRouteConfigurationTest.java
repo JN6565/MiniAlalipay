@@ -11,7 +11,8 @@ import static org.assertj.core.api.Assertions.assertThat;
 /**
  * 网关生产路由配置测试，防止 P0 接口被转发到错误服务。
  */
-@SpringBootTest(webEnvironment = SpringBootTest.WebEnvironment.RANDOM_PORT)
+@SpringBootTest(webEnvironment = SpringBootTest.WebEnvironment.RANDOM_PORT,
+        properties = {"spring.cloud.nacos.discovery.enabled=false"})
 class GatewayRouteConfigurationTest {
 
     @Autowired
@@ -24,7 +25,7 @@ class GatewayRouteConfigurationTest {
                 .findFirst()
                 .orElseThrow(() -> new AssertionError("缺少账户中心信用运维路由"));
 
-        assertThat(route.getUri().toString()).contains("8083");
+        assertThat(route.getUri().toString()).contains("account-center");
         assertThat(route.getPredicates())
                 .anySatisfy(predicate -> assertThat(predicate.getArgs().values())
                         .contains("/api/v1/ops/credit/**"));
