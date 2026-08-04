@@ -1,8 +1,5 @@
 server:
   port: ${BUSINESS_CENTER_PORT:8082}
-spring:
-  application:
-    name: business-center
 management:
   endpoints:
     web:

@@ -2,13 +2,11 @@ server:
   port: ${GATEWAY_PORT:8080}
 
 spring:
-  application:
-    name: minialalipay-gateway
   data:
     redis:
       host: ${REDIS_HOST:121.43.51.164}
       port: ${REDIS_PORT:6379}
-      password: ${REDIS_PASSWORD:teamuser2026}
+      password: ${REDIS_PASSWORD:}
       timeout: 2000ms
       lettuce:
         pool:
