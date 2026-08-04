@@ -20,4 +20,10 @@ public interface FreezeRecordRepository {
 
     /** @return 状态版本更新成功返回 true，版本冲突返回 false */
     boolean update(FreezeRecord record, long expectedVersion);
+
+    /** 判断交易付款冻结是否已确认扣减。 */
+    default boolean transactionFreezeIs(String transactionId, FreezeStatus status) { return false; }
+
+    /** 判断交易不存在活动冻结，供取消终态核验。 */
+    default boolean transactionHasNoActiveFreeze(String transactionId) { return false; }
 }

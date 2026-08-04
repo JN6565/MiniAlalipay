@@ -78,6 +78,14 @@ public final class AccountBalance {
         validate();
     }
 
+    /** 收款分支 Confirm 后增加可用余额；Try 阶段不提前展示入账。 */
+    public void credit(long amountFen, Instant now) {
+        requirePositive(amountFen, "入账金额必须为正");
+        availableFen = Math.addExact(availableFen, amountFen);
+        updatedAt = Objects.requireNonNull(now, "更新时间不能为空");
+        validate();
+    }
+
     private void requireFrozen(long amountFen, String message) {
         requirePositive(amountFen, message);
         if (frozenFen < amountFen) {

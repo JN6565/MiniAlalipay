@@ -91,6 +91,13 @@ public final class LedgerVoucher {
         postedAt = Objects.requireNonNull(now, "过账时间不能为空");
     }
 
+    /** Cancel 只允许取消尚未过账的预留凭证；重复取消保持幂等。 */
+    public void cancel() {
+        if (status == LedgerVoucherStatus.CANCELLED) return;
+        if (status != LedgerVoucherStatus.PREPARED) throw new IllegalStateException("已过账凭证不能直接取消");
+        status = LedgerVoucherStatus.CANCELLED;
+    }
+
     private void validateBalance() {
         if (entries.isEmpty()) throw new IllegalArgumentException("凭证至少包含两条分录");
         Set<Integer> sequenceNumbers = new HashSet<>();

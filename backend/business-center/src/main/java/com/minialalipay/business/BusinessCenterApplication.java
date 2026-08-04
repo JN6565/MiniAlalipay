@@ -3,12 +3,14 @@ package com.minialalipay.business;
 import org.springframework.boot.SpringApplication;
 import org.springframework.boot.autoconfigure.SpringBootApplication;
 import org.springframework.cloud.client.discovery.EnableDiscoveryClient;
+import org.springframework.scheduling.annotation.EnableScheduling;
 
 /**
  * 业务中心启动入口。
  */
 @SpringBootApplication
 @EnableDiscoveryClient
+@EnableScheduling
 public class BusinessCenterApplication {
 
     public static void main(String[] args) {

@@ -82,6 +82,183 @@ paths:
           $ref: '#/components/responses/NotFound'
         '500':
           $ref: '#/components/responses/InternalError'
+  /api/v1/transfer-drafts:
+    post:
+      summary: 创建主动转账草稿
+      operationId: createTransferDraft
+      x-client-scope: C
+      parameters:
+        - $ref: '#/components/parameters/RequestIdHeader'
+        - $ref: '#/components/parameters/IdempotencyKeyHeader'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateTransferDraftRequest'
+      responses:
+        '200':
+          description: 返回新建或幂等命中的本人草稿
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TransferDraftResponse'
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '409': { $ref: '#/components/responses/Conflict' }
+        '422': { $ref: '#/components/responses/UnprocessableEntity' }
+        '503': { $ref: '#/components/responses/ServiceUnavailable' }
+  /api/v1/transfer-drafts/{id}:
+    parameters:
+      - $ref: '#/components/parameters/RequestIdHeader'
+      - name: id
+        in: path
+        required: true
+        schema: { type: string, minLength: 1, maxLength: 26 }
+    get:
+      summary: 查询本人转账草稿
+      operationId: getTransferDraft
+      x-client-scope: C
+      responses:
+        '200':
+          description: 返回本人草稿
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/TransferDraftResponse' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '404': { $ref: '#/components/responses/NotFound' }
+    patch:
+      summary: 使用版本 CAS 编辑转账草稿
+      operationId: updateTransferDraft
+      x-client-scope: C
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/UpdateTransferDraftRequest' }
+      responses:
+        '200':
+          description: 返回递增版本后的草稿
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/TransferDraftResponse' }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409': { $ref: '#/components/responses/Conflict' }
+        '422': { $ref: '#/components/responses/UnprocessableEntity' }
+  /api/v1/transfer-drafts/{id}/validate:
+    post:
+      summary: 校验转账草稿但不修改余额
+      operationId: validateTransferDraft
+      x-client-scope: C
+      parameters:
+        - $ref: '#/components/parameters/RequestIdHeader'
+        - name: id
+          in: path
+          required: true
+          schema: { type: string, minLength: 1, maxLength: 26 }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/DraftVersionRequest' }
+      responses:
+        '200':
+          description: 返回风险预校验结果和新版本
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/TransferValidationResponse' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409': { $ref: '#/components/responses/Conflict' }
+        '422': { $ref: '#/components/responses/UnprocessableEntity' }
+  /api/v1/confirmations:
+    post:
+      summary: 为已校验草稿签发一次性确认令牌
+      operationId: issueConfirmation
+      x-client-scope: C
+      parameters:
+        - $ref: '#/components/parameters/RequestIdHeader'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/IssueConfirmationRequest' }
+      responses:
+        '200':
+          description: 原始令牌只在本次响应返回且两分钟有效
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ConfirmationResponse' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409': { $ref: '#/components/responses/Conflict' }
+        '422': { $ref: '#/components/responses/UnprocessableEntity' }
+        '503': { $ref: '#/components/responses/ServiceUnavailable' }
+  /api/v1/transfers:
+    post:
+      summary: 提交已确认的普通转账
+      operationId: submitTransfer
+      x-client-scope: C
+      parameters:
+        - $ref: '#/components/parameters/RequestIdHeader'
+        - $ref: '#/components/parameters/IdempotencyKeyHeader'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/SubmitTransferRequest' }
+      responses:
+        '202':
+          description: 交易已受理，客户端应按状态 URL 查询
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/TransferTransactionResponse' }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '409': { $ref: '#/components/responses/Conflict' }
+        '422': { $ref: '#/components/responses/UnprocessableEntity' }
+        '503': { $ref: '#/components/responses/ServiceUnavailable' }
+  /api/v1/transfers/{id}:
+    get:
+      summary: 查询本人普通转账权威状态
+      operationId: getTransfer
+      x-client-scope: C
+      parameters:
+        - $ref: '#/components/parameters/RequestIdHeader'
+        - name: id
+          in: path
+          required: true
+          schema: { type: string, minLength: 1, maxLength: 26 }
+      responses:
+        '200':
+          description: 返回统一交易状态
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/TransferTransactionResponse' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '404': { $ref: '#/components/responses/NotFound' }
+  /api/v1/transfers/{id}/receipt:
+    get:
+      summary: 查询确定终态转账回执
+      operationId: getTransferReceipt
+      x-client-scope: C
+      parameters:
+        - $ref: '#/components/parameters/RequestIdHeader'
+        - name: id
+          in: path
+          required: true
+          schema: { type: string, minLength: 1, maxLength: 26 }
+      responses:
+        '200':
+          description: 返回成功、取消或冲正终态回执
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/TransferReceiptResponse' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409': { $ref: '#/components/responses/Conflict' }
 components:
   securitySchemes:
     bearerAuth:
@@ -277,6 +454,118 @@ components:
           properties:
             data:
               $ref: '#/components/schemas/LedgerEntryPage'
+    CreateTransferDraftRequest:
+      type: object
+      additionalProperties: false
+      required: [payeeUserId, amountFen]
+      properties:
+        payeeUserId: { type: string, minLength: 1, maxLength: 26, description: 明确选择的收款用户 ID。 }
+        amountFen: { type: integer, format: int64, minimum: 1, maximum: 5000000, description: 转账金额，单位分。 }
+        remark: { type: [string, 'null'], maxLength: 128, description: 用户可见转账备注。 }
+    UpdateTransferDraftRequest:
+      type: object
+      additionalProperties: false
+      required: [version, amountFen]
+      properties:
+        version: { type: integer, format: int64, minimum: 0, description: 客户端读取到的草稿 CAS 版本。 }
+        amountFen: { type: integer, format: int64, minimum: 1, maximum: 5000000, description: 修改后金额，单位分。 }
+        remark: { type: [string, 'null'], maxLength: 128 }
+    DraftVersionRequest:
+      type: object
+      additionalProperties: false
+      required: [version]
+      properties:
+        version: { type: integer, format: int64, minimum: 0 }
+    IssueConfirmationRequest:
+      type: object
+      additionalProperties: false
+      required: [subjectType, subjectId, subjectVersion, paymentProof]
+      properties:
+        subjectType: { type: string, enum: [TRANSFER_DRAFT] }
+        subjectId: { type: string, minLength: 1, maxLength: 26 }
+        subjectVersion: { type: integer, format: int64, minimum: 0 }
+        paymentProof: { type: string, minLength: 1, maxLength: 256, description: 用户中心签发的一次性短期支付密码证明，不得记录日志。 }
+    SubmitTransferRequest:
+      type: object
+      additionalProperties: false
+      required: [draftId, confirmationToken]
+      properties:
+        draftId: { type: string, minLength: 1, maxLength: 26 }
+        confirmationToken: { type: string, minLength: 1, maxLength: 256, description: 两分钟有效的一次性确认令牌，不得进入 URL 或日志。 }
+    TransferDraft:
+      type: object
+      additionalProperties: false
+      required: [draftId, payeeUserId, amountFen, remark, status, version, expiresAt]
+      properties:
+        draftId: { type: string, minLength: 1, maxLength: 26 }
+        payeeUserId: { type: string, minLength: 1, maxLength: 26 }
+        amountFen: { type: integer, format: int64, minimum: 1, maximum: 5000000 }
+        remark: { type: [string, 'null'], maxLength: 128 }
+        status: { type: string, enum: [DRAFT, VALIDATED, PENDING_CONFIRMATION, SUBMITTED, EXPIRED] }
+        version: { type: integer, format: int64, minimum: 0 }
+        expiresAt: { type: string, format: date-time }
+    TransferTransaction:
+      type: object
+      additionalProperties: false
+      required: [transactionId, businessType, status, amountFen, statusUrl, updatedAt]
+      properties:
+        transactionId: { type: string, minLength: 1, maxLength: 26 }
+        businessType: { type: string, enum: [TRANSFER] }
+        status: { type: string, enum: [PROCESSING, COMPENSATING, MANUAL_REVIEW, SUCCESS, REVERSED, CANCELLED] }
+        amountFen: { type: integer, format: int64, minimum: 1, maximum: 5000000 }
+        statusUrl: { type: string, pattern: '^/api/v1/transfers/' }
+        updatedAt: { type: string, format: date-time }
+    TransferDraftResponse:
+      allOf:
+        - $ref: '#/components/schemas/ApiResponse'
+        - type: object
+          required: [data]
+          properties: { data: { $ref: '#/components/schemas/TransferDraft' } }
+    TransferValidationResponse:
+      allOf:
+        - $ref: '#/components/schemas/ApiResponse'
+        - type: object
+          properties:
+            data:
+              type: object
+              additionalProperties: false
+              required: [result, riskLevel, version]
+              properties:
+                result: { type: string, enum: [PASS, MANUAL] }
+                riskLevel: { type: string, enum: [LOW, MEDIUM, HIGH] }
+                version: { type: integer, format: int64, minimum: 0 }
+    ConfirmationResponse:
+      allOf:
+        - $ref: '#/components/schemas/ApiResponse'
+        - type: object
+          properties:
+            data:
+              type: object
+              additionalProperties: false
+              required: [confirmationToken, subjectHash, expiresAt]
+              properties:
+                confirmationToken: { type: string, description: 仅本次响应返回的原始确认令牌。 }
+                subjectHash: { type: string, pattern: '^sha256:' }
+                expiresAt: { type: string, format: date-time }
+    TransferTransactionResponse:
+      allOf:
+        - $ref: '#/components/schemas/ApiResponse'
+        - type: object
+          properties: { data: { $ref: '#/components/schemas/TransferTransaction' } }
+    TransferReceiptResponse:
+      allOf:
+        - $ref: '#/components/schemas/ApiResponse'
+        - type: object
+          properties:
+            data:
+              type: object
+              additionalProperties: false
+              required: [transactionId, status, amountFen, completedAt]
+              properties:
+                transactionId: { type: string, minLength: 1, maxLength: 26 }
+                status: { type: string, enum: [SUCCESS, REVERSED, CANCELLED] }
+                amountFen: { type: integer, format: int64, minimum: 1 }
+                completedAt: { type: string, format: date-time }
   responses:
     BadRequest:
       description: 请求格式或字段不合法
