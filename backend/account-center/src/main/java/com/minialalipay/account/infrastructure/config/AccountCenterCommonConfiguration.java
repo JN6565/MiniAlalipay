@@ -1,12 +1,16 @@
 package com.minialalipay.account.infrastructure.config;
 
 import com.minialalipay.common.error.CommonExceptionMapper;
+import com.minialalipay.common.idempotency.IdempotencyKeyValidator;
 import com.minialalipay.common.trace.RequestIdGenerator;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 
 /**
  * 账户中心跨子域共享的技术配置，不承载余额、信用或账本领域规则。
+ *
+ * <p>注册 platform-common 中框架无关组件为 Spring Bean，
+ * 供应用层和接口层注入使用。</p>
  */
 @Configuration
 public class AccountCenterCommonConfiguration {
@@ -21,5 +25,11 @@ public class AccountCenterCommonConfiguration {
     @Bean
     public RequestIdGenerator requestIdGenerator() {
         return new RequestIdGenerator();
+    }
+
+    /** @return 幂等键格式校验器，用于写操作接口校验客户端幂等键 */
+    @Bean
+    public IdempotencyKeyValidator idempotencyKeyValidator() {
+        return new IdempotencyKeyValidator();
     }
 }
