@@ -34,4 +34,24 @@ class AccountLedgerMigrationContractTest {
                 .contains("CHECK (amount_fen > 0)")
                 .doesNotContain("account_db.");
     }
+
+    @Test
+    void 阶段四迁移按Schema隔离并兼容初始化表() throws IOException {
+        Path migrationDirectory = Path.of("src", "main", "resources", "db", "migration");
+        String accountSql = Files.readString(migrationDirectory.resolve(
+                "V202608051020__create_account_tcc_branch.sql"));
+        String ledgerSql = Files.readString(migrationDirectory.resolve(
+                "V202608051030__create_ledger_tcc_and_reconciliation.sql"));
+
+        assertThat(accountSql).contains("branch_id CHAR(26) NOT NULL")
+                .contains("information_schema.columns")
+                .contains("ADD COLUMN amount_fen")
+                .contains("ADD COLUMN created_at")
+                .doesNotContain("ledger_db.");
+        assertThat(ledgerSql).contains("branch_id CHAR(26) NOT NULL")
+                .contains("CREATE TABLE IF NOT EXISTS ledger_db.reconciliation_diff")
+                .contains("expected_json JSON NOT NULL")
+                .contains("manual_case_id CHAR(26) NULL")
+                .doesNotContain("account_db.");
+    }
 }

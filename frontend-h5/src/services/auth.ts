@@ -21,19 +21,20 @@ export interface LoginResult {
 export interface RegisterResult {
   userId: string;
   accessToken: string;
-  initialBalanceFen: number;
+  nickname: string;
+  status: string;
 }
 
 // 登录
 export const login = (params: LoginParams) => {
-  return request.post<LoginResult>('/api/v1/auth/login', { data: params });
+  console.log('登录请求参数:', params);
+  return request.post<LoginResult>('/api/v1/auth/login', params);
 };
 
 // 注册
 export const register = (params: RegisterParams) => {
-  return request.post<RegisterResult>('/api/v1/auth/register', {
-    data: params,
-  });
+  console.log('注册请求参数:', params);
+  return request.post<RegisterResult>('/api/v1/auth/register', params);
 };
 
 // 退出登录
@@ -46,5 +47,5 @@ export const changeLoginPassword = (params: {
   currentPassword: string;
   newPassword: string;
 }) => {
-  return request.patch('/api/v1/auth/login-password', { data: params });
+  return request.patch('/api/v1/auth/login-password', params);
 };

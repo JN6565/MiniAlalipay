@@ -31,7 +31,7 @@ CREATE TABLE IF NOT EXISTS app_user (
     login_name VARCHAR(64) NOT NULL,
     nickname VARCHAR(64) NOT NULL,
     phone_tail CHAR(4) NULL,
-    identity_status VARCHAR(16) NOT NULL,
+    identity_status VARCHAR(24) NOT NULL DEFAULT 'PENDING_VERIFICATION',
     status VARCHAR(16) NOT NULL DEFAULT 'ACTIVE',
     version BIGINT UNSIGNED NOT NULL DEFAULT 0,
     created_at DATETIME(3) NOT NULL,

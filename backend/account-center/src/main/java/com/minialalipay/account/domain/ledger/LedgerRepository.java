@@ -26,6 +26,12 @@ public interface LedgerRepository {
      */
     boolean postAndAppendOutbox(LedgerVoucher voucher, String eventId, String traceId, Instant now);
 
+    /** @return 仅当 PREPARED 凭证被推进为 CANCELLED 时返回 true */
+    default boolean cancelPrepared(String voucherId) { throw new UnsupportedOperationException("仓储未实现凭证取消"); }
+
+    /** @return 交易原始凭证已过账且数据库实际借贷平衡时返回 true */
+    default boolean isPostedAndBalanced(String transactionId) { return false; }
+
     /**
      * 查询用户拥有科目的账本分录。
      *

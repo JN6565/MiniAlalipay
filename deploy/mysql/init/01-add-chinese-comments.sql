@@ -13,7 +13,7 @@ ALTER TABLE `user_db`.`app_user`
     MODIFY COLUMN login_name VARCHAR(64) NOT NULL COMMENT '规范化登录名，用于登录和唯一识别',
     MODIFY COLUMN nickname VARCHAR(64) NOT NULL COMMENT '可重复的展示名称和模糊搜索条件',
     MODIFY COLUMN phone_tail CHAR(4) NULL COMMENT '手机号尾号，仅用于辅助检索和脱敏展示',
-    MODIFY COLUMN identity_status VARCHAR(16) NOT NULL COMMENT '演示身份状态，不代表真实 KYC',
+    MODIFY COLUMN identity_status VARCHAR(24) NOT NULL COMMENT '演示身份状态，不代表真实 KYC',
     MODIFY COLUMN status VARCHAR(16) NOT NULL DEFAULT 'ACTIVE' COMMENT '用户物理状态：ACTIVE/LOCKED/CLOSED',
     MODIFY COLUMN version BIGINT UNSIGNED NOT NULL DEFAULT 0 COMMENT '用户资料和状态的 CAS 版本',
     MODIFY COLUMN created_at DATETIME(3) NOT NULL COMMENT '用户注册时间',

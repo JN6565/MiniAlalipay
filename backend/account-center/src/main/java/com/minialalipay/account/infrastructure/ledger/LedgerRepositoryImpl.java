@@ -87,6 +87,17 @@ public class LedgerRepositoryImpl implements LedgerRepository {
     }
 
     @Override
+    public boolean cancelPrepared(String voucherId) {
+        return jdbcTemplate.update("UPDATE ledger_db.ledger_voucher SET status='CANCELLED' WHERE voucher_id=? AND status='PREPARED'", voucherId) == 1;
+    }
+
+    @Override
+    public boolean isPostedAndBalanced(String transactionId) {
+        Integer count = jdbcTemplate.queryForObject("SELECT COUNT(*) FROM ledger_db.ledger_voucher v WHERE v.transaction_id=? AND v.reversal_no=0 AND v.status='POSTED' AND v.total_debit_fen=v.total_credit_fen AND v.total_debit_fen=(SELECT COALESCE(SUM(CASE WHEN e.direction='DEBIT' THEN e.amount_fen ELSE 0 END),0) FROM ledger_db.ledger_entry e WHERE e.voucher_id=v.voucher_id) AND v.total_credit_fen=(SELECT COALESCE(SUM(CASE WHEN e.direction='CREDIT' THEN e.amount_fen ELSE 0 END),0) FROM ledger_db.ledger_entry e WHERE e.voucher_id=v.voucher_id)", Integer.class, transactionId);
+        return count != null && count == 1;
+    }
+
+    @Override
     public List<LedgerEntry> findEntriesByUserId(String userId, Instant cursorCreatedAt,
                                                   long cursorEntryId, int limit) {
         return jdbcTemplate.query("SELECT e.* FROM ledger_db.ledger_entry e "

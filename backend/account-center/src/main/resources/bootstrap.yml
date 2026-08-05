@@ -6,8 +6,7 @@ spring:
     nacos:
       discovery:
         server-addr: ${NACOS_SERVER_ADDR:121.43.51.164:8848}
-        namespace: ${NACOS_NAMESPACE:}
-        group: DEFAULT_GROUP
         username: ${NACOS_USERNAME:nacos}
         password: ${NACOS_PASSWORD:nacos}
-
+        namespace: ${NACOS_NAMESPACE:}
+        group: DEFAULT_GROUP

@@ -3,6 +3,20 @@ server:
 spring:
   application:
     name: business-center
+  datasource:
+    url: ${BUSINESS_DB_URL:jdbc:mysql://121.43.51.164:3306/business_db?useSSL=false&serverTimezone=Asia/Shanghai&allowPublicKeyRetrieval=true&characterEncoding=UTF-8}
+    username: ${BUSINESS_DB_USERNAME:root}
+    password: ${BUSINESS_DB_PASSWORD:teamuser2026}
+    driver-class-name: com.mysql.cj.jdbc.Driver
+  flyway:
+    enabled: true
+    locations: classpath:db/migration
+    baseline-on-migrate: true
+    default-schema: ${BUSINESS_DB_SCHEMA:business_db}
+minialalipay:
+  internal:
+    account-center-url: ${ACCOUNT_CENTER_INTERNAL_URL:http://localhost:8083}
+    user-center-url: ${USER_CENTER_INTERNAL_URL:http://localhost:8081}
 management:
   endpoints:
     web:

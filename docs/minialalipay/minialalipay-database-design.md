@@ -821,10 +821,12 @@ erDiagram
 | `transaction_id` | `CHAR(26)` | 必填 | 对应资金交易 |
 | `branch_type` | `VARCHAR(32)` | 必填 | 余额、额度、应收或账本分支类型 |
 | `resource_id` | `CHAR(26)` | 必填 | 分支锁定的本地聚合 ID |
+| `amount_fen` | `BIGINT UNSIGNED` | 必填 | 分支参数快照金额，单位分，用于识别同键异参重试 |
 | `status` | `VARCHAR(16)` | `INIT` | `INIT/TRIED/CONFIRMED/CANCELLED/MANUAL_REVIEW` |
 | `rollback_type` | `VARCHAR(16)` | 可空 | `NORMAL` 或空回滚 `EMPTY` |
 | `barrier_version` | `BIGINT UNSIGNED` | `0` | 防悬挂屏障版本 |
 | `retry_count` | `INT UNSIGNED` | `0` | 恢复任务重试次数 |
+| `created_at` | `DATETIME(3)` | 必填 | 分支屏障首次创建时间 |
 | `updated_at` | `DATETIME(3)` | 必填 | 最近分支处理时间 |
 
 **键与索引**：UK `(xid,branch_type,resource_id)`；索引 `(transaction_id)`、`(status,updated_at)`。

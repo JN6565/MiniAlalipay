@@ -1430,6 +1430,22 @@ flowchart TD
     Consistent -- 否 --> Manual
 ```
 
+阶段四资金核心使用以下版本化内部 HTTP 契约。它们仅允许 `business-center` 与
+`account-center` 之间通过服务鉴权调用，不在网关注册路由，也不得由 B/C 端直接访问：
+
+| 方法与路径 | 调用方 -> 提供方 | 事务与幂等语义 |
+|---|---|---|
+| `GET /internal/v1/accounts/by-user/{userId}` | `business-center` -> `account-center` | 只返回个人账户引用和状态，不返回余额 |
+| `POST /internal/v1/tcc/balance/{role}/{action}` | `business-center` -> `account-center` | `role` 为 `payer/payee`，`action` 为 `try/confirm/cancel`；按 `xid + branch_type + resource_id` 幂等，支持空回滚和防悬挂 |
+| `POST /internal/v1/tcc/ledger/{action}` | `business-center` -> `account-center` | Try 持久化 `PREPARED` 平衡凭证，Confirm 汇总验平后过账，Cancel 只取消未过账凭证 |
+| `GET /internal/v1/transaction-facts/{transactionId}` | `business-center` -> `account-center` | 返回余额、冻结、TCC 分支和账本的脱敏布尔事实，终态发布器不得根据超时猜测成功 |
+| `POST /internal/v1/reconciliation-diffs` | `business-center` -> `account-center` | 按业务日期、交易和差异类型幂等追加证据；只写 `ledger_db.reconciliation_diff`，不得直接改账 |
+
+终态发布时，`fund_transaction` 状态、`tcc_global` 终态和业务 Outbox 必须在同一
+`business_db` 本地事务内提交。事实不一致时还需在同一事务创建活动 `manual_case`；
+跨服务写入的 `reconciliation_diff` 只保存预期与实际证据，后续修复必须创建冲正凭证，
+禁止覆盖历史凭证或直接调整余额。
+
 ### 9.8 交互式支付统一资金活动流程图
 
 ```mermaid

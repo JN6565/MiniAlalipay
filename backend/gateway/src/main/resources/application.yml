@@ -2,13 +2,11 @@ server:
   port: ${GATEWAY_PORT:8080}
 
 spring:
-  application:
-    name: minialalipay-gateway
   data:
     redis:
-      host: ${REDIS_HOST:39.107.95.141}
+      host: ${REDIS_HOST:121.43.51.164}
       port: ${REDIS_PORT:6379}
-      password: ${REDIS_PASSWORD:123456}
+      password: ${REDIS_PASSWORD:teamuser2026}
       timeout: 2000ms
       lettuce:
         pool:
@@ -20,7 +18,7 @@ spring:
       routes:
         # ========== 用户中心路由 ==========
         - id: user-center-auth
-          uri: ${USER_CENTER_URI:lb://user-center}
+          uri: ${USER_CENTER_URI:http://localhost:8081}
           predicates:
             - Path=/api/v1/auth/**
           filters:
@@ -31,7 +29,7 @@ spring:
                 redis-rate-limiter.burstCapacity: 20
                 redis-rate-limiter.requestedTokens: 1
         - id: user-center-api
-          uri: ${USER_CENTER_URI:lb://user-center}
+          uri: ${USER_CENTER_URI:http://localhost:8081}
           predicates:
             - Path=/api/v1/users/**,/api/v1/contacts/**
           filters:
@@ -43,7 +41,7 @@ spring:
                 redis-rate-limiter.requestedTokens: 1
         # 支付密码校验使用更严格的用户维度限流
         - id: user-center-password
-          uri: ${USER_CENTER_URI:lb://user-center}
+          uri: ${USER_CENTER_URI:http://localhost:8081}
           predicates:
             - Path=/api/v1/payment-password/**
           filters:
@@ -158,7 +156,7 @@ spring:
                 redis-rate-limiter.requestedTokens: 1
         # 信用运维任务由账户中心拥有，必须先于通配 ops 路由匹配
         - id: account-center-credit-ops
-          uri: ${ACCOUNT_CENTER_URI:lb://account-center}
+          uri: ${ACCOUNT_CENTER_URI:http://localhost:8083}
           predicates:
             - Path=/api/v1/ops/credit/**
           filters:
@@ -169,7 +167,7 @@ spring:
                 redis-rate-limiter.burstCapacity: 20
                 redis-rate-limiter.requestedTokens: 1
         - id: business-center-ops
-          uri: ${BUSINESS_CENTER_URI:lb://business-center}
+          uri: ${BUSINESS_CENTER_URI:http://localhost:8082}
           predicates:
             - Path=/api/v1/ops/**
           filters:
@@ -182,7 +180,7 @@ spring:
 
         # ========== 账户中心路由 ==========
         - id: account-center
-          uri: ${ACCOUNT_CENTER_URI:lb://account-center}
+          uri: ${ACCOUNT_CENTER_URI:http://localhost:8083}
           predicates:
             - Path=/api/v1/accounts/**,/api/v1/credit/**,/api/v1/bills/**
           filters:

@@ -1,0 +1,79 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.minialalipay.user.infrastructure.persistence.mapper.PaymentProofMapper">
+
+    <!-- 结果映射 -->
+    <resultMap id="paymentProofResultMap" type="com.minialalipay.user.infrastructure.persistence.po.PaymentProofPO">
+        <id property="proofId" column="proof_id"/>
+        <result property="tokenDigest" column="token_digest"/>
+        <result property="userId" column="user_id"/>
+        <result property="purpose" column="purpose"/>
+        <result property="payPasswordVersion" column="pay_password_version"/>
+        <result property="status" column="status"/>
+        <result property="expiresAt" column="expires_at"/>
+        <result property="consumedAt" column="consumed_at"/>
+        <result property="createdAt" column="created_at"/>
+    </resultMap>
+
+    <!-- 插入支付证明 -->
+    <insert id="insert" parameterType="com.minialalipay.user.infrastructure.persistence.po.PaymentProofPO">
+        INSERT INTO user_db.payment_proof (
+            proof_id,
+            token_digest,
+            user_id,
+            purpose,
+            pay_password_version,
+            status,
+            expires_at,
+            consumed_at,
+            created_at
+        ) VALUES (
+            #{proofId},
+            #{tokenDigest},
+            #{userId},
+            #{purpose},
+            #{payPasswordVersion},
+            #{status},
+            #{expiresAt},
+            #{consumedAt},
+            #{createdAt}
+        )
+    </insert>
+
+    <!-- 更新支付证明 -->
+    <update id="update" parameterType="com.minialalipay.user.infrastructure.persistence.po.PaymentProofPO">
+        UPDATE user_db.payment_proof
+        SET status = #{status},
+            consumed_at = #{consumedAt}
+        WHERE proof_id = #{proofId}
+    </update>
+
+    <!-- 根据证明 ID 查询 -->
+    <select id="selectByProofId" resultMap="paymentProofResultMap">
+        SELECT * FROM user_db.payment_proof
+        WHERE proof_id = #{proofId}
+    </select>
+
+    <!-- 根据令牌摘要查询 -->
+    <select id="selectByTokenDigest" resultMap="paymentProofResultMap">
+        SELECT * FROM user_db.payment_proof
+        WHERE token_digest = #{tokenDigest}
+    </select>
+
+    <!-- 查询用户的所有活动支付证明 -->
+    <select id="selectActiveByUserId" resultMap="paymentProofResultMap">
+        SELECT * FROM user_db.payment_proof
+        WHERE user_id = #{userId}
+          AND status = 'ACTIVE'
+        ORDER BY created_at DESC
+    </select>
+
+    <!-- 废弃用户的所有活动支付证明 -->
+    <update id="revokeAllByUserId">
+        UPDATE user_db.payment_proof
+        SET status = 'REVOKED'
+        WHERE user_id = #{userId}
+          AND status = 'ACTIVE'
+    </update>
+
+</mapper>

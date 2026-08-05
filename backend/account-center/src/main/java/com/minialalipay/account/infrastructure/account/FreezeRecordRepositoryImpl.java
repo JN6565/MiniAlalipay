@@ -54,6 +54,18 @@ public class FreezeRecordRepositoryImpl implements FreezeRecordRepository {
         return updated == 1;
     }
 
+    @Override public boolean transactionFreezeIs(String transactionId, FreezeStatus status) {
+        Integer count = jdbcTemplate.queryForObject("SELECT COUNT(*) FROM account_db.freeze_record WHERE transaction_id=? AND purpose='TRANSFER_OUT' AND status=?",
+                Integer.class, transactionId, status.name());
+        return count != null && count == 1;
+    }
+
+    @Override public boolean transactionHasNoActiveFreeze(String transactionId) {
+        Integer count = jdbcTemplate.queryForObject("SELECT COUNT(*) FROM account_db.freeze_record WHERE transaction_id=? AND status='FROZEN'",
+                Integer.class, transactionId);
+        return count != null && count == 0;
+    }
+
     private Optional<FreezeRecord> extractFirst(ResultSet rs) throws SQLException {
         if (!rs.next()) return Optional.empty();
         return Optional.of(new FreezeRecord(rs.getString("freeze_id"), rs.getString("transaction_id"),

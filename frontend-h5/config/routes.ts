@@ -170,6 +170,13 @@ export default [
         title: '还款',
         auth: true,
       },
+      {
+        path: '/h5/recharge',
+        component: '@/pages/h5/Recharge',
+        exact: true,
+        title: '充值',
+        auth: true,
+      },
 
       // 默认跳转
       {

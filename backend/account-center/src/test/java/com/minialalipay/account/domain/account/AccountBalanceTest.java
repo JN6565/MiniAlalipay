@@ -9,6 +9,17 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 class AccountBalanceTest {
 
+    @Test
+    void 收款确认增加可用余额且不产生冻结() {
+        Instant now = Instant.parse("2026-08-04T08:00:00Z");
+        AccountBalance balance = AccountBalance.zero("account-1", now);
+
+        balance.credit(300L, now.plusSeconds(1));
+
+        assertThat(balance.getAvailableFen()).isEqualTo(300L);
+        assertThat(balance.getFrozenFen()).isZero();
+    }
+
     private static final Instant NOW = Instant.parse("2026-08-04T08:00:00Z");
 
     @Test

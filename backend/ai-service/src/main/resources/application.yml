@@ -1,10 +1,55 @@
 server:
   port: ${AI_SERVICE_PORT:8084}
+
 spring:
-  application:
-    name: ai-service
+  datasource:
+    url: ${AGENT_DB_URL:jdbc:mysql://121.43.51.164:3306/agent_db?useSSL=false&serverTimezone=Asia/Shanghai&allowPublicKeyRetrieval=true&characterEncoding=UTF-8}
+    username: ${AGENT_DB_USERNAME:root}
+    password: ${AGENT_DB_PASSWORD:teamuser2026}
+    driver-class-name: com.mysql.cj.jdbc.Driver
+  flyway:
+    enabled: true
+    locations: classpath:db/migration
+    baseline-on-migrate: true
+    default-schema: ${AGENT_DB_SCHEMA:agent_db}
+  data:
+    redis:
+      host: ${REDIS_HOST:121.43.51.164}
+      port: ${REDIS_PORT:6379}
+      password: ${REDIS_PASSWORD:teamuser2026}
+      timeout: 2000ms
+      lettuce:
+        pool:
+          max-active: 8
+          max-idle: 8
+          min-idle: 2
+
+mybatis:
+  configuration:
+    map-underscore-to-camel-case: true
+
+# AI 服务超时与并发参数
+ai:
+  llm:
+    connect-timeout: 2s
+    read-timeout: 8s
+    max-concurrent: 20
+    circuit-breaker:
+      failure-threshold: 3
+      open-state-duration: 30s
+  mcp:
+    tool-timeout: 3s
+    max-retries: 1
+  session:
+    timeout: 30m
+    max-concurrent-sessions: 20
+
 management:
   endpoints:
     web:
       exposure:
         include: health,info
+
+logging:
+  level:
+    com.minialalipay.ai: DEBUG

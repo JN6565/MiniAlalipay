@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { history } from 'umi';
 import { Toast } from 'antd-mobile';
+import { register } from '@/services/auth';
 import './index.less';
 
 const RegisterPage: React.FC = () => {
@@ -46,9 +47,31 @@ const RegisterPage: React.FC = () => {
     }
 
     setLoading(true);
-    // TODO: 对接真实接口
-    Toast.show({ icon: 'fail', content: '后端服务未启动' });
-    setLoading(false);
+
+    try {
+      // 调用真实注册接口
+      const result = await register({
+        loginName,
+        nickname,
+        loginPassword,
+      });
+
+      // 保存会话令牌到 localStorage
+      localStorage.setItem('accessToken', result.accessToken);
+      localStorage.setItem('userId', result.userId);
+      localStorage.setItem('nickname', result.nickname);
+
+      // 显示注册成功提示
+      Toast.show({ icon: 'success', content: '注册成功' });
+
+      // 跳转到首页
+      history.push('/h5/home');
+    } catch (error: any) {
+      // 错误已在 request 拦截器中处理
+      console.error('注册失败:', error);
+    } finally {
+      setLoading(false);
+    }
   };
 
   return (
