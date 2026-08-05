@@ -36,7 +36,7 @@ DEALLOCATE PREPARE ledger_amount_stmt;
 
 SET @ledger_created_sql = (
     SELECT IF(COUNT(*) = 0,
-        'ALTER TABLE ledger_db.tcc_branch ADD COLUMN created_at DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3) BEFORE updated_at',
+        'ALTER TABLE ledger_db.tcc_branch ADD COLUMN created_at DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3) AFTER retry_count',
         'SELECT 1')
     FROM information_schema.columns
     WHERE table_schema = 'ledger_db' AND table_name = 'tcc_branch' AND column_name = 'created_at'

@@ -4,8 +4,8 @@ server:
 spring:
   datasource:
     url: ${AGENT_DB_URL:jdbc:mysql://121.43.51.164:3306/agent_db?useSSL=false&serverTimezone=Asia/Shanghai&allowPublicKeyRetrieval=true&characterEncoding=UTF-8}
-    username: ${AGENT_DB_USERNAME:mini_app}
-    password: ${AGENT_DB_PASSWORD:mini_app_dev_only}
+    username: ${AGENT_DB_USERNAME:root}
+    password: ${AGENT_DB_PASSWORD:teamuser2026}
     driver-class-name: com.mysql.cj.jdbc.Driver
   flyway:
     enabled: true
@@ -16,7 +16,7 @@ spring:
     redis:
       host: ${REDIS_HOST:121.43.51.164}
       port: ${REDIS_PORT:6379}
-      password: ${REDIS_PASSWORD:}
+      password: ${REDIS_PASSWORD:teamuser2026}
       timeout: 2000ms
       lettuce:
         pool:

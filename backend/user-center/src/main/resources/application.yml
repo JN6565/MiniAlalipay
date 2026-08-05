@@ -1,5 +1,11 @@
 server:
   port: ${USER_CENTER_PORT:8081}
+spring:
+  datasource:
+    url: ${USER_DB_URL:jdbc:mysql://121.43.51.164:3306/user_db?useSSL=false&serverTimezone=Asia/Shanghai&allowPublicKeyRetrieval=true&characterEncoding=UTF-8}
+    username: ${USER_DB_USERNAME:root}
+    password: ${USER_DB_PASSWORD:teamuser2026}
+    driver-class-name: com.mysql.cj.jdbc.Driver
 management:
   endpoints:
     web:
