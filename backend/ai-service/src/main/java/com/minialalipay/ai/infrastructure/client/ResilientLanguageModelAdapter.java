@@ -30,7 +30,7 @@ public class ResilientLanguageModelAdapter implements LanguageModelPort {
             OpenAiLanguageModelAdapter primary,
             FallbackLanguageModelAdapter fallback,
             @Value("${ai.llm.mock-mode:true}") boolean mockMode,
-            @Value("${SPRING_AI_OPENAI_API_KEY:}") String apiKey) {
+            @Value("${spring.ai.openai.api-key:}") String apiKey) {
         this.primary = primary;
         this.fallback = fallback;
         this.useFallback = mockMode || apiKey.isBlank();

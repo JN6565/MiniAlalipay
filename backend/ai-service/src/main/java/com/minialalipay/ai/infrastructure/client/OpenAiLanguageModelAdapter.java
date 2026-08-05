@@ -54,11 +54,12 @@ public class OpenAiLanguageModelAdapter {
             @Value("${ai.llm.max-concurrent:20}") int maxConcurrent,
             @Value("${ai.llm.circuit-breaker.failure-threshold:3}") int failureThreshold,
             @Value("${ai.llm.circuit-breaker.open-state-duration:30s}") String openStateDuration,
+            @Value("${ai.llm.mock-mode:true}") boolean mockModeConfig,
             ObjectProvider<ChatModel> chatModelProvider
     ) {
         this.model = model;
-        this.mockMode = apiKey == null || apiKey.isBlank();
-        // mock 模式下 Spring AI 不会自动创建 ChatModel Bean，通过 ObjectProvider 安全获取
+        this.mockMode = mockModeConfig || apiKey == null || apiKey.isBlank();
+        // mock 模式下不获取 ChatModel Bean，避免因 API Key 缺失导致启动失败
         this.chatModel = mockMode ? null : chatModelProvider.getIfAvailable();
         this.semaphore = new Semaphore(maxConcurrent);
         this.circuitBreaker = new CircuitBreaker(failureThreshold, parseDurationSeconds(openStateDuration));

@@ -2,10 +2,18 @@ server:
   port: ${AI_SERVICE_PORT:8084}
 
 spring:
+  autoconfigure:
+    exclude:
+      - org.springframework.ai.model.openai.autoconfigure.OpenAiAudioSpeechAutoConfiguration
+      - org.springframework.ai.model.openai.autoconfigure.OpenAiAudioTranscriptionAutoConfiguration
+
+      - org.springframework.ai.model.openai.autoconfigure.OpenAiImageAutoConfiguration
+      - org.springframework.ai.model.openai.autoconfigure.OpenAiEmbeddingAutoConfiguration
+      - org.springframework.ai.model.openai.autoconfigure.OpenAiModerationAutoConfiguration
   datasource:
-    url: ${AGENT_DB_URL:jdbc:mysql://localhost:3306/agent_db?useSSL=false&serverTimezone=Asia/Shanghai&allowPublicKeyRetrieval=true&characterEncoding=UTF-8}
-    username: ${AGENT_DB_USERNAME:}
-    password: ${AGENT_DB_PASSWORD:}
+    url: ${AGENT_DB_URL:jdbc:mysql://121.43.51.164:3306/agent_db?useSSL=false&serverTimezone=Asia/Shanghai&allowPublicKeyRetrieval=true&characterEncoding=UTF-8&createDatabaseIfNotExist=true}
+    username: ${AGENT_DB_USERNAME:root}
+    password: ${AGENT_DB_PASSWORD:teamuser2026}
     driver-class-name: com.mysql.cj.jdbc.Driver
   flyway:
     enabled: true
@@ -14,9 +22,9 @@ spring:
     default-schema: ${AGENT_DB_SCHEMA:agent_db}
   data:
     redis:
-      host: ${REDIS_HOST:localhost}
+      host: ${REDIS_HOST:121.43.51.164}
       port: ${REDIS_PORT:6379}
-      password: ${REDIS_PASSWORD:}
+      password: ${REDIS_PASSWORD:teamuser2026}
       timeout: 2000ms
       lettuce:
         pool:
@@ -26,7 +34,7 @@ spring:
 
   ai:
     openai:
-      api-key: ${SPRING_AI_OPENAI_API_KEY:}
+      api-key: ${SPRING_AI_OPENAI_API_KEY:sk-placeholder}
       base-url: ${SPRING_AI_OPENAI_BASE_URL:https://api.deepseek.com}
       chat:
         options:
@@ -40,6 +48,7 @@ mybatis:
 # AI 服务超时与并发参数
 ai:
   llm:
+    mock-mode: true
     connect-timeout: 2s
     read-timeout: 8s
     max-concurrent: 20
