@@ -1,12 +1,14 @@
 package com.minialalipay.user.infrastructure.client;
 
 import com.minialalipay.common.error.BusinessException;
+import com.minialalipay.user.application.auth.AccountProvisioningPort;
 import com.minialalipay.user.domain.auth.UserErrorCode;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.http.HttpEntity;
 import org.springframework.http.HttpHeaders;
+import org.springframework.http.HttpMethod;
 import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
 import org.springframework.stereotype.Component;
@@ -29,7 +31,7 @@ import java.util.UUID;
  * </p>
  */
 @Component
-public class AccountCenterClient {
+public class AccountCenterClient implements AccountProvisioningPort {
 
     private static final Logger log = LoggerFactory.getLogger(AccountCenterClient.class);
 
@@ -45,13 +47,18 @@ public class AccountCenterClient {
     }
 
     /**
-     * 调用账户中心开户接口。
+     * 调用账户中心幂等开户内部接口。
+     *
+     * <p>用户中心必须复用已经持久化的 {@code registrationId}；账户中心以该编号识别重试，
+     * 并在自身事务中创建或返回账户体系。生产调用需要由部署层提供服务身份认证，调用失败时
+     * 用户继续保持 {@code PROVISIONING}，由注册恢复任务使用相同编号重试。</p>
      *
      * @param userId         用户 ID
      * @param registrationId 注册幂等键
      * @return 账户 ID
      * @throws BusinessException 如果开户失败
      */
+    @Override
     public String openAccount(String userId, String registrationId) {
         try {
             // 构建请求
@@ -59,19 +66,16 @@ public class AccountCenterClient {
             headers.setContentType(MediaType.APPLICATION_JSON);
             headers.set("X-Request-Id", UUID.randomUUID().toString());
 
-            Map<String, String> requestBody = Map.of(
-                    "userId", userId,
-                    "registrationId", registrationId
-            );
+            Map<String, String> requestBody = Map.of("userId", userId);
 
             HttpEntity<Map<String, String>> request = new HttpEntity<>(requestBody, headers);
 
             // 调用账户中心
-            String url = accountCenterUrl + "/api/v1/accounts/open";
+            String url = accountCenterUrl + "/internal/v1/accounts/registrations/{registrationId}";
             log.info("调用账户中心开户接口: userId={}, registrationId={}", userId, registrationId);
 
-            ResponseEntity<AccountOpenResponse> response = restTemplate.postForEntity(
-                    url, request, AccountOpenResponse.class
+            ResponseEntity<AccountOpenResponse> response = restTemplate.exchange(
+                    url, HttpMethod.PUT, request, AccountOpenResponse.class, registrationId
             );
 
             if (response.getStatusCode().is2xxSuccessful() && response.getBody() != null) {

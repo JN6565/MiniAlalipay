@@ -5,10 +5,14 @@ import com.minialalipay.account.application.account.dto.AccountSummaryDTO;
 import com.minialalipay.common.api.ApiResponse;
 import com.minialalipay.common.trace.RequestIdGenerator;
 import jakarta.servlet.http.HttpServletRequest;
+import jakarta.validation.Valid;
 import jakarta.validation.constraints.NotBlank;
+import jakarta.validation.constraints.Pattern;
+import jakarta.validation.constraints.Size;
 import org.springframework.http.ResponseEntity;
 import org.springframework.validation.annotation.Validated;
-import org.springframework.web.bind.annotation.PostMapping;
+import org.springframework.web.bind.annotation.PathVariable;
+import org.springframework.web.bind.annotation.PutMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
@@ -17,22 +21,16 @@ import java.time.Instant;
 import java.util.UUID;
 
 /**
- * 账户开户接口。
+ * 用户注册自动开户内部接口。
  *
- * <p>提供用户注册时的账户开户能力，由用户中心调用。
- * 开户成功后返回账户摘要，包含账户 ID 和初始余额（0）。</p>
- *
- * <p>接口清单：
- * <ul>
- *   <li>POST /api/v1/accounts/open - 开户</li>
- * </ul>
- * </p>
+ * <p>仅允许用户中心在注册编排和恢复任务中调用，不注册到网关。调用方必须使用用户中心持久化的
+ * {@code registrationId}，重复请求返回既有账户、信用账户和账本科目，不得重复开户或初始化额度。</p>
  *
  * @see AccountApplicationService 账户应用服务
  */
 @Validated
 @RestController
-@RequestMapping("/api/v1/accounts")
+@RequestMapping("/internal/v1/accounts/registrations")
 public class AccountOpeningController {
 
     private final AccountApplicationService accountApplicationService;
@@ -45,43 +43,34 @@ public class AccountOpeningController {
     }
 
     /**
-     * 用户开户。
+     * 以注册编号幂等创建余额账户、账本科目、信用账户和信用应收。
      *
-     * <p>开户流程：
-     * <ol>
-     *   <li>校验请求参数</li>
-     *   <li>调用账户应用服务完成开户</li>
-     *   <li>返回账户摘要</li>
-     * </ol>
-     * </p>
+     * <p>权限仅限用户中心服务身份。Controller 不持有事务，账户应用服务负责账户体系的本地事务；
+     * 相同 registrationId 与相同用户重复调用返回原账户，不同用户复用该编号返回幂等冲突。
+     * 参数错误返回 400，幂等绑定冲突返回 409，持久化失败返回统一内部错误。</p>
      *
-     * <p>业务规则：
-     * <ul>
-     *   <li>使用 registrationId 作为幂等键，重复调用返回已有账户</li>
-     *   <li>初始余额为 0</li>
-     *   <li>同时创建账本科目</li>
-     * </ul>
-     * </p>
-     *
-     * @param requestDTO  开户请求 DTO
+     * @param registrationId 用户中心生成并持久化的注册幂等编号
+     * @param requestDTO  包含用户 ID 的开户请求
      * @param httpRequest HTTP 请求
-     * @return 账户摘要
+     * @return 已创建或既有账户的零余额摘要
      */
-    @PostMapping("/open")
+    @PutMapping("/{registrationId}")
     public ResponseEntity<ApiResponse<AccountSummaryDTO>> openAccount(
-            @RequestBody OpenAccountRequestDTO requestDTO,
+            @PathVariable @NotBlank @Size(min = 26, max = 26)
+            @Pattern(regexp = "^[0-9A-HJKMNP-TV-Z]{26}$") String registrationId,
+            @Valid @RequestBody OpenAccountRequestDTO requestDTO,
             HttpServletRequest httpRequest
     ) {
         String requestId = requestIdGenerator.resolve(httpRequest.getHeader("X-Request-Id"));
         String traceId = httpRequest.getHeader("X-Trace-Id");
 
-        // 生成账户 ID
+        // 账户 ID 必须由账户中心生成，调用方不能指定或覆盖其他用户的账户。
         String accountId = generateAccountId();
 
         AccountSummaryDTO result = accountApplicationService.openAccount(
                 accountId,
                 requestDTO.userId(),
-                requestDTO.registrationId(),
+                registrationId,
                 Instant.now()
         );
 
@@ -101,14 +90,12 @@ public class AccountOpeningController {
      * 开户请求 DTO。
      *
      * @param userId         用户 ID
-     * @param registrationId 注册幂等键
      */
     public record OpenAccountRequestDTO(
             @NotBlank(message = "用户 ID 不能为空")
-            String userId,
-
-            @NotBlank(message = "注册幂等键不能为空")
-            String registrationId
+            @Size(min = 26, max = 26, message = "用户 ID 必须为 26 位")
+            @Pattern(regexp = "^[0-9A-HJKMNP-TV-Z]{26}$", message = "用户 ID 格式不正确")
+            String userId
     ) {
     }
 }

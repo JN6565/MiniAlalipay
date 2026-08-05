@@ -25,9 +25,19 @@ class GatewayRouteConfigurationTest {
                 .findFirst()
                 .orElseThrow(() -> new AssertionError("缺少账户中心信用运维路由"));
 
-        assertThat(route.getUri().toString()).contains("account-center");
+        assertThat(route.getUri().toString())
+                .as("信用运维路由应指向本地账户中心或服务发现中的账户中心")
+                .isIn("http://localhost:8083", "lb://account-center");
         assertThat(route.getPredicates())
                 .anySatisfy(predicate -> assertThat(predicate.getArgs().values())
                         .contains("/api/v1/ops/credit/**"));
+    }
+
+    @Test
+    void doesNotRouteInternalServiceOperations() {
+        assertThat(gatewayProperties.getRoutes())
+                .flatExtracting(RouteDefinition::getPredicates)
+                .flatExtracting(predicate -> predicate.getArgs().values())
+                .noneMatch(path -> path.contains("/internal/"));
     }
 }

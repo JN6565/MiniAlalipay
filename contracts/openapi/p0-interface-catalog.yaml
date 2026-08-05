@@ -9,8 +9,17 @@ idempotencyPolicies:
   SESSION_SCOPED: {headerRequired: false, rule: 使用 bootstrap 会话和令牌摘要恢复同一交换结果}
   CLIENT_MESSAGE_ID: {headerRequired: false, rule: 使用 sessionId 和 clientMessageId 防止重复消息}
   BUSINESS_DATE: {headerRequired: true, rule: 同时使用 Idempotency-Key 和业务日期唯一键}
+  REGISTRATION_ID: {headerRequired: false, rule: 使用用户中心持久化的 registrationId 创建或返回同一账户体系}
+  TCC_BRANCH_KEY: {headerRequired: false, rule: 使用 xid、分支类型和资源 ID 形成持久化分支幂等屏障}
+  DIFF_ID: {headerRequired: false, rule: 使用 diffId 幂等追加同一份脱敏对账证据}
   NONE: {headerRequired: false, rule: 仅允许无可恢复业务副作用的登录入口使用}
 operations:
+  - {method: PUT, path: '/internal/v1/accounts/registrations/{registrationId}', operationId: provisionAccount, owner: account-center, clientScope: INTERNAL, idempotency: REGISTRATION_ID}
+  - {method: GET, path: '/internal/v1/accounts/by-user/{userId}', operationId: resolvePersonalAccount, owner: account-center, clientScope: INTERNAL, idempotency: READ_ONLY}
+  - {method: POST, path: '/internal/v1/tcc/balance/{role}/{action}', operationId: executeBalanceTccBranch, owner: account-center, clientScope: INTERNAL, idempotency: TCC_BRANCH_KEY}
+  - {method: POST, path: '/internal/v1/tcc/ledger/{action}', operationId: executeLedgerTccBranch, owner: account-center, clientScope: INTERNAL, idempotency: TCC_BRANCH_KEY}
+  - {method: GET, path: '/internal/v1/transaction-facts/{transactionId}', operationId: getTransactionFacts, owner: account-center, clientScope: INTERNAL, idempotency: READ_ONLY}
+  - {method: POST, path: /internal/v1/reconciliation-diffs, operationId: recordReconciliationDiff, owner: account-center, clientScope: INTERNAL, idempotency: DIFF_ID}
   - {method: POST, path: /api/v1/auth/register, operationId: register, owner: user-center, clientScope: C, idempotency: REQUIRED}
   - {method: POST, path: /api/v1/auth/login, operationId: login, owner: user-center, clientScope: SHARED, idempotency: NONE}
   - {method: POST, path: /api/v1/auth/logout, operationId: logout, owner: user-center, clientScope: SHARED, idempotency: NATURAL}

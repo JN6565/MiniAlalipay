@@ -1,8 +1,8 @@
 openapi: 3.1.0
 info:
   title: MiniAlalipay API
-  version: 0.2.0
-  description: MiniAlalipay 对外 HTTP 契约。业务操作只有在本文件中具备完整 Schema 后才允许实现。
+  version: 0.3.0
+  description: MiniAlalipay 外部与服务间 HTTP 契约。业务操作只有在本文件中具备完整 Schema 后才允许实现。
 servers:
   - url: http://localhost:8080
     description: 本地网关
@@ -259,6 +259,154 @@ paths:
         '401': { $ref: '#/components/responses/Unauthorized' }
         '404': { $ref: '#/components/responses/NotFound' }
         '409': { $ref: '#/components/responses/Conflict' }
+  /internal/v1/accounts/registrations/{registrationId}:
+    put:
+      summary: 用户注册时幂等创建账户体系
+      operationId: provisionAccount
+      x-client-scope: INTERNAL
+      servers: [{ url: 'http://localhost:8083', description: 本地账户中心直连地址 }]
+      security:
+        - internalServiceAuth: []
+      parameters:
+        - name: registrationId
+          in: path
+          required: true
+          description: 用户中心生成并持久化的注册幂等编号。
+          schema: { type: string, minLength: 26, maxLength: 26, pattern: '^[0-9A-HJKMNP-TV-Z]{26}$' }
+        - $ref: '#/components/parameters/RequestIdHeader'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/ProvisionAccountRequest' }
+      responses:
+        '200':
+          description: 返回已创建或既有账户的零余额摘要
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/AccountSummaryResponse' }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '409': { $ref: '#/components/responses/Conflict' }
+        '500': { $ref: '#/components/responses/InternalError' }
+  /internal/v1/accounts/by-user/{userId}:
+    get:
+      summary: 解析用户唯一个人账户引用
+      operationId: resolvePersonalAccount
+      x-client-scope: INTERNAL
+      servers: [{ url: 'http://localhost:8083', description: 本地账户中心直连地址 }]
+      security:
+        - internalServiceAuth: []
+      parameters:
+        - name: userId
+          in: path
+          required: true
+          schema: { type: string, minLength: 26, maxLength: 26, pattern: '^[0-9A-HJKMNP-TV-Z]{26}$' }
+      responses:
+        '200':
+          description: 返回账户引用和状态，不返回余额
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/InternalAccountReference' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '500': { $ref: '#/components/responses/InternalError' }
+  /internal/v1/tcc/balance/{role}/{action}:
+    post:
+      summary: 执行付款或收款余额 TCC 分支
+      operationId: executeBalanceTccBranch
+      x-client-scope: INTERNAL
+      servers: [{ url: 'http://localhost:8083', description: 本地账户中心直连地址 }]
+      security:
+        - internalServiceAuth: []
+      parameters:
+        - name: role
+          in: path
+          required: true
+          schema: { type: string, enum: [payer, payee] }
+        - name: action
+          in: path
+          required: true
+          schema: { type: string, enum: [try, confirm, cancel] }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/BalanceTccCommand' }
+      responses:
+        '200':
+          description: 返回幂等分支状态和空回滚类型
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/TccBranchResult' }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409': { $ref: '#/components/responses/Conflict' }
+        '500': { $ref: '#/components/responses/InternalError' }
+  /internal/v1/tcc/ledger/{action}:
+    post:
+      summary: 执行复式账本 TCC 分支
+      operationId: executeLedgerTccBranch
+      x-client-scope: INTERNAL
+      servers: [{ url: 'http://localhost:8083', description: 本地账户中心直连地址 }]
+      security:
+        - internalServiceAuth: []
+      parameters:
+        - name: action
+          in: path
+          required: true
+          schema: { type: string, enum: [try, confirm, cancel] }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/LedgerTccCommand' }
+      responses:
+        '200':
+          description: 返回账本分支状态
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/TccBranchResult' }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409': { $ref: '#/components/responses/Conflict' }
+        '500': { $ref: '#/components/responses/InternalError' }
+  /internal/v1/transaction-facts/{transactionId}:
+    get:
+      summary: 查询终态发布所需的脱敏资金事实
+      operationId: getTransactionFacts
+      x-client-scope: INTERNAL
+      servers: [{ url: 'http://localhost:8083', description: 本地账户中心直连地址 }]
+      security:
+        - internalServiceAuth: []
+      parameters:
+        - name: transactionId
+          in: path
+          required: true
+          schema: { type: string, minLength: 26, maxLength: 26, pattern: '^[0-9A-HJKMNP-TV-Z]{26}$' }
+      responses:
+        '200':
+          description: 返回成功和取消两组互斥一致性事实
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/TransactionFacts' }
+        '500': { $ref: '#/components/responses/InternalError' }
+  /internal/v1/reconciliation-diffs:
+    post:
+      summary: 幂等追加终态核验对账差异
+      operationId: recordReconciliationDiff
+      x-client-scope: INTERNAL
+      servers: [{ url: 'http://localhost:8083', description: 本地账户中心直连地址 }]
+      security:
+        - internalServiceAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/ReconciliationDiffRequest' }
+      responses:
+        '204': { description: 差异已记录或幂等命中 }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '409': { $ref: '#/components/responses/Conflict' }
+        '500': { $ref: '#/components/responses/InternalError' }
 components:
   securitySchemes:
     bearerAuth:
@@ -271,6 +419,9 @@ components:
       in: cookie
       name: MINIALALIPAY_SESSION
       description: HttpOnly、Secure、SameSite Cookie；写请求同时校验 CSRF 令牌。
+    internalServiceAuth:
+      type: mutualTLS
+      description: 服务间双向 TLS 身份认证；内部路径不注册网关路由，本地联调可由受控开发网络终止 TLS。
   parameters:
     RequestIdHeader:
       name: X-Request-Id
@@ -399,6 +550,86 @@ components:
           properties:
             data:
               $ref: '#/components/schemas/AccountSummary'
+    ProvisionAccountRequest:
+      type: object
+      additionalProperties: false
+      required: [userId]
+      properties:
+        userId:
+          type: string
+          minLength: 26
+          maxLength: 26
+          pattern: '^[0-9A-HJKMNP-TV-Z]{26}$'
+          description: 用户中心已经持久化的用户 ID。
+    InternalAccountReference:
+      type: object
+      additionalProperties: false
+      required: [accountId, userId, status]
+      properties:
+        accountId: { type: string, minLength: 26, maxLength: 26, pattern: '^[0-9A-HJKMNP-TV-Z]{26}$' }
+        userId: { type: string, minLength: 26, maxLength: 26, pattern: '^[0-9A-HJKMNP-TV-Z]{26}$' }
+        status: { type: string, enum: [ACTIVE, FROZEN, CLOSED] }
+    BalanceTccCommand:
+      type: object
+      additionalProperties: false
+      required: [xid, transactionId, accountId, amountFen, freezeId]
+      properties:
+        xid: { type: string, minLength: 1, maxLength: 128 }
+        transactionId: { type: string, minLength: 26, maxLength: 26, pattern: '^[0-9A-HJKMNP-TV-Z]{26}$' }
+        accountId: { type: string, minLength: 26, maxLength: 26, pattern: '^[0-9A-HJKMNP-TV-Z]{26}$' }
+        amountFen: { type: integer, format: int64, minimum: 1 }
+        freezeId: { type: string, minLength: 26, maxLength: 26, pattern: '^[0-9A-HJKMNP-TV-Z]{26}$' }
+    TccBranchResult:
+      type: object
+      additionalProperties: false
+      required: [status]
+      properties:
+        status: { type: string, enum: [INIT, TRIED, CONFIRMED, CANCELLED] }
+        rollbackType: { type: [string, 'null'], enum: [EMPTY, NORMAL, null] }
+    LedgerTccCommand:
+      type: object
+      additionalProperties: false
+      required: [xid, transactionId, payerAccountId, payeeAccountId, amountFen, voucherId,
+                 debitEntryId, creditEntryId, eventId, traceId]
+      properties:
+        xid: { type: string, minLength: 1, maxLength: 128 }
+        transactionId: { type: string, minLength: 26, maxLength: 26, pattern: '^[0-9A-HJKMNP-TV-Z]{26}$' }
+        payerAccountId: { type: string, minLength: 26, maxLength: 26, pattern: '^[0-9A-HJKMNP-TV-Z]{26}$' }
+        payeeAccountId: { type: string, minLength: 26, maxLength: 26, pattern: '^[0-9A-HJKMNP-TV-Z]{26}$' }
+        amountFen: { type: integer, format: int64, minimum: 1 }
+        voucherId: { type: string, minLength: 26, maxLength: 26, pattern: '^[0-9A-HJKMNP-TV-Z]{26}$' }
+        debitEntryId: { type: integer, format: int64, minimum: 1 }
+        creditEntryId: { type: integer, format: int64, minimum: 1 }
+        eventId: { type: string, minLength: 26, maxLength: 26, pattern: '^[0-9A-HJKMNP-TV-Z]{26}$' }
+        traceId: { type: string, pattern: '^[a-fA-F0-9]{32}$' }
+    TransactionFacts:
+      type: object
+      additionalProperties: false
+      required: [successConsistent, cancelConsistent, accountsConfirmed, ledgerConfirmed,
+                 freezeConfirmed, ledgerPosted, accountsCancelled, ledgerCancelled, noActiveFreeze]
+      properties:
+        successConsistent: { type: boolean }
+        cancelConsistent: { type: boolean }
+        accountsConfirmed: { type: boolean }
+        ledgerConfirmed: { type: boolean }
+        freezeConfirmed: { type: boolean }
+        ledgerPosted: { type: boolean }
+        accountsCancelled: { type: boolean }
+        ledgerCancelled: { type: boolean }
+        noActiveFreeze: { type: boolean }
+    ReconciliationDiffRequest:
+      type: object
+      additionalProperties: false
+      required: [diffId, transactionId, diffType, expectedJson, actualJson, manualCaseId, traceId, detectedAt]
+      properties:
+        diffId: { type: string, minLength: 26, maxLength: 26, pattern: '^[0-9A-HJKMNP-TV-Z]{26}$' }
+        transactionId: { type: string, minLength: 26, maxLength: 26, pattern: '^[0-9A-HJKMNP-TV-Z]{26}$' }
+        diffType: { type: string, minLength: 1, maxLength: 64 }
+        expectedJson: { type: string, minLength: 2, maxLength: 4096, description: 仅包含脱敏预期事实的 JSON 文本。 }
+        actualJson: { type: string, minLength: 2, maxLength: 4096, description: 仅包含脱敏实际事实的 JSON 文本。 }
+        manualCaseId: { type: string, minLength: 26, maxLength: 26, pattern: '^[0-9A-HJKMNP-TV-Z]{26}$' }
+        traceId: { type: string, pattern: '^[a-fA-F0-9]{32}$' }
+        detectedAt: { type: string, format: date-time }
     LedgerEntry:
       type: object
       additionalProperties: false

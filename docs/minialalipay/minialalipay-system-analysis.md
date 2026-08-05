@@ -1430,11 +1430,14 @@ flowchart TD
     Consistent -- 否 --> Manual
 ```
 
-阶段四资金核心使用以下版本化内部 HTTP 契约。它们仅允许 `business-center` 与
-`account-center` 之间通过服务鉴权调用，不在网关注册路由，也不得由 B/C 端直接访问：
+注册开户和阶段四资金核心使用以下版本化内部 HTTP 契约。它们仅允许 `user-center`、
+`business-center` 与 `account-center` 之间通过服务鉴权调用，不在网关注册路由，
+也不得由 B/C 端直接访问；生产部署必须使用双向 TLS 并按证书主体实施服务级 ACL，
+本地联调使用受控开发网络直连账户中心，仓库不得提交证书和私钥：
 
 | 方法与路径 | 调用方 -> 提供方 | 事务与幂等语义 |
 |---|---|---|
+| `PUT /internal/v1/accounts/registrations/{registrationId}` | `user-center` -> `account-center` | 以用户中心持久化的 `registrationId` 幂等创建或返回余额账户、零余额、账本科目、信用账户和信用应收；客户端不得提交账户 ID |
 | `GET /internal/v1/accounts/by-user/{userId}` | `business-center` -> `account-center` | 只返回个人账户引用和状态，不返回余额 |
 | `POST /internal/v1/tcc/balance/{role}/{action}` | `business-center` -> `account-center` | `role` 为 `payer/payee`，`action` 为 `try/confirm/cancel`；按 `xid + branch_type + resource_id` 幂等，支持空回滚和防悬挂 |
 | `POST /internal/v1/tcc/ledger/{action}` | `business-center` -> `account-center` | Try 持久化 `PREPARED` 平衡凭证，Confirm 汇总验平后过账，Cancel 只取消未过账凭证 |

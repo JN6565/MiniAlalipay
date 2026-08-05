@@ -11,7 +11,6 @@ import com.minialalipay.user.domain.credential.PasswordHasherPort;
 import com.minialalipay.user.domain.user.SessionManagerPort;
 import com.minialalipay.user.domain.user.User;
 import com.minialalipay.user.domain.user.UserRepository;
-import com.minialalipay.user.infrastructure.client.AccountCenterClient;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Service;
@@ -56,7 +55,7 @@ public class AuthService {
     private final CredentialRepository credentialRepository;
     private final PasswordHasherPort passwordHasher;
     private final SessionManagerPort sessionManager;
-    private final AccountCenterClient accountCenterClient;
+    private final AccountProvisioningPort accountProvisioningPort;
 
     /**
      * 构造函数注入依赖。
@@ -65,20 +64,20 @@ public class AuthService {
      * @param credentialRepository 凭证仓储
      * @param passwordHasher       密码哈希端口
      * @param sessionManager       会话管理端口
-     * @param accountCenterClient  账户中心客户端
+     * @param accountProvisioningPort  账户中心开户端口
      */
     public AuthService(
             UserRepository userRepository,
             CredentialRepository credentialRepository,
             PasswordHasherPort passwordHasher,
             SessionManagerPort sessionManager,
-            AccountCenterClient accountCenterClient
+            AccountProvisioningPort accountProvisioningPort
     ) {
         this.userRepository = userRepository;
         this.credentialRepository = credentialRepository;
         this.passwordHasher = passwordHasher;
         this.sessionManager = sessionManager;
-        this.accountCenterClient = accountCenterClient;
+        this.accountProvisioningPort = accountProvisioningPort;
     }
 
     /**
@@ -143,7 +142,7 @@ public class AuthService {
         // 9. 调用账户中心开户
         try {
             log.info("开始调用账户中心开户: userId={}, registrationId={}", userId, registrationId);
-            accountCenterClient.openAccount(userId, registrationId);
+            accountProvisioningPort.openAccount(userId, registrationId);
             log.info("账户中心开户成功: userId={}", userId);
 
             // 10. 开户成功，激活用户
