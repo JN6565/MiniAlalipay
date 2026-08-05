@@ -10,7 +10,12 @@ import com.minialalipay.account.domain.credit.CreditPurchase;
 import com.minialalipay.account.domain.credit.CreditPurchaseRepository;
 import com.minialalipay.account.domain.credit.CreditReceivable;
 import com.minialalipay.account.domain.credit.CreditReceivableRepository;
+import com.minialalipay.account.domain.tcc.TccBranch;
+import com.minialalipay.account.domain.tcc.TccBranchRepository;
+import com.minialalipay.account.domain.tcc.TccBranchStatus;
+import com.minialalipay.account.domain.tcc.TccBranchType;
 import com.minialalipay.common.error.BusinessException;
+import org.springframework.dao.DataIntegrityViolationException;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Service;
@@ -44,17 +49,20 @@ public class CreditTccParticipant {
     private final CreditFreezeRepository creditFreezeRepository;
     private final CreditPurchaseRepository creditPurchaseRepository;
     private final CreditReceivableRepository creditReceivableRepository;
+    private final TccBranchRepository branchRepository;
 
     public CreditTccParticipant(
             CreditAccountRepository creditAccountRepository,
             CreditFreezeRepository creditFreezeRepository,
             CreditPurchaseRepository creditPurchaseRepository,
-            CreditReceivableRepository creditReceivableRepository
+            CreditReceivableRepository creditReceivableRepository,
+            TccBranchRepository branchRepository
     ) {
         this.creditAccountRepository = creditAccountRepository;
         this.creditFreezeRepository = creditFreezeRepository;
         this.creditPurchaseRepository = creditPurchaseRepository;
         this.creditReceivableRepository = creditReceivableRepository;
+        this.branchRepository = branchRepository;
     }
 
     /**
@@ -76,18 +84,28 @@ public class CreditTccParticipant {
             String transactionId, String creditAccountId,
             long amountFen, String branchXid, Instant now
     ) {
-        // 幂等检查 + 防悬挂
+        TccBranch branch = initializeBranch(
+                branchXid, transactionId, creditAccountId, amountFen, now);
+        validateBranch(branch, transactionId, amountFen);
+        if (branch.getStatus() == TccBranchStatus.CANCELLED) {
+            throw new IllegalStateException("Cancel 已建立信用支付屏障，拒绝晚到 Try");
+        }
+
+        // 已完成 Try 或 Confirm 时只回读同一冻结事实，不重复占用额度。
         Optional<CreditFreeze> existing = creditFreezeRepository
                 .findByTransactionIdAndAccountId(transactionId, creditAccountId);
-        if (existing.isPresent()) {
+        if (branch.getStatus() != TccBranchStatus.INIT) {
             CreditFreeze freeze = existing.get();
-            if (freeze.getStatus() == CreditFreezeStatus.RELEASED) {
-                // 防悬挂：Cancel 已执行，拒绝 Try
-                throw new BusinessException(CreditErrorCode.CREDIT_NOT_AVAILABLE);
-            }
-            // 幂等：参数一致时返回已有记录
             validateRepeatedFreeze(freeze, amountFen, branchXid);
             return freeze;
+        }
+
+        if (existing.isPresent()) {
+            validateRepeatedFreeze(existing.get(), amountFen, branchXid);
+            long expectedVersion = branch.getBarrierVersion();
+            branch.markTried(now);
+            saveBranch(branch, expectedVersion);
+            return existing.get();
         }
 
         CreditAccount account = creditAccountRepository.findById(creditAccountId)
@@ -116,6 +134,10 @@ public class CreditTccParticipant {
         );
         creditFreezeRepository.save(freeze);
 
+        long expectedVersion = branch.getBarrierVersion();
+        branch.markTried(now);
+        saveBranch(branch, expectedVersion);
+
         log.info("CREDIT_PAY Try 成功: transactionId={}, creditAccountId={}, amountFen={}",
                 transactionId, creditAccountId, amountFen);
         return freeze;
@@ -129,6 +151,8 @@ public class CreditTccParticipant {
      *
      * @param transactionId 统一交易 ID
      * @param creditAccountId 信用账户 ID
+     * @param amountFen Try 阶段冻结金额（分），用于拒绝同键异参重试
+     * @param branchXid TCC 全局事务 XID，必须与 Try 阶段一致
      * @param qrOrderId 扫码订单 ID（用于创建消费明细）
      * @param merchantAccountId 收款方账户 ID（用于创建消费明细）
      * @param now 当前时间
@@ -138,11 +162,23 @@ public class CreditTccParticipant {
     @Transactional
     public void confirmFreeze(
             String transactionId, String creditAccountId,
+            long amountFen, String branchXid,
             String qrOrderId, String merchantAccountId, Instant now
     ) {
         CreditFreeze freeze = creditFreezeRepository
                 .findByTransactionIdAndAccountId(transactionId, creditAccountId)
                 .orElseThrow(() -> new BusinessException(CreditErrorCode.CREDIT_ACCOUNT_NOT_FOUND));
+
+        validateRepeatedFreeze(freeze, amountFen, branchXid);
+
+        TccBranch branch = requiredBranch(branchXid, creditAccountId);
+        validateBranch(branch, transactionId, amountFen);
+        if (branch.getStatus() == TccBranchStatus.CONFIRMED) {
+            return;
+        }
+        if (branch.getStatus() == TccBranchStatus.CANCELLED) {
+            throw new IllegalStateException("已取消的信用支付分支不可确认: " + transactionId);
+        }
 
         // 幂等：已确认直接返回
         if (freeze.getStatus() == CreditFreezeStatus.CONFIRMED) {
@@ -180,6 +216,10 @@ public class CreditTccParticipant {
         freeze.confirm(now);
         creditFreezeRepository.save(freeze);
 
+        long expectedVersion = branch.getBarrierVersion();
+        branch.confirm(now);
+        saveBranch(branch, expectedVersion);
+
         log.info("CREDIT_PAY Confirm 成功: transactionId={}, creditAccountId={}, amountFen={}",
                 transactionId, creditAccountId, freeze.getAmountFen());
     }
@@ -187,53 +227,111 @@ public class CreditTccParticipant {
     /**
      * Cancel 阶段：释放冻结额度。
      *
-     * <p>幂等保证：已释放的冻结记录重复调用直接返回。
-     * 空回滚：冻结记录不存在时记录日志并快速返回。</p>
+     * <p>幂等保证：已取消的分支重复调用直接返回。
+     * 空回滚必须持久化 CANCELLED/EMPTY 屏障，晚到 Try 读取屏障后拒绝占用额度。</p>
      *
      * @param transactionId 统一交易 ID
      * @param creditAccountId 信用账户 ID
+     * @param amountFen 分支金额（分），用于校验同键异参重试
+     * @param branchXid TCC 全局事务 XID
      * @param now 当前时间
      * @throws BusinessException 信用账户不存在（有冻结记录时）
      * @throws IllegalStateException 冻结记录已确认
      */
     @Transactional
     public void cancelFreeze(
-            String transactionId, String creditAccountId, Instant now
+            String transactionId, String creditAccountId,
+            long amountFen, String branchXid, Instant now
     ) {
-        Optional<CreditFreeze> existing = creditFreezeRepository
-                .findByTransactionIdAndAccountId(transactionId, creditAccountId);
-
-        // 空回滚：Try 未执行，记录日志并返回
-        if (existing.isEmpty()) {
-            log.warn("CREDIT_PAY Cancel 空回滚: transactionId={}, creditAccountId={}（Try 未执行或已过期）",
+        TccBranch branch = findBranch(branchXid, creditAccountId).orElse(null);
+        if (branch == null) {
+            branch = emptyRollbackBranch(branchXid, transactionId, creditAccountId, amountFen, now);
+            log.info("CREDIT_PAY Cancel 空回滚已落屏障: transactionId={}, creditAccountId={}",
                     transactionId, creditAccountId);
             return;
         }
-
-        CreditFreeze freeze = existing.get();
-
-        // 幂等：已释放直接返回
-        if (freeze.getStatus() == CreditFreezeStatus.RELEASED) {
-            log.info("CREDIT_PAY Cancel 幂等返回: transactionId={}", transactionId);
+        validateBranch(branch, transactionId, amountFen);
+        if (branch.getStatus() == TccBranchStatus.CANCELLED) {
             return;
         }
-
-        // 已确认的冻结不可释放
-        if (freeze.getStatus() == CreditFreezeStatus.CONFIRMED) {
-            throw new IllegalStateException("已确认的冻结记录不可释放: " + transactionId);
+        if (branch.getStatus() == TccBranchStatus.CONFIRMED) {
+            throw new IllegalStateException("已确认的信用支付分支不可取消: " + transactionId);
         }
 
-        CreditAccount account = creditAccountRepository.findById(creditAccountId)
-                .orElseThrow(() -> new BusinessException(CreditErrorCode.CREDIT_ACCOUNT_NOT_FOUND));
+        Optional<CreditFreeze> existing = creditFreezeRepository
+                .findByTransactionIdAndAccountId(transactionId, creditAccountId);
 
-        account.releaseFreeze(freeze.getAmountFen(), now);
-        creditAccountRepository.save(account);
+        if (branch.getStatus() == TccBranchStatus.TRIED) {
+            CreditFreeze freeze = existing.orElseThrow(() ->
+                    new IllegalStateException("信用支付 Try 屏障存在但冻结事实缺失: " + transactionId));
+            if (freeze.getStatus() == CreditFreezeStatus.CONFIRMED) {
+                throw new IllegalStateException("已确认的冻结记录不可释放: " + transactionId);
+            }
+            if (freeze.getStatus() != CreditFreezeStatus.RELEASED) {
+                CreditAccount account = creditAccountRepository.findById(creditAccountId)
+                        .orElseThrow(() -> new BusinessException(CreditErrorCode.CREDIT_ACCOUNT_NOT_FOUND));
+                account.releaseFreeze(freeze.getAmountFen(), now);
+                creditAccountRepository.save(account);
+                freeze.release(now);
+                creditFreezeRepository.save(freeze);
+            }
+        }
 
-        freeze.release(now);
-        creditFreezeRepository.save(freeze);
+        long expectedVersion = branch.getBarrierVersion();
+        branch.cancel(now);
+        saveBranch(branch, expectedVersion);
 
         log.info("CREDIT_PAY Cancel 成功: transactionId={}, creditAccountId={}, amountFen={}",
-                transactionId, creditAccountId, freeze.getAmountFen());
+                transactionId, creditAccountId, amountFen);
+    }
+
+    private TccBranch initializeBranch(String xid, String transactionId, String resourceId,
+                                       long amountFen, Instant now) {
+        Optional<TccBranch> existing = findBranch(xid, resourceId);
+        if (existing.isPresent()) {
+            return existing.get();
+        }
+        TccBranch branch = TccBranch.initialize(
+                xid, TccBranchType.CREDIT_PAY, resourceId, transactionId, amountFen, now);
+        try {
+            branchRepository.createAccountBranch(branch);
+            return branch;
+        } catch (DataIntegrityViolationException conflict) {
+            return requiredBranch(xid, resourceId);
+        }
+    }
+
+    private TccBranch emptyRollbackBranch(String xid, String transactionId, String resourceId,
+                                          long amountFen, Instant now) {
+        TccBranch branch = TccBranch.emptyRollback(
+                xid, TccBranchType.CREDIT_PAY, resourceId, transactionId, amountFen, now);
+        try {
+            branchRepository.createAccountBranch(branch);
+            return branch;
+        } catch (DataIntegrityViolationException conflict) {
+            return requiredBranch(xid, resourceId);
+        }
+    }
+
+    private Optional<TccBranch> findBranch(String xid, String resourceId) {
+        return branchRepository.findAccountBranchForUpdate(xid, TccBranchType.CREDIT_PAY, resourceId);
+    }
+
+    private TccBranch requiredBranch(String xid, String resourceId) {
+        return findBranch(xid, resourceId).orElseThrow(() ->
+                new IllegalStateException("信用支付 TCC 分支屏障不存在"));
+    }
+
+    private void validateBranch(TccBranch branch, String transactionId, long amountFen) {
+        if (!branch.getTransactionId().equals(transactionId) || branch.getAmountFen() != amountFen) {
+            throw new IllegalStateException("信用支付 TCC 分支幂等参数不一致");
+        }
+    }
+
+    private void saveBranch(TccBranch branch, long expectedVersion) {
+        if (!branchRepository.updateAccountBranch(branch, expectedVersion)) {
+            throw new IllegalStateException("信用支付 TCC 分支版本冲突");
+        }
     }
 
     private void validateRepeatedFreeze(CreditFreeze existing, long amountFen, String branchXid) {

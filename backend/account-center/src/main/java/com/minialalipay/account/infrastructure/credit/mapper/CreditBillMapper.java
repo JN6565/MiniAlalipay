@@ -7,6 +7,7 @@ import org.apache.ibatis.annotations.Param;
 import org.apache.ibatis.annotations.Select;
 import org.apache.ibatis.annotations.Update;
 
+import java.time.Instant;
 import java.util.List;
 
 /**
@@ -49,6 +50,20 @@ public interface CreditBillMapper {
     @Select("SELECT * FROM ledger_db.credit_bill "
             + "WHERE credit_account_id = #{creditAccountId}")
     List<CreditBillPO> findByCreditAccountId(@Param("creditAccountId") String creditAccountId);
+
+    /**
+     * 查询已到期但未标记为 OVERDUE 且仍有未还金额的账单。
+     *
+     * <p>查询条件：due_at &lt; #{cutoffTime} AND status IN ('OPEN', 'PARTIALLY_PAID') AND outstanding_fen > 0</p>
+     *
+     * @param cutoffTime 截止时间
+     * @return 到期未还账单 PO 列表
+     */
+    @Select("SELECT * FROM ledger_db.credit_bill "
+            + "WHERE due_at < #{cutoffTime} "
+            + "AND status IN ('OPEN', 'PARTIALLY_PAID') "
+            + "AND outstanding_fen > 0")
+    List<CreditBillPO> findOverdueBills(@Param("cutoffTime") Instant cutoffTime);
 
     /**
      * 插入账单。

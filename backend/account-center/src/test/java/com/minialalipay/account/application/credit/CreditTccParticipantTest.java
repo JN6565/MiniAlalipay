@@ -2,6 +2,7 @@ package com.minialalipay.account.application.credit;
 
 import com.minialalipay.account.domain.credit.CreditAccount;
 import com.minialalipay.account.domain.credit.CreditAccountRepository;
+import com.minialalipay.account.domain.credit.CreditAccountStatus;
 import com.minialalipay.account.domain.credit.CreditFreeze;
 import com.minialalipay.account.domain.credit.CreditFreezeRepository;
 import com.minialalipay.account.domain.credit.CreditFreezeStatus;
@@ -10,6 +11,9 @@ import com.minialalipay.account.domain.credit.CreditPurchaseBillingStatus;
 import com.minialalipay.account.domain.credit.CreditPurchaseRepository;
 import com.minialalipay.account.domain.credit.CreditReceivable;
 import com.minialalipay.account.domain.credit.CreditReceivableRepository;
+import com.minialalipay.account.domain.tcc.RollbackType;
+import com.minialalipay.account.domain.tcc.TccBranchStatus;
+import com.minialalipay.account.domain.tcc.TccBranchType;
 import com.minialalipay.common.error.BusinessException;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
@@ -42,6 +46,7 @@ class CreditTccParticipantTest {
     private InMemoryCreditFreezeRepository freezeRepo;
     private InMemoryCreditPurchaseRepository purchaseRepo;
     private InMemoryCreditReceivableRepository receivableRepo;
+    private InMemoryTccBranchRepository branchRepo;
     private CreditTccParticipant participant;
 
     @BeforeEach
@@ -50,7 +55,9 @@ class CreditTccParticipantTest {
         freezeRepo = new InMemoryCreditFreezeRepository();
         purchaseRepo = new InMemoryCreditPurchaseRepository();
         receivableRepo = new InMemoryCreditReceivableRepository();
-        participant = new CreditTccParticipant(accountRepo, freezeRepo, purchaseRepo, receivableRepo);
+        branchRepo = new InMemoryTccBranchRepository();
+        participant = new CreditTccParticipant(
+                accountRepo, freezeRepo, purchaseRepo, receivableRepo, branchRepo);
 
         // 初始化信用账户和应收
         CreditAccount account = new CreditAccount(CREDIT_ACCOUNT_ID, "user-1", NOW);
@@ -96,11 +103,13 @@ class CreditTccParticipantTest {
     @DisplayName("Try 防悬挂：已释放的冻结记录拒绝 Try")
     void tryFreezeSuspensionPrevention() {
         participant.tryFreeze(TRANSACTION_ID, CREDIT_ACCOUNT_ID, AMOUNT_FEN, BRANCH_XID, NOW);
-        participant.cancelFreeze(TRANSACTION_ID, CREDIT_ACCOUNT_ID, NOW.plusSeconds(1));
+        participant.cancelFreeze(
+                TRANSACTION_ID, CREDIT_ACCOUNT_ID, AMOUNT_FEN, BRANCH_XID, NOW.plusSeconds(1));
 
         assertThatThrownBy(() -> participant.tryFreeze(
                 TRANSACTION_ID, CREDIT_ACCOUNT_ID, AMOUNT_FEN, BRANCH_XID, NOW.plusSeconds(2)
-        )).isInstanceOf(BusinessException.class);
+        )).isInstanceOf(IllegalStateException.class)
+                .hasMessageContaining("拒绝晚到 Try");
     }
 
     @Test
@@ -110,7 +119,8 @@ class CreditTccParticipantTest {
 
         assertThatThrownBy(() -> participant.tryFreeze(
                 TRANSACTION_ID, CREDIT_ACCOUNT_ID, 30_000L, BRANCH_XID, NOW.plusSeconds(1)
-        )).isInstanceOf(BusinessException.class);
+        )).isInstanceOf(IllegalStateException.class)
+                .hasMessageContaining("幂等参数不一致");
     }
 
     @Test
@@ -131,7 +141,8 @@ class CreditTccParticipantTest {
     void confirmFreezeSuccess() {
         participant.tryFreeze(TRANSACTION_ID, CREDIT_ACCOUNT_ID, AMOUNT_FEN, BRANCH_XID, NOW);
         participant.confirmFreeze(
-                TRANSACTION_ID, CREDIT_ACCOUNT_ID, "qr-order-1", "merchant-acc-1", NOW.plusSeconds(1)
+                TRANSACTION_ID, CREDIT_ACCOUNT_ID, AMOUNT_FEN, BRANCH_XID,
+                "qr-order-1", "merchant-acc-1", NOW.plusSeconds(1)
         );
 
         CreditAccount account = accountRepo.findById(CREDIT_ACCOUNT_ID).orElseThrow();
@@ -155,10 +166,12 @@ class CreditTccParticipantTest {
     void confirmFreezeIdempotent() {
         participant.tryFreeze(TRANSACTION_ID, CREDIT_ACCOUNT_ID, AMOUNT_FEN, BRANCH_XID, NOW);
         participant.confirmFreeze(
-                TRANSACTION_ID, CREDIT_ACCOUNT_ID, "qr-order-1", "merchant-acc-1", NOW.plusSeconds(1)
+                TRANSACTION_ID, CREDIT_ACCOUNT_ID, AMOUNT_FEN, BRANCH_XID,
+                "qr-order-1", "merchant-acc-1", NOW.plusSeconds(1)
         );
         participant.confirmFreeze(
-                TRANSACTION_ID, CREDIT_ACCOUNT_ID, "qr-order-1", "merchant-acc-1", NOW.plusSeconds(2)
+                TRANSACTION_ID, CREDIT_ACCOUNT_ID, AMOUNT_FEN, BRANCH_XID,
+                "qr-order-1", "merchant-acc-1", NOW.plusSeconds(2)
         );
 
         CreditAccount account = accountRepo.findById(CREDIT_ACCOUNT_ID).orElseThrow();
@@ -172,7 +185,8 @@ class CreditTccParticipantTest {
     @DisplayName("Confirm 不存在的冻结记录 → 抛出异常")
     void confirmNonExistentFreezeThrows() {
         assertThatThrownBy(() -> participant.confirmFreeze(
-                "nonexistent-tx", CREDIT_ACCOUNT_ID, "qr-order-1", "merchant-acc-1", NOW
+                "nonexistent-tx", CREDIT_ACCOUNT_ID, AMOUNT_FEN, BRANCH_XID,
+                "qr-order-1", "merchant-acc-1", NOW
         )).isInstanceOf(BusinessException.class);
     }
 
@@ -180,10 +194,12 @@ class CreditTccParticipantTest {
     @DisplayName("Confirm 已释放的冻结 → IllegalStateException")
     void confirmReleasedFreezeThrows() {
         participant.tryFreeze(TRANSACTION_ID, CREDIT_ACCOUNT_ID, AMOUNT_FEN, BRANCH_XID, NOW);
-        participant.cancelFreeze(TRANSACTION_ID, CREDIT_ACCOUNT_ID, NOW.plusSeconds(1));
+        participant.cancelFreeze(
+                TRANSACTION_ID, CREDIT_ACCOUNT_ID, AMOUNT_FEN, BRANCH_XID, NOW.plusSeconds(1));
 
         assertThatThrownBy(() -> participant.confirmFreeze(
-                TRANSACTION_ID, CREDIT_ACCOUNT_ID, "qr-order-1", "merchant-acc-1", NOW.plusSeconds(2)
+                TRANSACTION_ID, CREDIT_ACCOUNT_ID, AMOUNT_FEN, BRANCH_XID,
+                "qr-order-1", "merchant-acc-1", NOW.plusSeconds(2)
         )).isInstanceOf(IllegalStateException.class);
     }
 
@@ -193,7 +209,8 @@ class CreditTccParticipantTest {
     @DisplayName("Cancel 成功：释放冻结额度")
     void cancelFreezeSuccess() {
         participant.tryFreeze(TRANSACTION_ID, CREDIT_ACCOUNT_ID, AMOUNT_FEN, BRANCH_XID, NOW);
-        participant.cancelFreeze(TRANSACTION_ID, CREDIT_ACCOUNT_ID, NOW.plusSeconds(1));
+        participant.cancelFreeze(
+                TRANSACTION_ID, CREDIT_ACCOUNT_ID, AMOUNT_FEN, BRANCH_XID, NOW.plusSeconds(1));
 
         CreditAccount account = accountRepo.findById(CREDIT_ACCOUNT_ID).orElseThrow();
         assertThat(account.getFrozenFen()).isZero();
@@ -209,8 +226,10 @@ class CreditTccParticipantTest {
     @DisplayName("Cancel 幂等：重复调用不产生副作用")
     void cancelFreezeIdempotent() {
         participant.tryFreeze(TRANSACTION_ID, CREDIT_ACCOUNT_ID, AMOUNT_FEN, BRANCH_XID, NOW);
-        participant.cancelFreeze(TRANSACTION_ID, CREDIT_ACCOUNT_ID, NOW.plusSeconds(1));
-        participant.cancelFreeze(TRANSACTION_ID, CREDIT_ACCOUNT_ID, NOW.plusSeconds(2));
+        participant.cancelFreeze(
+                TRANSACTION_ID, CREDIT_ACCOUNT_ID, AMOUNT_FEN, BRANCH_XID, NOW.plusSeconds(1));
+        participant.cancelFreeze(
+                TRANSACTION_ID, CREDIT_ACCOUNT_ID, AMOUNT_FEN, BRANCH_XID, NOW.plusSeconds(2));
 
         CreditAccount account = accountRepo.findById(CREDIT_ACCOUNT_ID).orElseThrow();
         assertThat(account.getFrozenFen()).isZero();
@@ -221,12 +240,22 @@ class CreditTccParticipantTest {
     @DisplayName("Cancel 空回滚：Try 未执行时快速返回")
     void cancelFreezeEmptyRollback() {
         // 不执行 Try，直接 Cancel
-        participant.cancelFreeze(TRANSACTION_ID, CREDIT_ACCOUNT_ID, NOW);
+        participant.cancelFreeze(TRANSACTION_ID, CREDIT_ACCOUNT_ID, AMOUNT_FEN, BRANCH_XID, NOW);
 
         CreditAccount account = accountRepo.findById(CREDIT_ACCOUNT_ID).orElseThrow();
         assertThat(account.getFrozenFen()).isZero();
         assertThat(account.getUsedFen()).isZero();
         assertThat(account.getAvailableFen()).isEqualTo(CreditAccount.FIXED_TOTAL_LIMIT_FEN);
+
+        var branch = branchRepo.findAccountBranchForUpdate(
+                BRANCH_XID, TccBranchType.CREDIT_PAY, CREDIT_ACCOUNT_ID).orElseThrow();
+        assertThat(branch.getStatus()).isEqualTo(TccBranchStatus.CANCELLED);
+        assertThat(branch.getRollbackType()).isEqualTo(RollbackType.EMPTY);
+
+        assertThatThrownBy(() -> participant.tryFreeze(
+                TRANSACTION_ID, CREDIT_ACCOUNT_ID, AMOUNT_FEN, BRANCH_XID, NOW.plusSeconds(1)))
+                .isInstanceOf(IllegalStateException.class)
+                .hasMessageContaining("拒绝晚到 Try");
     }
 
     @Test
@@ -234,11 +263,12 @@ class CreditTccParticipantTest {
     void cancelConfirmedFreezeThrows() {
         participant.tryFreeze(TRANSACTION_ID, CREDIT_ACCOUNT_ID, AMOUNT_FEN, BRANCH_XID, NOW);
         participant.confirmFreeze(
-                TRANSACTION_ID, CREDIT_ACCOUNT_ID, "qr-order-1", "merchant-acc-1", NOW.plusSeconds(1)
+                TRANSACTION_ID, CREDIT_ACCOUNT_ID, AMOUNT_FEN, BRANCH_XID,
+                "qr-order-1", "merchant-acc-1", NOW.plusSeconds(1)
         );
 
         assertThatThrownBy(() -> participant.cancelFreeze(
-                TRANSACTION_ID, CREDIT_ACCOUNT_ID, NOW.plusSeconds(2)
+                TRANSACTION_ID, CREDIT_ACCOUNT_ID, AMOUNT_FEN, BRANCH_XID, NOW.plusSeconds(2)
         )).isInstanceOf(IllegalStateException.class);
     }
 
@@ -252,11 +282,15 @@ class CreditTccParticipantTest {
 
         // 第一笔消费
         participant.tryFreeze("tx-1", CREDIT_ACCOUNT_ID, amount1, "xid-1", NOW);
-        participant.confirmFreeze("tx-1", CREDIT_ACCOUNT_ID, "qr-1", "merchant-1", NOW.plusSeconds(1));
+        participant.confirmFreeze(
+                "tx-1", CREDIT_ACCOUNT_ID, amount1, "xid-1",
+                "qr-1", "merchant-1", NOW.plusSeconds(1));
 
         // 第二笔消费
         participant.tryFreeze("tx-2", CREDIT_ACCOUNT_ID, amount2, "xid-2", NOW.plusSeconds(2));
-        participant.confirmFreeze("tx-2", CREDIT_ACCOUNT_ID, "qr-2", "merchant-2", NOW.plusSeconds(3));
+        participant.confirmFreeze(
+                "tx-2", CREDIT_ACCOUNT_ID, amount2, "xid-2",
+                "qr-2", "merchant-2", NOW.plusSeconds(3));
 
         CreditAccount account = accountRepo.findById(CREDIT_ACCOUNT_ID).orElseThrow();
         assertThat(account.getUsedFen()).isEqualTo(amount1 + amount2);
@@ -274,11 +308,14 @@ class CreditTccParticipantTest {
         long amount = 30_000L;
 
         participant.tryFreeze("tx-1", CREDIT_ACCOUNT_ID, amount, "xid-1", NOW);
-        participant.cancelFreeze("tx-1", CREDIT_ACCOUNT_ID, NOW.plusSeconds(1));
+        participant.cancelFreeze(
+                "tx-1", CREDIT_ACCOUNT_ID, amount, "xid-1", NOW.plusSeconds(1));
 
         // 取消后额度恢复，可以发起新消费
         participant.tryFreeze("tx-2", CREDIT_ACCOUNT_ID, amount, "xid-2", NOW.plusSeconds(2));
-        participant.confirmFreeze("tx-2", CREDIT_ACCOUNT_ID, "qr-2", "merchant-2", NOW.plusSeconds(3));
+        participant.confirmFreeze(
+                "tx-2", CREDIT_ACCOUNT_ID, amount, "xid-2",
+                "qr-2", "merchant-2", NOW.plusSeconds(3));
 
         CreditAccount account = accountRepo.findById(CREDIT_ACCOUNT_ID).orElseThrow();
         assertThat(account.getUsedFen()).isEqualTo(amount);
@@ -299,6 +336,13 @@ class CreditTccParticipantTest {
         @Override
         public Optional<CreditAccount> findById(String creditAccountId) {
             return Optional.ofNullable(accounts.get(creditAccountId));
+        }
+
+        @Override
+        public List<CreditAccount> findByStatus(CreditAccountStatus status) {
+            return accounts.values().stream()
+                    .filter(a -> a.getStatus() == status)
+                    .toList();
         }
 
         @Override
@@ -348,6 +392,13 @@ class CreditTccParticipantTest {
             return purchases.values().stream()
                     .filter(p -> p.getCreditAccountId().equals(creditAccountId)
                             && p.getBillingStatus().name().equals(billingStatus))
+                    .toList();
+        }
+
+        @Override
+        public List<CreditPurchase> findByBillingStatus(String billingStatus) {
+            return purchases.values().stream()
+                    .filter(p -> p.getBillingStatus().name().equals(billingStatus))
                     .toList();
         }
 

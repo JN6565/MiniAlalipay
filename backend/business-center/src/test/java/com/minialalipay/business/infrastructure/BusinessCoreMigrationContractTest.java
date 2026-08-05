@@ -19,6 +19,9 @@ class BusinessCoreMigrationContractTest {
 
         assertTrue(sql.contains("create table if not exists business_db.transfer_draft"));
         assertTrue(sql.contains("unique key uk_fund_transaction_source"));
+        assertTrue(sql.contains(
+                "unique key uk_fund_transaction_source (source_type,source_order_id)"),
+                "资金交易来源唯一键必须同时覆盖 source_type 和 source_order_id");
         assertTrue(sql.contains("unique key uk_fund_transaction_idempotency"));
         assertTrue(sql.contains("unique key uk_confirmation_token"));
         assertTrue(sql.contains("key idx_fund_transaction_recovery"));

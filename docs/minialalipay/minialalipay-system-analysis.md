@@ -1438,6 +1438,8 @@ flowchart TD
 | `GET /internal/v1/accounts/by-user/{userId}` | `business-center` -> `account-center` | 只返回个人账户引用和状态，不返回余额 |
 | `POST /internal/v1/tcc/balance/{role}/{action}` | `business-center` -> `account-center` | `role` 为 `payer/payee`，`action` 为 `try/confirm/cancel`；按 `xid + branch_type + resource_id` 幂等，支持空回滚和防悬挂 |
 | `POST /internal/v1/tcc/ledger/{action}` | `business-center` -> `account-center` | Try 持久化 `PREPARED` 平衡凭证，Confirm 汇总验平后过账，Cancel 只取消未过账凭证 |
+| `POST /internal/v1/tcc/credit-pay/{action}` | `business-center` -> `account-center` | `action` 为 `try/confirm/cancel`；Try 冻结额度，Confirm 占用额度并增加消费明细和信用应收，Cancel 释放冻结；按 `xid + CREDIT_PAY + credit_account_id` 幂等并持久化空回滚屏障 |
+| `POST /internal/v1/tcc/credit-repay/{action}` | `business-center` -> `account-center` | `action` 为 `try/confirm/cancel`；Try 冻结还款余额，Confirm 扣减余额、减少应收并恢复额度，Cancel 释放余额；按 `xid + CREDIT_REPAY + credit_account_id` 幂等并持久化空回滚屏障 |
 | `GET /internal/v1/transaction-facts/{transactionId}` | `business-center` -> `account-center` | 返回余额、冻结、TCC 分支和账本的脱敏布尔事实，终态发布器不得根据超时猜测成功 |
 | `POST /internal/v1/reconciliation-diffs` | `business-center` -> `account-center` | 按业务日期、交易和差异类型幂等追加证据；只写 `ledger_db.reconciliation_diff`，不得直接改账 |
 

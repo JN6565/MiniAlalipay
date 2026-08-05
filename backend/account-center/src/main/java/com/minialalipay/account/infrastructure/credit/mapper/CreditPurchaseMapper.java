@@ -52,6 +52,16 @@ public interface CreditPurchaseMapper {
             @Param("billingStatus") String billingStatus);
 
     /**
+     * 按出账状态查询所有信用消费明细（不限定账户）。
+     *
+     * @param billingStatus 出账状态
+     * @return 消费明细 PO 列表
+     */
+    @Select("SELECT * FROM ledger_db.credit_purchase "
+            + "WHERE billing_status = #{billingStatus}")
+    List<CreditPurchasePO> findByBillingStatus(@Param("billingStatus") String billingStatus);
+
+    /**
      * 插入消费明细。
      *
      * @param po 消费明细持久化对象

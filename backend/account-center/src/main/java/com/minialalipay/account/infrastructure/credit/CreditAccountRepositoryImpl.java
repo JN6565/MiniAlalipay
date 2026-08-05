@@ -7,6 +7,7 @@ import com.minialalipay.account.infrastructure.credit.mapper.CreditAccountMapper
 import com.minialalipay.account.infrastructure.credit.po.CreditAccountPO;
 import org.springframework.stereotype.Repository;
 
+import java.util.List;
 import java.util.Optional;
 
 /**
@@ -34,6 +35,12 @@ public class CreditAccountRepositoryImpl implements CreditAccountRepository {
     public Optional<CreditAccount> findById(String creditAccountId) {
         CreditAccountPO po = creditAccountMapper.findByCreditAccountId(creditAccountId);
         return Optional.ofNullable(po).map(this::toDomain);
+    }
+
+    @Override
+    public List<CreditAccount> findByStatus(CreditAccountStatus status) {
+        List<CreditAccountPO> pos = creditAccountMapper.findByStatus(status.name());
+        return pos.stream().map(this::toDomain).toList();
     }
 
     @Override

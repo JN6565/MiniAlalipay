@@ -12,11 +12,15 @@ import com.minialalipay.account.domain.account.FreezeRecordRepository;
 import com.minialalipay.account.domain.account.FreezeStatus;
 import com.minialalipay.account.domain.credit.CreditAccount;
 import com.minialalipay.account.domain.credit.CreditAccountRepository;
+import com.minialalipay.account.domain.credit.CreditAccountStatus;
 import com.minialalipay.account.domain.credit.CreditReceivable;
 import com.minialalipay.account.domain.credit.CreditReceivableRepository;
 import com.minialalipay.account.domain.repayment.CreditRepayment;
 import com.minialalipay.account.domain.repayment.CreditRepaymentRepository;
 import com.minialalipay.account.domain.repayment.CreditRepaymentStatus;
+import com.minialalipay.account.domain.tcc.RollbackType;
+import com.minialalipay.account.domain.tcc.TccBranchStatus;
+import com.minialalipay.account.domain.tcc.TccBranchType;
 import com.minialalipay.common.error.BusinessException;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
@@ -24,6 +28,7 @@ import org.junit.jupiter.api.Test;
 
 import java.time.Instant;
 import java.util.HashMap;
+import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 
@@ -52,6 +57,7 @@ class CreditRepayTccParticipantTest {
     private TestCreditAccountRepository creditAccountRepo;
     private TestCreditReceivableRepository receivableRepo;
     private TestCreditRepaymentRepository repaymentRepo;
+    private InMemoryTccBranchRepository branchRepo;
     private CreditRepayTccParticipant participant;
 
     @BeforeEach
@@ -62,8 +68,9 @@ class CreditRepayTccParticipantTest {
         creditAccountRepo = new TestCreditAccountRepository();
         receivableRepo = new TestCreditReceivableRepository();
         repaymentRepo = new TestCreditRepaymentRepository();
+        branchRepo = new InMemoryTccBranchRepository();
         participant = new CreditRepayTccParticipant(
-                balanceService, creditAccountRepo, receivableRepo, repaymentRepo
+                balanceService, creditAccountRepo, receivableRepo, repaymentRepo, branchRepo
         );
 
         // 初始化余额账户
@@ -140,7 +147,7 @@ class CreditRepayTccParticipantTest {
         participant.tryRepay(TRANSACTION_ID, ACCOUNT_ID, CREDIT_ACCOUNT_ID,
                 REPAY_AMOUNT, BRANCH_XID, NOW);
         participant.confirmRepay(TRANSACTION_ID, ACCOUNT_ID, CREDIT_ACCOUNT_ID,
-                REPAY_AMOUNT, NOW.plusSeconds(1));
+                REPAY_AMOUNT, BRANCH_XID, NOW.plusSeconds(1));
 
         // 余额已扣减
         AccountBalance balance = accountRepo.findBalance(ACCOUNT_ID).orElseThrow();
@@ -167,9 +174,9 @@ class CreditRepayTccParticipantTest {
         participant.tryRepay(TRANSACTION_ID, ACCOUNT_ID, CREDIT_ACCOUNT_ID,
                 REPAY_AMOUNT, BRANCH_XID, NOW);
         participant.confirmRepay(TRANSACTION_ID, ACCOUNT_ID, CREDIT_ACCOUNT_ID,
-                REPAY_AMOUNT, NOW.plusSeconds(1));
+                REPAY_AMOUNT, BRANCH_XID, NOW.plusSeconds(1));
         participant.confirmRepay(TRANSACTION_ID, ACCOUNT_ID, CREDIT_ACCOUNT_ID,
-                REPAY_AMOUNT, NOW.plusSeconds(2));
+                REPAY_AMOUNT, BRANCH_XID, NOW.plusSeconds(2));
 
         AccountBalance balance = accountRepo.findBalance(ACCOUNT_ID).orElseThrow();
         assertThat(balance.getAvailableFen()).isEqualTo(INITIAL_BALANCE - REPAY_AMOUNT);
@@ -185,7 +192,9 @@ class CreditRepayTccParticipantTest {
     void cancelRepaySuccess() {
         participant.tryRepay(TRANSACTION_ID, ACCOUNT_ID, CREDIT_ACCOUNT_ID,
                 REPAY_AMOUNT, BRANCH_XID, NOW);
-        participant.cancelRepay(TRANSACTION_ID, ACCOUNT_ID, CREDIT_ACCOUNT_ID, NOW.plusSeconds(1));
+        participant.cancelRepay(
+                TRANSACTION_ID, ACCOUNT_ID, CREDIT_ACCOUNT_ID,
+                REPAY_AMOUNT, BRANCH_XID, NOW.plusSeconds(1));
 
         // 余额已恢复
         AccountBalance balance = accountRepo.findBalance(ACCOUNT_ID).orElseThrow();
@@ -206,8 +215,12 @@ class CreditRepayTccParticipantTest {
     void cancelRepayIdempotent() {
         participant.tryRepay(TRANSACTION_ID, ACCOUNT_ID, CREDIT_ACCOUNT_ID,
                 REPAY_AMOUNT, BRANCH_XID, NOW);
-        participant.cancelRepay(TRANSACTION_ID, ACCOUNT_ID, CREDIT_ACCOUNT_ID, NOW.plusSeconds(1));
-        participant.cancelRepay(TRANSACTION_ID, ACCOUNT_ID, CREDIT_ACCOUNT_ID, NOW.plusSeconds(2));
+        participant.cancelRepay(
+                TRANSACTION_ID, ACCOUNT_ID, CREDIT_ACCOUNT_ID,
+                REPAY_AMOUNT, BRANCH_XID, NOW.plusSeconds(1));
+        participant.cancelRepay(
+                TRANSACTION_ID, ACCOUNT_ID, CREDIT_ACCOUNT_ID,
+                REPAY_AMOUNT, BRANCH_XID, NOW.plusSeconds(2));
 
         AccountBalance balance = accountRepo.findBalance(ACCOUNT_ID).orElseThrow();
         assertThat(balance.getAvailableFen()).isEqualTo(INITIAL_BALANCE);
@@ -217,7 +230,8 @@ class CreditRepayTccParticipantTest {
     @DisplayName("Cancel 空回滚：Try 未执行时快速返回")
     void cancelRepayEmptyRollback() {
         // 不执行 Try，直接 Cancel
-        participant.cancelRepay(TRANSACTION_ID, ACCOUNT_ID, CREDIT_ACCOUNT_ID, NOW);
+        participant.cancelRepay(
+                TRANSACTION_ID, ACCOUNT_ID, CREDIT_ACCOUNT_ID, REPAY_AMOUNT, BRANCH_XID, NOW);
 
         // 余额不变
         AccountBalance balance = accountRepo.findBalance(ACCOUNT_ID).orElseThrow();
@@ -227,6 +241,17 @@ class CreditRepayTccParticipantTest {
         // 还款记录标记取消
         CreditRepayment repayment = repaymentRepo.findByTransactionId(TRANSACTION_ID).orElseThrow();
         assertThat(repayment.getStatus()).isEqualTo(CreditRepaymentStatus.CANCELLED);
+
+        var branch = branchRepo.findAccountBranchForUpdate(
+                BRANCH_XID, TccBranchType.CREDIT_REPAY, CREDIT_ACCOUNT_ID).orElseThrow();
+        assertThat(branch.getStatus()).isEqualTo(TccBranchStatus.CANCELLED);
+        assertThat(branch.getRollbackType()).isEqualTo(RollbackType.EMPTY);
+
+        assertThatThrownBy(() -> participant.tryRepay(
+                TRANSACTION_ID, ACCOUNT_ID, CREDIT_ACCOUNT_ID,
+                REPAY_AMOUNT, BRANCH_XID, NOW.plusSeconds(1)))
+                .isInstanceOf(IllegalStateException.class)
+                .hasMessageContaining("拒绝晚到 Try");
     }
 
     // ========== 金额守恒测试 ==========
@@ -243,7 +268,7 @@ class CreditRepayTccParticipantTest {
         assertThat(afterTry.getTotalFen()).isEqualTo(INITIAL_BALANCE);
 
         participant.confirmRepay(TRANSACTION_ID, ACCOUNT_ID, CREDIT_ACCOUNT_ID,
-                REPAY_AMOUNT, NOW.plusSeconds(1));
+                REPAY_AMOUNT, BRANCH_XID, NOW.plusSeconds(1));
 
         // Confirm 后：扣减 == 还款金额
         AccountBalance afterConfirm = accountRepo.findBalance(ACCOUNT_ID).orElseThrow();
@@ -265,7 +290,9 @@ class CreditRepayTccParticipantTest {
     void tryCancelThenNewTry() {
         participant.tryRepay("tx-1", ACCOUNT_ID, CREDIT_ACCOUNT_ID,
                 REPAY_AMOUNT, "xid-1", NOW);
-        participant.cancelRepay("tx-1", ACCOUNT_ID, CREDIT_ACCOUNT_ID, NOW.plusSeconds(1));
+        participant.cancelRepay(
+                "tx-1", ACCOUNT_ID, CREDIT_ACCOUNT_ID,
+                REPAY_AMOUNT, "xid-1", NOW.plusSeconds(1));
 
         // 取消后余额恢复，可以发起新还款
         participant.tryRepay("tx-2", ACCOUNT_ID, CREDIT_ACCOUNT_ID,
@@ -370,6 +397,13 @@ class CreditRepayTccParticipantTest {
         @Override
         public Optional<CreditAccount> findById(String creditAccountId) {
             return Optional.ofNullable(accounts.get(creditAccountId));
+        }
+
+        @Override
+        public List<CreditAccount> findByStatus(CreditAccountStatus status) {
+            return accounts.values().stream()
+                    .filter(a -> a.getStatus() == status)
+                    .toList();
         }
 
         @Override

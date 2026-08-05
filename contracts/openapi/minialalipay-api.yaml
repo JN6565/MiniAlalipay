@@ -259,6 +259,144 @@ paths:
         '401': { $ref: '#/components/responses/Unauthorized' }
         '404': { $ref: '#/components/responses/NotFound' }
         '409': { $ref: '#/components/responses/Conflict' }
+  /internal/v1/tcc/credit-pay/try:
+    post:
+      summary: 冻结信用支付额度
+      operationId: tryCreditPayTcc
+      x-client-scope: INTERNAL
+      x-service-auth: required
+      security:
+        - serviceAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/CreditPayTccBranchRequest' }
+      responses:
+        '200':
+          description: 信用额度已冻结；同一分支重复请求返回相同状态
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/TccBranchResult' }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '422': { $ref: '#/components/responses/UnprocessableEntity' }
+        '500': { $ref: '#/components/responses/InternalError' }
+  /internal/v1/tcc/credit-pay/confirm:
+    post:
+      summary: 确认信用支付额度占用和应收
+      operationId: confirmCreditPayTcc
+      x-client-scope: INTERNAL
+      x-service-auth: required
+      security:
+        - serviceAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/CreditPayTccConfirmRequest' }
+      responses:
+        '200':
+          description: 额度占用、消费明细和信用应收已在账户中心本地事务内确认
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/TccBranchResult' }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '422': { $ref: '#/components/responses/UnprocessableEntity' }
+        '500': { $ref: '#/components/responses/InternalError' }
+  /internal/v1/tcc/credit-pay/cancel:
+    post:
+      summary: 取消信用支付额度冻结
+      operationId: cancelCreditPayTcc
+      x-client-scope: INTERNAL
+      x-service-auth: required
+      security:
+        - serviceAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/CreditPayTccBranchRequest' }
+      responses:
+        '200':
+          description: 冻结已释放或空回滚屏障已持久化
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/TccBranchResult' }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '422': { $ref: '#/components/responses/UnprocessableEntity' }
+        '500': { $ref: '#/components/responses/InternalError' }
+  /internal/v1/tcc/credit-repay/try:
+    post:
+      summary: 冻结信用还款余额
+      operationId: tryCreditRepayTcc
+      x-client-scope: INTERNAL
+      x-service-auth: required
+      security:
+        - serviceAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/CreditRepayTccBranchRequest' }
+      responses:
+        '200':
+          description: 还款余额已冻结；同一分支重复请求返回相同状态
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/TccBranchResult' }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '422': { $ref: '#/components/responses/UnprocessableEntity' }
+        '500': { $ref: '#/components/responses/InternalError' }
+  /internal/v1/tcc/credit-repay/confirm:
+    post:
+      summary: 确认信用还款扣款和额度恢复
+      operationId: confirmCreditRepayTcc
+      x-client-scope: INTERNAL
+      x-service-auth: required
+      security:
+        - serviceAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/CreditRepayTccBranchRequest' }
+      responses:
+        '200':
+          description: 余额扣减、应收减少、额度恢复和还款事实已确认
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/TccBranchResult' }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '422': { $ref: '#/components/responses/UnprocessableEntity' }
+        '500': { $ref: '#/components/responses/InternalError' }
+  /internal/v1/tcc/credit-repay/cancel:
+    post:
+      summary: 取消信用还款余额冻结
+      operationId: cancelCreditRepayTcc
+      x-client-scope: INTERNAL
+      x-service-auth: required
+      security:
+        - serviceAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/CreditRepayTccBranchRequest' }
+      responses:
+        '200':
+          description: 余额冻结已释放或空回滚屏障已持久化
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/TccBranchResult' }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '422': { $ref: '#/components/responses/UnprocessableEntity' }
+        '500': { $ref: '#/components/responses/InternalError' }
 components:
   securitySchemes:
     bearerAuth:
@@ -271,6 +409,11 @@ components:
       in: cookie
       name: MINIALALIPAY_SESSION
       description: HttpOnly、Secure、SameSite Cookie；写请求同时校验 CSRF 令牌。
+    serviceAuth:
+      type: apiKey
+      in: header
+      name: X-Service-Token
+      description: 仅用于服务间鉴权的内部令牌，由部署环境注入，不得写入日志或经过前端网关。
   parameters:
     RequestIdHeader:
       name: X-Request-Id
@@ -310,6 +453,81 @@ components:
         type: string
         maxLength: 128
   schemas:
+    CreditPayTccBranchRequest:
+      type: object
+      additionalProperties: false
+      required: [xid, transactionId, creditAccountId, amountFen]
+      properties:
+        xid:
+          type: string
+          minLength: 1
+          maxLength: 128
+          description: TCC 全局事务标识；同一分支重试时保持不变。
+        transactionId: { type: string, minLength: 1, maxLength: 26 }
+        creditAccountId: { type: string, minLength: 1, maxLength: 26 }
+        amountFen:
+          type: integer
+          format: int64
+          minimum: 1
+          description: 信用支付金额，单位为分。
+    CreditPayTccConfirmRequest:
+      type: object
+      additionalProperties: false
+      required: [xid, transactionId, creditAccountId, amountFen, qrOrderId, merchantAccountId]
+      properties:
+        xid:
+          type: string
+          minLength: 1
+          maxLength: 128
+          description: TCC 全局事务标识；必须与 Try 阶段一致。
+        transactionId: { type: string, minLength: 1, maxLength: 26 }
+        creditAccountId: { type: string, minLength: 1, maxLength: 26 }
+        amountFen:
+          type: integer
+          format: int64
+          minimum: 1
+          description: 信用支付金额，单位为分；必须与 Try 阶段一致。
+        qrOrderId:
+          type: string
+          minLength: 1
+          maxLength: 26
+          description: 已由业务中心受理的扫码订单标识。
+        merchantAccountId:
+          type: string
+          minLength: 1
+          maxLength: 26
+          description: 收款方账户标识。
+    CreditRepayTccBranchRequest:
+      type: object
+      additionalProperties: false
+      required: [xid, transactionId, accountId, creditAccountId, amountFen]
+      properties:
+        xid:
+          type: string
+          minLength: 1
+          maxLength: 128
+          description: TCC 全局事务标识；同一分支重试时保持不变。
+        transactionId: { type: string, minLength: 1, maxLength: 26 }
+        accountId:
+          type: string
+          minLength: 1
+          maxLength: 26
+          description: 承担还款扣款的余额账户标识。
+        creditAccountId: { type: string, minLength: 1, maxLength: 26 }
+        amountFen:
+          type: integer
+          format: int64
+          minimum: 1
+          description: 信用还款金额，单位为分。
+    TccBranchResult:
+      type: object
+      additionalProperties: false
+      required: [status]
+      properties:
+        status:
+          type: string
+          enum: [TRIED, CONFIRMED, CANCELLED]
+          description: 本次同步调用完成后的 TCC 分支状态。
     HealthResponse:
       type: object
       additionalProperties: false

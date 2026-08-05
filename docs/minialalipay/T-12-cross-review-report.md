@@ -1,101 +1,111 @@
-# T-12 余额/账本内核交叉评审报告
+# T-12 余额、账本与交易 TCC 交叉评审报告
 
 **评审人：** 王基哲（信用业务与质量保障）
-**被评审代码：** 王钧平提交的 account-center 余额/账本内核
-**评审日期：** 2026-08-04
-**测试结果：** 205 个测试全部通过（含 62 个新增交叉评审测试）
+
+**评审日期：** 2026-08-05
+
+**评审阶段：** 阶段三余额/账本内核、阶段四统一交易状态机与 TCC 全局
+
+**最终结果：** 通过；Java 21 下 `platform-common` 11 项、`business-center` 37 项、`account-center` 218 项测试全部通过
 
 ---
 
 ## 一、评审范围
 
-| 评审对象 | 文件路径 | 评审重点 |
-|---------|---------|---------|
-| AccountBalance | `domain/account/AccountBalance.java` | CAS 乐观锁、金额非负不变量、总余额守恒 |
-| FreezeRecord | `domain/account/FreezeRecord.java` | FROZEN→CONFIRMED/RELEASED 单向流转、幂等、反向拒绝 |
-| BalanceApplicationService | `application/account/BalanceApplicationService.java` | 冻结记录唯一键先于余额 CAS、幂等回读、CAS 失败映射 |
-| LedgerVoucher | `domain/ledger/LedgerVoucher.java` | 双重平衡校验、分录一致性、冲正引用约束 |
-| LedgerApplicationService | `application/ledger/LedgerApplicationService.java` | PREPARED→POSTED 原子推进、DB 汇总验平、Outbox 同事务 |
-| Flyway 迁移 | `V202608051000`、`V202608051010` | 唯一键约束、升级存储过程 |
+| 评审对象 | 评审重点 |
+|---|---|
+| `AccountBalance`、`FreezeRecord` | 金额非负、余额守恒、冻结状态机、CAS 并发安全 |
+| `BalanceApplicationService` | 幂等回读、余额不足、唯一键冲突、余额与冻结事实同事务 |
+| `LedgerVoucher`、`LedgerTccApplicationService` | 借贷平衡、不可变分录、数据库汇总二次验平、Outbox 同事务 |
+| `CreditTccParticipant` | `CREDIT_PAY` Try/Confirm/Cancel、额度与应收守恒、空回滚、防悬挂 |
+| `CreditRepayTccParticipant` | `CREDIT_REPAY` 余额冻结、应收减少、额度恢复、空回滚、防悬挂 |
+| `FundTransaction`、`HttpTccCoordinator` | 状态机、Confirm 未知结果、Cancel 恢复、终态事实核验 |
+| `TransactionRecoveryScanner` | 服务重启后按原交易接管，不创建第二笔资金交易 |
+| 阶段四 Flyway 迁移 | 来源唯一键、TCC 恢复索引、Schema 所有权边界 |
 
----
+## 二、阶段三余额与账本结论
 
-## 二、评审结论
+以下不变量已通过领域测试、应用服务测试和仓储集成测试验证：
 
-### 2.1 通过项（无问题）
+1. 余额 Try 只在账户为 `ACTIVE` 且版本匹配时冻结，余额不足返回稳定错误码。
+2. 冻结记录以 `transactionId + accountId + purpose` 唯一，重复同参回读，异参拒绝。
+3. Confirm 只扣除已冻结金额，Cancel 只释放活动冻结；终态不可反向流转。
+4. 复式凭证创建时校验借贷平衡，Confirm 前再次汇总数据库实际分录。
+5. 凭证过账与账本 Outbox 在同一账户中心本地事务内提交。
+6. 余额、冻结、凭证和分支更新均使用版本或状态条件防止并发覆盖。
 
-| 评审项 | 结论 |
-|--------|------|
-| **余额 CAS 乐观锁** | `updateBalanceForActiveAccount` 正确实现版本比对 + 账户状态双重检查 |
-| **金额非负不变量** | `freeze`/`confirm`/`cancel` 均在操作后调用 `validate()` 校验非负 |
-| **总余额守恒** | `freeze` 保持总余额不变，`confirm` 减少总额，`cancel` 恢复可用 |
-| **冻结记录状态机** | FROZEN→CONFIRMED/RELEASED 单向流转，终态不可回退 |
-| **冻结记录幂等** | 重复同向幂等返回，反向回调拒绝 |
-| **冻结记录唯一键** | `(transactionId, accountId, purpose)` 三元组唯一，先于余额 CAS 创建 |
-| **DataIntegrityViolation 回读** | 唯一键冲突时回读已提交记录并验证参数一致性 |
-| **凭证双重平衡校验** | 内存校验 + DB `summarizeEntries` 校验，防止分录被篡改 |
-| **分录序号唯一** | `HashSet` 检测重复序号 |
-| **冲正引用约束** | `reversalNo == 0` 不允许携带冲正引用，`reversalNo > 0` 必须引用原凭证 |
-| **凭证过账幂等** | `POSTED` 状态重复过账幂等返回 |
-| **Outbox 同事务** | `postAndAppendOutbox` 与凭证状态推进在同一事务 |
-| **游标分页安全** | Base64 编码游标，`limit + 1` 判断 hasMore |
+## 三、阶段四 T-03 信用 TCC 结论
 
-### 2.2 需关注项（非阻塞）
+### 3.1 CREDIT_PAY
 
-| 编号 | 评审项 | 说明 | 建议 |
-|------|--------|------|------|
-| R-01 | `saveState` 短路求值 | `BalanceApplicationService.saveState` 使用 `\|\|` 短路：如果余额 CAS 成功但冻结记录 CAS 失败，会抛 VERSION_CONFLICT 但余额已更新。由于在同一 `@Transactional` 中，事务回滚会同时撤销余额更新，**不影响正确性**。但建议改为分别检查以提供更精确的错误信息。 | 低优先级 |
-| R-02 | 空回滚 + 防悬挂 | `CreditFreeze` 构造器要求 `amountFen >= 1`，无法创建零金额记录作为空回滚屏障。当前 `CreditTccParticipant.cancelFreeze` 在无记录时直接返回。**防悬挂**依赖 CreditFreeze 的 RELEASED 状态（Cancel 先于 Try 到达时，Try 会发现 RELEASED 记录并拒绝）。但如果 Cancel 到达时无记录（纯空回滚），后续 Try 仍会执行。 | Seata TCC 协调器引入后，由协调器维护分支状态（INIT/CANCELLED），可完整解决防悬挂。当前阶段不影响核心功能。 |
-| R-03 | `getTotalFen` 溢出 | `AccountBalance.getTotalFen()` 使用 `Math.addExact` 防止 long 溢出，正确。但 `CreditAccount.getAvailableFen()` 使用普通减法 `totalLimitFen - usedFen - frozenFen`，理论上可能下溢。实际上 `validateInvariants()` 保证 `used + frozen <= total`，所以不会下溢。 | 无需修改 |
-| R-04 | LedgerEntry 不可变 | `LedgerEntry` 是 record，天然不可变。仓储只暴露 `savePrepared` 和查询方法，不暴露 update/delete。 | 符合设计 |
+| 阶段 | 本地资金动作 | 幂等与屏障 |
+|---|---|---|
+| Try | 冻结信用额度并创建 `credit_freeze` | `xid + CREDIT_PAY + creditAccountId` 屏障；重复同参不重复冻结 |
+| Confirm | 冻结转已用，创建消费明细，增加未出账应收 | 仅允许 `TRIED -> CONFIRMED`；重复确认不重复增加应收 |
+| Cancel | 释放信用冻结 | Try 未到达时持久化 `CANCELLED/EMPTY`；正常取消记录 `NORMAL` |
 
-### 2.3 评审通过
+### 3.2 CREDIT_REPAY
 
-**结论：余额/账本内核代码质量良好，幂等、并发和不变量逻辑正确，可以进入阶段四 TCC 对接。**
+| 阶段 | 本地资金动作 | 幂等与屏障 |
+|---|---|---|
+| Try | 冻结还款余额 | `xid + CREDIT_REPAY + creditAccountId` 屏障；余额冻结复用唯一键和 CAS |
+| Confirm | 扣减余额、减少应收、恢复额度、完成还款事实 | 金额必须与 Try 和还款事实一致；重复确认无副作用 |
+| Cancel | 释放余额冻结并取消还款事实 | Try 未到达时持久化 `CANCELLED/EMPTY`，晚到 Try 被拒绝 |
 
----
+信用支付和信用还款均已验证：重复 Try、重复 Confirm、重复 Cancel、额度或余额不足、同键异参、空回滚、晚到 Try、防止已确认分支被取消，以及完整资金生命周期。
 
-## 三、新增测试清单
+## 四、阶段四 T-12 交易状态机与 TCC 全局结论
 
-### T-12 交叉评审测试（37 个用例）
+### 4.1 终态发布器
 
-| 测试文件 | 用例数 | 覆盖重点 |
-|---------|--------|---------|
-| `BalanceLedgerCrossReviewTest` | 10 | CAS 并发、金额非负、总余额守恒、溢出保护 |
-| `FreezeRecordCrossReviewTest` | 7 | 状态机终态、幂等返回、反向拒绝、防悬挂 |
-| `LedgerVoucherCrossReviewTest` | 10 | 双重平衡校验、分录一致性、冲正约束、过账幂等 |
-| `BalanceApplicationServiceCrossReviewTest` | 10 | 幂等回读、CAS 冲突映射、余额不足映射、账户状态检查 |
+- Confirm 调用超时后交易保持 `PROCESSING`，全局事务记录 `COMMITTING/UNKNOWN` 并安排重试，不根据超时执行 Cancel。
+- 只有账户分支已确认、冻结已确认、账本分支已确认且凭证已过账时，才调用 `finalizeTransaction` 原子发布 `SUCCESS`。
+- Confirm 完成但资金事实不一致时写入对账差异并原子转入 `MANUAL_REVIEW`，不会伪造成功。
+- Cancel 只有在账户和账本均已取消且没有活动冻结时，才原子发布 `CANCELLED`。
 
-### T-03 TCC 分支参与者测试（25 个用例）
+### 4.2 来源唯一约束
 
-| 测试文件 | 用例数 | 覆盖重点 |
-|---------|--------|---------|
-| `CreditTccParticipantTest` | 15 | Try 幂等/防悬挂/额度不足、Confirm 幂等/已释放拒绝、Cancel 空回滚/幂等/已确认拒绝、完整生命周期 |
-| `CreditRepayTccParticipantTest` | 10 | Try 余额冻结/幂等/余额不足、Confirm 余额扣减/应收减少/额度恢复/还款标记、Cancel 释放/空回滚、金额守恒 |
+`business_db.fund_transaction` 已具备：
 
----
+```sql
+UNIQUE KEY uk_fund_transaction_source (source_type, source_order_id)
+```
 
-## 四、TCC 参与者实现说明
+契约测试按完整列组合校验该约束，同时验证交易幂等键和恢复索引存在，避免同一业务来源创建第二笔资金主单。
 
-### CreditTccParticipant（CREDIT_PAY 分支）
+### 4.3 Confirm 与 Cancel 恢复
 
-| 阶段 | 操作 | 幂等机制 |
-|------|------|---------|
-| **Try** | `CreditAccount.freeze()` + 创建 `CreditFreeze(FROZEN)` | `(transactionId, creditAccountId)` 唯一键 |
-| **Confirm** | `CreditAccount.confirmFreeze()` + 创建 `CreditPurchase(UNBILLED)` + `CreditReceivable.increaseUnbilled()` + `CreditFreeze.confirm()` | CreditFreeze CONFIRMED 状态 |
-| **Cancel** | `CreditAccount.releaseFreeze()` + `CreditFreeze.release()` | CreditFreeze RELEASED 状态 + 空回滚日志 |
+- Confirm 首次失败后，恢复调用重新执行幂等 Try，再使用同一 `xid`、冻结 ID、凭证 ID、分录 ID 和事件 ID 正向 Confirm。
+- Cancel 首次失败后保持 `COMPENSATING` 和 `ROLLING_BACK/UNKNOWN`，恢复调用继续按账本、收款方、付款方的逆序执行 Cancel。
+- 两种恢复都必须在读取账户中心终态事实后才能发布确定终态。
 
-### CreditRepayTccParticipant（CREDIT_REPAY 分支）
+### 4.4 服务重启恢复
 
-| 阶段 | 操作 | 幂等机制 |
-|------|------|---------|
-| **Try** | `BalanceApplicationService.freeze(CREDIT_REPAYMENT)` | 余额冻结唯一键 |
-| **Confirm** | `BalanceApplicationService.confirm()` + `CreditReceivable.decreaseByRepayment()` + `CreditAccount.restoreByRepayment()` + `CreditRepayment.markSuccess()` | CreditRepayment SUCCESS 状态 |
-| **Cancel** | `BalanceApplicationService.cancel()` + `CreditRepayment.markCancelled()` | CreditRepayment CANCELLED 状态 + 空回滚捕获 |
+`TransactionRecoveryScanner` 每次最多读取 100 笔超过恢复阈值的 `PROCESSING/COMPENSATING` 交易，并将持久化的原交易交给协调器。分支技术键由交易 ID 稳定派生，因此服务重启不会生成第二笔交易或第二套资金资源。
 
-### 待对接项（阻塞于王钧平）
+### 4.5 账本不平保护
 
-1. **Seata 客户端依赖** — pom.xml 中需引入 `spring-cloud-starter-alibaba-seata`
-2. **`@TwoPhaseBusinessAction` 注解** — TCC 参与者方法添加注解后接入全局协调器
-3. **`CreditRepaymentService.submitRepayment`** — 去除 TODO，调用 `CreditRepayTccParticipant`
-4. **TCC 全局协调器** — business-center 中的 TransactionOrder + 状态机 + 恢复扫描
+账本 Confirm 以数据库实际分录汇总为准。借贷任一侧与交易金额不一致时：
+
+- 拒绝调用 `postAndAppendOutbox`；
+- TCC 账本分支保持 `TRIED`；
+- 不发布交易成功，等待恢复或人工处理。
+
+## 五、本次新增和强化的阶段四测试
+
+| 测试文件 | 新增或强化内容 |
+|---|---|
+| `CreditTccParticipantTest` | 直接断言空回滚屏障为 `CANCELLED/EMPTY`，并验证晚到 Try 被拒绝 |
+| `CreditRepayTccParticipantTest` | 直接断言还款空回滚屏障、还款事实取消和晚到 Try 拒绝 |
+| `HttpTccCoordinatorTest` | Confirm 超时正向重试、Cancel 失败逆序重试、成功终态事实核验、事实不一致转人工 |
+| `TransactionRecoveryScannerTest` | 重启扫描接管原交易、空扫描不触发协调器 |
+| `LedgerTccApplicationServiceTest` | 数据库借贷不平时拒绝过账并保持 `TRIED` |
+| `BusinessCoreMigrationContractTest` | 精确校验 `(source_type, source_order_id)` 来源唯一键 |
+
+## 六、评审结论与后续边界
+
+阶段三分配给王基哲的 T-01、T-02 和 T-12 工作已完成。信用领域模型、迁移契约、余额 CAS 并发安全与账本借贷平衡均有自动化测试覆盖；T-02 已在本机 MySQL 8.0.40 核验 Flyway 成功历史、11 张信用表及 8 项关键约束，详见 `T-02-credit-migration-verification.md`。
+
+阶段四分配给王基哲的 T-03 和 T-12 工作已完成，交付条件中的重复请求、余额不足、Confirm 超时、Cancel 重试、服务重启恢复和账本不平场景均有自动化测试覆盖。
+
+信用查询、还款业务编排、账单任务和面向用户的信用接口属于阶段五 T-04 至 T-06；本报告不将其计入阶段三、阶段四完成条件。当前机器未安装 Docker，因此没有执行容器重建；已用真实 MySQL 8.0.40 的 Flyway 历史和 `information_schema` 完成等价数据库事实核验，并由迁移契约测试持续保护表与约束定义。
