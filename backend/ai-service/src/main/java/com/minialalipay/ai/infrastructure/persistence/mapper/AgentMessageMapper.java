@@ -42,14 +42,34 @@ public interface AgentMessageMapper {
     /**
      * 查询会话内消息，按创建时间正序（用于恢复对话上下文）。
      *
+     * <p>注意：此方法返回最早 N 条，不适合"最近 N 轮"场景。
+     * 获取最近消息请使用 {@link #findRecentBySessionId}。</p>
+     *
      * @param sessionId 会话 ID
      * @param limit 最大返回数
-     * @return 消息列表
+     * @return 消息列表（正序）
      */
     @Select("SELECT * FROM agent_db.agent_message "
             + "WHERE session_id = #{sessionId} "
             + "ORDER BY created_at ASC LIMIT #{limit}")
     List<AgentMessagePO> findBySessionId(
+            @Param("sessionId") String sessionId,
+            @Param("limit") int limit);
+
+    /**
+     * 查询会话内最近 N 条消息，按创建时间倒序。
+     *
+     * <p>调用方自行反转以获得正序上下文。使用 {@code message_id}
+     * 作为第二排序键保证同毫秒消息的稳定排序。</p>
+     *
+     * @param sessionId 会话 ID
+     * @param limit 最大返回数
+     * @return 最近消息列表（倒序）
+     */
+    @Select("SELECT * FROM agent_db.agent_message "
+            + "WHERE session_id = #{sessionId} "
+            + "ORDER BY created_at DESC, message_id DESC LIMIT #{limit}")
+    List<AgentMessagePO> findRecentBySessionId(
             @Param("sessionId") String sessionId,
             @Param("limit") int limit);
 

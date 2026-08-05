@@ -3,6 +3,7 @@ package com.minialalipay.gateway.filter;
 import com.minialalipay.common.api.ApiResponse;
 import com.minialalipay.common.error.CommonErrorCode;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.minialalipay.gateway.auth.GatewayAuthenticationPort;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.cloud.gateway.filter.GatewayFilterChain;
@@ -16,9 +17,8 @@ import org.springframework.stereotype.Component;
 import org.springframework.web.server.ServerWebExchange;
 import reactor.core.publisher.Mono;
 
-import java.nio.charset.StandardCharsets;
 import java.util.List;
-import java.util.Set;
+import java.util.Optional;
 
 /**
  * 身份认证全局过滤器。
@@ -63,17 +63,17 @@ public final class AuthenticationGlobalFilter implements GlobalFilter, Ordered {
     /** 网关写给下游服务的可信用户身份头，任何客户端同名值都会被覆盖。 */
     public static final String USER_ID_HEADER = "X-User-Id";
 
-    /**
-     * 阶段二 Stub：开发阶段使用的测试主体 ID。
-     * 后续由用户中心真实会话校验替换。
-     */
-    private static final String STUB_PRINCIPAL_ID = "dev-user-001";
-    private static final Set<String> STUB_ROLES = Set.of("USER");
+    /** 网关写给下游服务的可信角色头。 */
+    public static final String ROLES_HEADER = "X-User-Roles";
 
     private final ObjectMapper objectMapper;
+    private final GatewayAuthenticationPort authenticationPort;
 
-    public AuthenticationGlobalFilter(ObjectMapper objectMapper) {
+    public AuthenticationGlobalFilter(
+            ObjectMapper objectMapper,
+            GatewayAuthenticationPort authenticationPort) {
         this.objectMapper = objectMapper;
+        this.authenticationPort = authenticationPort;
     }
 
     @Override
@@ -83,8 +83,8 @@ public final class AuthenticationGlobalFilter implements GlobalFilter, Ordered {
                 ? exchange.getRequest().getMethod().name()
                 : "GET";
 
-        if (isWhitelisted(path, method)) {
-            return chain.filter(exchange);
+        if ("OPTIONS".equalsIgnoreCase(method) || isWhitelisted(path, method)) {
+            return chain.filter(removeUntrustedIdentityHeaders(exchange));
         }
 
         String authHeader = exchange.getRequest().getHeaders().getFirst(HttpHeaders.AUTHORIZATION);
@@ -97,21 +97,10 @@ public final class AuthenticationGlobalFilter implements GlobalFilter, Ordered {
             return writeUnauthorizedResponse(exchange, "认证令牌不能为空");
         }
 
-        GatewayAuthContext authContext = resolvePrincipal(token);
-        if (authContext == null) {
-            return writeUnauthorizedResponse(exchange, "会话无效或已过期");
-        }
-
-        log.debug("认证成功: principalId={}, roles={}, path={}", authContext.principalId(), authContext.roles(), path);
-
-        // 下游 MVC 服务无法读取 Reactor Context，因此必须把已认证主体写入内部请求头。
-        // mutate().headers(set) 会覆盖而不是追加，防止客户端伪造同名身份头越权访问本人资源。
-        ServerWebExchange authenticatedExchange = exchange.mutate()
-                .request(request -> request.headers(headers ->
-                        headers.set(USER_ID_HEADER, authContext.principalId())))
-                .build();
-        return chain.filter(authenticatedExchange)
-                .contextWrite(ctx -> ctx.put(GatewayAuthContext.CONTEXT_KEY, authContext));
+        return authenticationPort.authenticate(token)
+                .switchIfEmpty(Mono.defer(() -> writeUnauthorizedResponse(exchange, "会话无效或已过期")
+                        .then(Mono.empty())))
+                .flatMap(authContext -> authorizeAndContinue(exchange, chain, path, authContext));
     }
 
     @Override
@@ -119,21 +108,46 @@ public final class AuthenticationGlobalFilter implements GlobalFilter, Ordered {
         return GatewayFilterOrders.AUTHENTICATION;
     }
 
-    /**
-     * 解析会话令牌，返回认证上下文。
-     *
-     * <p><b>阶段二 Stub：</b>接受任意非空令牌，返回固定测试用户。
-     * 阶段三将替换为对用户中心 {@code GET /api/v1/auth/sessions/validate} 的真实调用。</p>
-     *
-     * @param token Bearer 令牌
-     * @return 认证上下文，或 null 表示令牌无效
-     */
-    private GatewayAuthContext resolvePrincipal(String token) {
-        // 阶段二 Stub：接受任意合法格式令牌
-        if (token.length() >= 8) {
-            return new GatewayAuthContext(STUB_PRINCIPAL_ID, STUB_ROLES);
+    private Mono<Void> authorizeAndContinue(
+            ServerWebExchange exchange,
+            GatewayFilterChain chain,
+            String path,
+            GatewayAuthContext authContext) {
+        if (path.startsWith("/api/v1/ops/") && authContext.roles().stream()
+                .noneMatch(role -> "ADMIN".equals(role) || "OPERATOR".equals(role) || "OBSERVER".equals(role))) {
+            return writeForbiddenResponse(exchange);
         }
-        return null;
+
+        log.debug("认证成功: principalId={}, roles={}, path={}",
+                authContext.principalId(), authContext.roles(), path);
+        ServerWebExchange authenticatedExchange = exchange.mutate()
+                .request(request -> request.headers(headers -> {
+                    headers.remove(USER_ID_HEADER);
+                    headers.remove(ROLES_HEADER);
+                    headers.set(USER_ID_HEADER, authContext.principalId());
+                    headers.set(ROLES_HEADER, String.join(",", authContext.roles()));
+                }))
+                .build();
+        return chain.filter(authenticatedExchange)
+                .contextWrite(ctx -> ctx.put(GatewayAuthContext.CONTEXT_KEY, authContext));
+    }
+
+    private ServerWebExchange removeUntrustedIdentityHeaders(ServerWebExchange exchange) {
+        return exchange.mutate()
+                .request(request -> request.headers(headers -> {
+                    headers.remove(USER_ID_HEADER);
+                    headers.remove(ROLES_HEADER);
+                }))
+                .build();
+    }
+
+    private Mono<Void> writeForbiddenResponse(ServerWebExchange exchange) {
+        String requestId = exchange.getAttribute(RequestIdGlobalFilter.ATTR_REQUEST_ID);
+        String traceId = exchange.getAttribute(RequestIdGlobalFilter.ATTR_TRACE_ID);
+        ApiResponse<Void> body = ApiResponse.failure(CommonErrorCode.FORBIDDEN, requestId, traceId);
+        exchange.getResponse().setStatusCode(HttpStatus.FORBIDDEN);
+        exchange.getResponse().getHeaders().setContentType(MediaType.APPLICATION_JSON);
+        return writeBody(exchange, body);
     }
 
     /**
@@ -160,14 +174,20 @@ public final class AuthenticationGlobalFilter implements GlobalFilter, Ordered {
      * 写入 401 未认证响应。
      */
     private Mono<Void> writeUnauthorizedResponse(ServerWebExchange exchange, String detail) {
-        String requestId = exchange.getRequest().getHeaders().getFirst(RequestIdGlobalFilter.HEADER_NAME);
+        String requestId = Optional.ofNullable(
+                exchange.getRequest().getHeaders().getFirst(RequestIdGlobalFilter.HEADER_NAME))
+                .orElse(exchange.getAttribute(RequestIdGlobalFilter.ATTR_REQUEST_ID));
         log.warn("认证拒绝: path={}, detail={}, requestId={}",
                 exchange.getRequest().getURI().getPath(), detail, requestId);
 
-        ApiResponse<Void> body = ApiResponse.failure(CommonErrorCode.UNAUTHORIZED, requestId);
+        String traceId = exchange.getAttribute(RequestIdGlobalFilter.ATTR_TRACE_ID);
+        ApiResponse<Void> body = ApiResponse.failure(CommonErrorCode.UNAUTHORIZED, requestId, traceId);
         exchange.getResponse().setStatusCode(HttpStatus.UNAUTHORIZED);
         exchange.getResponse().getHeaders().setContentType(MediaType.APPLICATION_JSON);
+        return writeBody(exchange, body);
+    }
 
+    private Mono<Void> writeBody(ServerWebExchange exchange, ApiResponse<Void> body) {
         try {
             byte[] bytes = objectMapper.writeValueAsBytes(body);
             DataBuffer buffer = exchange.getResponse().bufferFactory().wrap(bytes);

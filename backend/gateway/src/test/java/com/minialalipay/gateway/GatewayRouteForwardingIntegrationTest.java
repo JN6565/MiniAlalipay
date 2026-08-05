@@ -11,6 +11,7 @@ import org.springframework.boot.test.autoconfigure.web.reactive.AutoConfigureWeb
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.boot.test.mock.mockito.MockBean;
 import org.springframework.cloud.gateway.filter.ratelimit.RedisRateLimiter;
+import org.springframework.test.context.ActiveProfiles;
 import org.springframework.test.context.DynamicPropertyRegistry;
 import org.springframework.test.context.DynamicPropertySource;
 import org.springframework.test.web.reactive.server.WebTestClient;
@@ -32,9 +33,10 @@ import static org.mockito.Mockito.when;
  */
 @SpringBootTest(webEnvironment = SpringBootTest.WebEnvironment.RANDOM_PORT)
 @AutoConfigureWebTestClient(timeout = "10000")
+@ActiveProfiles("test")
 class GatewayRouteForwardingIntegrationTest {
 
-    private static final String TOKEN = "Bearer stage-two-token";
+    private static final String TOKEN = "Bearer test-token-for-integration";
     private static final String REQUEST_ID = "request-stage-two-forwarding";
 
     private static final DisposableServer USER_SERVER = startDownstream("user-center");

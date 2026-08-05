@@ -4,9 +4,9 @@ server:
 spring:
   data:
     redis:
-      host: ${REDIS_HOST:121.43.51.164}
+      host: ${REDIS_HOST:localhost}
       port: ${REDIS_PORT:6379}
-      password: ${REDIS_PASSWORD:teamuser2026}
+      password: ${REDIS_PASSWORD:}
       timeout: 2000ms
       lettuce:
         pool:
@@ -25,8 +25,8 @@ spring:
             - name: RequestRateLimiter
               args:
                 key-resolver: "#{@loginKeyResolver}"
-                redis-rate-limiter.replenishRate: 10
-                redis-rate-limiter.burstCapacity: 20
+                redis-rate-limiter.replenishRate: 1
+                redis-rate-limiter.burstCapacity: 10
                 redis-rate-limiter.requestedTokens: 1
         - id: user-center-api
           uri: ${USER_CENTER_URI:http://localhost:8081}
@@ -36,8 +36,8 @@ spring:
             - name: RequestRateLimiter
               args:
                 key-resolver: "#{@userKeyResolver}"
-                redis-rate-limiter.replenishRate: 60
-                redis-rate-limiter.burstCapacity: 120
+                redis-rate-limiter.replenishRate: 1
+                redis-rate-limiter.burstCapacity: 60
                 redis-rate-limiter.requestedTokens: 1
         # 支付密码校验使用更严格的用户维度限流
         - id: user-center-password
@@ -48,11 +48,11 @@ spring:
             - name: RequestRateLimiter
               args:
                 key-resolver: "#{@paymentPasswordKeyResolver}"
-                redis-rate-limiter.replenishRate: 5
-                redis-rate-limiter.burstCapacity: 10
+                redis-rate-limiter.replenishRate: 1
+                redis-rate-limiter.burstCapacity: 5
                 redis-rate-limiter.requestedTokens: 1
 
-        # ========== 业务中心路由 ==========
+        # ========== 业务中心路由（仅已实现 Controller 的操作） ==========
         - id: business-center-transfers
           uri: ${BUSINESS_CENTER_URI:lb://business-center}
           predicates:
@@ -61,66 +61,17 @@ spring:
             - name: RequestRateLimiter
               args:
                 key-resolver: "#{@userKeyResolver}"
-                redis-rate-limiter.replenishRate: 60
-                redis-rate-limiter.burstCapacity: 120
-                redis-rate-limiter.requestedTokens: 1
-        # 二维码令牌交换使用独立限流
-        - id: business-center-qrpay
-          uri: ${BUSINESS_CENTER_URI:lb://business-center}
-          predicates:
-            - Path=/api/v1/qr-pay/**
-          filters:
-            - name: RequestRateLimiter
-              args:
-                key-resolver: "#{@qrTokenKeyResolver}"
-                redis-rate-limiter.replenishRate: 20
-                redis-rate-limiter.burstCapacity: 40
-                redis-rate-limiter.requestedTokens: 1
-        - id: business-center-p2p
-          uri: ${BUSINESS_CENTER_URI:lb://business-center}
-          predicates:
-            - Path=/api/v1/p2p-collections/**
-          filters:
-            - name: RequestRateLimiter
-              args:
-                key-resolver: "#{@qrTokenKeyResolver}"
-                redis-rate-limiter.replenishRate: 20
-                redis-rate-limiter.burstCapacity: 40
-                redis-rate-limiter.requestedTokens: 1
-        - id: business-center-transactions
-          uri: ${BUSINESS_CENTER_URI:lb://business-center}
-          predicates:
-            - Path=/api/v1/transactions/**
-          filters:
-            - name: RequestRateLimiter
-              args:
-                key-resolver: "#{@userKeyResolver}"
-                redis-rate-limiter.replenishRate: 60
-                redis-rate-limiter.burstCapacity: 120
-                redis-rate-limiter.requestedTokens: 1
-        - id: business-center-monitoring
-          uri: ${BUSINESS_CENTER_URI:lb://business-center}
-          predicates:
-            - Path=/api/v1/monitoring/**
-          filters:
-            - name: RequestRateLimiter
-              args:
-                key-resolver: "#{@userKeyResolver}"
-                redis-rate-limiter.replenishRate: 30
+                redis-rate-limiter.replenishRate: 1
                 redis-rate-limiter.burstCapacity: 60
                 redis-rate-limiter.requestedTokens: 1
-        # ========== 以下为 P0 接口目录存在但此前缺失的业务中心路由 ==========
-        - id: business-center-recharges
-          uri: ${BUSINESS_CENTER_URI:lb://business-center}
-          predicates:
-            - Path=/api/v1/recharges/**
-          filters:
-            - name: RequestRateLimiter
-              args:
-                key-resolver: "#{@userKeyResolver}"
-                redis-rate-limiter.replenishRate: 60
-                redis-rate-limiter.burstCapacity: 120
-                redis-rate-limiter.requestedTokens: 1
+        # ---- 以下路由已列入契约但对应 Controller 尚未实现，暂禁用 ----
+        # qr-pay → 王春桂 阶段五实现
+        # p2p-collections → 王春桂 阶段五实现
+        # transactions → 王钧平 阶段四已完成，Controller 待补充
+        # monitoring → 王春桂 阶段五实现
+        # recharges → 王春桂 阶段五实现
+        # manual-cases → 王春桂 阶段五实现
+        # ops (通用) → 王春桂 阶段五实现
         - id: business-center-transfer-drafts
           uri: ${BUSINESS_CENTER_URI:lb://business-center}
           predicates:
@@ -129,8 +80,8 @@ spring:
             - name: RequestRateLimiter
               args:
                 key-resolver: "#{@userKeyResolver}"
-                redis-rate-limiter.replenishRate: 60
-                redis-rate-limiter.burstCapacity: 120
+                redis-rate-limiter.replenishRate: 1
+                redis-rate-limiter.burstCapacity: 60
                 redis-rate-limiter.requestedTokens: 1
         - id: business-center-confirmations
           uri: ${BUSINESS_CENTER_URI:lb://business-center}
@@ -140,19 +91,8 @@ spring:
             - name: RequestRateLimiter
               args:
                 key-resolver: "#{@userKeyResolver}"
-                redis-rate-limiter.replenishRate: 30
-                redis-rate-limiter.burstCapacity: 60
-                redis-rate-limiter.requestedTokens: 1
-        - id: business-center-manual-cases
-          uri: ${BUSINESS_CENTER_URI:lb://business-center}
-          predicates:
-            - Path=/api/v1/manual-cases/**
-          filters:
-            - name: RequestRateLimiter
-              args:
-                key-resolver: "#{@userKeyResolver}"
-                redis-rate-limiter.replenishRate: 30
-                redis-rate-limiter.burstCapacity: 60
+                redis-rate-limiter.replenishRate: 1
+                redis-rate-limiter.burstCapacity: 30
                 redis-rate-limiter.requestedTokens: 1
         # 信用运维任务由账户中心拥有，必须先于通配 ops 路由匹配
         - id: account-center-credit-ops
@@ -163,22 +103,12 @@ spring:
             - name: RequestRateLimiter
               args:
                 key-resolver: "#{@userKeyResolver}"
-                redis-rate-limiter.replenishRate: 10
-                redis-rate-limiter.burstCapacity: 20
+                redis-rate-limiter.replenishRate: 1
+                redis-rate-limiter.burstCapacity: 10
                 redis-rate-limiter.requestedTokens: 1
-        - id: business-center-ops
-          uri: ${BUSINESS_CENTER_URI:http://localhost:8082}
-          predicates:
-            - Path=/api/v1/ops/**
-          filters:
-            - name: RequestRateLimiter
-              args:
-                key-resolver: "#{@userKeyResolver}"
-                redis-rate-limiter.replenishRate: 30
-                redis-rate-limiter.burstCapacity: 60
-                redis-rate-limiter.requestedTokens: 1
+        # ---- business-center-ops 禁用：对应 Controller 尚未实现（王春桂 阶段五） ----
 
-        # ========== 账户中心路由 ==========
+        # ========== 账户中心路由（仅已实现 Controller 的操作） ==========
         - id: account-center
           uri: ${ACCOUNT_CENTER_URI:http://localhost:8083}
           predicates:
@@ -187,8 +117,8 @@ spring:
             - name: RequestRateLimiter
               args:
                 key-resolver: "#{@userKeyResolver}"
-                redis-rate-limiter.replenishRate: 60
-                redis-rate-limiter.burstCapacity: 120
+                redis-rate-limiter.replenishRate: 1
+                redis-rate-limiter.burstCapacity: 60
                 redis-rate-limiter.requestedTokens: 1
 
         # ========== AI 服务路由 ==========
@@ -200,14 +130,26 @@ spring:
             - name: RequestRateLimiter
               args:
                 key-resolver: "#{@agentKeyResolver}"
-                redis-rate-limiter.replenishRate: 20
-                redis-rate-limiter.burstCapacity: 40
+                redis-rate-limiter.replenishRate: 1
+                redis-rate-limiter.burstCapacity: 20
                 redis-rate-limiter.requestedTokens: 1
 
       # 全局默认过滤器
       default-filters:
         - RateLimitResponse
         - DedupeResponseHeader=Access-Control-Allow-Origin Access-Control-Allow-Credentials
+
+# ========== 阶段二受控鉴权（dev/test profile 显式启用） ==========
+gateway:
+  authentication:
+    stub:
+      enabled: ${GATEWAY_AUTH_STUB_ENABLED:false}
+      token: ${GATEWAY_AUTH_STUB_TOKEN:}
+      principal-id: ${GATEWAY_AUTH_STUB_PRINCIPAL:dev-user-001}
+      roles: ${GATEWAY_AUTH_STUB_ROLES:USER}
+  cors:
+    allowed-origins: ${GATEWAY_CORS_ORIGINS:http://localhost:8000,http://localhost:8001}
+    max-age-seconds: ${GATEWAY_CORS_MAX_AGE:3600}
 
 management:
   endpoints:

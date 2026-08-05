@@ -25,7 +25,9 @@ class GatewayRouteConfigurationTest {
                 .findFirst()
                 .orElseThrow(() -> new AssertionError("缺少账户中心信用运维路由"));
 
-        assertThat(route.getUri().toString()).contains("account-center");
+        // 路由目标：Nacos 模式为 lb://account-center，直连模式为 http://localhost:8083
+        assertThat(route.getUri().toString())
+                .containsAnyOf("account-center", "8083");
         assertThat(route.getPredicates())
                 .anySatisfy(predicate -> assertThat(predicate.getArgs().values())
                         .contains("/api/v1/ops/credit/**"));
