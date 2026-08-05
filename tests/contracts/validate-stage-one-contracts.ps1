@@ -44,7 +44,7 @@ $operations = foreach ($line in $operationLines) {
     }
 }
 
-Assert-Contract ($operations.Count -eq 72) "P0 操作数量应为 72，实际为 $($operations.Count)"
+Assert-Contract ($operations.Count -eq 80) "P0 操作数量应为 80，实际为 $($operations.Count)"
 Assert-Contract (($operations | Group-Object Method, Path | Where-Object Count -gt 1).Count -eq 0) '方法与路径存在重复'
 Assert-Contract (($operations | Group-Object OperationId | Where-Object Count -gt 1).Count -eq 0) 'operationId 存在重复'
 Assert-Contract (($operations | Where-Object Owner -notin @('gateway', 'user-center', 'business-center', 'account-center', 'ai-service')).Count -eq 0) '存在未知服务所有者'
@@ -97,10 +97,10 @@ Assert-Contract ($openApi.Contains("pattern: '^[A-Za-z0-9._:-]+$'")) 'OpenAPI �
 Assert-Contract ($requestIdJava.Contains('[A-Za-z0-9._:-]{1,128}')) 'Java 请求编号规则与 OpenAPI 长度不一致'
 Assert-Contract ($idempotencyJava.Contains('[A-Za-z0-9._:-]{16,64}')) 'Java 幂等键规则与 OpenAPI 长度不一致'
 
-$internalOpenApiOperations = [regex]::Matches($openApi, '(?m)^\s+operationId: ([^\r\n]+)\r?\n\s+x-client-scope: INTERNAL$') |
+$internalOpenApiOperations = [regex]::Matches($openApi, '(?m)^\s+operationId: ([^\r\n]+)\r?\n\s+x-client-scope: INTERNAL\r?$') |
     ForEach-Object { $_.Groups[1].Value.Trim() }
 $internalCatalogOperations = $operations | Where-Object ClientScope -eq 'INTERNAL' | ForEach-Object OperationId
-Assert-Contract ($internalOpenApiOperations.Count -eq 6) "OpenAPI INTERNAL 操作数量应为 6，实际为 $($internalOpenApiOperations.Count)"
+Assert-Contract ($internalOpenApiOperations.Count -eq 14) "OpenAPI INTERNAL 操作数量应为 14，实际为 $($internalOpenApiOperations.Count)"
 Assert-Contract (($internalOpenApiOperations | Where-Object { $_ -notin $internalCatalogOperations }).Count -eq 0) 'OpenAPI INTERNAL 操作未全部登记到 P0 接口目录'
 Assert-Contract (($internalCatalogOperations | Where-Object { $_ -notin $internalOpenApiOperations }).Count -eq 0) 'P0 接口目录存在 OpenAPI 未定义的 INTERNAL 操作'
 

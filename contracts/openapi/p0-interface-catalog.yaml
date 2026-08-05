@@ -20,6 +20,14 @@ operations:
   - {method: POST, path: '/internal/v1/tcc/ledger/{action}', operationId: executeLedgerTccBranch, owner: account-center, clientScope: INTERNAL, idempotency: TCC_BRANCH_KEY}
   - {method: GET, path: '/internal/v1/transaction-facts/{transactionId}', operationId: getTransactionFacts, owner: account-center, clientScope: INTERNAL, idempotency: READ_ONLY}
   - {method: POST, path: /internal/v1/reconciliation-diffs, operationId: recordReconciliationDiff, owner: account-center, clientScope: INTERNAL, idempotency: DIFF_ID}
+  - {method: POST, path: /internal/v1/payment-proofs/verify, operationId: verifyInternalPaymentProof, owner: user-center, clientScope: INTERNAL, idempotency: NATURAL}
+  - {method: GET, path: '/internal/v1/payment-password/version/{userId}', operationId: getInternalPaymentPasswordVersion, owner: user-center, clientScope: INTERNAL, idempotency: READ_ONLY}
+  - {method: POST, path: /internal/v1/tcc/credit-pay/try, operationId: tryCreditPayTcc, owner: account-center, clientScope: INTERNAL, idempotency: TCC_BRANCH_KEY}
+  - {method: POST, path: /internal/v1/tcc/credit-pay/confirm, operationId: confirmCreditPayTcc, owner: account-center, clientScope: INTERNAL, idempotency: TCC_BRANCH_KEY}
+  - {method: POST, path: /internal/v1/tcc/credit-pay/cancel, operationId: cancelCreditPayTcc, owner: account-center, clientScope: INTERNAL, idempotency: TCC_BRANCH_KEY}
+  - {method: POST, path: /internal/v1/tcc/credit-repay/try, operationId: tryCreditRepayTcc, owner: account-center, clientScope: INTERNAL, idempotency: TCC_BRANCH_KEY}
+  - {method: POST, path: /internal/v1/tcc/credit-repay/confirm, operationId: confirmCreditRepayTcc, owner: account-center, clientScope: INTERNAL, idempotency: TCC_BRANCH_KEY}
+  - {method: POST, path: /internal/v1/tcc/credit-repay/cancel, operationId: cancelCreditRepayTcc, owner: account-center, clientScope: INTERNAL, idempotency: TCC_BRANCH_KEY}
   - {method: POST, path: /api/v1/auth/register, operationId: register, owner: user-center, clientScope: C, idempotency: REQUIRED}
   - {method: POST, path: /api/v1/auth/login, operationId: login, owner: user-center, clientScope: SHARED, idempotency: NONE}
   - {method: POST, path: /api/v1/auth/logout, operationId: logout, owner: user-center, clientScope: SHARED, idempotency: NATURAL}

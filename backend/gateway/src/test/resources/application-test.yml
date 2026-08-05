@@ -1,10 +1,5 @@
-# 网关集成测试配置：排除 Redis 和 Nacos，启用受控鉴权 Stub
+# 网关集成测试配置：关闭 Nacos，Redis 限流器由测试替身接管，启用受控鉴权 Stub
 spring:
-  autoconfigure:
-    exclude:
-      - org.springframework.boot.autoconfigure.data.redis.RedisAutoConfiguration
-      - org.springframework.boot.autoconfigure.data.redis.RedisReactiveAutoConfiguration
-      - org.springframework.boot.autoconfigure.data.redis.RedisRepositoriesAutoConfiguration
   cloud:
     nacos:
       discovery:
@@ -16,7 +11,9 @@ gateway:
       enabled: true
       token: test-token-for-integration
       principal-id: dev-user-001
-      roles: USER
+      roles:
+        - USER
+        - OPERATOR
   cors:
     allowed-origins:
       - http://localhost:8000

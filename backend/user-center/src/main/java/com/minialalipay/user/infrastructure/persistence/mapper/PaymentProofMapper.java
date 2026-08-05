@@ -6,6 +6,7 @@ import org.apache.ibatis.annotations.Param;
 
 import java.util.List;
 import java.util.Optional;
+import java.time.Instant;
 
 /**
  * 支付密码证明 MyBatis Mapper 接口。
@@ -55,6 +56,15 @@ public interface PaymentProofMapper {
      * @return 支付证明（可能不存在）
      */
     Optional<PaymentProofPO> selectByTokenDigest(@Param("tokenDigest") byte[] tokenDigest);
+
+    /**
+     * 使用状态条件原子消费活动证明，防止并发确认重复使用同一原始令牌。
+     *
+     * @param proofId 证明 ID
+     * @param consumedAt 消费时间
+     * @return 影响行数，只允许为 0 或 1
+     */
+    int consumeActive(@Param("proofId") String proofId, @Param("consumedAt") Instant consumedAt);
 
     /**
      * 查询用户的所有活动支付证明。

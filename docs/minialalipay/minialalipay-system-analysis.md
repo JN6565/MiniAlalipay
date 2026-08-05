@@ -2698,6 +2698,17 @@ Content-Type: application/json
 
 #### 12.9.2 支付密码校验与确认令牌
 
+业务中心不得接收或校验原始支付密码。用户中心通过以下版本化内部接口完成证明消费和改密失效检查：
+
+- `POST /internal/v1/payment-proofs/verify`：校验证明所属用户、用途、有效期和支付密码版本，并使用数据库
+  `ACTIVE` 条件更新原子消费一次性证明；并发消费只有一方成功。响应只返回 `paymentProofId` 和
+  `payPasswordVersion`，不得返回或记录原始证明。
+- `GET /internal/v1/payment-password/version/{userId}`：返回当前支付密码版本，业务中心在消费确认令牌时
+  拒绝改密前签发的确认上下文。
+
+两个接口只允许业务中心通过服务间网络和服务身份调用，不注册到前端网关。主体、用途、版本或状态不匹配统一按
+`PAYMENT_PROOF_INVALID` 处理，避免向调用方泄露证明是否属于其他用户。
+
 ```http
 POST /api/v1/payment-password/verify
 Content-Type: application/json

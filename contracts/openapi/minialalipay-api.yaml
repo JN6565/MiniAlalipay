@@ -259,6 +259,197 @@ paths:
         '401': { $ref: '#/components/responses/Unauthorized' }
         '404': { $ref: '#/components/responses/NotFound' }
         '409': { $ref: '#/components/responses/Conflict' }
+  /internal/v1/accounts/registrations/{registrationId}:
+    put:
+      summary: 按注册编号幂等创建账户体系
+      operationId: provisionAccount
+      x-client-scope: INTERNAL
+      x-service-auth: required
+      servers: [{ url: http://localhost:8083 }]
+      security: [{ internalServiceAuth: [] }]
+      parameters:
+        - name: registrationId
+          in: path
+          required: true
+          schema: { type: string, minLength: 26, maxLength: 26 }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/ProvisionAccountRequest' }
+      responses:
+        '200':
+          description: 返回已创建或幂等命中的账户摘要
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/AccountSummaryResponse' }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '409': { $ref: '#/components/responses/Conflict' }
+        '500': { $ref: '#/components/responses/InternalError' }
+  /internal/v1/accounts/by-user/{userId}:
+    get:
+      summary: 解析用户唯一个人账户
+      operationId: resolvePersonalAccount
+      x-client-scope: INTERNAL
+      x-service-auth: required
+      servers: [{ url: http://localhost:8083 }]
+      security: [{ internalServiceAuth: [] }]
+      parameters:
+        - name: userId
+          in: path
+          required: true
+          schema: { type: string, minLength: 26, maxLength: 26 }
+      responses:
+        '200':
+          description: 返回不含余额的账户引用
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/InternalAccountReference' }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '404': { $ref: '#/components/responses/NotFound' }
+  /internal/v1/tcc/balance/{role}/{action}:
+    post:
+      summary: 执行付款方或收款方余额 TCC 分支
+      operationId: executeBalanceTccBranch
+      x-client-scope: INTERNAL
+      x-service-auth: required
+      servers: [{ url: http://localhost:8083 }]
+      security: [{ internalServiceAuth: [] }]
+      parameters:
+        - name: role
+          in: path
+          required: true
+          schema: { type: string, enum: [payer, payee] }
+        - name: action
+          in: path
+          required: true
+          schema: { type: string, enum: [try, confirm, cancel] }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/BalanceTccCommand' }
+      responses:
+        '200':
+          description: 返回余额分支状态和空回滚类型
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/BalanceTccBranchResult' }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409': { $ref: '#/components/responses/Conflict' }
+  /internal/v1/tcc/ledger/{action}:
+    post:
+      summary: 执行复式账本 TCC 分支
+      operationId: executeLedgerTccBranch
+      x-client-scope: INTERNAL
+      x-service-auth: required
+      servers: [{ url: http://localhost:8083 }]
+      security: [{ internalServiceAuth: [] }]
+      parameters:
+        - name: action
+          in: path
+          required: true
+          schema: { type: string, enum: [try, confirm, cancel] }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/LedgerTccCommand' }
+      responses:
+        '200':
+          description: 返回账本分支状态
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/TccBranchResult' }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409': { $ref: '#/components/responses/Conflict' }
+  /internal/v1/transaction-facts/{transactionId}:
+    get:
+      summary: 查询终态发布所需的脱敏资金事实
+      operationId: getTransactionFacts
+      x-client-scope: INTERNAL
+      x-service-auth: required
+      servers: [{ url: http://localhost:8083 }]
+      security: [{ internalServiceAuth: [] }]
+      parameters:
+        - name: transactionId
+          in: path
+          required: true
+          schema: { type: string, minLength: 26, maxLength: 26 }
+      responses:
+        '200':
+          description: 返回成功和取消的一致性事实
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/TransactionFacts' }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '500': { $ref: '#/components/responses/InternalError' }
+  /internal/v1/reconciliation-diffs:
+    post:
+      summary: 幂等追加脱敏对账差异
+      operationId: recordReconciliationDiff
+      x-client-scope: INTERNAL
+      x-service-auth: required
+      servers: [{ url: http://localhost:8083 }]
+      security: [{ internalServiceAuth: [] }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/ReconciliationDiffRequest' }
+      responses:
+        '204': { description: 差异已记录或已幂等存在 }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '409': { $ref: '#/components/responses/Conflict' }
+        '500': { $ref: '#/components/responses/InternalError' }
+  /internal/v1/payment-proofs/verify:
+    post:
+      summary: 校验并原子消费一次性支付密码证明
+      operationId: verifyInternalPaymentProof
+      x-client-scope: INTERNAL
+      x-service-auth: required
+      security:
+        - serviceAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/InternalPaymentProofVerifyRequest' }
+      responses:
+        '200':
+          description: 证明已验证并消费，原始证明不在响应中返回
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/InternalVerifiedPaymentProof' }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '409': { $ref: '#/components/responses/Conflict' }
+        '500': { $ref: '#/components/responses/InternalError' }
+  /internal/v1/payment-password/version/{userId}:
+    get:
+      summary: 查询用户当前支付密码版本
+      operationId: getInternalPaymentPasswordVersion
+      x-client-scope: INTERNAL
+      x-service-auth: required
+      security:
+        - serviceAuth: []
+      parameters:
+        - name: userId
+          in: path
+          required: true
+          schema: { type: string, minLength: 1, maxLength: 64 }
+      responses:
+        '200':
+          description: 返回当前支付密码版本
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/InternalPaymentPasswordVersion' }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '500': { $ref: '#/components/responses/InternalError' }
   /internal/v1/tcc/credit-pay/try:
     post:
       summary: 冻结信用支付额度
@@ -414,6 +605,11 @@ components:
       in: header
       name: X-Service-Token
       description: 仅用于服务间鉴权的内部令牌，由部署环境注入，不得写入日志或经过前端网关。
+    internalServiceAuth:
+      type: apiKey
+      in: header
+      name: X-Internal-Service-Token
+      description: 账户中心既有内部资金接口使用的服务身份令牌，不得经过前端网关或写入日志。
   parameters:
     RequestIdHeader:
       name: X-Request-Id
@@ -453,6 +649,112 @@ components:
         type: string
         maxLength: 128
   schemas:
+    ProvisionAccountRequest:
+      type: object
+      additionalProperties: false
+      required: [userId]
+      properties:
+        userId: { type: string, minLength: 26, maxLength: 26, pattern: '^[0-9A-HJKMNP-TV-Z]{26}$' }
+    InternalAccountReference:
+      type: object
+      additionalProperties: false
+      required: [accountId, userId, status]
+      properties:
+        accountId: { type: string, minLength: 26, maxLength: 26 }
+        userId: { type: string, minLength: 26, maxLength: 26 }
+        status: { type: string, enum: [ACTIVE, FROZEN, CLOSED] }
+    BalanceTccCommand:
+      type: object
+      additionalProperties: false
+      required: [xid, transactionId, accountId, amountFen, freezeId]
+      properties:
+        xid: { type: string, minLength: 1, maxLength: 128 }
+        transactionId: { type: string, minLength: 26, maxLength: 26 }
+        accountId: { type: string, minLength: 26, maxLength: 26 }
+        amountFen: { type: integer, format: int64, minimum: 1 }
+        freezeId: { type: string, minLength: 26, maxLength: 26 }
+    BalanceTccBranchResult:
+      type: object
+      additionalProperties: false
+      required: [status]
+      properties:
+        status: { type: string, enum: [TRIED, CONFIRMED, CANCELLED] }
+        rollbackType: { type: [string, 'null'], enum: [NORMAL, EMPTY, null] }
+    LedgerTccCommand:
+      type: object
+      additionalProperties: false
+      required: [xid, transactionId, payerAccountId, payeeAccountId, amountFen, voucherId, debitEntryId, creditEntryId, eventId, traceId]
+      properties:
+        xid: { type: string, minLength: 1, maxLength: 128 }
+        transactionId: { type: string, minLength: 26, maxLength: 26 }
+        payerAccountId: { type: string, minLength: 26, maxLength: 26 }
+        payeeAccountId: { type: string, minLength: 26, maxLength: 26 }
+        amountFen: { type: integer, format: int64, minimum: 1 }
+        voucherId: { type: string, minLength: 26, maxLength: 26 }
+        debitEntryId: { type: integer, format: int64, minimum: 1 }
+        creditEntryId: { type: integer, format: int64, minimum: 1 }
+        eventId: { type: string, minLength: 26, maxLength: 26 }
+        traceId: { type: string, pattern: '^[a-fA-F0-9]{32}$' }
+    TransactionFacts:
+      type: object
+      additionalProperties: false
+      required: [successConsistent, cancelConsistent, accountsConfirmed, ledgerConfirmed, freezeConfirmed, ledgerPosted, accountsCancelled, ledgerCancelled, noActiveFreeze]
+      properties:
+        successConsistent: { type: boolean }
+        cancelConsistent: { type: boolean }
+        accountsConfirmed: { type: boolean }
+        ledgerConfirmed: { type: boolean }
+        freezeConfirmed: { type: boolean }
+        ledgerPosted: { type: boolean }
+        accountsCancelled: { type: boolean }
+        ledgerCancelled: { type: boolean }
+        noActiveFreeze: { type: boolean }
+    ReconciliationDiffRequest:
+      type: object
+      additionalProperties: false
+      required: [diffId, transactionId, diffType, expectedJson, actualJson, manualCaseId, traceId, detectedAt]
+      properties:
+        diffId: { type: string, minLength: 26, maxLength: 26 }
+        transactionId: { type: string, minLength: 26, maxLength: 26 }
+        diffType: { type: string, minLength: 1, maxLength: 64 }
+        expectedJson: { type: string, minLength: 2, maxLength: 4096 }
+        actualJson: { type: string, minLength: 2, maxLength: 4096 }
+        manualCaseId: { type: string, minLength: 26, maxLength: 26 }
+        traceId: { type: string, pattern: '^[a-fA-F0-9]{32}$' }
+        detectedAt: { type: string, format: date-time }
+    InternalPaymentProofVerifyRequest:
+      type: object
+      additionalProperties: false
+      required: [userId, paymentProof, purpose]
+      properties:
+        userId:
+          type: string
+          minLength: 1
+          maxLength: 64
+          description: 证明所属用户，必须与签发主体一致。
+        paymentProof:
+          type: string
+          minLength: 1
+          maxLength: 256
+          description: 用户中心签发的一次性原始证明，不得写入日志、URL 或持久化字段。
+        purpose:
+          type: string
+          minLength: 1
+          maxLength: 64
+          enum: [TRANSFER_CONFIRM]
+    InternalVerifiedPaymentProof:
+      type: object
+      additionalProperties: false
+      required: [paymentProofId, payPasswordVersion]
+      properties:
+        paymentProofId: { type: string, minLength: 1, maxLength: 26 }
+        payPasswordVersion: { type: integer, format: int64, minimum: 0 }
+    InternalPaymentPasswordVersion:
+      type: object
+      additionalProperties: false
+      required: [version]
+      properties:
+        version: { type: integer, format: int64, minimum: 0 }
     CreditPayTccBranchRequest:
       type: object
       additionalProperties: false
