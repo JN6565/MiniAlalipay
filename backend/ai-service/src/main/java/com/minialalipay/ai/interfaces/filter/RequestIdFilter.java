@@ -1,4 +1,4 @@
-package com.minialalipay.ai.infrastructure.filter;
+package com.minialalipay.ai.interfaces.filter;
 
 import com.minialalipay.common.trace.RequestIdGenerator;
 import jakarta.servlet.Filter;

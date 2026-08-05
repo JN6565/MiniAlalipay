@@ -1,4 +1,4 @@
-package com.minialalipay.ai.infrastructure.error;
+package com.minialalipay.ai.interfaces.error;
 
 import com.minialalipay.common.api.ApiResponse;
 import com.minialalipay.common.error.BusinessException;
@@ -6,7 +6,7 @@ import com.minialalipay.common.error.CommonErrorCode;
 import com.minialalipay.common.error.CommonExceptionMapper;
 import com.minialalipay.common.error.MappedError;
 import com.minialalipay.common.trace.RequestIdGenerator;
-import com.minialalipay.ai.infrastructure.filter.RequestIdFilter;
+import com.minialalipay.ai.interfaces.filter.RequestIdFilter;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.validation.ConstraintViolationException;
 import org.slf4j.Logger;
