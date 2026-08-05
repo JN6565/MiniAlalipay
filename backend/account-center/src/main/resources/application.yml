@@ -4,7 +4,7 @@ spring:
   application:
     name: account-center
   datasource:
-    url: ${ACCOUNT_DB_URL:jdbc:mysql://121.43.51.164:3306/account_db?useSSL=false&serverTimezone=Asia/Shanghai&allowPublicKeyRetrieval=true&characterEncoding=utf8mb4}
+    url: ${ACCOUNT_DB_URL:jdbc:mysql://121.43.51.164:3306/account_db?useSSL=false&serverTimezone=Asia/Shanghai&allowPublicKeyRetrieval=true&characterEncoding=utf8}
     username: ${ACCOUNT_DB_USERNAME:root}
     password: ${ACCOUNT_DB_PASSWORD:teamuser2026}
     driver-class-name: com.mysql.cj.jdbc.Driver
