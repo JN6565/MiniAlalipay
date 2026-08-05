@@ -1,4 +1,4 @@
-# 网关集成测试配置：排除 Redis 和 Nacos，避免测试环境依赖外部中间件
+# 网关集成测试配置：排除 Redis 和 Nacos，启用受控鉴权 Stub
 spring:
   autoconfigure:
     exclude:
@@ -9,3 +9,15 @@ spring:
     nacos:
       discovery:
         enabled: false
+
+gateway:
+  authentication:
+    stub:
+      enabled: true
+      token: test-token-for-integration
+      principal-id: dev-user-001
+      roles: USER
+  cors:
+    allowed-origins:
+      - http://localhost:8000
+      - http://localhost:8001

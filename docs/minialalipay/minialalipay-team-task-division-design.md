@@ -188,7 +188,18 @@
 
 **进入条件：** 网关到各服务的健康检查和错误响应测试通过。前端只能使用网关地址，不能直连服务端口。
 
-**当前验收状态（2026-08-03）：已完成并关闭。** 五个 Spring Boot 服务均具备独立启动配置和健康检查，完成四层目录说明、统一错误响应、请求编号处理及架构边界测试。网关已完成阶段二鉴权 Stub、P0 路由、`X-Request-Id` 生成与透传、统一异常和 Redis 基础限流；真实 HTTP 集成测试已验证网关分别转发至 `user-center`、`business-center`、`account-center`、`ai-service`，并验证信用运维路径归属账户中心。真实 Redis 测试已覆盖正常放行、超额返回统一 `RATE_LIMITED` 响应和 Redis 不可用时的临时放行语义。Java 21 后端全量测试与阶段一契约校验均已通过。闫泽华在本阶段完成的是用户中心服务骨架，注册、登录、会话、支付密码和联系人等真实业务仍属于阶段三。
+**当前验收状态（2026-08-05）：网关安全基线已完善。** 原始骨架于 2026-08-03 完成，2026-08-05 针对安全闭环进行以下增强：
+
+- 鉴权从任意 Bearer Token 改为配置化精确匹配 Stub，仅在 dev/test profile 显式启用时生效，其他环境 fail-closed。新增 `GatewayAuthenticationPort`、`ConfiguredStubAuthenticationAdapter` 和 `GatewayAuthenticationProperties`。
+- 客户端伪造的 `X-User-Id` 和 `X-User-Roles` 头统一清洗；运维路径增加粗粒度角色门禁（ADMIN/OPERATOR/OBSERVER）；OPTIONS 预检跳过认证。
+- `X-Trace-Id` 生成/透传/校验并写入下游请求、响应与 Reactor Context。
+- `Retry-After` 头随 429 响应返回。
+- CORS 来源配置化（`CorsProperties`）。
+- Redis 主机默认值改为 localhost；限流 replenishRate 从直接使用每分钟值改为每秒速率。
+- 路由收紧为已实现 OpenAPI 操作交集。
+- 新增认证、角色、伪造头和 OPTIONS 测试覆盖。
+
+**待外部依赖：** 用户中心真实会话校验接口契约与实现尚未就绪，因此网关仅使用可控 Stub，不得声明"真实鉴权已完成"。
 
 ### 5.3 阶段三：用户、账户和数据基础
 

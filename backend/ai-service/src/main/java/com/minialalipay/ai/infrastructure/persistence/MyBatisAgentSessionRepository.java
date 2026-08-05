@@ -1,12 +1,19 @@
 package com.minialalipay.ai.infrastructure.persistence;
 
+import com.fasterxml.jackson.core.type.TypeReference;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import com.minialalipay.ai.domain.agent.AgentSession;
 import com.minialalipay.ai.domain.agent.AgentSessionRepository;
 import com.minialalipay.ai.domain.agent.AgentSessionStatus;
 import com.minialalipay.ai.infrastructure.persistence.mapper.AgentSessionMapper;
 import com.minialalipay.ai.infrastructure.persistence.po.AgentSessionPO;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+import com.minialalipay.ai.domain.agent.AgentErrorCode;
+import com.minialalipay.common.error.BusinessException;
 import org.springframework.stereotype.Repository;
 
+import java.util.Collections;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
@@ -22,10 +29,14 @@ import java.util.stream.Collectors;
 @Repository
 public class MyBatisAgentSessionRepository implements AgentSessionRepository {
 
-    private final AgentSessionMapper agentSessionMapper;
+    private static final Logger log = LoggerFactory.getLogger(MyBatisAgentSessionRepository.class);
 
-    public MyBatisAgentSessionRepository(AgentSessionMapper agentSessionMapper) {
+    private final AgentSessionMapper agentSessionMapper;
+    private final ObjectMapper objectMapper;
+
+    public MyBatisAgentSessionRepository(AgentSessionMapper agentSessionMapper, ObjectMapper objectMapper) {
         this.agentSessionMapper = agentSessionMapper;
+        this.objectMapper = objectMapper;
     }
 
     @Override
@@ -48,8 +59,7 @@ public class MyBatisAgentSessionRepository implements AgentSessionRepository {
         } else {
             int updated = agentSessionMapper.updateByCas(toPO(session));
             if (updated == 0) {
-                throw new IllegalStateException(
-                        "会话乐观锁冲突或状态不允许修改，sessionId=" + session.getSessionId());
+                throw new BusinessException(AgentErrorCode.VERSION_CONFLICT);
             }
             session.updateVersion(session.getVersion() + 1);
         }
@@ -94,23 +104,32 @@ public class MyBatisAgentSessionRepository implements AgentSessionRepository {
     }
 
     /**
-     * 简易 JSON 解析——将数据库 JSON 字符串转为 Map。
-     * 生产环境应使用 Jackson ObjectMapper。
+     * 使用 Jackson ObjectMapper 将数据库 JSON 字符串转为 Map。
+     *
+     * <p>JSON 损坏视为数据异常，抛出稳定业务异常而非静默返回空槽位。
+     * 静默降级会导致已确认的安全上下文丢失。</p>
      */
     private Map<String, Object> parseSlotsJson(String json) {
-        // 阶段三骨架：预留 JSON 解析位置，当前返回空 Map
-        return new java.util.HashMap<>();
+        try {
+            return objectMapper.readValue(json, new TypeReference<Map<String, Object>>() {});
+        } catch (Exception e) {
+            log.error("会话槽位 JSON 解析失败，数据可能已损坏: error={}", e.getMessage());
+            throw new BusinessException(AgentErrorCode.SESSION_NOT_FOUND);
+        }
     }
 
     /**
-     * 简易 JSON 序列化——将槽位 Map 转为 JSON 字符串。
-     * 生产环境应使用 Jackson ObjectMapper。
+     * 使用 Jackson ObjectMapper 将槽位 Map 序列化为 JSON 字符串。
      */
     private String toSlotsJson(Map<String, Object> slots) {
-        // 阶段三骨架：预留 JSON 序列化位置，当前返回空 JSON 对象
         if (slots == null || slots.isEmpty()) {
             return null;
         }
-        return "{}";
+        try {
+            return objectMapper.writeValueAsString(slots);
+        } catch (Exception e) {
+            log.warn("会话槽位 JSON 序列化失败: {}", e.getMessage());
+            return "{}";
+        }
     }
 }

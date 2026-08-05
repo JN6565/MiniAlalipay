@@ -28,6 +28,9 @@ class GatewayRouteConfigurationTest {
         assertThat(route.getUri().toString())
                 .as("信用运维路由应指向本地账户中心或服务发现中的账户中心")
                 .isIn("http://localhost:8083", "lb://account-center");
+        // 路由目标：Nacos 模式为 lb://account-center，直连模式为 http://localhost:8083
+        assertThat(route.getUri().toString())
+                .containsAnyOf("account-center", "8083");
         assertThat(route.getPredicates())
                 .anySatisfy(predicate -> assertThat(predicate.getArgs().values())
                         .contains("/api/v1/ops/credit/**"));

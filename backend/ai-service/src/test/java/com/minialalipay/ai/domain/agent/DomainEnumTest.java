@@ -66,10 +66,10 @@ class DomainEnumTest {
     }
 
     @Test
-    void intentTypeShouldHaveEightValues() {
+    void intentTypeShouldHaveNineValues() {
         // TRANSFER, BALANCE_QUERY, TRANSACTION_LIST, TRANSACTION_STATUS,
-        // USER_SEARCH, CREDIT_SUMMARY, CREDIT_BILL, CREDIT_REPAYMENT
-        assertThat(IntentType.values()).hasSize(8);
+        // USER_SEARCH, CREDIT_SUMMARY, CREDIT_BILL, CREDIT_REPAYMENT, UNKNOWN
+        assertThat(IntentType.values()).hasSize(9);
     }
 
     @Test

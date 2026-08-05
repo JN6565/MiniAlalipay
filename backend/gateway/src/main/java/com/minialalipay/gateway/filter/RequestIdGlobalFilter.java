@@ -36,6 +36,12 @@ public final class RequestIdGlobalFilter implements GlobalFilter, Ordered {
     /** 请求编号 HTTP 头名称。 */
     public static final String HEADER_NAME = "X-Request-Id";
 
+    /** 链路编号 HTTP 头名称。 */
+    public static final String TRACE_HEADER_NAME = "X-Trace-Id";
+
+    private static final java.util.regex.Pattern SAFE_TRACE_ID =
+            java.util.regex.Pattern.compile("^[A-Za-z0-9_-]{8,64}$");
+
     /** Exchange 属性中请求编号的键（供异常处理器读取）。 */
     public static final String ATTR_REQUEST_ID = "gateway.requestId";
 
@@ -58,14 +64,18 @@ public final class RequestIdGlobalFilter implements GlobalFilter, Ordered {
     public Mono<Void> filter(ServerWebExchange exchange, GatewayFilterChain chain) {
         String clientHeader = exchange.getRequest().getHeaders().getFirst(HEADER_NAME);
         String requestId = requestIdGenerator.resolve(clientHeader);
-        String traceId = generateTraceId();
+        String clientTraceId = exchange.getRequest().getHeaders().getFirst(TRACE_HEADER_NAME);
+        String traceId = resolveTraceId(clientTraceId);
 
         if (clientHeader != null && !clientHeader.equals(requestId)) {
             log.warn("请求编号格式不安全，已替换: 原始值已丢弃, requestId={}", requestId);
         }
 
         ServerHttpRequest request = exchange.getRequest().mutate()
-                .headers(headers -> headers.set(HEADER_NAME, requestId))
+                .headers(headers -> {
+                    headers.set(HEADER_NAME, requestId);
+                    headers.set(TRACE_HEADER_NAME, traceId);
+                })
                 .build();
 
         // 写入 Exchange 属性，确保异常处理器能读取
@@ -88,13 +98,20 @@ public final class RequestIdGlobalFilter implements GlobalFilter, Ordered {
     }
 
     /**
-     * 生成链路追踪编号。
+     * 解析链路追踪编号。
      *
-     * <p>当前使用 UUID 作为 Trace ID，后续接入分布式追踪系统后替换。</p>
+     * <p>客户端提供的合法 {@code X-Trace-Id} 予以信任透传；不安全格式替换为新 UUID。
+     * 客户端不得伪造网关内部 Trace 头——该规则由调用方负责清理伪造头。
      *
-     * @return 新生成的 Trace ID
+     * <p>当前使用 UUID 作为 Trace ID，后续接入分布式追踪系统后统一为 W3C traceparent。
+     *
+     * @param clientTraceId 客户端提交的 Trace ID，可为 null
+     * @return 安全的 Trace ID
      */
-    private String generateTraceId() {
+    private String resolveTraceId(String clientTraceId) {
+        if (clientTraceId != null && SAFE_TRACE_ID.matcher(clientTraceId).matches()) {
+            return clientTraceId;
+        }
         return UUID.randomUUID().toString();
     }
 }

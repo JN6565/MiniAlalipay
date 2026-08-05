@@ -15,6 +15,8 @@ import org.springframework.web.server.ServerWebExchange;
 import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
 
+import java.time.Duration;
+
 /**
  * 为网关限流器产生的空 429 响应补充统一错误响应体。
  *
@@ -58,6 +60,7 @@ public class RateLimitResponseGatewayFilterFactory
         try {
             byte[] bytes = objectMapper.writeValueAsBytes(body);
             response.getHeaders().setContentType(MediaType.APPLICATION_JSON);
+            response.getHeaders().set("Retry-After", String.valueOf(Duration.ofMinutes(1).toSeconds()));
             DataBuffer buffer = response.bufferFactory().wrap(bytes);
             return response.writeWith(Flux.just(buffer));
         } catch (Exception exception) {

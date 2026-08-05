@@ -41,5 +41,8 @@ public enum IntentType {
     CREDIT_BILL,
 
     /** 花呗还款：创建还款草稿，确认后从余额扣款偿还花呗。 */
-    CREDIT_REPAYMENT
+    CREDIT_REPAYMENT,
+
+    /** 无法识别用户意图，需展示支持范围并引导用户澄清。 */
+    UNKNOWN
 }

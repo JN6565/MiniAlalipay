@@ -259,6 +259,44 @@ paths:
         '401': { $ref: '#/components/responses/Unauthorized' }
         '404': { $ref: '#/components/responses/NotFound' }
         '409': { $ref: '#/components/responses/Conflict' }
+  /api/v1/agent/messages:
+    post:
+      summary: AI 多轮对话入口
+      operationId: sendAgentMessage
+      x-client-scope: C
+      description: |
+        提交一条用户消息到 AI 会话，返回脱敏且经过结构化校验的回复。
+        会话在首条消息时自动创建，后续请求携带 sessionId 继续对话。
+        同一 clientMessageId 的重复请求返回相同结果。
+      parameters:
+        - $ref: '#/components/parameters/RequestIdHeader'
+        - name: X-User-Id
+          in: header
+          required: true
+          description: 网关从会话解析并注入的可信用户标识。
+          schema:
+            type: string
+            minLength: 1
+            maxLength: 26
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/SendAgentMessageRequest'
+      responses:
+        '200':
+          description: AI 回复，可能包含待确认槽位或澄清问题
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AgentMessageResponse'
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '409': { $ref: '#/components/responses/Conflict' }
+        '422': { $ref: '#/components/responses/UnprocessableEntity' }
+        '429': { $ref: '#/components/responses/TooManyRequests' }
+        '503': { $ref: '#/components/responses/ServiceUnavailable' }
   /internal/v1/accounts/registrations/{registrationId}:
     put:
       summary: 用户注册时幂等创建账户体系
@@ -797,6 +835,56 @@ components:
                 status: { type: string, enum: [SUCCESS, REVERSED, CANCELLED] }
                 amountFen: { type: integer, format: int64, minimum: 1 }
                 completedAt: { type: string, format: date-time }
+    SendAgentMessageRequest:
+      type: object
+      additionalProperties: false
+      required: [clientMessageId, content]
+      properties:
+        clientMessageId:
+          type: string
+          minLength: 16
+          maxLength: 64
+          description: 客户端消息幂等键，同一会话内重复请求返回相同结果。
+        sessionId:
+          type: [string, 'null']
+          maxLength: 26
+          description: 已有会话 ID；为空则创建新会话。
+        content:
+          type: string
+          minLength: 1
+          maxLength: 2000
+          description: 脱敏后的用户输入原文。
+    AgentMessageResponse:
+      allOf:
+        - $ref: '#/components/schemas/ApiResponse'
+        - type: object
+          required: [data]
+          properties:
+            data:
+              type: object
+              additionalProperties: false
+              required: [sessionId, messageId, content, intent, clarificationNeeded]
+              properties:
+                sessionId:
+                  type: string
+                  minLength: 1
+                  maxLength: 26
+                messageId:
+                  type: string
+                  minLength: 1
+                  maxLength: 26
+                content:
+                  type: string
+                  description: 脱敏 AI 回复正文。
+                intent:
+                  type: string
+                  enum: [TRANSFER, BALANCE_QUERY, TRANSACTION_LIST, TRANSACTION_STATUS, USER_SEARCH, CREDIT_SUMMARY, CREDIT_BILL, CREDIT_REPAYMENT, UNKNOWN]
+                slots:
+                  type: object
+                  additionalProperties: true
+                  description: 结构化槽位，不含支付密码、令牌或确认上下文。
+                clarificationNeeded:
+                  type: boolean
   responses:
     BadRequest:
       description: 请求格式或字段不合法
