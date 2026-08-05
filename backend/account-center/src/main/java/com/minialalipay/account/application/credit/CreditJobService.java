@@ -120,9 +120,10 @@ public class CreditJobService {
 
         try {
             // 计算账期：businessDate 的前一个月
-            LocalDate statementDate = businessDate.minusMonths(1).withDayOfMonth(1);
-            String period = String.format("%04d-%02d", statementDate.getYear(), statementDate.getMonthValue());
-            // 到期时间：当月 10 日 23:59:59
+            LocalDate periodDate = businessDate.minusMonths(1).withDayOfMonth(1);
+            LocalDate statementDate = businessDate.withDayOfMonth(1);
+            String period = String.format("%04d-%02d", periodDate.getYear(), periodDate.getMonthValue());
+            // 上月消费在本月 1 日出账，本月 10 日到期，不能误用上月日期导致新账单立即逾期。
             Instant dueAt = statementDate.withDayOfMonth(BILL_DUE_DAY)
                     .atTime(23, 59, 59)
                     .atZone(ZoneId.of("Asia/Shanghai"))
