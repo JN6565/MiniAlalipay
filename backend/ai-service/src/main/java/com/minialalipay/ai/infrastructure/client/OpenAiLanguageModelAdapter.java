@@ -2,30 +2,33 @@ package com.minialalipay.ai.infrastructure.client;
 
 import com.minialalipay.ai.application.port.ChatMessage;
 import com.minialalipay.ai.application.port.ChatResponse;
-import com.minialalipay.ai.application.port.LanguageModelPort;
 import com.minialalipay.ai.domain.agent.AgentErrorCode;
 import com.minialalipay.ai.domain.agent.IntentType;
 import com.minialalipay.common.error.BusinessException;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.ai.chat.messages.Message;
+import org.springframework.ai.chat.messages.SystemMessage;
+import org.springframework.ai.chat.messages.UserMessage;
+import org.springframework.ai.chat.messages.AssistantMessage;
+import org.springframework.ai.chat.model.ChatModel;
+import org.springframework.ai.chat.prompt.Prompt;
+import org.springframework.ai.openai.OpenAiChatOptions;
+import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.beans.factory.annotation.Value;
-import org.springframework.http.MediaType;
 import org.springframework.stereotype.Component;
-import org.springframework.http.client.SimpleClientHttpRequestFactory;
-import org.springframework.web.client.RestClient;
 
 import java.util.ArrayList;
-import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.Semaphore;
 import java.util.concurrent.atomic.AtomicInteger;
 
 /**
- * OpenAI 兼容的语言模型适配器。
+ * OpenAI 兼容协议的语言模型适配器（基于 Spring AI）。
  *
- * <p>当 {@code spring.ai.openai.api-key} 未配置时使用关键词匹配 Mock；
- * 配置后通过 Spring {@link RestClient} 直连 OpenAI 兼容 API。</p>
+ * <p>通过 Spring AI {@link ChatModel} 调用 DeepSeek 或其他 OpenAI 兼容的 LLM。
+ * 当未配置 API Key 时使用关键词匹配 Mock，不依赖真实 LLM。</p>
  *
  * <h3>安全约束</h3>
  * <ul>
@@ -39,7 +42,7 @@ public class OpenAiLanguageModelAdapter {
 
     private static final Logger log = LoggerFactory.getLogger(OpenAiLanguageModelAdapter.class);
 
-    private final RestClient restClient;
+    private final ChatModel chatModel;
     private final String model;
     private final Semaphore semaphore;
     private final CircuitBreaker circuitBreaker;
@@ -47,28 +50,29 @@ public class OpenAiLanguageModelAdapter {
 
     public OpenAiLanguageModelAdapter(
             @Value("${spring.ai.openai.api-key:}") String apiKey,
-            @Value("${spring.ai.openai.base-url:https://api.openai.com/v1}") String baseUrl,
-            @Value("${spring.ai.openai.chat.options.model:gpt-4o}") String model,
+            @Value("${spring.ai.openai.chat.options.model:deepseek-chat}") String model,
             @Value("${ai.llm.max-concurrent:20}") int maxConcurrent,
             @Value("${ai.llm.circuit-breaker.failure-threshold:3}") int failureThreshold,
             @Value("${ai.llm.circuit-breaker.open-state-duration:30s}") String openStateDuration,
-            @Value("${ai.llm.connect-timeout:2s}") String connectTimeout,
-            @Value("${ai.llm.read-timeout:8s}") String readTimeout
+            ObjectProvider<ChatModel> chatModelProvider
     ) {
         this.model = model;
         this.mockMode = apiKey == null || apiKey.isBlank();
+        // mock 模式下 Spring AI 不会自动创建 ChatModel Bean，通过 ObjectProvider 安全获取
+        this.chatModel = mockMode ? null : chatModelProvider.getIfAvailable();
         this.semaphore = new Semaphore(maxConcurrent);
         this.circuitBreaker = new CircuitBreaker(failureThreshold, parseDurationSeconds(openStateDuration));
-        this.restClient = mockMode ? null
-                : RestClient.builder()
-                    .baseUrl(baseUrl)
-                    .defaultHeader("Authorization", "Bearer " + apiKey)
-                    .defaultHeader("Content-Type", "application/json")
-                    .requestFactory(buildRequestFactory(connectTimeout, readTimeout))
-                    .build();
-        log.info("LLM 适配器启动: mode={}, model={}", mockMode ? "Mock" : "RestClient", model);
+        log.info("LLM 适配器启动: mode={}, model={}", mockMode ? "Mock" : "Spring AI + DeepSeek", model);
     }
 
+    /**
+     * 调用语言模型，返回结构化的意图、槽位和自然语言回复。
+     *
+     * @param systemPrompt 系统提示词
+     * @param history      近期对话历史（按时间正序）
+     * @param userMessage  当前用户输入（已脱敏）
+     * @return 含意图、槽位和回复文本的结构化响应
+     */
     public ChatResponse chat(String systemPrompt, List<ChatMessage> history, String userMessage) {
         circuitBreaker.assertNotOpen();
         if (!semaphore.tryAcquire()) {
@@ -89,60 +93,46 @@ public class OpenAiLanguageModelAdapter {
                 log.info("真实 LLM 不可用，降级到 Mock 响应");
                 return mockLlmResponse(userMessage);
             }
-            throw new BusinessException(AgentErrorCode.TOOL_UNAVAILABLE);
+            throw new BusinessException(AgentErrorCode.LLM_UNAVAILABLE);
         } finally {
             semaphore.release();
         }
     }
 
+    // ---- 真实 LLM 调用 ----
+
     /**
-     * 通过 RestClient 调用 OpenAI 兼容 API（Chat Completions）。
+     * 通过 Spring AI ChatModel 调用 DeepSeek 等 OpenAI 兼容 API。
      */
-    @SuppressWarnings("unchecked")
     private ChatResponse realLlmCall(String systemPrompt, List<ChatMessage> history, String userMessage) {
-        List<Map<String, String>> messages = new ArrayList<>();
-        messages.add(Map.of("role", "system", "content", systemPrompt));
+        List<Message> messages = new ArrayList<>();
+        messages.add(new SystemMessage(systemPrompt));
         for (ChatMessage msg : history) {
-            String role = switch (msg.role()) {
-                case USER -> "user";
-                case ASSISTANT -> "assistant";
-                case SYSTEM -> "system";
-            };
-            messages.add(Map.of("role", role, "content", msg.content()));
+            messages.add(switch (msg.role()) {
+                case USER -> new UserMessage(msg.content());
+                case ASSISTANT -> new AssistantMessage(msg.content());
+                case SYSTEM -> new SystemMessage(msg.content());
+            });
         }
-        messages.add(Map.of("role", "user", "content", userMessage));
+        messages.add(new UserMessage(userMessage));
 
-        Map<String, Object> body = new LinkedHashMap<>();
-        body.put("model", model);
-        body.put("messages", messages);
-        body.put("temperature", 0.1);
+        Prompt prompt = new Prompt(messages, OpenAiChatOptions.builder()
+                .model(model)
+                .temperature(0.1)
+                .build());
 
-        Map<String, Object> response = restClient.post()
-                .uri("/chat/completions")
-                .contentType(MediaType.APPLICATION_JSON)
-                .body(body)
-                .retrieve()
-                .body(Map.class);
-
-        if (response == null) {
-            return fallbackResponse();
-        }
-
-        List<Map<String, Object>> choices = (List<Map<String, Object>>) response.get("choices");
-        if (choices == null || choices.isEmpty()) {
-            return fallbackResponse();
-        }
-        Map<String, Object> message = (Map<String, Object>) choices.get(0).get("message");
-        String content = (String) message.get("content");
+        String content = chatModel.call(prompt).getResult().getOutput().getText();
         if (content == null || content.isBlank()) {
             return fallbackResponse();
         }
 
-        Map<String, Object> usage = (Map<String, Object>) response.get("usage");
-        int tokens = usage != null ? ((Number) usage.getOrDefault("total_tokens", 0)).intValue() : 0;
+        // 简单估算 token 数（中文约 0.5 token/字）
+        int estimatedTokens = estimateTokens(userMessage) + estimateTokens(content);
 
-        return parseLlmOutput(content, userMessage, tokens);
+        return parseLlmOutput(content, userMessage, estimatedTokens);
     }
+
+    // ---- 输出解析 ----
 
     private ChatResponse parseLlmOutput(String content, String originalInput, int tokens) {
         String lower = content.toLowerCase();
@@ -167,13 +157,13 @@ public class OpenAiLanguageModelAdapter {
                     containsAny(lower, "还款", "还") ? IntentType.CREDIT_REPAYMENT : IntentType.CREDIT_SUMMARY,
                     Map.of(), tokens, false);
         }
-        if (containsAny(lower, "?", "?", "请提供", "请告诉")) {
+        if (containsAny(lower, "?", "？", "请提供", "请告诉")) {
             return new ChatResponse(content, IntentType.UNKNOWN, Map.of(), tokens, true);
         }
         return new ChatResponse(content, IntentType.UNKNOWN, Map.of(), tokens, false);
     }
 
-    // ---- Mock ----
+    // ---- Mock 降级 ----
 
     private ChatResponse mockLlmResponse(String userMessage) {
         String lower = userMessage.toLowerCase();
@@ -218,7 +208,7 @@ public class OpenAiLanguageModelAdapter {
                 IntentType.UNKNOWN, Map.of(), 15, true);
     }
 
-    // ---- helpers ----
+    // ---- 工具方法 ----
 
     private boolean containsAny(String text, String... keywords) {
         for (String kw : keywords) { if (text.contains(kw)) return true; }
@@ -228,6 +218,21 @@ public class OpenAiLanguageModelAdapter {
     private long inferAmountFen(String text) {
         var m = java.util.regex.Pattern.compile("(\\d+)\\s*元").matcher(text);
         return m.find() ? Long.parseLong(m.group(1)) * 100 : 0L;
+    }
+
+    static int estimateTokens(String text) {
+        if (text == null || text.isBlank()) return 0;
+        int chineseChars = 0;
+        int otherChars = 0;
+        for (char c : text.toCharArray()) {
+            if (Character.UnicodeBlock.of(c) == Character.UnicodeBlock.CJK_UNIFIED_IDEOGRAPHS
+                    || Character.UnicodeBlock.of(c) == Character.UnicodeBlock.CJK_COMPATIBILITY_IDEOGRAPHS) {
+                chineseChars++;
+            } else if (!Character.isWhitespace(c)) {
+                otherChars++;
+            }
+        }
+        return (int) (chineseChars * 0.5 + otherChars * 0.25);
     }
 
     private static long parseDurationSeconds(String d) {
@@ -240,21 +245,6 @@ public class OpenAiLanguageModelAdapter {
         if (t.endsWith("s")) return Long.parseLong(t.replace("s", "")) * 1000;
         if (t.endsWith("m")) return Long.parseLong(t.replace("m", "")) * 60000;
         return Long.parseLong(t);
-    }
-
-    /**
-     * 根据外部化配置构建带超时的请求工厂。
-     *
-     * @param connectTimeout 连接超时配置（如 "2s"）
-     * @param readTimeout 读取超时配置（如 "8s"）
-     * @return 已配置超时的请求工厂
-     */
-    private static SimpleClientHttpRequestFactory buildRequestFactory(
-            String connectTimeout, String readTimeout) {
-        SimpleClientHttpRequestFactory factory = new SimpleClientHttpRequestFactory();
-        factory.setConnectTimeout((int) parseMillis(connectTimeout));
-        factory.setReadTimeout((int) parseMillis(readTimeout));
-        return factory;
     }
 
     // ---- 熔断器 ----
@@ -274,7 +264,7 @@ public class OpenAiLanguageModelAdapter {
         void assertNotOpen() {
             long now = System.currentTimeMillis() / 1000;
             if (openUntil > 0 && now < openUntil)
-                throw new BusinessException(AgentErrorCode.TOOL_UNAVAILABLE);
+                throw new BusinessException(AgentErrorCode.LLM_UNAVAILABLE);
             if (openUntil > 0 && now >= openUntil && !halfOpen) {
                 halfOpen = true;
                 log.info("熔断器进入 HALF_OPEN");
