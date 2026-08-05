@@ -7,13 +7,13 @@ import './index.less';
 
 const PaymentPasswordChangePage: React.FC = () => {
   const [loading, setLoading] = useState(false);
-  const [loginPassword, setLoginPassword] = useState('');
+  const [currentPassword, setCurrentPassword] = useState('');
   const [newPassword, setNewPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
 
   const handleSubmit = async () => {
-    if (!loginPassword) {
-      Toast.show({ content: '请输入登录密码', icon: 'fail' });
+    if (!currentPassword) {
+      Toast.show({ content: '请输入当前支付密码', icon: 'fail' });
       return;
     }
 
@@ -30,8 +30,8 @@ const PaymentPasswordChangePage: React.FC = () => {
     setLoading(true);
     try {
       await paymentPasswordService.changePaymentPassword({
-        loginPassword,
-        newPaymentPassword: newPassword,
+        currentPassword,
+        newPassword,
       });
       Toast.show({ icon: 'success', content: '支付密码修改成功' });
       history.push('/h5/settings');
@@ -46,13 +46,8 @@ const PaymentPasswordChangePage: React.FC = () => {
     <div className="payment-password-change-page">
       <div className="change-form">
         <div className="form-item">
-          <div className="form-label">登录密码</div>
-          <Input
-            type="password"
-            placeholder="请输入当前登录密码"
-            value={loginPassword}
-            onChange={setLoginPassword}
-          />
+          <div className="form-label">当前支付密码</div>
+          <PasswordInput value={currentPassword} onChange={setCurrentPassword} length={6} />
         </div>
 
         <div className="form-item">
