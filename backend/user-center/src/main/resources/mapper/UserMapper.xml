@@ -1,0 +1,242 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+
+<!--
+  用户 Mapper XML 映射文件。
+
+  定义 app_user 表的 SQL 操作，包括插入、查询和更新。
+  所有 SQL 语句使用 MyBatis 动态 SQL 语法，避免 SQL 注入。
+
+  命名规范：
+  - insert: 插入新记录
+  - selectByXxx: 按条件查询单条记录
+  - update: 更新记录（使用乐观锁 version）
+  - existsByXxx: 检查记录是否存在
+
+  注意事项：
+  - 所有时间字段使用 java.time.Instant，MyBatis 自动处理 UTC 转换
+  - 更新操作必须包含 WHERE version = #{expectedVersion}，防止并发覆盖
+  - 唯一约束冲突（如 login_name 重复）由数据库抛出异常，由上层捕获并转换为业务异常
+-->
+<mapper namespace="com.minialalipay.user.infrastructure.persistence.mapper.UserMapper">
+
+    <!-- 结果映射：将数据库字段映射到 Java 对象 -->
+    <resultMap id="userResultMap" type="com.minialalipay.user.infrastructure.persistence.po.UserPO">
+        <id property="userId" column="user_id"/>
+        <result property="registrationId" column="registration_id"/>
+        <result property="loginName" column="login_name"/>
+        <result property="nickname" column="nickname"/>
+        <result property="phoneTail" column="phone_tail"/>
+        <result property="identityStatus" column="identity_status"/>
+        <result property="status" column="status"/>
+        <result property="version" column="version"/>
+        <result property="createdAt" column="created_at"/>
+        <result property="updatedAt" column="updated_at"/>
+    </resultMap>
+
+    <!--
+      插入新用户记录。
+
+      注册时调用，插入新用户记录到 app_user 表。
+      如果 login_name 已存在，数据库抛出唯一约束异常。
+
+      参数：
+      - user: 用户持久化对象
+
+      返回值：
+      - 插入的行数（成功时返回 1）
+    -->
+    <insert id="insert" parameterType="com.minialalipay.user.infrastructure.persistence.po.UserPO">
+        INSERT INTO app_user (
+            user_id,
+            registration_id,
+            login_name,
+            nickname,
+            phone_tail,
+            identity_status,
+            status,
+            version,
+            created_at,
+            updated_at
+        ) VALUES (
+            #{userId},
+            #{registrationId},
+            #{loginName},
+            #{nickname},
+            #{phoneTail},
+            #{identityStatus},
+            #{status},
+            #{version},
+            #{createdAt},
+            #{updatedAt}
+        )
+    </insert>
+
+    <!--
+      根据用户 ID 查询用户。
+
+      参数：
+      - userId: 用户 ID（ULID 格式，26 位字符）
+
+      返回值：
+      - 用户持久化对象，如果不存在则返回 null
+    -->
+    <select id="selectByUserId" parameterType="string" resultMap="userResultMap">
+        SELECT
+            user_id,
+            registration_id,
+            login_name,
+            nickname,
+            phone_tail,
+            identity_status,
+            status,
+            version,
+            created_at,
+            updated_at
+        FROM app_user
+        WHERE user_id = #{userId}
+    </select>
+
+    <!--
+      根据登录名查询用户。
+
+      登录名已规范化存储（转小写、去空格），查询时也需要规范化。
+
+      参数：
+      - loginName: 登录名（已规范化）
+
+      返回值：
+      - 用户持久化对象，如果不存在则返回 null
+    -->
+    <select id="selectByLoginName" parameterType="string" resultMap="userResultMap">
+        SELECT
+            user_id,
+            registration_id,
+            login_name,
+            nickname,
+            phone_tail,
+            identity_status,
+            status,
+            version,
+            created_at,
+            updated_at
+        FROM app_user
+        WHERE login_name = #{loginName}
+    </select>
+
+    <!--
+      根据注册幂等键查询用户。
+
+      用于开户恢复场景：账户中心以 registration_id
+      作为开户幂等键，查询用户是否存在。
+
+      参数：
+      - registrationId: 注册幂等键（ULID 格式，26 位字符）
+
+      返回值：
+      - 用户持久化对象，如果不存在则返回 null
+    -->
+    <select id="selectByRegistrationId" parameterType="string" resultMap="userResultMap">
+        SELECT
+            user_id,
+            registration_id,
+            login_name,
+            nickname,
+            phone_tail,
+            identity_status,
+            status,
+            version,
+            created_at,
+            updated_at
+        FROM app_user
+        WHERE registration_id = #{registrationId}
+    </select>
+
+    <!--
+      更新用户信息。
+
+      更新用户资料或状态时调用，使用乐观锁（version）保证并发安全。
+      更新成功后 version 自动递增 1。
+
+      参数：
+      - user: 用户持久化对象（包含更新后的数据）
+
+      返回值：
+      - 更新的行数（成功时返回 1，版本冲突时返回 0）
+    -->
+    <update id="update" parameterType="com.minialalipay.user.infrastructure.persistence.po.UserPO">
+        UPDATE app_user
+        SET
+            login_name = #{loginName},
+            nickname = #{nickname},
+            phone_tail = #{phoneTail},
+            identity_status = #{identityStatus},
+            status = #{status},
+            version = version + 1,
+            updated_at = #{updatedAt}
+        WHERE user_id = #{userId}
+          AND version = #{version}
+    </update>
+
+    <!--
+      检查登录名是否已存在。
+
+      注册时用于校验用户名唯一性，避免插入后才报唯一约束冲突。
+
+      参数：
+      - loginName: 登录名（已规范化）
+
+      返回值：
+      - 如果登录名已存在则返回 true
+    -->
+    <select id="existsByLoginName" parameterType="string" resultType="boolean">
+        SELECT COUNT(*) > 0
+        FROM app_user
+        WHERE login_name = #{loginName}
+    </select>
+
+    <!--
+      按关键词搜索用户。
+
+      搜索规则：
+      - 按登录名或昵称模糊搜索
+      - 只返回 ACTIVE 状态的用户
+      - 排除指定的用户 ID（通常是当前用户）
+      - 最多返回指定数量的结果
+
+      参数：
+      - searchPattern: 搜索模式（%keyword%）
+      - excludeId: 排除的用户 ID（可为 null）
+      - limit: 最大返回数量
+
+      返回值：
+      - 用户列表
+    -->
+    <select id="searchByKeyword" resultMap="userResultMap">
+        SELECT
+            user_id,
+            registration_id,
+            login_name,
+            nickname,
+            phone_tail,
+            identity_status,
+            status,
+            version,
+            created_at,
+            updated_at
+        FROM app_user
+        WHERE status = 'ACTIVE'
+          AND (login_name LIKE #{searchPattern} OR nickname LIKE #{searchPattern})
+          <if test="excludeId != null">
+            AND user_id != #{excludeId}
+          </if>
+        ORDER BY
+            CASE
+                WHEN login_name LIKE #{searchPattern} THEN 0
+                ELSE 1
+            END,
+            login_name ASC
+        LIMIT #{limit}
+    </select>
+
+</mapper>
