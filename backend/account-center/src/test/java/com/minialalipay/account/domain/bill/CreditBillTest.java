@@ -105,6 +105,22 @@ class CreditBillTest {
         }
 
         @Test
+        @DisplayName("逾期账单部分还款后保持 OVERDUE，全部清偿后转为 PAID")
+        void shouldKeepOverdueUntilFullyRepaid() {
+            CreditBill bill = new CreditBill(
+                    BILL_ID, CREDIT_ACCOUNT_ID, PERIOD,
+                    STATEMENT_DATE, DUE_AT, 100_000L, NOW
+            );
+            bill.markOverdue(NOW);
+
+            bill.applyRepayment(40_000L, NOW);
+            assertThat(bill.getStatus()).isEqualTo(CreditBillStatus.OVERDUE);
+
+            bill.applyRepayment(60_000L, NOW);
+            assertThat(bill.getStatus()).isEqualTo(CreditBillStatus.PAID);
+        }
+
+        @Test
         @DisplayName("PAID 状态再还款抛异常")
         void shouldThrowWhenRepayPaidBill() {
             CreditBill bill = new CreditBill(

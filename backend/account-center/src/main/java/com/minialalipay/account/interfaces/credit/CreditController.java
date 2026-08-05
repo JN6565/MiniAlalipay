@@ -165,7 +165,8 @@ public class CreditController {
         validateIdempotencyKey(idempotencyKey);
         String requestId = requestIdGenerator.resolve(httpRequest.getHeader("X-Request-Id"));
         String traceId = httpRequest.getHeader("X-Trace-Id");
-        RepaymentDraftDTO data = creditRepaymentService.createRepaymentDraft(userId, request.amountFen());
+        RepaymentDraftDTO data = creditRepaymentService.createRepaymentDraft(
+                userId, request.amountFen(), idempotencyKey);
         return ResponseEntity.ok(ApiResponse.success(data, requestId, traceId));
     }
 
@@ -191,7 +192,8 @@ public class CreditController {
         validateIdempotencyKey(idempotencyKey);
         String requestId = requestIdGenerator.resolve(httpRequest.getHeader("X-Request-Id"));
         String traceId = httpRequest.getHeader("X-Trace-Id");
-        RepaymentDTO data = creditRepaymentService.submitRepayment(userId, request.repaymentDraftId());
+        RepaymentDTO data = creditRepaymentService.submitRepayment(
+                userId, request.repaymentDraftId(), request.paymentProofToken(), idempotencyKey);
         return ResponseEntity.ok(ApiResponse.success(data, requestId, traceId));
     }
 

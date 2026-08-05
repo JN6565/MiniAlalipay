@@ -42,6 +42,11 @@ public enum CreditErrorCode implements ErrorCode {
     /** 还款记录不存在。 */
     REPAYMENT_NOT_FOUND(
             "REPAYMENT_NOT_FOUND", "还款记录不存在", 404
+    ),
+
+    /** 支付密码证明无效、已过期、用途不匹配或已被消费。 */
+    PAYMENT_PROOF_INVALID(
+            "PAYMENT_PROOF_INVALID", "支付密码证明无效或已过期", 409
     );
 
     private final String code;

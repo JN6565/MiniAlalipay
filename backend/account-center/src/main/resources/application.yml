@@ -23,3 +23,7 @@ management:
     web:
       exposure:
         include: health,info
+minialalipay:
+  internal:
+    user-center-url: ${USER_CENTER_URL:http://localhost:8081}
+    service-token: ${INTERNAL_SERVICE_TOKEN:}

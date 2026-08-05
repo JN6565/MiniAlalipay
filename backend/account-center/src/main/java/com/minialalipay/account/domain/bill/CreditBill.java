@@ -98,7 +98,7 @@ public class CreditBill {
      *
      * <p>状态流转：
      * <ul>
-     *   <li>部分还款：OPEN/OVERDUE → PARTIALLY_PAID</li>
+     *   <li>部分还款：OPEN → PARTIALLY_PAID；OVERDUE 保持逾期，直至全部清偿</li>
      *   <li>全额还款：任意非 PAID 状态 → PAID</li>
      * </ul>
      * </p>
@@ -118,9 +118,10 @@ public class CreditBill {
         }
         this.paidFen += amountFen;
         this.outstandingFen -= amountFen;
+        CreditBillStatus previousStatus = this.status;
         if (this.outstandingFen == 0) {
             this.status = CreditBillStatus.PAID;
-        } else {
+        } else if (previousStatus != CreditBillStatus.OVERDUE) {
             this.status = CreditBillStatus.PARTIALLY_PAID;
         }
         this.updatedAt = now;
