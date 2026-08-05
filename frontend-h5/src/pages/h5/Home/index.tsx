@@ -1,18 +1,11 @@
-import React, { useEffect, useState } from 'react';
+import React, { useState } from 'react';
 import { history } from 'umi';
 import { Toast } from 'antd-mobile';
-import { formatRelativeTime } from '@/utils/format';
 import './index.less';
 
 const HomePage: React.FC = () => {
-  const [loading, setLoading] = useState(true);
   const nickname = localStorage.getItem('nickname') || '用户';
-
-  // TODO: 对接真实接口
-  useEffect(() => {
-    Toast.show({ content: '后端服务未启动', icon: 'fail' });
-    setLoading(false);
-  }, []);
+  const [loading] = useState(false);
 
   // Mock数据
   const account = {
@@ -96,7 +89,7 @@ const HomePage: React.FC = () => {
           <div className="func-icon" style={{ background: '#e6fffb' }}>📈</div>
           <span>分析</span>
         </div>
-        <div className="func-item">
+        <div className="func-item" onClick={() => history.push('/h5/recharge')}>
           <div className="func-icon" style={{ background: '#f5f5f5' }}>🏦</div>
           <span>充值</span>
         </div>

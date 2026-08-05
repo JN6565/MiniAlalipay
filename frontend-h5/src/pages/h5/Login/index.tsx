@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { history } from 'umi';
 import { Toast } from 'antd-mobile';
+import { login } from '@/services/auth';
 import './index.less';
 
 const LoginPage: React.FC = () => {
@@ -21,9 +22,26 @@ const LoginPage: React.FC = () => {
 
     setLoading(true);
 
-    // TODO: 对接真实接口
-    Toast.show({ icon: 'fail', content: '后端服务未启动' });
-    setLoading(false);
+    try {
+      // 调用真实登录接口
+      const result = await login({ loginName, loginPassword });
+
+      // 保存会话令牌到 localStorage
+      localStorage.setItem('accessToken', result.accessToken);
+      localStorage.setItem('userId', result.userId);
+      localStorage.setItem('nickname', result.nickname);
+
+      // 显示登录成功提示
+      Toast.show({ content: '登录成功', icon: 'success' });
+
+      // 跳转到首页
+      history.push('/h5/home');
+    } catch (error: any) {
+      // 错误已在 request 拦截器中处理，这里可以添加额外处理
+      console.error('登录失败:', error);
+    } finally {
+      setLoading(false);
+    }
   };
 
   return (
