@@ -1,0 +1,321 @@
+package com.minialalipay.user.domain.user;
+
+import java.time.Instant;
+
+/**
+ * 用户聚合根。
+ *
+ * <p>保存用户主体、展示资料和账户级状态，不保存密码或 RBAC 角色。
+ * 密码保存在 {@code credential} 表中，角色保存在 {@code role_assignment} 表中。</p>
+ *
+ * <p>状态流转规则：
+ * <ul>
+ *   <li>注册时初始状态为 {@link UserStatus#PROVISIONING}，等待账户中心开户</li>
+ *   <li>账户中心开户完成后，状态变为 {@link UserStatus#ACTIVE}，用户可以登录</li>
+ *   <li>管理操作可以将状态设为 {@link UserStatus#DISABLED}，禁止用户登录</li>
+ * </ul>
+ * </p>
+ *
+ * <p>关键不变量：
+ * <ul>
+ *   <li>只有 {@link UserStatus#ACTIVE} 状态的用户可以登录</li>
+ *   <li>{@code registrationId} 是跨服务开户幂等键，由用户中心生成</li>
+ *   <li>{@code loginName} 在系统内唯一，用于登录和唯一识别</li>
+ *   <li>{@code nickname} 可重复，用于展示和模糊搜索</li>
+ * </ul>
+ * </p>
+ *
+ * @see UserStatus 用户状态枚举
+ * @see com.minialalipay.user.domain.credential.Credential 用户凭证实体
+ */
+public class User {
+
+    /**
+     * 用户 ID（ULID 格式，26 位字符）。
+     * <p>跨模块引用用户的稳定标识，在整个系统生命周期内不变。</p>
+     */
+    private final String userId;
+
+    /**
+     * 注册幂等键（ULID 格式，26 位字符）。
+     * <p>用户中心生成的注册幂等键，用于开户恢复和既有资源查询。
+     * 账户中心以 {@code registration_id} 作为开户幂等键，保证注册和开户的原子性。</p>
+     */
+    private final String registrationId;
+
+    /**
+     * 登录名（规范化存储，最大 64 字符）。
+     * <p>用于登录和唯一识别，系统内唯一。注册时规范化处理（如转小写、去空格）。</p>
+     */
+    private String loginName;
+
+    /**
+     * 昵称（最大 64 字符）。
+     * <p>可重复的展示名称和模糊搜索条件，不要求唯一。</p>
+     */
+    private String nickname;
+
+    /**
+     * 手机号尾号（4 位字符，可空）。
+     * <p>仅用于辅助检索和脱敏展示，不保存完整手机号。</p>
+     */
+    private String phoneTail;
+
+    /**
+     * 演示身份状态（最大 16 字符）。
+     * <p>不代表真实 KYC，仅用于演示身份核验流程。
+     * 取值：PENDING_VERIFICATION / VERIFIED / REJECTED</p>
+     */
+    private String identityStatus;
+
+    /**
+     * 用户状态（最大 16 字符）。
+     * <p>控制用户是否可以登录和使用系统功能。
+     * 取值：PROVISIONING / ACTIVE / DISABLED</p>
+     */
+    private UserStatus status;
+
+    /**
+     * 版本号（乐观锁）。
+     * <p>用于并发控制，每次状态或资料变更时递增。
+     * 更新时必须校验版本号一致，防止并发覆盖。</p>
+     */
+    private long version;
+
+    /**
+     * 用户注册时间（UTC，毫秒精度）。
+     * <p>注册时设置，之后不可修改。</p>
+     */
+    private final Instant createdAt;
+
+    /**
+     * 最近资料或状态变更时间（UTC，毫秒精度）。
+     * <p>每次修改用户资料或状态时更新。</p>
+     */
+    private Instant updatedAt;
+
+    /**
+     * 创建新用户（注册时使用）。
+     *
+     * <p>注册时自动设置以下属性：
+     * <ul>
+     *   <li>{@code identityStatus} = PENDING_VERIFICATION（待核验）</li>
+     *   <li>{@code status} = PROVISIONING（等待开户）</li>
+     *   <li>{@code version} = 0（初始版本）</li>
+     *   <li>{@code createdAt} 和 {@code updatedAt} = 当前时间</li>
+     * </ul>
+     * </p>
+     *
+     * @param userId         用户 ID（ULID 格式，26 位字符）
+     * @param registrationId 注册幂等键（ULID 格式，26 位字符）
+     * @param loginName      登录名（已规范化，最大 64 字符）
+     * @param nickname       昵称（最大 64 字符）
+     * @throws IllegalArgumentException 如果任何必填参数为空
+     */
+    public User(String userId, String registrationId, String loginName, String nickname) {
+        if (userId == null || userId.isBlank()) {
+            throw new IllegalArgumentException("用户 ID 不能为空");
+        }
+        if (registrationId == null || registrationId.isBlank()) {
+            throw new IllegalArgumentException("注册幂等键不能为空");
+        }
+        if (loginName == null || loginName.isBlank()) {
+            throw new IllegalArgumentException("登录名不能为空");
+        }
+        if (nickname == null || nickname.isBlank()) {
+            throw new IllegalArgumentException("昵称不能为空");
+        }
+
+        this.userId = userId;
+        this.registrationId = registrationId;
+        this.loginName = loginName;
+        this.nickname = nickname;
+        this.identityStatus = "PENDING_VERIFICATION";
+        this.status = UserStatus.PROVISIONING;
+        this.version = 0;
+        this.createdAt = Instant.now();
+        this.updatedAt = Instant.now();
+    }
+
+    /**
+     * 重建用户对象（从数据库加载时使用）。
+     *
+     * <p>此构造函数用于从数据库加载已有用户，不执行业务校验。
+     * 所有参数直接赋值，保持数据库中的原始状态。</p>
+     *
+     * @param userId         用户 ID
+     * @param registrationId 注册幂等键
+     * @param loginName      登录名
+     * @param nickname       昵称
+     * @param phoneTail      手机号尾号（可空）
+     * @param identityStatus 身份状态
+     * @param status         用户状态
+     * @param version        版本号
+     * @param createdAt      注册时间
+     * @param updatedAt      最近更新时间
+     */
+    public User(
+            String userId,
+            String registrationId,
+            String loginName,
+            String nickname,
+            String phoneTail,
+            String identityStatus,
+            UserStatus status,
+            long version,
+            Instant createdAt,
+            Instant updatedAt
+    ) {
+        this.userId = userId;
+        this.registrationId = registrationId;
+        this.loginName = loginName;
+        this.nickname = nickname;
+        this.phoneTail = phoneTail;
+        this.identityStatus = identityStatus;
+        this.status = status;
+        this.version = version;
+        this.createdAt = createdAt;
+        this.updatedAt = updatedAt;
+    }
+
+    /**
+     * 检查用户是否可以登录。
+     *
+     * <p>只有 {@link UserStatus#ACTIVE} 状态的用户可以登录。
+     * PROVISIONING 状态表示账户中心尚未完成开户，DISABLED 状态表示用户已被停用。</p>
+     *
+     * @return 如果用户处于 ACTIVE 状态则返回 true
+     */
+    public boolean canLogin() {
+        return this.status == UserStatus.ACTIVE;
+    }
+
+    /**
+     * 检查用户是否正在开户中。
+     *
+     * <p>PROVISIONING 状态表示注册已成功，但账户中心尚未完成开户。
+     * 此状态下用户不能登录，需要等待开户完成。</p>
+     *
+     * @return 如果用户处于 PROVISIONING 状态则返回 true
+     */
+    public boolean isProvisioning() {
+        return this.status == UserStatus.PROVISIONING;
+    }
+
+    /**
+     * 检查用户是否已被停用。
+     *
+     * @return 如果用户处于 DISABLED 状态则返回 true
+     */
+    public boolean isDisabled() {
+        return this.status == UserStatus.DISABLED;
+    }
+
+    /**
+     * 激活用户。
+     *
+     * <p>账户中心开户完成后调用，将用户状态从 PROVISIONING 变为 ACTIVE。
+     * 激活后用户可以登录并使用系统功能。</p>
+     *
+     * @throws IllegalStateException 如果用户不在 PROVISIONING 状态
+     */
+    public void activate() {
+        if (this.status != UserStatus.PROVISIONING) {
+            throw new IllegalStateException("只有 PROVISIONING 状态的用户可以激活，当前状态: " + this.status);
+        }
+        this.status = UserStatus.ACTIVE;
+        this.updatedAt = Instant.now();
+    }
+
+    // ==================== Getters ====================
+
+    /**
+     * 获取用户 ID。
+     *
+     * @return 用户 ID（ULID 格式，26 位字符）
+     */
+    public String getUserId() {
+        return userId;
+    }
+
+    /**
+     * 获取注册幂等键。
+     *
+     * @return 注册幂等键（ULID 格式，26 位字符）
+     */
+    public String getRegistrationId() {
+        return registrationId;
+    }
+
+    /**
+     * 获取登录名。
+     *
+     * @return 登录名（已规范化，最大 64 字符）
+     */
+    public String getLoginName() {
+        return loginName;
+    }
+
+    /**
+     * 获取昵称。
+     *
+     * @return 昵称（最大 64 字符）
+     */
+    public String getNickname() {
+        return nickname;
+    }
+
+    /**
+     * 获取手机号尾号。
+     *
+     * @return 手机号尾号（4 位字符），可能为 null
+     */
+    public String getPhoneTail() {
+        return phoneTail;
+    }
+
+    /**
+     * 获取身份状态。
+     *
+     * @return 身份状态字符串（PENDING_VERIFICATION / VERIFIED / REJECTED）
+     */
+    public String getIdentityStatus() {
+        return identityStatus;
+    }
+
+    /**
+     * 获取用户状态。
+     *
+     * @return 用户状态枚举（PROVISIONING / ACTIVE / DISABLED）
+     */
+    public UserStatus getStatus() {
+        return status;
+    }
+
+    /**
+     * 获取版本号。
+     *
+     * @return 版本号（用于乐观锁）
+     */
+    public long getVersion() {
+        return version;
+    }
+
+    /**
+     * 获取注册时间。
+     *
+     * @return 注册时间（UTC，毫秒精度）
+     */
+    public Instant getCreatedAt() {
+        return createdAt;
+    }
+
+    /**
+     * 获取最近更新时间。
+     *
+     * @return 最近更新时间（UTC，毫秒精度）
+     */
+    public Instant getUpdatedAt() {
+        return updatedAt;
+    }
+}
