@@ -44,6 +44,12 @@ public class CreditPurchaseRepositoryImpl implements CreditPurchaseRepository {
     }
 
     @Override
+    public List<CreditPurchase> findByBillingStatus(String billingStatus) {
+        List<CreditPurchasePO> pos = creditPurchaseMapper.findByBillingStatus(billingStatus);
+        return pos.stream().map(this::toDomain).toList();
+    }
+
+    @Override
     public void save(CreditPurchase purchase) {
         CreditPurchasePO existing = creditPurchaseMapper.findById(purchase.getPurchaseId());
         if (existing == null) {

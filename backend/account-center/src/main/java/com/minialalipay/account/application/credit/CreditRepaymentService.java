@@ -2,6 +2,8 @@ package com.minialalipay.account.application.credit;
 
 import com.minialalipay.account.application.credit.dto.RepaymentDTO;
 import com.minialalipay.account.application.credit.dto.RepaymentDraftDTO;
+import com.minialalipay.account.domain.account.Account;
+import com.minialalipay.account.domain.account.AccountRepository;
 import com.minialalipay.account.domain.bill.CreditBill;
 import com.minialalipay.account.domain.bill.CreditBillRepository;
 import com.minialalipay.account.domain.credit.CreditAccount;
@@ -29,7 +31,10 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.UUID;
 import java.util.stream.Collectors;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
 
 /**
  * 信用还款应用服务。
@@ -47,6 +52,8 @@ import org.springframework.stereotype.Service;
 @Service
 public class CreditRepaymentService {
 
+    private static final Logger log = LoggerFactory.getLogger(CreditRepaymentService.class);
+
     private static final long DRAFT_TTL_MINUTES = 10L;
     private static final long MAX_REPAYMENT_FEN = 5_000_000L;
 
@@ -56,9 +63,11 @@ public class CreditRepaymentService {
     private final CreditBillRepository creditBillRepository;
     private final CreditRepaymentDraftRepository draftRepository;
     private final CreditRepaymentRepository repaymentRepository;
+    private final AccountRepository accountRepository;
+    private final CreditRepayTccParticipant creditRepayTccParticipant;
 
     /**
-     * 注入仓储依赖。
+     * 注入仓储和 TCC 参与者依赖。
      */
     public CreditRepaymentService(
             CreditAccountRepository creditAccountRepository,
@@ -66,7 +75,9 @@ public class CreditRepaymentService {
             CreditPurchaseRepository creditPurchaseRepository,
             CreditBillRepository creditBillRepository,
             CreditRepaymentDraftRepository draftRepository,
-            CreditRepaymentRepository repaymentRepository
+            CreditRepaymentRepository repaymentRepository,
+            AccountRepository accountRepository,
+            CreditRepayTccParticipant creditRepayTccParticipant
     ) {
         this.creditAccountRepository = creditAccountRepository;
         this.creditReceivableRepository = creditReceivableRepository;
@@ -74,6 +85,8 @@ public class CreditRepaymentService {
         this.creditBillRepository = creditBillRepository;
         this.draftRepository = draftRepository;
         this.repaymentRepository = repaymentRepository;
+        this.accountRepository = accountRepository;
+        this.creditRepayTccParticipant = creditRepayTccParticipant;
     }
 
     /**
@@ -94,6 +107,10 @@ public class CreditRepaymentService {
         }
 
         CreditAccount account = creditAccountRepository.findByUserId(userId)
+                .orElseThrow(() -> new BusinessException(CreditErrorCode.CREDIT_ACCOUNT_NOT_FOUND));
+
+        // 查询用户余额账户，用于还款时扣减余额
+        Account payerAccount = accountRepository.findByUserId(userId)
                 .orElseThrow(() -> new BusinessException(CreditErrorCode.CREDIT_ACCOUNT_NOT_FOUND));
 
         CreditReceivable receivable = creditReceivableRepository
@@ -121,7 +138,7 @@ public class CreditRepaymentService {
 
         CreditRepaymentDraft draft = new CreditRepaymentDraft(
                 draftId, userId, account.getCreditAccountId(),
-                account.getCreditAccountId(), // 付款方账户即为用户虚拟账户
+                payerAccount.getAccountId(),
                 amountFen, snapshot, hash, expiresAt, now
         );
         draftRepository.save(draft);
@@ -140,14 +157,20 @@ public class CreditRepaymentService {
     /**
      * 提交还款。
      *
-     * <p>确认草稿后发起 TCC 事务。当前 TCC 内核尚未实现，
-     * 此方法创建还款记录并标记为 PROCESSING，实际资金联动待 TCC 内核完成后对接。</p>
+     * <p>确认草稿后发起 CREDIT_REPAY TCC 事务：
+     * <ol>
+     *   <li>Try：冻结用户虚拟余额，预占还款资金</li>
+     *   <li>Confirm：扣减余额，减少信用应收/已用额度，恢复可用额度，标记还款成功</li>
+     * </ol>
+     * 若 Try 阶段失败（如余额不足），事务整体回滚，不产生还款记录。
+     * Seata 全局协调器引入后，Try/Confirm/Cancel 将由协调器编排，此方法只需发起 Try。</p>
      *
      * @param userId 用户 ID
      * @param repaymentDraftId 还款草稿 ID
      * @return 还款记录
-     * @throws BusinessException 草稿不存在、已过期或状态不允许时抛出对应错误码
+     * @throws BusinessException 草稿不存在、已过期、余额不足或状态不允许时抛出对应错误码
      */
+    @Transactional
     public RepaymentDTO submitRepayment(String userId, String repaymentDraftId) {
         CreditRepaymentDraft draft = draftRepository.findById(repaymentDraftId)
                 .orElseThrow(() -> new BusinessException(CreditErrorCode.REPAYMENT_NOT_FOUND));
@@ -174,30 +197,44 @@ public class CreditRepaymentService {
         draft.confirm(now);
         draftRepository.save(draft);
 
-        // 创建还款记录
+        // 创建还款记录（PROCESSING 状态）
         String repaymentId = generateId();
         String transactionId = generateId();
+        String branchXid = generateId();
         CreditRepayment repayment = new CreditRepayment(
                 repaymentId, repaymentDraftId, transactionId,
                 draft.getCreditAccountId(), draft.getAmountFen(), now
         );
         repaymentRepository.save(repayment);
 
-        // TODO: TCC 内核完成后，在此发起 CREDIT_REPAY TCC 事务
-        // 1. Try: 冻结用户虚拟余额，预占信用应收减少
-        // 2. Confirm: 扣减余额，减少应收/已用额度，恢复可用额度，更新账单/明细状态
-        // 3. Cancel: 释放余额冻结
+        // 发起 CREDIT_REPAY TCC 事务（同步 Try → Confirm）
+        // 金额守恒：Try 冻结金额 == Confirm 扣减金额 == 还款金额
+        creditRepayTccParticipant.tryRepay(
+                transactionId, draft.getPayerAccountId(), draft.getCreditAccountId(),
+                draft.getAmountFen(), branchXid, now
+        );
+        creditRepayTccParticipant.confirmRepay(
+                transactionId, draft.getPayerAccountId(), draft.getCreditAccountId(),
+                draft.getAmountFen(), branchXid, now
+        );
+
+        log.info("信用还款成功: repaymentId={}, transactionId={}, amountFen={}",
+                repaymentId, transactionId, draft.getAmountFen());
 
         // 消费草稿
         draft.consume(now);
         draftRepository.save(draft);
 
+        // 重新读取还款记录以获取 Confirm 更新后的最终状态
+        CreditRepayment finalized = repaymentRepository.findById(repaymentId)
+                .orElseThrow(() -> new IllegalStateException("还款记录在提交后消失，repaymentId=" + repaymentId));
+
         return new RepaymentDTO(
-                repayment.getRepaymentId(),
-                repayment.getAmountFen(),
-                repayment.getStatus().name(),
-                repayment.getCreatedAt(),
-                repayment.getUpdatedAt()
+                finalized.getRepaymentId(),
+                finalized.getAmountFen(),
+                finalized.getStatus().name(),
+                finalized.getCreatedAt(),
+                finalized.getUpdatedAt()
         );
     }
 

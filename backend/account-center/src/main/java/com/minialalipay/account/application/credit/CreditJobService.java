@@ -193,10 +193,9 @@ public class CreditJobService {
      * 为所有信用账户执行出账。
      */
     private void doStatementForAllAccounts(String period, LocalDate statementDate, Instant dueAt, Instant now) {
-        // 此处简化处理：通过消费明细反查信用账户
-        // 实际实现应分页遍历信用账户
+        // 查询所有未出账消费，按信用账户分组
         List<CreditPurchase> unbilledPurchases = creditPurchaseRepository
-                .findByCreditAccountIdAndBillingStatus(null, CreditPurchaseBillingStatus.UNBILLED.name());
+                .findByBillingStatus(CreditPurchaseBillingStatus.UNBILLED.name());
 
         // 按信用账户分组
         var groupedByAccount = unbilledPurchases.stream()
@@ -246,34 +245,60 @@ public class CreditJobService {
 
     /**
      * 为所有信用账户执行到期检查。
+     *
+     * <p>两阶段处理：
+     * <ol>
+     *   <li>标记逾期：查询到期未还账单（due_at < now 且 status IN OPEN/PARTIALLY_PAID 且 outstanding > 0），
+     *       标记为 OVERDUE，增加信用应收逾期金额，暂停信用账户</li>
+     *   <li>恢复激活：查询所有 SUSPENDED 账户，若无剩余逾期未还账单则恢复为 ACTIVE</li>
+     * </ol>
+     * </p>
      */
     private void doDueCheckForAllAccounts(LocalDate businessDate, Instant now) {
-        // 此处简化处理：需要遍历所有信用账户和账单
-        // 实际实现应通过 Mapper 分页查询到期未还账单
+        // ---- 阶段一：标记逾期账单 ----
+        List<CreditBill> overdueBills = creditBillRepository.findOverdueBills(now);
 
-        // 遍历所有信用账户（通过已有账单反查）
-        // 这里简化处理，实际需要通过 Repository 查询所有账户
-        // 由于当前 Repository 没有 findAll 方法，这里留作 TODO
-        // 实际实现需要添加 findAll 或分页查询方法
+        for (CreditBill bill : overdueBills) {
+            // 标记账单为逾期
+            bill.markOverdue(now);
+            creditBillRepository.save(bill);
 
-        // 伪代码：
-        // List<CreditBill> overdueBills = creditBillRepository.findOverdueBills(businessDate);
-        // for (CreditBill bill : overdueBills) {
-        //     bill.markOverdue(now);
-        //     creditBillRepository.save(bill);
-        //
-        //     CreditReceivable receivable = creditReceivableRepository.findByCreditAccountId(bill.getCreditAccountId()).orElse(null);
-        //     if (receivable != null) {
-        //         receivable.markOverdue(bill.getOutstandingFen(), now);
-        //         creditReceivableRepository.save(receivable);
-        //     }
-        //
-        //     CreditAccount account = creditAccountRepository.findById(bill.getCreditAccountId()).orElse(null);
-        //     if (account != null && account.getStatus() == CreditAccountStatus.ACTIVE) {
-        //         account.suspend("OVERDUE", now);
-        //         creditAccountRepository.save(account);
-        //     }
-        // }
+            // 增加信用应收逾期金额（overdue 是 billed 的子集）
+            CreditReceivable receivable = creditReceivableRepository
+                    .findByCreditAccountId(bill.getCreditAccountId())
+                    .orElse(null);
+            if (receivable != null) {
+                receivable.markOverdue(bill.getOutstandingFen(), now);
+                creditReceivableRepository.save(receivable);
+            }
+
+            // 暂停信用账户（仅 ACTIVE 可暂停，SUSPENDED 幂等）
+            CreditAccount account = creditAccountRepository
+                    .findById(bill.getCreditAccountId())
+                    .orElse(null);
+            if (account != null && account.getStatus() == CreditAccountStatus.ACTIVE) {
+                account.suspend("OVERDUE", now);
+                creditAccountRepository.save(account);
+            }
+        }
+
+        // ---- 阶段二：恢复已还清逾期的账户 ----
+        List<CreditAccount> suspendedAccounts = creditAccountRepository
+                .findByStatus(CreditAccountStatus.SUSPENDED);
+
+        for (CreditAccount account : suspendedAccounts) {
+            // 检查是否还有逾期未还账单
+            boolean hasOverdueOutstanding = creditBillRepository
+                    .findByCreditAccountId(account.getCreditAccountId())
+                    .stream()
+                    .anyMatch(b -> b.getStatus() == CreditBillStatus.OVERDUE
+                            && b.getOutstandingFen() > 0);
+
+            if (!hasOverdueOutstanding) {
+                account.activate(now);
+                creditAccountRepository.save(account);
+            }
+        }
     }
 
     private CreditJobRunDTO toDTO(CreditJobRun jobRun) {
