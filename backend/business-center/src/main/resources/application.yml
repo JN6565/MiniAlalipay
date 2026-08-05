@@ -17,6 +17,7 @@ minialalipay:
   internal:
     account-center-url: ${ACCOUNT_CENTER_INTERNAL_URL:http://localhost:8083}
     user-center-url: ${USER_CENTER_INTERNAL_URL:http://localhost:8081}
+    service-token: ${INTERNAL_SERVICE_TOKEN:}
 management:
   endpoints:
     web:

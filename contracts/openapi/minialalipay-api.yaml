@@ -1,8 +1,8 @@
 openapi: 3.1.0
 info:
   title: MiniAlalipay API
-  version: 0.3.0
-  description: MiniAlalipay 外部与服务间 HTTP 契约。业务操作只有在本文件中具备完整 Schema 后才允许实现。
+  version: 0.2.0
+  description: MiniAlalipay 对外 HTTP 契约。业务操作只有在本文件中具备完整 Schema 后才允许实现。
 servers:
   - url: http://localhost:8080
     description: 本地网关
@@ -259,59 +259,19 @@ paths:
         '401': { $ref: '#/components/responses/Unauthorized' }
         '404': { $ref: '#/components/responses/NotFound' }
         '409': { $ref: '#/components/responses/Conflict' }
-  /api/v1/agent/messages:
-    post:
-      summary: AI 多轮对话入口
-      operationId: sendAgentMessage
-      x-client-scope: C
-      description: |
-        提交一条用户消息到 AI 会话，返回脱敏且经过结构化校验的回复。
-        会话在首条消息时自动创建，后续请求携带 sessionId 继续对话。
-        同一 clientMessageId 的重复请求返回相同结果。
-      parameters:
-        - $ref: '#/components/parameters/RequestIdHeader'
-        - name: X-User-Id
-          in: header
-          required: true
-          description: 网关从会话解析并注入的可信用户标识。
-          schema:
-            type: string
-            minLength: 1
-            maxLength: 26
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              $ref: '#/components/schemas/SendAgentMessageRequest'
-      responses:
-        '200':
-          description: AI 回复，可能包含待确认槽位或澄清问题
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/AgentMessageResponse'
-        '400': { $ref: '#/components/responses/BadRequest' }
-        '401': { $ref: '#/components/responses/Unauthorized' }
-        '409': { $ref: '#/components/responses/Conflict' }
-        '422': { $ref: '#/components/responses/UnprocessableEntity' }
-        '429': { $ref: '#/components/responses/TooManyRequests' }
-        '503': { $ref: '#/components/responses/ServiceUnavailable' }
   /internal/v1/accounts/registrations/{registrationId}:
     put:
-      summary: 用户注册时幂等创建账户体系
+      summary: 按注册编号幂等创建账户体系
       operationId: provisionAccount
       x-client-scope: INTERNAL
-      servers: [{ url: 'http://localhost:8083', description: 本地账户中心直连地址 }]
-      security:
-        - internalServiceAuth: []
+      x-service-auth: required
+      servers: [{ url: http://localhost:8083 }]
+      security: [{ internalServiceAuth: [] }]
       parameters:
         - name: registrationId
           in: path
           required: true
-          description: 用户中心生成并持久化的注册幂等编号。
-          schema: { type: string, minLength: 26, maxLength: 26, pattern: '^[0-9A-HJKMNP-TV-Z]{26}$' }
-        - $ref: '#/components/parameters/RequestIdHeader'
+          schema: { type: string, minLength: 26, maxLength: 26 }
       requestBody:
         required: true
         content:
@@ -319,7 +279,7 @@ paths:
             schema: { $ref: '#/components/schemas/ProvisionAccountRequest' }
       responses:
         '200':
-          description: 返回已创建或既有账户的零余额摘要
+          description: 返回已创建或幂等命中的账户摘要
           content:
             application/json:
               schema: { $ref: '#/components/schemas/AccountSummaryResponse' }
@@ -328,33 +288,33 @@ paths:
         '500': { $ref: '#/components/responses/InternalError' }
   /internal/v1/accounts/by-user/{userId}:
     get:
-      summary: 解析用户唯一个人账户引用
+      summary: 解析用户唯一个人账户
       operationId: resolvePersonalAccount
       x-client-scope: INTERNAL
-      servers: [{ url: 'http://localhost:8083', description: 本地账户中心直连地址 }]
-      security:
-        - internalServiceAuth: []
+      x-service-auth: required
+      servers: [{ url: http://localhost:8083 }]
+      security: [{ internalServiceAuth: [] }]
       parameters:
         - name: userId
           in: path
           required: true
-          schema: { type: string, minLength: 26, maxLength: 26, pattern: '^[0-9A-HJKMNP-TV-Z]{26}$' }
+          schema: { type: string, minLength: 26, maxLength: 26 }
       responses:
         '200':
-          description: 返回账户引用和状态，不返回余额
+          description: 返回不含余额的账户引用
           content:
             application/json:
               schema: { $ref: '#/components/schemas/InternalAccountReference' }
+        '400': { $ref: '#/components/responses/BadRequest' }
         '404': { $ref: '#/components/responses/NotFound' }
-        '500': { $ref: '#/components/responses/InternalError' }
   /internal/v1/tcc/balance/{role}/{action}:
     post:
-      summary: 执行付款或收款余额 TCC 分支
+      summary: 执行付款方或收款方余额 TCC 分支
       operationId: executeBalanceTccBranch
       x-client-scope: INTERNAL
-      servers: [{ url: 'http://localhost:8083', description: 本地账户中心直连地址 }]
-      security:
-        - internalServiceAuth: []
+      x-service-auth: required
+      servers: [{ url: http://localhost:8083 }]
+      security: [{ internalServiceAuth: [] }]
       parameters:
         - name: role
           in: path
@@ -371,22 +331,21 @@ paths:
             schema: { $ref: '#/components/schemas/BalanceTccCommand' }
       responses:
         '200':
-          description: 返回幂等分支状态和空回滚类型
+          description: 返回余额分支状态和空回滚类型
           content:
             application/json:
-              schema: { $ref: '#/components/schemas/TccBranchResult' }
+              schema: { $ref: '#/components/schemas/BalanceTccBranchResult' }
         '400': { $ref: '#/components/responses/BadRequest' }
         '404': { $ref: '#/components/responses/NotFound' }
         '409': { $ref: '#/components/responses/Conflict' }
-        '500': { $ref: '#/components/responses/InternalError' }
   /internal/v1/tcc/ledger/{action}:
     post:
       summary: 执行复式账本 TCC 分支
       operationId: executeLedgerTccBranch
       x-client-scope: INTERNAL
-      servers: [{ url: 'http://localhost:8083', description: 本地账户中心直连地址 }]
-      security:
-        - internalServiceAuth: []
+      x-service-auth: required
+      servers: [{ url: http://localhost:8083 }]
+      security: [{ internalServiceAuth: [] }]
       parameters:
         - name: action
           in: path
@@ -406,44 +365,228 @@ paths:
         '400': { $ref: '#/components/responses/BadRequest' }
         '404': { $ref: '#/components/responses/NotFound' }
         '409': { $ref: '#/components/responses/Conflict' }
-        '500': { $ref: '#/components/responses/InternalError' }
   /internal/v1/transaction-facts/{transactionId}:
     get:
       summary: 查询终态发布所需的脱敏资金事实
       operationId: getTransactionFacts
       x-client-scope: INTERNAL
-      servers: [{ url: 'http://localhost:8083', description: 本地账户中心直连地址 }]
-      security:
-        - internalServiceAuth: []
+      x-service-auth: required
+      servers: [{ url: http://localhost:8083 }]
+      security: [{ internalServiceAuth: [] }]
       parameters:
         - name: transactionId
           in: path
           required: true
-          schema: { type: string, minLength: 26, maxLength: 26, pattern: '^[0-9A-HJKMNP-TV-Z]{26}$' }
+          schema: { type: string, minLength: 26, maxLength: 26 }
       responses:
         '200':
-          description: 返回成功和取消两组互斥一致性事实
+          description: 返回成功和取消的一致性事实
           content:
             application/json:
               schema: { $ref: '#/components/schemas/TransactionFacts' }
+        '400': { $ref: '#/components/responses/BadRequest' }
         '500': { $ref: '#/components/responses/InternalError' }
   /internal/v1/reconciliation-diffs:
     post:
-      summary: 幂等追加终态核验对账差异
+      summary: 幂等追加脱敏对账差异
       operationId: recordReconciliationDiff
       x-client-scope: INTERNAL
-      servers: [{ url: 'http://localhost:8083', description: 本地账户中心直连地址 }]
-      security:
-        - internalServiceAuth: []
+      x-service-auth: required
+      servers: [{ url: http://localhost:8083 }]
+      security: [{ internalServiceAuth: [] }]
       requestBody:
         required: true
         content:
           application/json:
             schema: { $ref: '#/components/schemas/ReconciliationDiffRequest' }
       responses:
-        '204': { description: 差异已记录或幂等命中 }
+        '204': { description: 差异已记录或已幂等存在 }
         '400': { $ref: '#/components/responses/BadRequest' }
         '409': { $ref: '#/components/responses/Conflict' }
+        '500': { $ref: '#/components/responses/InternalError' }
+  /internal/v1/payment-proofs/verify:
+    post:
+      summary: 校验并原子消费一次性支付密码证明
+      operationId: verifyInternalPaymentProof
+      x-client-scope: INTERNAL
+      x-service-auth: required
+      security:
+        - serviceAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/InternalPaymentProofVerifyRequest' }
+      responses:
+        '200':
+          description: 证明已验证并消费，原始证明不在响应中返回
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/InternalVerifiedPaymentProof' }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '409': { $ref: '#/components/responses/Conflict' }
+        '500': { $ref: '#/components/responses/InternalError' }
+  /internal/v1/payment-password/version/{userId}:
+    get:
+      summary: 查询用户当前支付密码版本
+      operationId: getInternalPaymentPasswordVersion
+      x-client-scope: INTERNAL
+      x-service-auth: required
+      security:
+        - serviceAuth: []
+      parameters:
+        - name: userId
+          in: path
+          required: true
+          schema: { type: string, minLength: 1, maxLength: 64 }
+      responses:
+        '200':
+          description: 返回当前支付密码版本
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/InternalPaymentPasswordVersion' }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '500': { $ref: '#/components/responses/InternalError' }
+  /internal/v1/tcc/credit-pay/try:
+    post:
+      summary: 冻结信用支付额度
+      operationId: tryCreditPayTcc
+      x-client-scope: INTERNAL
+      x-service-auth: required
+      security:
+        - serviceAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/CreditPayTccBranchRequest' }
+      responses:
+        '200':
+          description: 信用额度已冻结；同一分支重复请求返回相同状态
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/TccBranchResult' }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '422': { $ref: '#/components/responses/UnprocessableEntity' }
+        '500': { $ref: '#/components/responses/InternalError' }
+  /internal/v1/tcc/credit-pay/confirm:
+    post:
+      summary: 确认信用支付额度占用和应收
+      operationId: confirmCreditPayTcc
+      x-client-scope: INTERNAL
+      x-service-auth: required
+      security:
+        - serviceAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/CreditPayTccConfirmRequest' }
+      responses:
+        '200':
+          description: 额度占用、消费明细和信用应收已在账户中心本地事务内确认
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/TccBranchResult' }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '422': { $ref: '#/components/responses/UnprocessableEntity' }
+        '500': { $ref: '#/components/responses/InternalError' }
+  /internal/v1/tcc/credit-pay/cancel:
+    post:
+      summary: 取消信用支付额度冻结
+      operationId: cancelCreditPayTcc
+      x-client-scope: INTERNAL
+      x-service-auth: required
+      security:
+        - serviceAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/CreditPayTccBranchRequest' }
+      responses:
+        '200':
+          description: 冻结已释放或空回滚屏障已持久化
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/TccBranchResult' }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '422': { $ref: '#/components/responses/UnprocessableEntity' }
+        '500': { $ref: '#/components/responses/InternalError' }
+  /internal/v1/tcc/credit-repay/try:
+    post:
+      summary: 冻结信用还款余额
+      operationId: tryCreditRepayTcc
+      x-client-scope: INTERNAL
+      x-service-auth: required
+      security:
+        - serviceAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/CreditRepayTccBranchRequest' }
+      responses:
+        '200':
+          description: 还款余额已冻结；同一分支重复请求返回相同状态
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/TccBranchResult' }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '422': { $ref: '#/components/responses/UnprocessableEntity' }
+        '500': { $ref: '#/components/responses/InternalError' }
+  /internal/v1/tcc/credit-repay/confirm:
+    post:
+      summary: 确认信用还款扣款和额度恢复
+      operationId: confirmCreditRepayTcc
+      x-client-scope: INTERNAL
+      x-service-auth: required
+      security:
+        - serviceAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/CreditRepayTccBranchRequest' }
+      responses:
+        '200':
+          description: 余额扣减、应收减少、额度恢复和还款事实已确认
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/TccBranchResult' }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '422': { $ref: '#/components/responses/UnprocessableEntity' }
+        '500': { $ref: '#/components/responses/InternalError' }
+  /internal/v1/tcc/credit-repay/cancel:
+    post:
+      summary: 取消信用还款余额冻结
+      operationId: cancelCreditRepayTcc
+      x-client-scope: INTERNAL
+      x-service-auth: required
+      security:
+        - serviceAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/CreditRepayTccBranchRequest' }
+      responses:
+        '200':
+          description: 余额冻结已释放或空回滚屏障已持久化
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/TccBranchResult' }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '422': { $ref: '#/components/responses/UnprocessableEntity' }
         '500': { $ref: '#/components/responses/InternalError' }
 components:
   securitySchemes:
@@ -457,9 +600,16 @@ components:
       in: cookie
       name: MINIALALIPAY_SESSION
       description: HttpOnly、Secure、SameSite Cookie；写请求同时校验 CSRF 令牌。
+    serviceAuth:
+      type: apiKey
+      in: header
+      name: X-Service-Token
+      description: 仅用于服务间鉴权的内部令牌，由部署环境注入，不得写入日志或经过前端网关。
     internalServiceAuth:
-      type: mutualTLS
-      description: 服务间双向 TLS 身份认证；内部路径不注册网关路由，本地联调可由受控开发网络终止 TLS。
+      type: apiKey
+      in: header
+      name: X-Internal-Service-Token
+      description: 账户中心既有内部资金接口使用的服务身份令牌，不得经过前端网关或写入日志。
   parameters:
     RequestIdHeader:
       name: X-Request-Id
@@ -499,6 +649,187 @@ components:
         type: string
         maxLength: 128
   schemas:
+    ProvisionAccountRequest:
+      type: object
+      additionalProperties: false
+      required: [userId]
+      properties:
+        userId: { type: string, minLength: 26, maxLength: 26, pattern: '^[0-9A-HJKMNP-TV-Z]{26}$' }
+    InternalAccountReference:
+      type: object
+      additionalProperties: false
+      required: [accountId, userId, status]
+      properties:
+        accountId: { type: string, minLength: 26, maxLength: 26 }
+        userId: { type: string, minLength: 26, maxLength: 26 }
+        status: { type: string, enum: [ACTIVE, FROZEN, CLOSED] }
+    BalanceTccCommand:
+      type: object
+      additionalProperties: false
+      required: [xid, transactionId, accountId, amountFen, freezeId]
+      properties:
+        xid: { type: string, minLength: 1, maxLength: 128 }
+        transactionId: { type: string, minLength: 26, maxLength: 26 }
+        accountId: { type: string, minLength: 26, maxLength: 26 }
+        amountFen: { type: integer, format: int64, minimum: 1 }
+        freezeId: { type: string, minLength: 26, maxLength: 26 }
+    BalanceTccBranchResult:
+      type: object
+      additionalProperties: false
+      required: [status]
+      properties:
+        status: { type: string, enum: [TRIED, CONFIRMED, CANCELLED] }
+        rollbackType: { type: [string, 'null'], enum: [NORMAL, EMPTY, null] }
+    LedgerTccCommand:
+      type: object
+      additionalProperties: false
+      required: [xid, transactionId, payerAccountId, payeeAccountId, amountFen, voucherId, debitEntryId, creditEntryId, eventId, traceId]
+      properties:
+        xid: { type: string, minLength: 1, maxLength: 128 }
+        transactionId: { type: string, minLength: 26, maxLength: 26 }
+        payerAccountId: { type: string, minLength: 26, maxLength: 26 }
+        payeeAccountId: { type: string, minLength: 26, maxLength: 26 }
+        amountFen: { type: integer, format: int64, minimum: 1 }
+        voucherId: { type: string, minLength: 26, maxLength: 26 }
+        debitEntryId: { type: integer, format: int64, minimum: 1 }
+        creditEntryId: { type: integer, format: int64, minimum: 1 }
+        eventId: { type: string, minLength: 26, maxLength: 26 }
+        traceId: { type: string, pattern: '^[a-fA-F0-9]{32}$' }
+    TransactionFacts:
+      type: object
+      additionalProperties: false
+      required: [successConsistent, cancelConsistent, accountsConfirmed, ledgerConfirmed, freezeConfirmed, ledgerPosted, accountsCancelled, ledgerCancelled, noActiveFreeze]
+      properties:
+        successConsistent: { type: boolean }
+        cancelConsistent: { type: boolean }
+        accountsConfirmed: { type: boolean }
+        ledgerConfirmed: { type: boolean }
+        freezeConfirmed: { type: boolean }
+        ledgerPosted: { type: boolean }
+        accountsCancelled: { type: boolean }
+        ledgerCancelled: { type: boolean }
+        noActiveFreeze: { type: boolean }
+    ReconciliationDiffRequest:
+      type: object
+      additionalProperties: false
+      required: [diffId, transactionId, diffType, expectedJson, actualJson, manualCaseId, traceId, detectedAt]
+      properties:
+        diffId: { type: string, minLength: 26, maxLength: 26 }
+        transactionId: { type: string, minLength: 26, maxLength: 26 }
+        diffType: { type: string, minLength: 1, maxLength: 64 }
+        expectedJson: { type: string, minLength: 2, maxLength: 4096 }
+        actualJson: { type: string, minLength: 2, maxLength: 4096 }
+        manualCaseId: { type: string, minLength: 26, maxLength: 26 }
+        traceId: { type: string, pattern: '^[a-fA-F0-9]{32}$' }
+        detectedAt: { type: string, format: date-time }
+    InternalPaymentProofVerifyRequest:
+      type: object
+      additionalProperties: false
+      required: [userId, paymentProof, purpose]
+      properties:
+        userId:
+          type: string
+          minLength: 1
+          maxLength: 64
+          description: 证明所属用户，必须与签发主体一致。
+        paymentProof:
+          type: string
+          minLength: 1
+          maxLength: 256
+          description: 用户中心签发的一次性原始证明，不得写入日志、URL 或持久化字段。
+        purpose:
+          type: string
+          minLength: 1
+          maxLength: 64
+          enum: [TRANSFER_CONFIRM]
+    InternalVerifiedPaymentProof:
+      type: object
+      additionalProperties: false
+      required: [paymentProofId, payPasswordVersion]
+      properties:
+        paymentProofId: { type: string, minLength: 1, maxLength: 26 }
+        payPasswordVersion: { type: integer, format: int64, minimum: 0 }
+    InternalPaymentPasswordVersion:
+      type: object
+      additionalProperties: false
+      required: [version]
+      properties:
+        version: { type: integer, format: int64, minimum: 0 }
+    CreditPayTccBranchRequest:
+      type: object
+      additionalProperties: false
+      required: [xid, transactionId, creditAccountId, amountFen]
+      properties:
+        xid:
+          type: string
+          minLength: 1
+          maxLength: 128
+          description: TCC 全局事务标识；同一分支重试时保持不变。
+        transactionId: { type: string, minLength: 1, maxLength: 26 }
+        creditAccountId: { type: string, minLength: 1, maxLength: 26 }
+        amountFen:
+          type: integer
+          format: int64
+          minimum: 1
+          description: 信用支付金额，单位为分。
+    CreditPayTccConfirmRequest:
+      type: object
+      additionalProperties: false
+      required: [xid, transactionId, creditAccountId, amountFen, qrOrderId, merchantAccountId]
+      properties:
+        xid:
+          type: string
+          minLength: 1
+          maxLength: 128
+          description: TCC 全局事务标识；必须与 Try 阶段一致。
+        transactionId: { type: string, minLength: 1, maxLength: 26 }
+        creditAccountId: { type: string, minLength: 1, maxLength: 26 }
+        amountFen:
+          type: integer
+          format: int64
+          minimum: 1
+          description: 信用支付金额，单位为分；必须与 Try 阶段一致。
+        qrOrderId:
+          type: string
+          minLength: 1
+          maxLength: 26
+          description: 已由业务中心受理的扫码订单标识。
+        merchantAccountId:
+          type: string
+          minLength: 1
+          maxLength: 26
+          description: 收款方账户标识。
+    CreditRepayTccBranchRequest:
+      type: object
+      additionalProperties: false
+      required: [xid, transactionId, accountId, creditAccountId, amountFen]
+      properties:
+        xid:
+          type: string
+          minLength: 1
+          maxLength: 128
+          description: TCC 全局事务标识；同一分支重试时保持不变。
+        transactionId: { type: string, minLength: 1, maxLength: 26 }
+        accountId:
+          type: string
+          minLength: 1
+          maxLength: 26
+          description: 承担还款扣款的余额账户标识。
+        creditAccountId: { type: string, minLength: 1, maxLength: 26 }
+        amountFen:
+          type: integer
+          format: int64
+          minimum: 1
+          description: 信用还款金额，单位为分。
+    TccBranchResult:
+      type: object
+      additionalProperties: false
+      required: [status]
+      properties:
+        status:
+          type: string
+          enum: [TRIED, CONFIRMED, CANCELLED]
+          description: 本次同步调用完成后的 TCC 分支状态。
     HealthResponse:
       type: object
       additionalProperties: false
@@ -588,86 +919,6 @@ components:
           properties:
             data:
               $ref: '#/components/schemas/AccountSummary'
-    ProvisionAccountRequest:
-      type: object
-      additionalProperties: false
-      required: [userId]
-      properties:
-        userId:
-          type: string
-          minLength: 26
-          maxLength: 26
-          pattern: '^[0-9A-HJKMNP-TV-Z]{26}$'
-          description: 用户中心已经持久化的用户 ID。
-    InternalAccountReference:
-      type: object
-      additionalProperties: false
-      required: [accountId, userId, status]
-      properties:
-        accountId: { type: string, minLength: 26, maxLength: 26, pattern: '^[0-9A-HJKMNP-TV-Z]{26}$' }
-        userId: { type: string, minLength: 26, maxLength: 26, pattern: '^[0-9A-HJKMNP-TV-Z]{26}$' }
-        status: { type: string, enum: [ACTIVE, FROZEN, CLOSED] }
-    BalanceTccCommand:
-      type: object
-      additionalProperties: false
-      required: [xid, transactionId, accountId, amountFen, freezeId]
-      properties:
-        xid: { type: string, minLength: 1, maxLength: 128 }
-        transactionId: { type: string, minLength: 26, maxLength: 26, pattern: '^[0-9A-HJKMNP-TV-Z]{26}$' }
-        accountId: { type: string, minLength: 26, maxLength: 26, pattern: '^[0-9A-HJKMNP-TV-Z]{26}$' }
-        amountFen: { type: integer, format: int64, minimum: 1 }
-        freezeId: { type: string, minLength: 26, maxLength: 26, pattern: '^[0-9A-HJKMNP-TV-Z]{26}$' }
-    TccBranchResult:
-      type: object
-      additionalProperties: false
-      required: [status]
-      properties:
-        status: { type: string, enum: [INIT, TRIED, CONFIRMED, CANCELLED] }
-        rollbackType: { type: [string, 'null'], enum: [EMPTY, NORMAL, null] }
-    LedgerTccCommand:
-      type: object
-      additionalProperties: false
-      required: [xid, transactionId, payerAccountId, payeeAccountId, amountFen, voucherId,
-                 debitEntryId, creditEntryId, eventId, traceId]
-      properties:
-        xid: { type: string, minLength: 1, maxLength: 128 }
-        transactionId: { type: string, minLength: 26, maxLength: 26, pattern: '^[0-9A-HJKMNP-TV-Z]{26}$' }
-        payerAccountId: { type: string, minLength: 26, maxLength: 26, pattern: '^[0-9A-HJKMNP-TV-Z]{26}$' }
-        payeeAccountId: { type: string, minLength: 26, maxLength: 26, pattern: '^[0-9A-HJKMNP-TV-Z]{26}$' }
-        amountFen: { type: integer, format: int64, minimum: 1 }
-        voucherId: { type: string, minLength: 26, maxLength: 26, pattern: '^[0-9A-HJKMNP-TV-Z]{26}$' }
-        debitEntryId: { type: integer, format: int64, minimum: 1 }
-        creditEntryId: { type: integer, format: int64, minimum: 1 }
-        eventId: { type: string, minLength: 26, maxLength: 26, pattern: '^[0-9A-HJKMNP-TV-Z]{26}$' }
-        traceId: { type: string, pattern: '^[a-fA-F0-9]{32}$' }
-    TransactionFacts:
-      type: object
-      additionalProperties: false
-      required: [successConsistent, cancelConsistent, accountsConfirmed, ledgerConfirmed,
-                 freezeConfirmed, ledgerPosted, accountsCancelled, ledgerCancelled, noActiveFreeze]
-      properties:
-        successConsistent: { type: boolean }
-        cancelConsistent: { type: boolean }
-        accountsConfirmed: { type: boolean }
-        ledgerConfirmed: { type: boolean }
-        freezeConfirmed: { type: boolean }
-        ledgerPosted: { type: boolean }
-        accountsCancelled: { type: boolean }
-        ledgerCancelled: { type: boolean }
-        noActiveFreeze: { type: boolean }
-    ReconciliationDiffRequest:
-      type: object
-      additionalProperties: false
-      required: [diffId, transactionId, diffType, expectedJson, actualJson, manualCaseId, traceId, detectedAt]
-      properties:
-        diffId: { type: string, minLength: 26, maxLength: 26, pattern: '^[0-9A-HJKMNP-TV-Z]{26}$' }
-        transactionId: { type: string, minLength: 26, maxLength: 26, pattern: '^[0-9A-HJKMNP-TV-Z]{26}$' }
-        diffType: { type: string, minLength: 1, maxLength: 64 }
-        expectedJson: { type: string, minLength: 2, maxLength: 4096, description: 仅包含脱敏预期事实的 JSON 文本。 }
-        actualJson: { type: string, minLength: 2, maxLength: 4096, description: 仅包含脱敏实际事实的 JSON 文本。 }
-        manualCaseId: { type: string, minLength: 26, maxLength: 26, pattern: '^[0-9A-HJKMNP-TV-Z]{26}$' }
-        traceId: { type: string, pattern: '^[a-fA-F0-9]{32}$' }
-        detectedAt: { type: string, format: date-time }
     LedgerEntry:
       type: object
       additionalProperties: false
@@ -835,56 +1086,6 @@ components:
                 status: { type: string, enum: [SUCCESS, REVERSED, CANCELLED] }
                 amountFen: { type: integer, format: int64, minimum: 1 }
                 completedAt: { type: string, format: date-time }
-    SendAgentMessageRequest:
-      type: object
-      additionalProperties: false
-      required: [clientMessageId, content]
-      properties:
-        clientMessageId:
-          type: string
-          minLength: 16
-          maxLength: 64
-          description: 客户端消息幂等键，同一会话内重复请求返回相同结果。
-        sessionId:
-          type: [string, 'null']
-          maxLength: 26
-          description: 已有会话 ID；为空则创建新会话。
-        content:
-          type: string
-          minLength: 1
-          maxLength: 2000
-          description: 脱敏后的用户输入原文。
-    AgentMessageResponse:
-      allOf:
-        - $ref: '#/components/schemas/ApiResponse'
-        - type: object
-          required: [data]
-          properties:
-            data:
-              type: object
-              additionalProperties: false
-              required: [sessionId, messageId, content, intent, clarificationNeeded]
-              properties:
-                sessionId:
-                  type: string
-                  minLength: 1
-                  maxLength: 26
-                messageId:
-                  type: string
-                  minLength: 1
-                  maxLength: 26
-                content:
-                  type: string
-                  description: 脱敏 AI 回复正文。
-                intent:
-                  type: string
-                  enum: [TRANSFER, BALANCE_QUERY, TRANSACTION_LIST, TRANSACTION_STATUS, USER_SEARCH, CREDIT_SUMMARY, CREDIT_BILL, CREDIT_REPAYMENT, UNKNOWN]
-                slots:
-                  type: object
-                  additionalProperties: true
-                  description: 结构化槽位，不含支付密码、令牌或确认上下文。
-                clarificationNeeded:
-                  type: boolean
   responses:
     BadRequest:
       description: 请求格式或字段不合法

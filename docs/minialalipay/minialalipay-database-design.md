@@ -70,6 +70,11 @@
 | `agent_db` | `ai-service` | `agent_session`、`agent_message`、`tool_call_log`、`preference`、`idempotency_record`、`audit_log`、`outbox_event` |
 | `metrics_db` | `business-center` 监控投影模块 | `inbox_event`、`analytics_event`、`personal_cashflow_daily`、`personal_counterparty_stat`、`merchant_business_daily`、`merchant_reconciliation_daily`、`quarantined_event`、`metric_definition`、`minute_metric`、`daily_metric`、`quality_result`、`monitor_alert` |
 
+历史迁移 `V202608050900__create_credit_tables.sql` 在 2026-08-05 已由 Flyway 成功执行，内容同时初始化
+`account_db` 与 `ledger_db` 的信用表。依据“已执行迁移不可修改”的规则保留该文件及校验和，不再拆分、删除或重命名；
+后续信用变更必须新增向前迁移，并保证每个新迁移文件只修改一个 Schema。该历史迁移的 MySQL 验证结果记录在
+`docs/minialalipay/T-02-credit-migration-verification.md`。
+
 项目采用 Monorepo：后端使用 Maven 多模块，B 端和 C 端使用两个独立 Umi 工程并分别构建、部署；代码仓库形态不改变数据所有权。`gateway` 不拥有业务数据库，`business-center` 内部包含收款、风控、运营和监控投影，`account-center` 内部包含余额、账本和 Mini 花呗。
 
 `/api/v1/credit/**` 的外部 Controller 由 `account-center` 承载，但这不改变 `credit_repayment_draft` 和统一资金主单归 `business_db` 所有的事实。账户中心通过版本化内部契约把还款分配哈希和确认上下文提交给业务中心；业务中心在自己的本地事务内持久化草稿、确认消费、资金主单和 Outbox，双方禁止跨库直写。

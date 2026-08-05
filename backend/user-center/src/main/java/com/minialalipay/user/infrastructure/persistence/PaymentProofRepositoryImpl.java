@@ -9,6 +9,7 @@ import org.springframework.stereotype.Repository;
 import java.util.List;
 import java.util.Optional;
 import java.util.stream.Collectors;
+import java.time.Instant;
 
 /**
  * 支付密码证明仓储实现。
@@ -54,6 +55,11 @@ public class PaymentProofRepositoryImpl implements PaymentProofRepository {
     public Optional<PaymentProof> findByTokenDigest(byte[] tokenDigest) {
         return paymentProofMapper.selectByTokenDigest(tokenDigest)
                 .map(this::toDomain);
+    }
+
+    @Override
+    public boolean consumeActive(String proofId, Instant consumedAt) {
+        return paymentProofMapper.consumeActive(proofId, consumedAt) == 1;
     }
 
     @Override

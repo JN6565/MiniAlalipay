@@ -7,6 +7,8 @@ import org.apache.ibatis.annotations.Param;
 import org.apache.ibatis.annotations.Select;
 import org.apache.ibatis.annotations.Update;
 
+import java.util.List;
+
 /**
  * 信用账户 Mapper，对应 {@code account_db.credit_account} 表。
  *
@@ -33,6 +35,15 @@ public interface CreditAccountMapper {
      */
     @Select("SELECT * FROM account_db.credit_account WHERE credit_account_id = #{creditAccountId}")
     CreditAccountPO findByCreditAccountId(@Param("creditAccountId") String creditAccountId);
+
+    /**
+     * 按状态查询信用账户列表。
+     *
+     * @param status 账户状态（ACTIVE / SUSPENDED / CLOSED）
+     * @return 匹配状态的信用账户 PO 列表
+     */
+    @Select("SELECT * FROM account_db.credit_account WHERE status = #{status}")
+    List<CreditAccountPO> findByStatus(@Param("status") String status);
 
     /**
      * 插入信用账户记录。

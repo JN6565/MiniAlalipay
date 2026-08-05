@@ -3,10 +3,7 @@ package com.minialalipay.account.application.account;
 import com.minialalipay.account.domain.account.Account;
 import com.minialalipay.account.domain.account.AccountBalance;
 import com.minialalipay.account.domain.account.AccountRepository;
-import com.minialalipay.account.domain.credit.CreditAccount;
-import com.minialalipay.account.domain.credit.CreditAccountRepository;
-import com.minialalipay.account.domain.credit.CreditReceivable;
-import com.minialalipay.account.domain.credit.CreditReceivableRepository;
+import com.minialalipay.account.domain.credit.*;
 import com.minialalipay.account.domain.ledger.LedgerAccount;
 import com.minialalipay.account.domain.ledger.LedgerAccountRepository;
 import org.junit.jupiter.api.Test;
@@ -15,6 +12,7 @@ import com.minialalipay.common.error.BusinessException;
 
 import java.time.Instant;
 import java.util.HashMap;
+import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 
@@ -140,6 +138,12 @@ class AccountApplicationServiceTest {
         @Override public Optional<CreditAccount> findById(String creditAccountId) {
             return Optional.ofNullable(accounts.get(creditAccountId));
         }
+
+        @Override
+        public List<CreditAccount> findByStatus(CreditAccountStatus status) {
+            return List.of();
+        }
+
         @Override public void save(CreditAccount account) {
             accounts.put(account.getCreditAccountId(), account);
         }

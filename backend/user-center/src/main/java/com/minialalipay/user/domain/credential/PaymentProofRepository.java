@@ -2,6 +2,7 @@ package com.minialalipay.user.domain.credential;
 
 import java.util.List;
 import java.util.Optional;
+import java.time.Instant;
 
 /**
  * 支付密码证明仓储接口。
@@ -51,6 +52,18 @@ public interface PaymentProofRepository {
      * @return 支付证明（可能不存在）
      */
     Optional<PaymentProof> findByTokenDigest(byte[] tokenDigest);
+
+    /**
+     * 仅当证明仍为活动状态时原子标记为已消费。
+     *
+     * <p>条件更新用于保护一次性证明不被并发请求重复消费；调用方必须检查返回值，
+     * 返回 {@code false} 表示证明已被其他事务消费或废弃。</p>
+     *
+     * @param proofId 证明 ID
+     * @param consumedAt 消费时间
+     * @return 是否成功完成状态转换
+     */
+    boolean consumeActive(String proofId, Instant consumedAt);
 
     /**
      * 查询用户的所有活动支付证明。

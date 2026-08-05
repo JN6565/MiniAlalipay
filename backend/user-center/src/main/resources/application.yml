@@ -3,6 +3,12 @@ server:
 spring:
   application:
     name: user-center
+  data:
+    redis:
+      host: ${REDIS_HOST:121.43.51.164}
+      port: ${REDIS_PORT:6379}
+      password: ${REDIS_PASSWORD:${spring.datasource.password}}
+      timeout: 2000ms
   datasource:
     url: ${USER_DB_URL:jdbc:mysql://121.43.51.164:3306/user_db?useSSL=false&serverTimezone=Asia/Shanghai&allowPublicKeyRetrieval=true&characterEncoding=UTF-8}
     username: ${USER_DB_USERNAME:root}
@@ -21,6 +27,9 @@ mybatis:
 # 账户中心配置
 account-center:
   url: ${ACCOUNT_CENTER_URL:http://localhost:8083}
+minialalipay:
+  internal:
+    service-token: ${INTERNAL_SERVICE_TOKEN:}
 management:
   endpoints:
     web:

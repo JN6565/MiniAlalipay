@@ -60,6 +60,15 @@
         WHERE token_digest = #{tokenDigest}
     </select>
 
+    <!-- 一次性证明必须通过 ACTIVE 条件更新完成消费，避免并发请求同时通过读取校验。 -->
+    <update id="consumeActive">
+        UPDATE user_db.payment_proof
+        SET status = 'CONSUMED',
+            consumed_at = #{consumedAt}
+        WHERE proof_id = #{proofId}
+          AND status = 'ACTIVE'
+    </update>
+
     <!-- 查询用户的所有活动支付证明 -->
     <select id="selectActiveByUserId" resultMap="paymentProofResultMap">
         SELECT * FROM user_db.payment_proof

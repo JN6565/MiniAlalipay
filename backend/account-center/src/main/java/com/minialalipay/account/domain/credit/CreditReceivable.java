@@ -127,9 +127,11 @@ public class CreditReceivable {
             throw new IllegalArgumentException("还款金额必须为正");
         }
         long remaining = amountFen;
-        // 先扣逾期
+        // 逾期是已出账应收的子集，还款逾期本金时必须同步减少 billedFen，
+        // 否则账面总应收不会随还款下降，破坏“已用额度=应收余额”的资金不变量。
         long overdueDeduct = Math.min(remaining, this.overdueFen);
         this.overdueFen -= overdueDeduct;
+        this.billedFen -= overdueDeduct;
         remaining -= overdueDeduct;
         // 再扣已出账非逾期
         long billedNonOverdue = this.billedFen - this.overdueFen;

@@ -24,7 +24,8 @@ import org.springframework.test.web.reactive.server.WebTestClient;
                 "spring.cloud.gateway.routes[0].id=test-route",
                 "spring.cloud.gateway.routes[0].uri=no://op",
                 "spring.cloud.gateway.routes[0].predicates[0]=Path=/api/v1/test/**",
-                "spring.cloud.gateway.default-filters="
+                "spring.cloud.gateway.default-filters=",
+                "management.health.redis.enabled=false"
         })
 @AutoConfigureWebTestClient(timeout = "10000")
 @ActiveProfiles("test")

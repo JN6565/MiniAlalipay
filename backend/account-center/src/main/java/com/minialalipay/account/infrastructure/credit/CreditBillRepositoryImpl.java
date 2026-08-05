@@ -7,6 +7,7 @@ import com.minialalipay.account.infrastructure.credit.mapper.CreditBillMapper;
 import com.minialalipay.account.infrastructure.credit.po.CreditBillPO;
 import org.springframework.stereotype.Repository;
 
+import java.time.Instant;
 import java.util.List;
 import java.util.Optional;
 
@@ -40,6 +41,12 @@ public class CreditBillRepositoryImpl implements CreditBillRepository {
     @Override
     public List<CreditBill> findByCreditAccountId(String creditAccountId) {
         List<CreditBillPO> pos = creditBillMapper.findByCreditAccountId(creditAccountId);
+        return pos.stream().map(this::toDomain).toList();
+    }
+
+    @Override
+    public List<CreditBill> findOverdueBills(Instant cutoffTime) {
+        List<CreditBillPO> pos = creditBillMapper.findOverdueBills(cutoffTime);
         return pos.stream().map(this::toDomain).toList();
     }
 

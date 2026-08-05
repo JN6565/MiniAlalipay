@@ -159,8 +159,21 @@ class CreditReceivableTest {
 
             // 先扣逾期100，再扣已出账非逾期100
             assertThat(receivable.getOverdueFen()).isZero();
-            assertThat(receivable.getBilledFen()).isEqualTo(100L);
+            assertThat(receivable.getBilledFen()).isZero();
             assertThat(receivable.getUnbilledFen()).isEqualTo(100L);
+        }
+
+        @Test
+        @DisplayName("偿还逾期金额时同步减少已出账应收")
+        void shouldReduceBilledWhenRepayingOverdue() {
+            CreditReceivable receivable = new CreditReceivable(
+                    CREDIT_ACCOUNT_ID, 0L, 30_000L, 30_000L, 0L, NOW);
+
+            receivable.decreaseByRepayment(30_000L, NOW.plusSeconds(1));
+
+            assertThat(receivable.getOverdueFen()).isZero();
+            assertThat(receivable.getBilledFen()).isZero();
+            assertThat(receivable.getTotalOutstandingFen()).isZero();
         }
 
         @Test
@@ -201,12 +214,12 @@ class CreditReceivableTest {
             receivable.markOverdue(100L, NOW);
             assertThat(receivable.getOverdueFen()).isEqualTo(100L);
 
-            // decreaseByRepayment: 先扣逾期100→再扣已出账300→剩余0
-            // 注意：overdue 扣减后 overdueFen=0，billedNonOverdue=billedFen(300)-0=300
+            // decreaseByRepayment: 先扣逾期100（同步减少 billed），
+            // 再扣已出账非逾期200，最后扣未出账100。
             receivable.decreaseByRepayment(400L, NOW);
             assertThat(receivable.getOverdueFen()).isZero();
             assertThat(receivable.getBilledFen()).isZero();
-            assertThat(receivable.getUnbilledFen()).isEqualTo(200L);
+            assertThat(receivable.getUnbilledFen()).isEqualTo(100L);
         }
     }
 }

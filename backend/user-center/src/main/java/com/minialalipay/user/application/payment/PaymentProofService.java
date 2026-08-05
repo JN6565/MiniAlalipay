@@ -253,19 +253,25 @@ public class PaymentProofService {
      * </ol>
      * </p>
      *
+     * @param userId   发起确认的用户 ID，必须与证明主体一致
      * @param rawToken 原始令牌
      * @param purpose  确认用途
-     * @return 证明 ID（用于业务关联）
+     * @return 已消费证明的逻辑 ID 和支付密码版本
      * @throws BusinessException 如果证明不存在、已消费、已过期或用途不匹配
      */
     @Transactional
-    public String consumeProof(String rawToken, String purpose) {
+    public VerifiedPaymentProof consumeProof(String userId, String rawToken, String purpose) {
         // 1. 生成令牌摘要
         byte[] tokenDigest = hmacSha256(rawToken);
 
         // 2. 根据令牌摘要查询支付证明
         PaymentProof proof = paymentProofRepository.findByTokenDigest(tokenDigest)
                 .orElseThrow(() -> new BusinessException(UserErrorCode.PAYMENT_PROOF_INVALID));
+
+        // 证明必须绑定当前调用主体，避免其他用户截获令牌后用于自己的确认流程。
+        if (!proof.getUserId().equals(userId)) {
+            throw new BusinessException(UserErrorCode.PAYMENT_PROOF_INVALID);
+        }
 
         // 3. 获取当前支付密码版本
         Credential credential = credentialRepository.findByUserId(proof.getUserId())
@@ -281,14 +287,30 @@ public class PaymentProofService {
             throw new BusinessException(UserErrorCode.PAYMENT_PROOF_INVALID);
         }
 
-        // 6. 消费证明
-        proof.consume();
+        // 读取校验之后仍可能发生并发消费，因此最终状态转换必须由数据库 ACTIVE 条件更新仲裁。
+        if (!paymentProofRepository.consumeActive(proof.getProofId(), Instant.now())) {
+            throw new BusinessException(UserErrorCode.PAYMENT_PROOF_INVALID);
+        }
 
-        // 7. 更新证明状态
-        paymentProofRepository.update(proof);
-
-        return proof.getProofId();
+        return new VerifiedPaymentProof(proof.getProofId(), credential.getPayPasswordVersion());
     }
+
+    /**
+     * 查询用户当前支付密码版本，供业务中心在消费确认令牌时检查改密失效规则。
+     *
+     * @param userId 用户 ID
+     * @return 当前支付密码版本
+     * @throws BusinessException 用户凭证不存在时返回认证失败
+     */
+    @Transactional(readOnly = true)
+    public long currentPayPasswordVersion(String userId) {
+        return credentialRepository.findByUserId(userId)
+                .orElseThrow(() -> new BusinessException(UserErrorCode.AUTH_REQUIRED))
+                .getPayPasswordVersion();
+    }
+
+    /** 已验证并原子消费的支付证明引用，不包含原始证明令牌。 */
+    public record VerifiedPaymentProof(String paymentProofId, long payPasswordVersion) { }
 
     /**
      * 废弃用户的所有活动支付证明。
