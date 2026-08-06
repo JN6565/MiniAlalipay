@@ -122,11 +122,8 @@ public final class AuthenticationGlobalFilter implements GlobalFilter, Ordered {
                 authContext.principalId(), authContext.roles(), path);
         ServerWebExchange authenticatedExchange = exchange.mutate()
                 .request(request -> request.headers(headers -> {
-                    // 保留前端传递的 X-User-Id，如果没有则使用认证上下文的 principalId
-                    String existingUserId = headers.getFirst(USER_ID_HEADER);
-                    if (existingUserId == null || existingUserId.isBlank()) {
-                        headers.set(USER_ID_HEADER, authContext.principalId());
-                    }
+                    // 认证主体是身份事实来源，必须覆盖客户端可能伪造的 X-User-Id，禁止保留伪造头
+                    headers.set(USER_ID_HEADER, authContext.principalId());
                     headers.set(ROLES_HEADER, String.join(",", authContext.roles()));
                 }))
                 .build();
