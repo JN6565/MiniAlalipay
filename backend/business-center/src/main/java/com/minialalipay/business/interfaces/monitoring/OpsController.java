@@ -229,15 +229,11 @@ public class OpsController {
     public ResponseEntity<ApiResponse<AlertRuleResponse>> updateAlertRuleThreshold(
             @RequestHeader("X-User-Id") String operatorId,
             @RequestHeader("X-User-Roles") String roles,
-            @RequestHeader("Idempotency-Key") String idempotencyKey,
             @PathVariable String ruleCode,
             @Valid @RequestBody UpdateAlertRuleThresholdRequest body,
             HttpServletRequest request) {
         access.requireAdmin(roles);
-        if (!idempotencyKeyValidator.isValid(idempotencyKey)) {
-            throw new BusinessException(CommonErrorCode.INVALID_REQUEST);
-        }
-        AlertRule value = service.updateAlertRuleThreshold(operatorId, ruleCode, body.thresholdValue(), body.version(), idempotencyKey);
+        AlertRule value = service.updateAlertRuleThreshold(operatorId, ruleCode, body.thresholdValue(), body.version());
         return ResponseEntity.ok(success(AlertRuleResponse.from(value), request));
     }
 

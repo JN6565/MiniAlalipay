@@ -157,14 +157,12 @@ class OpsControllerTest {
         // 运营人员无权限调整阈值。
         mvc.perform(post("/api/v1/ops/alert-rules/DUPLICATE_CHARGE/thresholds")
                         .header("X-User-Roles", "OPERATOR").header("X-User-Id", "ops-1")
-                        .header("Idempotency-Key", "00000000-0000-0000-0000-000000000001")
                         .contentType(MediaType.APPLICATION_JSON).content("{\"thresholdValue\":5,\"version\":0}"))
                 .andExpect(status().isForbidden()).andExpect(jsonPath("$.code").value("OPS_PERMISSION_REQUIRED"));
 
-        // 管理员按 CAS 更新阈值。
+        // 管理员按 CAS 更新阈值，无需幂等键。
         mvc.perform(post("/api/v1/ops/alert-rules/DUPLICATE_CHARGE/thresholds")
                         .header("X-User-Roles", "ADMIN").header("X-User-Id", "admin-1")
-                        .header("Idempotency-Key", "00000000-0000-0000-0000-000000000001")
                         .contentType(MediaType.APPLICATION_JSON).content("{\"thresholdValue\":5,\"version\":0}"))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.data.thresholdValue").value(5))
@@ -228,7 +226,7 @@ class OpsControllerTest {
                     "GT", 0L, true, 0L, "seed", NOW));
         }
         @Override public AlertRule updateAlertRuleThreshold(String operatorId, String ruleCode, long thresholdValue,
-                                                           long version, String idempotencyKey) {
+                                                           long version) {
             return new AlertRule(ruleCode, "重复扣款告警", "duplicate_charge_count", "CRITICAL",
                     "GT", thresholdValue, true, version + 1, operatorId, NOW.plusSeconds(1));
         }

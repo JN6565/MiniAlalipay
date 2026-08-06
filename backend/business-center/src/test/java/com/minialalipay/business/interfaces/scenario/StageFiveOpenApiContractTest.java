@@ -54,7 +54,8 @@ class StageFiveOpenApiContractTest {
         assertHeaders(paths, "/api/v1/p2p-collections/orders/{id}/pay", "post", true);
         assertHeaders(paths, "/api/v1/manual-cases/{id}/decisions", "post", true);
         assertHeaders(paths, "/api/v1/ops/alerts/{id}/acknowledge", "post", true);
-        assertHeaders(paths, "/api/v1/ops/alert-rules/{ruleCode}/thresholds", "post", true);
+        // 阈值更新由规则版本 CAS 保证并发安全，重复设置同一阈值无副作用，不需要幂等键。
+        assertHeaders(paths, "/api/v1/ops/alert-rules/{ruleCode}/thresholds", "post", false);
 
         Map<String, Object> schemas = contractSchemas();
         for (String name : List.of("CreateRechargeRequest", "CreateQrPayOrderRequest", "TokenExchangeRequest",

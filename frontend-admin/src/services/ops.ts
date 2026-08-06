@@ -278,11 +278,14 @@ export function listAlertRules(): Promise<ApiResponse<AlertRuleItem[]>> {
   return gatewayRequest<ApiResponse<AlertRuleItem[]>>('/api/v1/ops/alert-rules');
 }
 
-/** 按版本 CAS 更新告警规则阈值（管理员受审计动作）。 */
+/** 按版本 CAS 更新告警规则阈值（管理员受审计动作）；阈值写入由版本 CAS 保证并发安全，无需幂等键。 */
 export function updateAlertRuleThreshold(
   ruleCode: string,
   thresholdValue: number,
   version: number,
 ): Promise<ApiResponse<AlertRuleItem>> {
-  return writeAction(`/api/v1/ops/alert-rules/${encodeURIComponent(ruleCode)}/thresholds`, { thresholdValue, version });
+  return gatewayRequest<ApiResponse<AlertRuleItem>>(
+    `/api/v1/ops/alert-rules/${encodeURIComponent(ruleCode)}/thresholds`,
+    { method: 'POST', data: { thresholdValue, version } },
+  );
 }

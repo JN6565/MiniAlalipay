@@ -118,7 +118,7 @@ public class MonitoringApplicationService {
      */
     @Transactional
     public AlertRule updateAlertRuleThreshold(String operatorId, String ruleCode, long thresholdValue,
-                                              long version, String idempotencyKey) {
+                                              long version) {
         AlertRule rule = store.findAlertRule(ruleCode)
                 .orElseThrow(() -> new BusinessException(CommonErrorCode.NOT_FOUND));
         AlertRule next = rule.withThreshold(thresholdValue, operatorId, clock.instant());

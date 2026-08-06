@@ -1676,9 +1676,10 @@ paths:
       summary: 按版本 CAS 更新告警规则阈值
       operationId: updateAlertRuleThreshold
       x-client-scope: B
+      description: |
+        阈值写入是幂等写操作（重复设置同一阈值无副作用），由规则版本 CAS 保证并发安全，无需幂等键。
       parameters:
         - { $ref: '#/components/parameters/RequestIdHeader' }
-        - { $ref: '#/components/parameters/IdempotencyKeyHeader' }
         - { name: ruleCode, in: path, required: true, schema: { type: string, maxLength: 64 } }
       requestBody:
         required: true
