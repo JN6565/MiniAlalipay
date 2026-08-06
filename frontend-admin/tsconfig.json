@@ -4,6 +4,6 @@
     "forceConsistentCasingInFileNames": true,
     "types": ["jest", "@testing-library/jest-dom"]
   },
-  "include": ["src/**/*", "config/**/*", "src/.umi/**/*"],
+  "include": ["src/**/*", "test/**/*", "config/**/*", "src/.umi/**/*"],
   "exclude": ["node_modules", "dist", ".umi", ".umi-production"]
 }

@@ -1,10 +1,10 @@
 module.exports = {
   preset: 'ts-jest',
   testEnvironment: 'jsdom',
-  roots: ['<rootDir>/src'],
-  setupFilesAfterEnv: ['<rootDir>/src/test/setup.ts'],
+  roots: ['<rootDir>/test'],
+  setupFilesAfterEnv: ['<rootDir>/test/setup.ts'],
   moduleNameMapper: {
     '^@/(.*)$': '<rootDir>/src/$1',
-    '\\.(css|less)$': '<rootDir>/src/test/styleMock.js',
+    '\\.(css|less)$': '<rootDir>/test/styleMock.js',
   },
 };

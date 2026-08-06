@@ -1,5 +1,11 @@
-import { formatAmountFen } from './amount';
+import { formatAmountFen } from '../../src/utils/amount';
 
+/**
+ * 金额格式化单元测试。
+ *
+ * 资金展示涉及整数分到元的转换，任何实现变更都必须保证：
+ * 正数、负数、跨元进位、大额数值格式正确，且小数或超出安全整数的输入被拒绝。
+ */
 describe('formatAmountFen', () => {
   it.each([
     [0, '0.00'],
