@@ -1,4 +1,9 @@
 export default [
+  // 根路径重定向到登录页
+  {
+    path: '/',
+    redirect: '/h5/login',
+  },
   {
     path: '/h5',
     component: '@/layouts/H5Layout',
@@ -181,7 +186,7 @@ export default [
       // 默认跳转
       {
         path: '/h5',
-        redirect: '/h5/home',
+        redirect: '/h5/login',
       },
     ],
   },
