@@ -1,4 +1,4 @@
-import React, { useState, useCallback, useRef, useEffect } from 'react';
+import React, { useState, useCallback } from 'react';
 import { history } from 'umi';
 import { Button, Toast } from 'antd-mobile';
 import { useSession } from './hooks/useSession';
@@ -21,31 +21,6 @@ const AITalkPage: React.FC = () => {
   const [inputValue, setInputValue] = useState('');
   const { sessionId, saveSessionId } = useSession();
   const { startStream, abort, streaming } = useSSEStream();
-  const activeAssistantIdRef = useRef<string | null>(null);
-  const pendingCharsRef = useRef('');
-
-  // 逐字打字定时器——始终运行，从 pendingCharsRef 取字符逐字渲染
-  useEffect(() => {
-    const timer = setInterval(() => {
-      const pending = pendingCharsRef.current;
-      if (!pending) return;
-      const ch = pending[0];
-      pendingCharsRef.current = pending.slice(1);
-      const aid = activeAssistantIdRef.current;
-      if (aid) {
-        setMessages((prev) => {
-          const updated = [...prev];
-          const idx = updated.findIndex((m) => m.id === aid);
-          if (idx >= 0) {
-            const cur = updated[idx] as AssistantTextMessage;
-            updated[idx] = { ...cur, content: cur.content + ch };
-          }
-          return updated;
-        });
-      }
-    }, 30);
-    return () => clearInterval(timer);
-  }, []);
 
   /** 发送消息的核心逻辑（通过 SSE 流） */
   const sendViaStream = useCallback(
@@ -54,7 +29,6 @@ const AITalkPage: React.FC = () => {
 
       // 创建待填充的 assistant text bubble
       const assistantId = nextId();
-      activeAssistantIdRef.current = assistantId;
       const assistantMsg: AssistantTextMessage = {
         id: assistantId,
         role: 'assistant',
@@ -83,8 +57,15 @@ const AITalkPage: React.FC = () => {
           },
 
           'agent-content': (data) => {
-            // 推入字符队列，由逐字定时器消费，不直接更新 state
-            pendingCharsRef.current += data.delta;
+            setMessages((prev) => {
+              const updated = [...prev];
+              const idx = updated.findIndex((m) => m.id === assistantId);
+              if (idx >= 0) {
+                const current = updated[idx] as AssistantTextMessage;
+                updated[idx] = { ...current, content: current.content + data.delta };
+              }
+              return updated;
+            });
           },
 
           'agent-confirmation': (data) => {
@@ -121,32 +102,26 @@ const AITalkPage: React.FC = () => {
 
           'agent-done': (data) => {
             if (data.sessionId) saveSessionId(data.sessionId);
-            const aid = activeAssistantIdRef.current;
-            if (aid) {
-              setMessages((prev) => {
-                const updated = [...prev];
-                const idx = updated.findIndex((m) => m.id === aid);
-                if (idx >= 0) {
-                  updated[idx] = { ...updated[idx], streaming: false } as AssistantTextMessage;
-                }
-                return updated;
-              });
-            }
+            setMessages((prev) => {
+              const updated = [...prev];
+              const idx = updated.findIndex((m) => m.id === assistantId);
+              if (idx >= 0) {
+                updated[idx] = { ...updated[idx], streaming: false } as AssistantTextMessage;
+              }
+              return updated;
+            });
           },
 
           'agent-error': (data) => {
             Toast.show({ content: data.message || 'AI 请求失败' });
-            const aid = activeAssistantIdRef.current;
-            if (aid) {
-              setMessages((prev) => {
-                const updated = [...prev];
-                const idx = updated.findIndex((m) => m.id === aid);
-                if (idx >= 0) {
-                  (updated[idx] as AssistantTextMessage).streaming = false;
-                }
-                return updated;
-              });
-            }
+            setMessages((prev) => {
+              const updated = [...prev];
+              const idx = updated.findIndex((m) => m.id === assistantId);
+              if (idx >= 0) {
+                (updated[idx] as AssistantTextMessage).streaming = false;
+              }
+              return updated;
+            });
           },
         },
       );

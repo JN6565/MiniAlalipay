@@ -66,6 +66,8 @@ export function useSSEStream() {
               const parsed = JSON.parse(data);
               const handler = (handlers as Record<string, Function>)[eventType];
               handler?.(parsed);
+              // 让浏览器有时间渲染，产生逐句出现的流式效果
+              await new Promise((r) => setTimeout(r, 80));
             } catch { /* 解析失败跳过 */ }
             eventType = '';
             data = '';
