@@ -124,10 +124,11 @@ public class AgentStreamController {
                             .name("agent-error")
                             .data(objectMapper.writeValueAsString(
                                     new SseEvent.ErrorPayload("INTERNAL_ERROR", "处理异常"))));
+                    emitter.complete();
                 } catch (IOException ignored) {
-                    // 连接已断开，忽略发送失败
+                    // 连接已断开，用 completeWithError 触发清理
+                    emitter.completeWithError(e);
                 }
-                emitter.completeWithError(e);
             } finally {
                 RequestContext.clear();
             }
