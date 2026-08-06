@@ -8,6 +8,8 @@
  * <ul>
  *   <li>{@code LanguageModelPort}：语言模型调用契约</li>
  *   <li>{@code ChatMessage / ChatResponse}：端口级数据结构</li>
+ *   <li>{@code StreamCallback}：SSE 流式回调契约</li>
+ *   <li>{@code SseEvent}：SSE 事件类型与载荷定义</li>
  * </ul>
  */
 package com.minialalipay.ai.application.port;
