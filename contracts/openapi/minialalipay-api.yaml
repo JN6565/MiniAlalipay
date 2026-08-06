@@ -1707,6 +1707,38 @@ paths:
         '409': { $ref: '#/components/responses/Conflict' }
         '429': { $ref: '#/components/responses/TooManyRequests' }
         '500': { $ref: '#/components/responses/InternalError' }
+  /api/v1/agent/messages/stream:
+    post:
+      summary: 发送消息并接收 SSE 流式回复
+      operationId: sendAgentMessageStream
+      x-client-scope: C
+      description: |
+        与 POST /api/v1/agent/messages 相同的业务语义，但响应为 SSE (text/event-stream) 格式。
+        客户端使用 fetch + ReadableStream 消费事件流。
+      parameters:
+        - $ref: '#/components/parameters/RequestIdHeader'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/SendAgentMessageRequest' }
+      responses:
+        '200':
+          description: SSE 事件流
+          content:
+            text/event-stream:
+              schema:
+                type: string
+                description: >
+                  事件序列:
+                  agent-status → agent-tool-call* → agent-tool-result* →
+                  agent-content* → (agent-confirmation | agent-clarification)? →
+                  agent-done | agent-error
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '409': { $ref: '#/components/responses/Conflict' }
+        '429': { $ref: '#/components/responses/TooManyRequests' }
+        '500': { $ref: '#/components/responses/InternalError' }
 components:
   securitySchemes:
     bearerAuth:
