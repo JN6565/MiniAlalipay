@@ -191,9 +191,31 @@
    仍固定在顶栏右端；头像白底圆 + 描边，与 C 方案 .who .av 保持一致。 */
 .headerUser {
   display: flex;
+  min-width: 0;
   flex: 0 0 auto;
   align-items: center;
+}
+
+/* 下拉触发器必须显式使用横向布局，避免 Dropdown 的默认行内容器把头像和身份信息拆成多行。 */
+.headerUserTrigger {
+  display: flex;
+  min-width: 148px;
+  max-width: 220px;
+  min-height: 40px;
+  padding: 5px 8px;
+  align-items: center;
   gap: 9px;
+  overflow: hidden;
+  border: 1px solid transparent;
+  border-radius: 8px;
+  color: inherit;
+  cursor: pointer;
+  transition: background var(--admin-transition-fast), border-color var(--admin-transition-fast);
+}
+
+.headerUserTrigger:hover {
+  border-color: var(--admin-border-soft);
+  background: var(--admin-sider-bg);
 }
 
 .headerUserAvatar {
@@ -202,8 +224,8 @@
   height: 28px !important;
   border-radius: 50%;
   background: #fff !important;
-  border: 1px solid var(--line-strong);
-  color: var(--ink-2) !important;
+  border: 1px solid var(--admin-border);
+  color: var(--admin-text-secondary) !important;
   font-size: 11px;
   font-weight: 600;
 }
@@ -211,20 +233,28 @@
 /* 姓名与邮箱纵向排列，字号、弱化色对齐 C 方案的 .who b / .who span。 */
 .headerUserText {
   display: flex;
+  flex: 1 1 auto;
   min-width: 0;
   flex-direction: column;
+  overflow: hidden;
   line-height: 1.35;
 }
 
 .headerUserText strong {
+  overflow: hidden;
   color: var(--admin-text);
   font-size: 12px;
   font-weight: 600;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .headerUserText span {
-  color: var(--ink-3);
+  overflow: hidden;
+  color: var(--admin-text-secondary);
   font-size: 11px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 /* 内容区：唯一滚动容器，flex:1 占满剩余高度。 */
@@ -251,6 +281,17 @@
 @media (max-width: 768px) {
   .header {
     padding: 0 12px !important;
+  }
+
+  .headerUserTrigger {
+    min-width: 40px;
+    width: 40px;
+    padding: 5px;
+    justify-content: center;
+  }
+
+  .headerUserText {
+    display: none;
   }
 
   .content {

@@ -213,7 +213,10 @@ export default function AdminLayout() {
               }}
               placement="bottomRight"
             >
-              <span>
+              <span
+                className={styles.headerUserTrigger}
+                aria-label={`${displayName}，${roleText}`}
+              >
                 <Avatar size="small" className={styles.headerUserAvatar}>
                   {displayName.slice(0, 1)}
                 </Avatar>
