@@ -1,29 +1,74 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { history } from 'umi';
-import { Toast } from 'antd-mobile';
+import { Toast, SpinLoading } from 'antd-mobile';
+import * as accountService from '@/services/account';
+import * as creditService from '@/services/credit';
 import './index.less';
 
 const HomePage: React.FC = () => {
   const nickname = localStorage.getItem('nickname') || '用户';
-  const [loading] = useState(false);
+  const [loading, setLoading] = useState(true);
+  const [account, setAccount] = useState<accountService.AccountInfo | null>(null);
+  const [credit, setCredit] = useState<creditService.CreditSummary | null>(null);
+  const [transactions, setTransactions] = useState<accountService.Transaction[]>([]);
 
-  // Mock数据
-  const account = {
-    totalFen: 0,
-    availableFen: 0,
-    frozenFen: 0,
+  useEffect(() => {
+    loadData();
+  }, []);
+
+  const loadData = async () => {
+    try {
+      const [accountResult, creditResult, txResult] = await Promise.allSettled([
+        accountService.getMyAccount(),
+        creditService.getCreditSummary(),
+        accountService.getTransactions({ pageSize: 5 }),
+      ]);
+
+      if (accountResult.status === 'fulfilled') {
+        setAccount(accountResult.value);
+      }
+
+      if (creditResult.status === 'fulfilled') {
+        setCredit(creditResult.value);
+      } else {
+        setCredit({ creditAccountId: '', status: 'ACTIVE', totalLimitFen: 500000, usedFen: 0, frozenFen: 0, availableFen: 500000, unbilledFen: 0, billedFen: 0, overdueFen: 0 });
+      }
+
+      if (txResult.status === 'fulfilled') {
+        setTransactions(txResult.value.items || []);
+      }
+    } catch (error) {
+      console.error('加载数据失败:', error);
+    } finally {
+      setLoading(false);
+    }
   };
-
-  const credit = {
-    availableFen: 0,
-    usedFen: 0,
-  };
-
-  const transactions: any[] = [];
 
   const formatAmount = (fen: number) => {
     return (fen / 100).toFixed(2);
   };
+
+  const formatRelativeTime = (dateStr: string) => {
+    const now = new Date();
+    const date = new Date(dateStr);
+    const diffMs = now.getTime() - date.getTime();
+    const diffMins = Math.floor(diffMs / 60000);
+    const diffHours = Math.floor(diffMs / 3600000);
+    const diffDays = Math.floor(diffMs / 86400000);
+    if (diffMins < 1) return '刚刚';
+    if (diffMins < 60) return `${diffMins}分钟前`;
+    if (diffHours < 24) return `${diffHours}小时前`;
+    if (diffDays < 7) return `${diffDays}天前`;
+    return date.toLocaleDateString('zh-CN');
+  };
+
+  if (loading) {
+    return (
+      <div className="loading-container">
+        <SpinLoading />
+      </div>
+    );
+  }
 
   return (
     <div className="home">
@@ -35,8 +80,6 @@ const HomePage: React.FC = () => {
             <span>{nickname}</span>
           </div>
           <div className="header-btns">
-            <span onClick={() => history.push('/h5/settings')}>⚙️</span>
-            <span>🔔</span>
           </div>
         </div>
 
@@ -45,19 +88,19 @@ const HomePage: React.FC = () => {
             <span>总资产(元)</span>
             <span className="eye">👁️</span>
           </div>
-          <div className="asset-num">{formatAmount(account.totalFen)}</div>
+          <div className="asset-num">{formatAmount(account?.totalFen || 0)}</div>
           <div className="asset-cols">
             <div>
               <span>可用余额</span>
-              <b>{formatAmount(account.availableFen)}</b>
+              <b>{formatAmount(account?.availableFen || 0)}</b>
             </div>
             <div>
               <span>冻结金额</span>
-              <b>{formatAmount(account.frozenFen)}</b>
+              <b>{formatAmount(account?.frozenFen || 0)}</b>
             </div>
             <div>
               <span>花呗可用</span>
-              <b>{formatAmount(credit.availableFen)}</b>
+              <b>{formatAmount(credit?.availableFen || 0)}</b>
             </div>
           </div>
         </div>
@@ -138,13 +181,13 @@ const HomePage: React.FC = () => {
           <span className="tab-icon">💬</span>
           <span className="tab-label">AI助手</span>
         </div>
-        <div className="tab" onClick={() => history.push('/h5/collection')}>
-          <span className="tab-icon">📱</span>
-          <span className="tab-label">收款</span>
+        <div className="tab" onClick={() => history.push('/h5/contacts')}>
+          <span className="tab-icon">👥</span>
+          <span className="tab-label">联系人</span>
         </div>
-        <div className="tab" onClick={() => history.push('/h5/credit')}>
-          <span className="tab-icon">💳</span>
-          <span className="tab-label">花呗</span>
+        <div className="tab" onClick={() => history.push('/h5/profile')}>
+          <span className="tab-icon">👤</span>
+          <span className="tab-label">我的</span>
         </div>
       </div>
     </div>

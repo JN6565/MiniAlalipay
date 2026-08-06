@@ -1,9 +1,8 @@
 import axios from 'axios';
 import { Toast } from 'antd-mobile';
 
-// 创建axios实例
+// 创建axios实例 - 不设置baseURL，让请求通过前端代理
 const request = axios.create({
-  baseURL: 'http://localhost:8080',
   timeout: 10000,
 });
 
@@ -36,14 +35,21 @@ request.interceptors.request.use(
       };
     }
 
-    // 为非登录/注册请求添加 Authorization 头
+    // 为非登录/注册请求添加 Authorization 头和用户ID
     const url = config.url || '';
     if (!url.includes('/auth/login') && !url.includes('/auth/register')) {
       const token = localStorage.getItem('accessToken');
+      const userId = localStorage.getItem('userId');
       if (token) {
         config.headers = {
           ...config.headers,
           Authorization: `Bearer ${token}`,
+        };
+      }
+      if (userId) {
+        config.headers = {
+          ...config.headers,
+          'X-User-Id': userId,
         };
       }
     }

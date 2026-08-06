@@ -58,14 +58,14 @@ export const createRequest = (params: {
 // 查询固定请求状态
 export const getRequestStatus = (requestId: string) => {
   return request.get<CollectionRequest>(
-    `/api/v1/p2p-collections/requests/${requestId}`,
+    `/v1/p2p-collections/requests/${requestId}`,
   );
 };
 
 // 取消固定请求
 export const cancelRequest = (requestId: string) => {
   return request.post(
-    `/api/v1/p2p-collections/requests/${requestId}/cancel`,
+    `/v1/p2p-collections/requests/${requestId}/cancel`,
   );
 };
 
@@ -82,7 +82,7 @@ export const lockOrderAmount = (
   orderId: string,
   params: { amountFen: number; subject?: string },
 ) => {
-  return request.patch(`/api/v1/p2p-collections/orders/${orderId}`, {
+  return request.patch(`/v1/p2p-collections/orders/${orderId}`, {
     data: params,
   });
 };
@@ -93,7 +93,7 @@ export const createOrderConfirmation = (
   paymentPassword: string,
 ) => {
   return request.post<{ confirmationToken: string; expiresAt: string }>(
-    `/api/v1/p2p-collections/orders/${orderId}/confirmations`,
+    `/v1/p2p-collections/orders/${orderId}/confirmations`,
     { data: { paymentPassword } },
   );
 };
@@ -104,7 +104,7 @@ export const submitPayment = (
   confirmationToken: string,
 ) => {
   return request.post<{ transactionId: string; status: string }>(
-    `/api/v1/p2p-collections/orders/${orderId}/pay`,
+    `/v1/p2p-collections/orders/${orderId}/pay`,
     { data: { confirmationToken } },
   );
 };
@@ -112,6 +112,6 @@ export const submitPayment = (
 // 查询订单状态
 export const getOrderStatus = (orderId: string) => {
   return request.get<CollectionOrder>(
-    `/api/v1/p2p-collections/orders/${orderId}`,
+    `/v1/p2p-collections/orders/${orderId}`,
   );
 };

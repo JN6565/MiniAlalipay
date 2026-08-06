@@ -24,7 +24,7 @@ export const exchangeToken = (token: string) => {
 
 // 标记已扫码
 export const markScanned = (orderId: string) => {
-  return request.post(`/api/v1/qr-pay/orders/${orderId}/scan`);
+  return request.post(`/v1/qr-pay/orders/${orderId}/scan`);
 };
 
 // 生成确认令牌
@@ -36,7 +36,7 @@ export const createConfirmation = (
   },
 ) => {
   return request.post<{ confirmationToken: string; expiresAt: string }>(
-    `/api/v1/qr-pay/orders/${orderId}/confirmations`,
+    `/v1/qr-pay/orders/${orderId}/confirmations`,
     { data: params },
   );
 };
@@ -50,12 +50,12 @@ export const submitPayment = (
   },
 ) => {
   return request.post<{ transactionId: string; status: string }>(
-    `/api/v1/qr-pay/orders/${orderId}/pay`,
+    `/v1/qr-pay/orders/${orderId}/pay`,
     { data: params },
   );
 };
 
 // 查询订单状态
 export const getOrderStatus = (orderId: string) => {
-  return request.get<QrPayOrder>(`/api/v1/qr-pay/orders/${orderId}`);
+  return request.get<QrPayOrder>(`/v1/qr-pay/orders/${orderId}`);
 };

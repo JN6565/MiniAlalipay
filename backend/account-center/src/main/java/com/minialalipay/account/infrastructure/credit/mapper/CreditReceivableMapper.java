@@ -8,7 +8,7 @@ import org.apache.ibatis.annotations.Select;
 import org.apache.ibatis.annotations.Update;
 
 /**
- * 信用应收汇总 Mapper，对应 {@code ledger_db.credit_receivable} 表。
+ * 信用应收汇总 Mapper，对应 {@code credit_receivable} 表。
  *
  * <p>提供信用应收汇总的按信用账户 ID 查询、插入及乐观锁 CAS 更新能力。
  * 应收分布在 ledger_db，区分未出账、已出账及逾期金额。</p>
@@ -22,7 +22,7 @@ public interface CreditReceivableMapper {
      * @param creditAccountId 信用账户 ID
      * @return 应收汇总 PO，未找到时返回 null
      */
-    @Select("SELECT * FROM ledger_db.credit_receivable "
+    @Select("SELECT * FROM credit_receivable "
             + "WHERE credit_account_id = #{creditAccountId}")
     CreditReceivablePO findByCreditAccountId(@Param("creditAccountId") String creditAccountId);
 
@@ -32,7 +32,7 @@ public interface CreditReceivableMapper {
      * @param po 应收汇总持久化对象
      * @return 受影响行数
      */
-    @Insert("INSERT INTO ledger_db.credit_receivable "
+    @Insert("INSERT INTO credit_receivable "
             + "(credit_account_id, unbilled_fen, billed_fen, overdue_fen, version, updated_at) "
             + "VALUES (#{creditAccountId}, #{unbilledFen}, #{billedFen}, #{overdueFen}, "
             + "#{version}, #{updatedAt})")
@@ -47,7 +47,7 @@ public interface CreditReceivableMapper {
      * @param po 包含最新字段值及当前版本号的应收汇总 PO
      * @return 受影响行数，0 表示版本号不匹配（并发冲突）
      */
-    @Update("UPDATE ledger_db.credit_receivable "
+    @Update("UPDATE credit_receivable "
             + "SET unbilled_fen = #{unbilledFen}, billed_fen = #{billedFen}, "
             + "overdue_fen = #{overdueFen}, version = version + 1, updated_at = #{updatedAt} "
             + "WHERE credit_account_id = #{creditAccountId} AND version = #{version}")

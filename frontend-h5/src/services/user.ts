@@ -51,5 +51,5 @@ export const updateContact = (
     version: number;
   },
 ) => {
-  return request.patch(`/api/v1/contacts/${payeeUserId}`, { data: params });
+  return request.patch(`/v1/contacts/${payeeUserId}`, { data: params });
 };

@@ -7,6 +7,8 @@ export interface CreditSummary {
   frozenFen: number;
   availableFen: number;
   unbilledFen: number;
+  billedFen: number;
+  overdueFen: number;
   status: 'ACTIVE' | 'SUSPENDED' | 'CLOSED';
   suspendReason?: string;
 }
@@ -52,7 +54,7 @@ export const getBills = (params?: { page?: number; pageSize?: number }) => {
 
 // 查询账单详情
 export const getBillDetail = (billId: string) => {
-  return request.get<BillDetail>(`/api/v1/credit/bills/${billId}`);
+  return request.get<BillDetail>(`/v1/credit/bills/${billId}`);
 };
 
 // 创建还款草稿
@@ -89,5 +91,5 @@ export const getRepaymentStatus = (repaymentId: string) => {
     amountFen: number;
     status: string;
     restoredLimitFen: number;
-  }>(`/api/v1/credit/repayments/${repaymentId}`);
+  }>(`/v1/credit/repayments/${repaymentId}`);
 };

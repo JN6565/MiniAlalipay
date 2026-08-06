@@ -1,6 +1,8 @@
 import React, { useState, useRef, useEffect } from 'react';
+import { history } from 'umi';
 import { Input, Button, Toast } from 'antd-mobile';
 import { SendOutline } from 'antd-mobile-icons';
+import { sendMessage } from '@/services/ai';
 import './index.less';
 
 interface Message {
@@ -14,6 +16,7 @@ const AITalkPage: React.FC = () => {
   const [messages, setMessages] = useState<Message[]>([]);
   const [inputValue, setInputValue] = useState('');
   const [loading, setLoading] = useState(false);
+  const [sessionId, setSessionId] = useState<string | null>(null);
   const messagesEndRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -35,20 +38,53 @@ const AITalkPage: React.FC = () => {
     };
 
     setMessages((prev) => [...prev, userMessage]);
+    const currentInput = inputValue;
     setInputValue('');
     setLoading(true);
 
-    // TODO: 调用AI接口
-    setTimeout(() => {
+    try {
+      // 生成客户端消息ID（16-64位）
+      const clientMessageId = `msg_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+
+      // 调用 AI 接口
+      const result = await sendMessage({
+        clientMessageId,
+        sessionId: sessionId || undefined,
+        content: currentInput,
+      });
+
+      // 更新 sessionId
+      if (result.sessionId) {
+        setSessionId(result.sessionId);
+      }
+
+      // 构建 AI 回复消息
       const aiMessage: Message = {
-        id: (Date.now() + 1).toString(),
+        id: result.messageId || Date.now().toString(),
         role: 'assistant',
-        content: 'AI助手功能开发中...',
+        content: result.content,
         timestamp: new Date(),
       };
+
       setMessages((prev) => [...prev, aiMessage]);
+    } catch (error: any) {
+      console.error('AI 请求失败:', error);
+      Toast.show({
+        content: error?.message || 'AI 请求失败，请重试',
+        position: 'center',
+      });
+
+      // 添加错误提示消息
+      const errorMessage: Message = {
+        id: Date.now().toString(),
+        role: 'assistant',
+        content: '抱歉，我暂时无法回复。请稍后再试。',
+        timestamp: new Date(),
+      };
+      setMessages((prev) => [...prev, errorMessage]);
+    } finally {
       setLoading(false);
-    }, 1000);
+    }
   };
 
   return (
@@ -56,7 +92,6 @@ const AITalkPage: React.FC = () => {
       <div className="ai-messages">
         {messages.length === 0 && (
           <div className="ai-welcome">
-            <div className="ai-welcome-title">AI助手</div>
             <div className="ai-welcome-desc">
               我可以帮你转账、查余额、查账单等
             </div>
@@ -91,6 +126,26 @@ const AITalkPage: React.FC = () => {
         >
           <SendOutline />
         </Button>
+      </div>
+
+      {/* 底部导航栏 */}
+      <div className="tabbar">
+        <div className="tab" onClick={() => history.push('/h5/home')}>
+          <span className="tab-icon">🏠</span>
+          <span className="tab-label">首页</span>
+        </div>
+        <div className="tab on">
+          <span className="tab-icon">💬</span>
+          <span className="tab-label">AI助手</span>
+        </div>
+        <div className="tab" onClick={() => history.push('/h5/contacts')}>
+          <span className="tab-icon">👥</span>
+          <span className="tab-label">联系人</span>
+        </div>
+        <div className="tab" onClick={() => history.push('/h5/profile')}>
+          <span className="tab-icon">👤</span>
+          <span className="tab-label">我的</span>
+        </div>
       </div>
     </div>
   );

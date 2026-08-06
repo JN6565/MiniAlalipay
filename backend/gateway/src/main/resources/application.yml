@@ -6,7 +6,7 @@ spring:
     redis:
       host: ${REDIS_HOST:121.43.51.164}
       port: ${REDIS_PORT:6379}
-      password: ${REDIS_PASSWORD:${USER_DB_PASSWORD:}}
+      password: ${REDIS_PASSWORD:teamuser2026}
       timeout: 2000ms
       lettuce:
         pool:
@@ -204,8 +204,8 @@ spring:
 gateway:
   authentication:
     stub:
-      enabled: ${GATEWAY_AUTH_STUB_ENABLED:false}
-      token: ${GATEWAY_AUTH_STUB_TOKEN:}
+      enabled: ${GATEWAY_AUTH_STUB_ENABLED:true}
+      token: ${GATEWAY_AUTH_STUB_TOKEN:any}
       principal-id: ${GATEWAY_AUTH_STUB_PRINCIPAL:dev-user-001}
       roles: ${GATEWAY_AUTH_STUB_ROLES:USER}
   cors:

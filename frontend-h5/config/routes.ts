@@ -1,4 +1,9 @@
 export default [
+  // 根路径重定向到登录页
+  {
+    path: '/',
+    redirect: '/h5/login',
+  },
   {
     path: '/h5',
     component: '@/layouts/H5Layout',
@@ -101,6 +106,20 @@ export default [
         auth: true,
       },
       {
+        path: '/h5/contacts',
+        component: '@/pages/h5/Contacts',
+        exact: true,
+        title: '联系人',
+        auth: true,
+      },
+      {
+        path: '/h5/profile',
+        component: '@/pages/h5/Profile',
+        exact: true,
+        title: '我的',
+        auth: true,
+      },
+      {
         path: '/h5/qr-pay/receipt/:id',
         component: '@/pages/h5/QrPayReceipt',
         exact: true,
@@ -181,7 +200,7 @@ export default [
       // 默认跳转
       {
         path: '/h5',
-        redirect: '/h5/home',
+        redirect: '/h5/login',
       },
     ],
   },

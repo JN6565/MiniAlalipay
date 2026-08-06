@@ -39,7 +39,7 @@ export const updateDraft = (
     version: number;
   },
 ) => {
-  return request.patch<TransferDraft>(`/api/v1/transfer-drafts/${draftId}`, {
+  return request.patch<TransferDraft>(`/v1/transfer-drafts/${draftId}`, {
     data: params,
   });
 };
@@ -50,7 +50,7 @@ export const validateDraft = (draftId: string) => {
     riskAction: 'PASS' | 'REJECT' | 'MANUAL';
     riskMessage?: string;
     riskLevel: string;
-  }>(`/api/v1/transfer-drafts/${draftId}/validate`);
+  }>(`/v1/transfer-drafts/${draftId}/validate`);
 };
 
 // 提交转账
@@ -65,5 +65,5 @@ export const submitTransfer = (params: {
 
 // 查询交易状态
 export const getTransferStatus = (transactionId: string) => {
-  return request.get<TransferResult>(`/api/v1/transfers/${transactionId}`);
+  return request.get<TransferResult>(`/v1/transfers/${transactionId}`);
 };

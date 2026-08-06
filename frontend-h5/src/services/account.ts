@@ -38,7 +38,7 @@ export const getMyAccount = () => {
   return request.get<AccountInfo>('/api/v1/accounts/me');
 };
 
-// 查询交易明细
+// 查询交易明细 - 使用账本明细接口
 export const getTransactions = (params: {
   page?: number;
   pageSize?: number;
@@ -46,8 +46,8 @@ export const getTransactions = (params: {
   status?: string;
 }) => {
   return request.get<{ items: Transaction[]; total: number }>(
-    '/api/v1/accounts/me/transactions',
-    { params },
+    '/api/v1/accounts/me/entries',
+    { params: { limit: params.pageSize || 20 } },
   );
 };
 
