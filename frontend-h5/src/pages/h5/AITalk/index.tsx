@@ -1,4 +1,5 @@
 import React, { useState, useCallback } from 'react';
+import { flushSync } from 'react-dom';
 import { history } from 'umi';
 import { Button, Toast } from 'antd-mobile';
 import { useSession } from './hooks/useSession';
@@ -57,16 +58,18 @@ const AITalkPage: React.FC = () => {
           },
 
           'agent-content': async (data: any) => {
-            // 逐字追加到消息，每个字符间隔 15ms 产生打字效果
+            // 逐字追加，flushSync 强制每字立即渲染，15ms 间隔产生打字效果
             for (const ch of data.delta) {
-              setMessages((prev) => {
-                const updated = [...prev];
-                const idx = updated.findIndex((m) => m.id === assistantId);
-                if (idx >= 0) {
-                  const current = updated[idx] as AssistantTextMessage;
-                  updated[idx] = { ...current, content: current.content + ch };
-                }
-                return updated;
+              flushSync(() => {
+                setMessages((prev) => {
+                  const updated = [...prev];
+                  const idx = updated.findIndex((m) => m.id === assistantId);
+                  if (idx >= 0) {
+                    const current = updated[idx] as AssistantTextMessage;
+                    updated[idx] = { ...current, content: current.content + ch };
+                  }
+                  return updated;
+                });
               });
               await new Promise((r) => setTimeout(r, 15));
             }
