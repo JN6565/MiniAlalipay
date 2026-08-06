@@ -24,12 +24,27 @@ export const changePaymentPassword = (params: {
   return request.patch('/api/v1/payment-password', params);
 };
 
+export interface PaymentProofResult {
+  paymentProof: string;
+}
+
 /**
- * 验证支付密码。
+ * 验证支付密码并签发一次性支付证明，用于转账确认。
+ *
+ * 后端 `/verify` 仅返回验证结果不含证明，支付证明由 `/proof` 接口签发；
+ * 响应中的 `accessToken` 即原始证明令牌，此处统一映射为 `paymentProof` 供上层使用。
  *
  * @param paymentPassword 支付密码（6 位数字）
- * @returns 成功响应
+ * @param purpose 证明用途，默认 TRANSFER_CONFIRM；信用还款传 CREDIT_REPAY
+ * @returns 支付证明（两分钟有效，不得写入日志、URL 或浏览器存储）
  */
-export const verifyPaymentPassword = (paymentPassword: string) => {
-  return request.post('/api/v1/payment-password/verify', { paymentPassword });
+export const verifyPaymentPassword = async (
+  paymentPassword: string,
+  purpose: string = 'TRANSFER_CONFIRM',
+): Promise<PaymentProofResult> => {
+  const result = await request.post<{ accessToken: string }>('/api/v1/payment-password/proof', {
+    paymentPassword,
+    purpose,
+  });
+  return { paymentProof: result.accessToken };
 };

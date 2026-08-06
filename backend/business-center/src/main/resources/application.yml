@@ -17,7 +17,9 @@ minialalipay:
   internal:
     account-center-url: ${ACCOUNT_CENTER_INTERNAL_URL:http://localhost:8083}
     user-center-url: ${USER_CENTER_INTERNAL_URL:http://localhost:8081}
-    service-token: ${INTERNAL_SERVICE_TOKEN:}
+    # 与 user-center 的 internal.auth.service-token / minialalipay.internal.service-token 保持一致，
+    # 否则支付证明验证等内部调用会被拒绝并映射为 PAYMENT_PROOF_INVALID。
+    service-token: ${INTERNAL_SERVICE_TOKEN:local-internal-token}
 management:
   endpoints:
     web:

@@ -25,7 +25,7 @@ public class ToolCatalog {
                             "type", "object",
                             "properties", Map.of(
                                     "query", Map.of("type", "string", "minLength", 1, "maxLength", 64,
-                                            "description", "搜索关键词（姓名或手机号尾号）"),
+                                            "description", "搜索手机号（11 位精确匹配）"),
                                     "limit", Map.of("type", "integer", "default", 10, "maximum", 20,
                                             "description", "返回结果数量上限")
                             ),

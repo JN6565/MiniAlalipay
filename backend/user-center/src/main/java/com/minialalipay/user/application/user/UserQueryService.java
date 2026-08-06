@@ -37,18 +37,18 @@ public class UserQueryService {
     }
 
     /**
-     * 模糊搜索用户。
+     * 按手机号搜索用户。
      *
      * <p>搜索规则：
      * <ul>
-     *   <li>按登录名或昵称模糊搜索</li>
+     *   <li>按手机号精确匹配搜索</li>
      *   <li>只返回 ACTIVE 状态的用户</li>
      *   <li>排除当前用户自己</li>
      *   <li>最多返回 20 条结果</li>
      * </ul>
      * </p>
      *
-     * @param keyword       搜索关键词（登录名或昵称）
+     * @param keyword       搜索手机号
      * @param currentUserId 当前用户 ID（排除自己）
      * @return 用户搜索结果列表
      */

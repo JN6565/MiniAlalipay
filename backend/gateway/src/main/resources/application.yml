@@ -1,4 +1,4 @@
-server:
+﻿server:
   port: ${GATEWAY_PORT:8080}
 
 spring:
@@ -16,7 +16,7 @@ spring:
   cloud:
     gateway:
       routes:
-        # ========== 用户中心路由 ==========
+        # ========== 鐢ㄦ埛涓績璺敱 ==========
         - id: user-center-auth
           uri: ${USER_CENTER_URI:http://localhost:8081}
           predicates:
@@ -39,7 +39,7 @@ spring:
                 redis-rate-limiter.replenishRate: 1
                 redis-rate-limiter.burstCapacity: 60
                 redis-rate-limiter.requestedTokens: 1
-        # 支付密码校验使用更严格的用户维度限流
+        # 鏀粯瀵嗙爜鏍￠獙浣跨敤鏇翠弗鏍肩殑鐢ㄦ埛缁村害闄愭祦
         - id: user-center-password
           uri: ${USER_CENTER_URI:http://localhost:8081}
           predicates:
@@ -52,9 +52,9 @@ spring:
                 redis-rate-limiter.burstCapacity: 5
                 redis-rate-limiter.requestedTokens: 1
 
-        # ========== 业务中心路由（仅已实现 Controller 的操作） ==========
+        # ========== 涓氬姟涓績璺敱锛堜粎宸插疄鐜?Controller 鐨勬搷浣滐級 ==========
         - id: business-center-transfers
-          uri: ${BUSINESS_CENTER_URI:lb://business-center}
+          uri: ${BUSINESS_CENTER_URI:http://localhost:8082}
           predicates:
             - Path=/api/v1/transfers/**
           filters:
@@ -64,10 +64,10 @@ spring:
                 redis-rate-limiter.replenishRate: 1
                 redis-rate-limiter.burstCapacity: 60
                 redis-rate-limiter.requestedTokens: 1
-        # ---- 以下路由已列入契约但对应 Controller 尚未实现，暂禁用 ----
-        # 二维码非资金来源订单已实现；确认与支付仍由业务中心受控返回依赖不可用。
+        # ---- 浠ヤ笅璺敱宸插垪鍏ュ绾︿絾瀵瑰簲 Controller 灏氭湭瀹炵幇锛屾殏绂佺敤 ----
+        # 浜岀淮鐮侀潪璧勯噾鏉ユ簮璁㈠崟宸插疄鐜帮紱纭涓庢敮浠樹粛鐢变笟鍔′腑蹇冨彈鎺ц繑鍥炰緷璧栦笉鍙敤銆?
         - id: business-center-qr-pay
-          uri: ${BUSINESS_CENTER_URI:lb://business-center}
+          uri: ${BUSINESS_CENTER_URI:http://localhost:8082}
           predicates:
             - Path=/api/v1/qr-pay/**
           filters:
@@ -78,7 +78,7 @@ spring:
                 redis-rate-limiter.burstCapacity: 30
                 redis-rate-limiter.requestedTokens: 1
         - id: business-center-p2p-collections
-          uri: ${BUSINESS_CENTER_URI:lb://business-center}
+          uri: ${BUSINESS_CENTER_URI:http://localhost:8082}
           predicates:
             - Path=/api/v1/p2p-collections/**
           filters:
@@ -88,9 +88,9 @@ spring:
                 redis-rate-limiter.replenishRate: 1
                 redis-rate-limiter.burstCapacity: 30
                 redis-rate-limiter.requestedTokens: 1
-        # transactions → 王钧平 阶段四已完成，Controller 待补充
+        # transactions 鈫?鐜嬮挧骞?闃舵鍥涘凡瀹屾垚锛孋ontroller 寰呰ˉ鍏?
         - id: business-center-recharges
-          uri: ${BUSINESS_CENTER_URI:lb://business-center}
+          uri: ${BUSINESS_CENTER_URI:http://localhost:8082}
           predicates:
             - Path=/api/v1/recharges/**
           filters:
@@ -101,7 +101,7 @@ spring:
                 redis-rate-limiter.burstCapacity: 10
                 redis-rate-limiter.requestedTokens: 1
         - id: business-center-refunds
-          uri: ${BUSINESS_CENTER_URI:lb://business-center}
+          uri: ${BUSINESS_CENTER_URI:http://localhost:8082}
           predicates:
             - Path=/api/v1/refunds/**
           filters:
@@ -112,7 +112,7 @@ spring:
                 redis-rate-limiter.burstCapacity: 10
                 redis-rate-limiter.requestedTokens: 1
         - id: business-center-manual-cases
-          uri: ${BUSINESS_CENTER_URI:lb://business-center}
+          uri: ${BUSINESS_CENTER_URI:http://localhost:8082}
           predicates:
             - Path=/api/v1/manual-cases/**
           filters:
@@ -123,7 +123,7 @@ spring:
                 redis-rate-limiter.burstCapacity: 20
                 redis-rate-limiter.requestedTokens: 1
         - id: business-center-transfer-drafts
-          uri: ${BUSINESS_CENTER_URI:lb://business-center}
+          uri: ${BUSINESS_CENTER_URI:http://localhost:8082}
           predicates:
             - Path=/api/v1/transfer-drafts/**
           filters:
@@ -134,7 +134,7 @@ spring:
                 redis-rate-limiter.burstCapacity: 60
                 redis-rate-limiter.requestedTokens: 1
         - id: business-center-confirmations
-          uri: ${BUSINESS_CENTER_URI:lb://business-center}
+          uri: ${BUSINESS_CENTER_URI:http://localhost:8082}
           predicates:
             - Path=/api/v1/confirmations/**
           filters:
@@ -144,7 +144,7 @@ spring:
                 redis-rate-limiter.replenishRate: 1
                 redis-rate-limiter.burstCapacity: 30
                 redis-rate-limiter.requestedTokens: 1
-        # 信用运维任务由账户中心拥有，必须先于通配 ops 路由匹配
+        # 淇＄敤杩愮淮浠诲姟鐢辫处鎴蜂腑蹇冩嫢鏈夛紝蹇呴』鍏堜簬閫氶厤 ops 璺敱鍖归厤
         - id: account-center-credit-ops
           uri: ${ACCOUNT_CENTER_URI:http://localhost:8083}
           predicates:
@@ -156,9 +156,9 @@ spring:
                 redis-rate-limiter.replenishRate: 1
                 redis-rate-limiter.burstCapacity: 10
                 redis-rate-limiter.requestedTokens: 1
-        # 监控运维路由：实时指标、告警处置、日报、数据质量、指标口径由业务中心提供；必须位于 credit-ops 之后。
+        # 鐩戞帶杩愮淮璺敱锛氬疄鏃舵寚鏍囥€佸憡璀﹀缃€佹棩鎶ャ€佹暟鎹川閲忋€佹寚鏍囧彛寰勭敱涓氬姟涓績鎻愪緵锛涘繀椤讳綅浜?credit-ops 涔嬪悗銆?
         - id: business-center-ops
-          uri: ${BUSINESS_CENTER_URI:lb://business-center}
+          uri: ${BUSINESS_CENTER_URI:http://localhost:8082}
           predicates:
             - Path=/api/v1/ops/**
           filters:
@@ -169,7 +169,7 @@ spring:
                 redis-rate-limiter.burstCapacity: 20
                 redis-rate-limiter.requestedTokens: 1
 
-        # ========== 账户中心路由（仅已实现 Controller 的操作） ==========
+        # ========== 璐︽埛涓績璺敱锛堜粎宸插疄鐜?Controller 鐨勬搷浣滐級 ==========
         - id: account-center
           uri: ${ACCOUNT_CENTER_URI:http://localhost:8083}
           predicates:
@@ -182,7 +182,7 @@ spring:
                 redis-rate-limiter.burstCapacity: 60
                 redis-rate-limiter.requestedTokens: 1
 
-        # ========== AI 服务路由 ==========
+        # ========== AI 鏈嶅姟璺敱 ==========
         - id: ai-service
           uri: ${AI_SERVICE_URI:lb://ai-service}
           predicates:
@@ -195,12 +195,12 @@ spring:
                 redis-rate-limiter.burstCapacity: 20
                 redis-rate-limiter.requestedTokens: 1
 
-      # 全局默认过滤器
+      # 鍏ㄥ眬榛樿杩囨护鍣?
       default-filters:
         - RateLimitResponse
         - DedupeResponseHeader=Access-Control-Allow-Origin Access-Control-Allow-Credentials
 
-# ========== 阶段二受控鉴权（dev/test profile 显式启用） ==========
+# ========== 闃舵浜屽彈鎺ч壌鏉冿紙dev/test profile 鏄惧紡鍚敤锛?==========
 gateway:
   authentication:
     user-center-uri: ${USER_CENTER_URI:http://localhost:8081}

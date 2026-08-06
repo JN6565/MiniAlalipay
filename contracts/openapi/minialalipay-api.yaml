@@ -317,6 +317,48 @@ paths:
         '401': { $ref: '#/components/responses/Unauthorized' }
         '404': { $ref: '#/components/responses/NotFound' }
         '409': { $ref: '#/components/responses/Conflict' }
+  /api/v1/contacts:
+    get:
+      summary: 查询当前用户的常用联系人列表
+      operationId: listContacts
+      x-client-scope: C
+      parameters:
+        - $ref: '#/components/parameters/RequestIdHeader'
+        - name: limit
+          in: query
+          required: false
+          schema: { type: integer, minimum: 1, maximum: 20, default: 5 }
+      responses:
+        '200':
+          description: 返回常用联系人列表
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ContactListResponse' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+  /api/v1/contacts/{payeeUserId}:
+    patch:
+      summary: 更新联系人属性
+      operationId: updateContact
+      x-client-scope: C
+      parameters:
+        - $ref: '#/components/parameters/RequestIdHeader'
+        - name: payeeUserId
+          in: path
+          required: true
+          schema: { type: string, minLength: 1, maxLength: 64 }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/UpdateContactRequest' }
+      responses:
+        '200':
+          description: 更新成功
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ApiResponse' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '404': { $ref: '#/components/responses/NotFound' }
   /internal/v1/accounts/registrations/{registrationId}:
     put:
       summary: 按注册编号幂等创建账户体系
@@ -2440,6 +2482,31 @@ components:
                 status: { type: string, enum: [SUCCESS, REVERSED, CANCELLED] }
                 amountFen: { type: integer, format: int64, minimum: 1 }
                 completedAt: { type: string, format: date-time }
+    Contact:
+      type: object
+      additionalProperties: false
+      required: [payeeUserId, successCount, pinned]
+      properties:
+        payeeUserId: { type: string, minLength: 1, maxLength: 64 }
+        alias: { type: string, maxLength: 64, nullable: true }
+        successCount: { type: integer, format: int64, minimum: 0 }
+        lastSuccessAt: { type: string, format: date-time, nullable: true }
+        pinned: { type: boolean }
+    UpdateContactRequest:
+      type: object
+      additionalProperties: false
+      properties:
+        alias: { type: string, maxLength: 64, nullable: true }
+        pinned: { type: boolean, nullable: true }
+        hidden: { type: boolean, nullable: true }
+    ContactListResponse:
+      allOf:
+        - $ref: '#/components/schemas/ApiResponse'
+        - type: object
+          properties:
+            data:
+              type: array
+              items: { $ref: '#/components/schemas/Contact' }
   responses:
     BadRequest:
       description: 请求格式或字段不合法

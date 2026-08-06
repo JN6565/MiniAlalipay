@@ -54,7 +54,7 @@ export const getBills = (params?: { page?: number; pageSize?: number }) => {
 
 // 查询账单详情
 export const getBillDetail = (billId: string) => {
-  return request.get<BillDetail>(`/v1/credit/bills/${billId}`);
+  return request.get<BillDetail>(`/api/v1/credit/bills/${billId}`);
 };
 
 // 创建还款草稿
@@ -68,19 +68,21 @@ export const createRepaymentDraft = (amountFen: number) => {
       amountFen: number;
     }>;
     expiresAt: string;
-  }>('/api/v1/credit/repayment-drafts', { data: { amountFen } });
+  }>('/api/v1/credit/repayment-drafts', { amountFen });
 };
 
-// 提交还款
+// 提交还款；契约字段为 repaymentDraftId + paymentProofToken（一次性支付密码证明）
 export const submitRepayment = (params: {
   repaymentDraftId: string;
-  confirmationToken: string;
+  paymentProofToken: string;
 }) => {
   return request.post<{
     repaymentId: string;
-    transactionId: string;
+    amountFen: number;
     status: string;
-  }>('/api/v1/credit/repayments', { data: params });
+    createdAt: string;
+    updatedAt: string;
+  }>('/api/v1/credit/repayments', params);
 };
 
 // 查询还款状态
@@ -91,5 +93,5 @@ export const getRepaymentStatus = (repaymentId: string) => {
     amountFen: number;
     status: string;
     restoredLimitFen: number;
-  }>(`/v1/credit/repayments/${repaymentId}`);
+  }>(`/api/v1/credit/repayments/${repaymentId}`);
 };

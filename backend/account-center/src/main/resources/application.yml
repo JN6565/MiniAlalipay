@@ -26,4 +26,5 @@ management:
 minialalipay:
   internal:
     user-center-url: ${USER_CENTER_URL:http://localhost:8081}
-    service-token: ${INTERNAL_SERVICE_TOKEN:}
+    # 内部接口服务令牌，必须与 user-center 的同名配置一致
+    service-token: ${INTERNAL_SERVICE_TOKEN:local-internal-token}

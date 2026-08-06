@@ -48,7 +48,7 @@ public record AuthResponseDTO(
 
         /**
          * 昵称。
-         * <p>用于前端展示，可重复的展示名称和模糊搜索条件。</p>
+         * <p>用于前端展示，可重复的展示名称。</p>
          */
         String nickname,
 
