@@ -351,7 +351,12 @@ public class AgentMessageService {
                     if (mockMode) {
                         finalContent = resultInterpreter.interpret(
                                 primary.toolName(), primary.toolResult());
-                        callback.onContentDelta(new SseEvent.ContentPayload(finalContent));
+                        // 逐句推送，产生流式显示效果
+                        for (String sentence : finalContent.split("(?<=[。！？\\n])")) {
+                            if (!sentence.isBlank()) {
+                                callback.onContentDelta(new SseEvent.ContentPayload(sentence.trim()));
+                            }
+                        }
                     } else {
                         String toolContext = formatToolResultsAsSystemMessage(toolResults);
                         context.add(new ChatMessage(MessageRole.SYSTEM, toolContext));
@@ -385,8 +390,11 @@ public class AgentMessageService {
                 } else {
                     finalContent = llmResponse.content();
                     finalSlots = llmResponse.slots();
-                    if (!finalContent.isBlank()) {
-                        callback.onContentDelta(new SseEvent.ContentPayload(finalContent));
+                    // 逐句推送，产生流式显示效果
+                    for (String sentence : finalContent.split("(?<=[。！？\\n])")) {
+                        if (!sentence.isBlank()) {
+                            callback.onContentDelta(new SseEvent.ContentPayload(sentence.trim()));
+                        }
                     }
                 }
             } else {
@@ -395,8 +403,13 @@ public class AgentMessageService {
                 if (llmResponse.clarificationNeeded()) {
                     callback.onClarification(new SseEvent.ClarificationPayload(
                             finalContent, List.of()));
-                } else if (!finalContent.isBlank()) {
-                    callback.onContentDelta(new SseEvent.ContentPayload(finalContent));
+                } else {
+                    // 逐句推送，产生流式显示效果
+                    for (String sentence : finalContent.split("(?<=[。！？\\n])")) {
+                        if (!sentence.isBlank()) {
+                            callback.onContentDelta(new SseEvent.ContentPayload(sentence.trim()));
+                        }
+                    }
                 }
             }
 

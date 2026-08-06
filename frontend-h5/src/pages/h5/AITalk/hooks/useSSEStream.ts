@@ -47,15 +47,11 @@ export function useSSEStream() {
 
       while (true) {
         const { done, value } = await reader.read();
-        if (done) { console.log('[SSE] stream done'); break; }
-
-        const chunk = decoder.decode(value, { stream: true });
-        console.log('[SSE] raw chunk:', chunk.substring(0, 200));
-        buffer += chunk;
+        if (done) break;
+        buffer += decoder.decode(value, { stream: true });
 
         const lines = buffer.split('\n');
         buffer = lines.pop() || '';
-        console.log('[SSE] lines count:', lines.length, 'buffer remainder:', buffer.substring(0, 50));
 
         let eventType = '';
         let data = '';
@@ -63,25 +59,16 @@ export function useSSEStream() {
           line = line.replace(/\r$/, '');
           if (line.startsWith('event:')) {
             eventType = line.slice(6).replace(/^ /, '');
-            console.log('[SSE] found event:', eventType);
           } else if (line.startsWith('data:')) {
             data = line.slice(5).replace(/^ /, '');
-            console.log('[SSE] found data:', data.substring(0, 80));
           } else if (line === '' && eventType && data) {
-            console.log('[SSE] DISPATCH:', eventType);
             try {
               const parsed = JSON.parse(data);
               const handler = (handlers as Record<string, Function>)[eventType];
-              if (handler) {
-                handler(parsed);
-              } else {
-                console.warn('[SSE] no handler for:', eventType);
-              }
-            } catch(e) { console.error('[SSE] parse error:', e); }
+              handler?.(parsed);
+            } catch { /* 解析失败跳过 */ }
             eventType = '';
             data = '';
-          } else if (line === '') {
-            console.log('[SSE] blank line (no event/data pending)');
           }
         }
       }
