@@ -65,7 +65,7 @@ public class UserQueryService {
         return userRepository.searchByKeyword(normalizedKeyword, currentUserId, 20).stream()
                 .map(user -> new UserSearchResult(
                         user.getUserId(),
-                        user.getLoginName(),
+                        user.getAccountNumber(),
                         user.getNickname(),
                         user.getIdentityStatus()
                 ))

@@ -47,7 +47,13 @@ public class User {
      * 登录名（规范化存储，最大 64 字符）。
      * <p>用于登录和唯一识别，系统内唯一。注册时规范化处理（如转小写、去空格）。</p>
      */
-    private String loginName;
+    private String accountNumber;
+
+    /** 完整手机号，规范化为 11 位数字并在数据库中保持唯一。 */
+    private final String phoneNumber;
+
+    /** 用户注册时提供的真实姓名，用于收款人精确或模糊查询。 */
+    private final String realName;
 
     /**
      * 昵称（最大 64 字符）。
@@ -112,24 +118,30 @@ public class User {
      * @param nickname       昵称（最大 64 字符）
      * @throws IllegalArgumentException 如果任何必填参数为空
      */
-    public User(String userId, String registrationId, String loginName, String nickname) {
+    public User(String userId, String registrationId, String accountNumber, String phoneNumber, String realName, String nickname) {
         if (userId == null || userId.isBlank()) {
             throw new IllegalArgumentException("用户 ID 不能为空");
         }
         if (registrationId == null || registrationId.isBlank()) {
             throw new IllegalArgumentException("注册幂等键不能为空");
         }
-        if (loginName == null || loginName.isBlank()) {
-            throw new IllegalArgumentException("登录名不能为空");
+        if (accountNumber == null || accountNumber.isBlank()) {
+            throw new IllegalArgumentException("账户号不能为空");
         }
-        if (nickname == null || nickname.isBlank()) {
-            throw new IllegalArgumentException("昵称不能为空");
+        if (phoneNumber == null || phoneNumber.isBlank()) {
+            throw new IllegalArgumentException("手机号不能为空");
+        }
+        if (realName == null || realName.isBlank()) {
+            throw new IllegalArgumentException("真实姓名不能为空");
         }
 
         this.userId = userId;
         this.registrationId = registrationId;
-        this.loginName = loginName;
-        this.nickname = nickname;
+        this.accountNumber = accountNumber;
+        this.phoneNumber = phoneNumber;
+        this.realName = realName;
+        this.nickname = nickname == null || nickname.isBlank() ? realName : nickname.trim();
+        this.phoneTail = phoneNumber.substring(phoneNumber.length() - 4);
         this.identityStatus = "PENDING_VERIFICATION";
         this.status = UserStatus.PROVISIONING;
         this.version = 0;
@@ -157,7 +169,9 @@ public class User {
     public User(
             String userId,
             String registrationId,
-            String loginName,
+            String accountNumber,
+            String phoneNumber,
+            String realName,
             String nickname,
             String phoneTail,
             String identityStatus,
@@ -168,7 +182,9 @@ public class User {
     ) {
         this.userId = userId;
         this.registrationId = registrationId;
-        this.loginName = loginName;
+        this.accountNumber = accountNumber;
+        this.phoneNumber = phoneNumber;
+        this.realName = realName;
         this.nickname = nickname;
         this.phoneTail = phoneTail;
         this.identityStatus = identityStatus;
@@ -252,8 +268,18 @@ public class User {
      *
      * @return 登录名（已规范化，最大 64 字符）
      */
-    public String getLoginName() {
-        return loginName;
+    public String getAccountNumber() {
+        return accountNumber;
+    }
+
+    /** @return 完整手机号，仅供用户中心认证和受控查询使用 */
+    public String getPhoneNumber() {
+        return phoneNumber;
+    }
+
+    /** @return 注册真实姓名 */
+    public String getRealName() {
+        return realName;
     }
 
     /**

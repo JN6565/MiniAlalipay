@@ -16,7 +16,7 @@
   注意事项：
   - 所有时间字段使用 java.time.Instant，MyBatis 自动处理 UTC 转换
   - 更新操作必须包含 WHERE version = #{expectedVersion}，防止并发覆盖
-  - 唯一约束冲突（如 login_name 重复）由数据库抛出异常，由上层捕获并转换为业务异常
+  - 唯一约束冲突（如 account_number 重复）由数据库抛出异常，由上层捕获并转换为业务异常
 -->
 <mapper namespace="com.minialalipay.user.infrastructure.persistence.mapper.UserMapper">
 
@@ -24,7 +24,9 @@
     <resultMap id="userResultMap" type="com.minialalipay.user.infrastructure.persistence.po.UserPO">
         <id property="userId" column="user_id"/>
         <result property="registrationId" column="registration_id"/>
-        <result property="loginName" column="login_name"/>
+        <result property="accountNumber" column="account_number"/>
+        <result property="phoneNumber" column="phone_number"/>
+        <result property="realName" column="real_name"/>
         <result property="nickname" column="nickname"/>
         <result property="phoneTail" column="phone_tail"/>
         <result property="identityStatus" column="identity_status"/>
@@ -50,7 +52,9 @@
         INSERT INTO app_user (
             user_id,
             registration_id,
-            login_name,
+            account_number,
+            phone_number,
+            real_name,
             nickname,
             phone_tail,
             identity_status,
@@ -61,7 +65,9 @@
         ) VALUES (
             #{userId},
             #{registrationId},
-            #{loginName},
+            #{accountNumber},
+            #{phoneNumber},
+            #{realName},
             #{nickname},
             #{phoneTail},
             #{identityStatus},
@@ -85,7 +91,9 @@
         SELECT
             user_id,
             registration_id,
-            login_name,
+            account_number,
+            phone_number,
+            real_name,
             nickname,
             phone_tail,
             identity_status,
@@ -108,11 +116,13 @@
       返回值：
       - 用户持久化对象，如果不存在则返回 null
     -->
-    <select id="selectByLoginName" parameterType="string" resultMap="userResultMap">
+    <select id="selectByAccountNumber" parameterType="string" resultMap="userResultMap">
         SELECT
             user_id,
             registration_id,
-            login_name,
+            account_number,
+            phone_number,
+            real_name,
             nickname,
             phone_tail,
             identity_status,
@@ -121,7 +131,15 @@
             created_at,
             updated_at
         FROM app_user
-        WHERE login_name = #{loginName}
+        WHERE account_number = #{accountNumber}
+    </select>
+
+    <!-- 手机号是登录标识之一，只允许精确匹配。 -->
+    <select id="selectByPhoneNumber" parameterType="string" resultMap="userResultMap">
+        SELECT user_id, registration_id, account_number, phone_number, real_name, nickname,
+               phone_tail, identity_status, status, version, created_at, updated_at
+        FROM app_user
+        WHERE phone_number = #{phoneNumber}
     </select>
 
     <!--
@@ -140,7 +158,9 @@
         SELECT
             user_id,
             registration_id,
-            login_name,
+            account_number,
+            phone_number,
+            real_name,
             nickname,
             phone_tail,
             identity_status,
@@ -167,7 +187,9 @@
     <update id="update" parameterType="com.minialalipay.user.infrastructure.persistence.po.UserPO">
         UPDATE app_user
         SET
-            login_name = #{loginName},
+            account_number = #{accountNumber},
+            phone_number = #{phoneNumber},
+            real_name = #{realName},
             nickname = #{nickname},
             phone_tail = #{phoneTail},
             identity_status = #{identityStatus},
@@ -189,10 +211,14 @@
       返回值：
       - 如果登录名已存在则返回 true
     -->
-    <select id="existsByLoginName" parameterType="string" resultType="boolean">
+    <select id="existsByAccountNumber" parameterType="string" resultType="boolean">
         SELECT COUNT(*) > 0
         FROM app_user
-        WHERE login_name = #{loginName}
+        WHERE account_number = #{accountNumber}
+    </select>
+
+    <select id="existsByPhoneNumber" parameterType="string" resultType="boolean">
+        SELECT COUNT(*) &gt; 0 FROM app_user WHERE phone_number = #{phoneNumber}
     </select>
 
     <!--
@@ -216,7 +242,9 @@
         SELECT
             user_id,
             registration_id,
-            login_name,
+            account_number,
+            phone_number,
+            real_name,
             nickname,
             phone_tail,
             identity_status,
@@ -226,16 +254,16 @@
             updated_at
         FROM app_user
         WHERE status = 'ACTIVE'
-          AND (login_name LIKE #{searchPattern} OR nickname LIKE #{searchPattern})
+          AND (phone_number = #{keyword} OR real_name LIKE #{searchPattern})
           <if test="excludeId != null">
             AND user_id != #{excludeId}
           </if>
         ORDER BY
             CASE
-                WHEN login_name LIKE #{searchPattern} THEN 0
+                WHEN account_number LIKE #{searchPattern} THEN 0
                 ELSE 1
             END,
-            login_name ASC
+            account_number ASC
         LIMIT #{limit}
     </select>
 

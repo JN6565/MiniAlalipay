@@ -21,30 +21,11 @@ import java.util.UUID;
 /**
  * 认证应用服务。
  *
- * <p>负责用户注册、登录和会话管理，是用户中心的核心应用服务。
- * 协调领域模型、仓储和安全工具，完成认证相关的业务流程。</p>
+ * <p>负责用户注册、登录和会话管理，是用户中心的核心应用服务。该服务只编排认证相关流程，密码哈希、会话管理和
+ * 跨服务开户均通过端口完成，避免应用层依赖具体基础设施实现。</p>
  *
- * <p>职责边界：
- * <ul>
- *   <li>只负责认证相关的业务逻辑（注册、登录、会话）</li>
- *   <li>不负责用户资料管理（修改昵称、手机号等）</li>
- *   <li>不负责支付密码管理（设置、修改、验证）</li>
- *   <li>不负责账户开户（由账户中心负责）</li>
- * </ul>
- * </p>
- *
- * <p>事务边界：
- * <ul>
- *   <li>注册操作在同一事务内保存用户和凭证，保证原子性</li>
- *   <li>登录操作在同一事务内验证密码和更新失败计数，保证一致性</li>
- *   <li>会话操作不涉及数据库事务，只操作 Redis</li>
- * </ul>
- * </p>
- *
- * @see UserRepository 用户仓储
- * @see CredentialRepository 凭证仓储
- * @see PasswordHasher 密码哈希工具
- * @see SessionManager 会话管理器
+ * <p>事务边界：注册在用户中心本地事务内保存用户和凭证，并在开户成功后激活用户；登录在本地事务内完成状态恢复、
+ * 密码校验和失败计数更新。Redis 会话创建只在用户可登录后执行。</p>
  */
 @Service
 public class AuthService {
@@ -58,13 +39,13 @@ public class AuthService {
     private final AccountProvisioningPort accountProvisioningPort;
 
     /**
-     * 构造函数注入依赖。
+     * 构造认证服务所需依赖。
      *
-     * @param userRepository       用户仓储
+     * @param userRepository 用户聚合仓储
      * @param credentialRepository 凭证仓储
-     * @param passwordHasher       密码哈希端口
-     * @param sessionManager       会话管理端口
-     * @param accountProvisioningPort  账户中心开户端口
+     * @param passwordHasher 密码哈希端口
+     * @param sessionManager 会话管理端口
+     * @param accountProvisioningPort 账户中心开户注册端口
      */
     public AuthService(
             UserRepository userRepository,
@@ -81,143 +62,85 @@ public class AuthService {
     }
 
     /**
-     * 用户注册。
+     * 使用手机号、真实姓名、登录密码和支付密码注册 C 端用户，并自动开立零余额账户。
      *
-     * <p>注册流程：
-     * <ol>
-     *   <li>校验登录名是否已存在</li>
-     *   <li>校验密码是否符合安全规则</li>
-     *   <li>生成用户 ID 和注册幂等键</li>
-     *   <li>创建用户对象（状态为 PROVISIONING）</li>
-     *   <li>对密码进行 BCrypt 哈希</li>
-     *   <li>创建凭证对象</li>
-     *   <li>在同一事务内保存用户和凭证</li>
-     *   <li>创建会话并返回认证结果</li>
-     * </ol>
-     * </p>
+     * <p>注册成功的对外语义必须包含开户成功：如果账户中心不可用或拒绝开户，本方法抛出业务异常，不创建会话，
+     * 防止前端拿到 PROVISIONING 用户后停留在“注册开户中”。账户中心按 registrationId 幂等，后续登录恢复仍可复用同一编号。</p>
      *
-     * <p>业务规则：
-     * <ul>
-     *   <li>登录名唯一，规范化存储（转小写、去空格）</li>
-     *   <li>登录密码使用 BCrypt 强哈希</li>
-     *   <li>注册时状态为 PROVISIONING，需要等账户中心开户完成后才能变为 ACTIVE</li>
-     *   <li>初始余额为 0（由账户中心负责）</li>
-     * </ul>
-     * </p>
-     *
-     * @param request 注册请求
-     * @return 认证结果（包含会话令牌和用户信息）
-     * @throws BusinessException 如果登录名已存在或密码不符合规则
+     * @param request 注册请求，包含手机号、真实姓名、可选昵称、登录密码和支付密码
+     * @return 认证结果，包含会话令牌、用户 ID、系统账户号、昵称和用户状态
+     * @throws BusinessException 手机号重复、密码不符合规则或开户注册失败时抛出
      */
     @Transactional
     public AuthResult register(RegisterRequest request) {
-        // 1. 规范化登录名
-        String loginName = normalizeLoginName(request.loginName());
+        String phoneNumber = normalizePhoneNumber(request.phoneNumber());
 
-        // 2. 校验登录名是否已存在
-        if (userRepository.existsByLoginName(loginName)) {
-            throw new BusinessException(UserErrorCode.LOGIN_NAME_EXISTS);
+        // 手机号既是登录凭据也是敏感唯一标识，应用预检和数据库唯一索引共同防止并发重复注册。
+        if (userRepository.existsByPhoneNumber(phoneNumber)) {
+            throw new BusinessException(UserErrorCode.PHONE_NUMBER_EXISTS);
         }
 
-        // 3. 校验密码是否符合安全规则
         validatePassword(request.loginPassword());
+        validatePaymentPassword(request.paymentPassword());
 
-        // 4. 生成用户 ID 和注册幂等键
         String userId = generateId();
         String registrationId = generateId();
+        String accountNumber = generateAccountNumber();
 
-        // 5. 创建用户对象（状态为 PROVISIONING）
-        User user = new User(userId, registrationId, loginName, request.nickname());
+        User user = new User(userId, registrationId, accountNumber, phoneNumber,
+                request.realName().trim(), request.nickname());
 
-        // 6. 对密码进行 BCrypt 哈希
         String hashedPassword = passwordHasher.hashPassword(request.loginPassword());
-
-        // 7. 创建凭证对象
         Credential credential = new Credential(userId, hashedPassword);
+        credential.setPaymentPasswordHash(passwordHasher.hashPassword(request.paymentPassword()));
 
-        // 8. 在同一事务内保存用户和凭证
         userRepository.save(user);
         credentialRepository.save(credential);
 
-        // 9. 调用账户中心开户
-        try {
-            log.info("开始调用账户中心开户: userId={}, registrationId={}", userId, registrationId);
-            accountProvisioningPort.openAccount(userId, registrationId);
-            log.info("账户中心开户成功: userId={}", userId);
+        log.info("开始调用账户中心开户 userId={}, registrationId={}", userId, registrationId);
+        accountProvisioningPort.openAccount(userId, registrationId);
+        log.info("账户中心开户成功 userId={}", userId);
 
-            // 10. 开户成功，激活用户
-            user.activate();
-            userRepository.update(user);
-        } catch (Exception e) {
-            // 开户失败，用户保持 PROVISIONING 状态
-            log.error("账户中心开户失败，用户保持 PROVISIONING 状态: userId={}", userId, e);
-            // 不抛出异常，注册流程继续，返回 PROVISIONING 状态
-        }
+        // 开户成功后才能激活并发放会话，避免用户带着 PROVISIONING 身份进入 C 端。
+        user.activate();
+        userRepository.update(user);
 
-        // 11. 创建会话并返回认证结果
         String token = sessionManager.createSession(userId);
-        return new AuthResult(token, userId, request.nickname(), user.getStatus().name());
+        return new AuthResult(token, userId, accountNumber, user.getNickname(), user.getStatus().name());
     }
 
     /**
-     * 用户登录。
+     * 使用手机号或系统账户号登录。
      *
-     * <p>登录流程：
-     * <ol>
-     *   <li>规范化登录名</li>
-     *   <li>根据登录名查询用户</li>
-     *   <li>校验用户状态（不能是 DISABLED 或 PROVISIONING）</li>
-     *   <li>查询用户凭证</li>
-     *   <li>校验登录是否被锁定</li>
-     *   <li>校验登录密码</li>
-     *   <li>如果密码错误，记录失败次数</li>
-     *   <li>如果密码正确，重置失败计数</li>
-     *   <li>创建会话并返回认证结果</li>
-     * </ol>
-     * </p>
+     * <p>如果用户处于 PROVISIONING 状态，会先按 registrationId 幂等重试开户；恢复成功后继续校验密码并创建会话，
+     * 恢复失败则返回注册开户处理中，不发放会话。</p>
      *
-     * <p>业务规则：
-     * <ul>
-     *   <li>校验用户状态（不能是 DISABLED 或 PROVISIONING）</li>
-     *   <li>校验登录密码哈希</li>
-     *   <li>连续失败 5 次后锁定 30 分钟</li>
-     *   <li>登录成功后创建会话</li>
-     * </ul>
-     * </p>
-     *
-     * @param request 登录请求
-     * @return 认证结果（包含会话令牌和用户信息）
-     * @throws BusinessException 如果登录名不存在、密码错误或账户被锁定
+     * @param request 登录请求，包含手机号或系统账户号以及登录密码
+     * @return 认证结果，包含会话令牌、用户 ID、系统账户号、昵称和用户状态
+     * @throws BusinessException 用户不存在、密码错误、登录锁定、用户禁用或开户恢复失败时抛出
      */
     @Transactional
     public AuthResult login(LoginRequest request) {
-        // 1. 规范化登录名
-        String loginName = normalizeLoginName(request.loginName());
+        String loginIdentifier = normalizeLoginIdentifier(request.loginIdentifier());
 
-        // 2. 根据登录名查询用户
-        User user = userRepository.findByLoginName(loginName)
+        User user = userRepository.findByLoginIdentifier(loginIdentifier)
                 .orElseThrow(() -> new BusinessException(UserErrorCode.LOGIN_INVALID));
 
-        // 3. 校验用户状态
         if (user.isDisabled()) {
             throw new BusinessException(UserErrorCode.LOGIN_INVALID);
         }
         if (user.isProvisioning()) {
-            throw new BusinessException(UserErrorCode.REGISTRATION_PROCESSING);
+            user = recoverProvisioningUser(user);
         }
 
-        // 4. 查询用户凭证
         Credential credential = credentialRepository.findByUserId(user.getUserId())
                 .orElseThrow(() -> new BusinessException(UserErrorCode.LOGIN_INVALID));
 
-        // 5. 校验登录是否被锁定
         if (credential.isLoginLocked()) {
             throw new BusinessException(UserErrorCode.LOGIN_LOCKED);
         }
 
-        // 6. 校验登录密码
         if (!passwordHasher.matches(request.loginPassword(), credential.getLoginPasswordHash())) {
-            // 7. 密码错误，记录失败次数
             boolean locked = credential.recordLoginFailure();
             credentialRepository.update(credential);
 
@@ -227,20 +150,37 @@ public class AuthService {
             throw new BusinessException(UserErrorCode.LOGIN_INVALID);
         }
 
-        // 8. 密码正确，重置失败计数
         credential.resetLoginFailCount();
         credentialRepository.update(credential);
 
-        // 9. 创建会话并返回认证结果
         String token = sessionManager.createSession(user.getUserId());
-        return new AuthResult(token, user.getUserId(), user.getNickname(), user.getStatus().name());
+        return new AuthResult(token, user.getUserId(), user.getAccountNumber(), user.getNickname(), user.getStatus().name());
     }
 
     /**
-     * 用户退出登录。
+     * 对已经持久化但还未激活的用户进行一次开户恢复。
      *
-     * <p>销毁会话，使会话令牌立即失效。
-     * 退出后用户需要重新登录。</p>
+     * <p>账户中心开户注册接口以 registrationId 幂等，登录时重试可以修复早先因服务重启、网络抖动或旧版本注册逻辑
+     * 留下的 PROVISIONING 用户。如果恢复仍然失败，继续返回注册开户处理中，并且不创建会话。</p>
+     */
+    private User recoverProvisioningUser(User user) {
+        try {
+            log.info("登录时尝试恢复注册开户 userId={}, registrationId={}",
+                    user.getUserId(), user.getRegistrationId());
+            accountProvisioningPort.openAccount(user.getUserId(), user.getRegistrationId());
+            user.activate();
+            userRepository.update(user);
+            return user;
+        } catch (BusinessException e) {
+            throw e;
+        } catch (Exception e) {
+            log.error("登录时恢复注册开户失败 userId={}", user.getUserId(), e);
+            throw new BusinessException(UserErrorCode.REGISTRATION_PROCESSING);
+        }
+    }
+
+    /**
+     * 退出登录并销毁当前会话。
      *
      * @param token 会话令牌
      */
@@ -248,40 +188,38 @@ public class AuthService {
         sessionManager.destroySession(token);
     }
 
-    /**
-     * 规范化登录名。
-     *
-     * <p>登录名规范化规则：
-     * <ul>
-     *   <li>去除首尾空格</li>
-     *   <li>转换为小写</li>
-     * </ul>
-     * </p>
-     *
-     * @param loginName 原始登录名
-     * @return 规范化后的登录名
-     */
-    private String normalizeLoginName(String loginName) {
-        if (loginName == null) {
-            throw new IllegalArgumentException("登录名不能为空");
+    private String normalizeLoginIdentifier(String loginIdentifier) {
+        if (loginIdentifier == null || loginIdentifier.isBlank()) {
+            throw new IllegalArgumentException("手机号或账户号不能为空");
         }
-        return loginName.trim().toLowerCase();
+        return loginIdentifier.trim();
+    }
+
+    private String normalizePhoneNumber(String phoneNumber) {
+        String normalized = phoneNumber == null ? "" : phoneNumber.trim();
+        if (!normalized.matches("^1[3-9]\\d{9}$")) {
+            throw new IllegalArgumentException("手机号格式不正确");
+        }
+        return normalized;
+    }
+
+    private void validatePaymentPassword(String paymentPassword) {
+        if (paymentPassword == null || !paymentPassword.matches("^\\d{6}$")) {
+            throw new BusinessException(UserErrorCode.PASSWORD_POLICY_VIOLATION);
+        }
+    }
+
+    /** 生成 16 位纯数字系统账户号，62 前缀用于和 11 位手机号明确区分。 */
+    private String generateAccountNumber() {
+        long value = Math.abs(UUID.randomUUID().getMostSignificantBits()) % 100_000_000_000_000L;
+        return "62" + String.format("%014d", value);
     }
 
     /**
-     * 校验密码是否符合安全规则。
+     * 校验登录密码是否符合安全规则。
      *
-     * <p>密码安全规则：
-     * <ul>
-     *   <li>长度 8-32 位</li>
-     *   <li>至少包含一个大写字母</li>
-     *   <li>至少包含一个小写字母</li>
-     *   <li>至少包含一个数字</li>
-     * </ul>
-     * </p>
-     *
-     * @param password 密码
-     * @throws BusinessException 如果密码不符合规则
+     * @param password 登录密码，要求 8-32 位且至少包含大写字母、小写字母和数字
+     * @throws BusinessException 密码不符合规则时抛出
      */
     private void validatePassword(String password) {
         if (password == null || password.length() < 8 || password.length() > 32) {
@@ -299,12 +237,9 @@ public class AuthService {
     }
 
     /**
-     * 生成唯一 ID（ULID 格式）。
+     * 生成 26 位业务 ID。
      *
-     * <p>使用 UUID 生成 26 位字符的 ID，用于用户 ID 和注册幂等键。
-     * 生产环境应使用 ULID 算法，保证时序性和唯一性。</p>
-     *
-     * @return 26 位字符的唯一 ID
+     * <p>当前沿用项目既有 UUID 截断策略；后续如统一 ULID，应通过独立 ID 组件替换。</p>
      */
     private String generateId() {
         return UUID.randomUUID().toString().replace("-", "").substring(0, 26).toUpperCase();

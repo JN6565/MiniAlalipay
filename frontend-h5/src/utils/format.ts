@@ -71,7 +71,7 @@ export const maskPhone = (phone: string): string => {
 /**
  * 脱敏登录名
  */
-export const maskLoginName = (name: string): string => {
+export const maskAccountNumber = (name: string): string => {
   if (!name || name.length < 3) {
     return name;
   }

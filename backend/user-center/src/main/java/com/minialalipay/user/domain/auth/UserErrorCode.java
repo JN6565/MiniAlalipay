@@ -13,7 +13,7 @@ import com.minialalipay.common.error.ErrorCode;
  * <p>使用场景：
  * <ul>
  *   <li>登录失败时抛出 LOGIN_INVALID 或 LOGIN_LOCKED</li>
- *   <li>注册时用户名已存在抛出 LOGIN_NAME_EXISTS</li>
+ *   <li>注册时账户号碰撞抛出 ACCOUNT_NUMBER_EXISTS</li>
  *   <li>密码不符合规则抛出 PASSWORD_POLICY_VIOLATION</li>
  *   <li>会话无效时抛出 AUTH_REQUIRED</li>
  * </ul>
@@ -42,7 +42,10 @@ public enum UserErrorCode implements ErrorCode {
     /**
      * 登录名已存在。
      */
-    LOGIN_NAME_EXISTS("LOGIN_NAME_EXISTS", "登录名已存在", 409),
+    ACCOUNT_NUMBER_EXISTS("ACCOUNT_NUMBER_EXISTS", "账户号已存在", 409),
+
+    /** 手机号已经完成注册。 */
+    PHONE_NUMBER_EXISTS("PHONE_NUMBER_EXISTS", "手机号已注册", 409),
 
     /**
      * 密码不符合安全规则。

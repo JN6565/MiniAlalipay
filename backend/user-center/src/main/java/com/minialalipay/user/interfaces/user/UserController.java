@@ -101,7 +101,7 @@ public class UserController {
         List<UserSearchResultDTO> results = appResults.stream()
                 .map(r -> new UserSearchResultDTO(
                         r.userId(),
-                        r.loginName(),
+                        r.accountNumber(),
                         r.nickname(),
                         r.identityStatus()
                 ))

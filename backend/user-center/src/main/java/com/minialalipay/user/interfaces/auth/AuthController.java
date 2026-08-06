@@ -122,9 +122,11 @@ public class AuthController {
 
         // 3. 调用应用服务完成注册
         RegisterRequest request = new RegisterRequest(
-                requestDTO.loginName(),
+                requestDTO.phoneNumber(),
+                requestDTO.realName(),
                 requestDTO.nickname(),
-                requestDTO.loginPassword()
+                requestDTO.loginPassword(),
+                requestDTO.paymentPassword()
         );
         AuthResult result = authService.register(request);
 
@@ -132,6 +134,7 @@ public class AuthController {
         AuthResponseDTO responseDTO = new AuthResponseDTO(
                 result.accessToken(),
                 result.userId(),
+                result.accountNumber(),
                 result.nickname(),
                 result.status()
         );
@@ -175,7 +178,7 @@ public class AuthController {
 
         // 2. 调用应用服务完成登录
         LoginRequest request = new LoginRequest(
-                requestDTO.loginName(),
+                requestDTO.loginIdentifier(),
                 requestDTO.loginPassword()
         );
         AuthResult result = authService.login(request);
@@ -184,6 +187,7 @@ public class AuthController {
         AuthResponseDTO responseDTO = new AuthResponseDTO(
                 result.accessToken(),
                 result.userId(),
+                result.accountNumber(),
                 result.nickname(),
                 result.status()
         );

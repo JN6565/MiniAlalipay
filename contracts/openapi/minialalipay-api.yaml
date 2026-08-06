@@ -8,6 +8,37 @@ servers:
     description: 本地网关
 x-p0-interface-catalog: ./p0-interface-catalog.yaml
 paths:
+  /api/v1/auth/register:
+    post:
+      summary: 使用手机号、真实姓名和两套密码注册并自动开立零余额账户
+      operationId: registerUser
+      x-client-scope: C
+      security: []
+      parameters:
+        - $ref: '#/components/parameters/RequestIdHeader'
+        - $ref: '#/components/parameters/IdempotencyKeyHeader'
+      requestBody:
+        required: true
+        content: { application/json: { schema: { $ref: '#/components/schemas/RegisterRequest' } } }
+      responses:
+        '200': { description: 注册及开户成功, content: { application/json: { schema: { $ref: '#/components/schemas/AuthResponse' } } } }
+        '409': { $ref: '#/components/responses/Conflict' }
+        '422': { $ref: '#/components/responses/UnprocessableEntity' }
+  /api/v1/auth/login:
+    post:
+      summary: 使用手机号或系统账户号和登录密码登录
+      operationId: loginUser
+      x-client-scope: C
+      security: []
+      parameters:
+        - $ref: '#/components/parameters/RequestIdHeader'
+      requestBody:
+        required: true
+        content: { application/json: { schema: { $ref: '#/components/schemas/LoginRequest' } } }
+      responses:
+        '200': { description: 登录成功, content: { application/json: { schema: { $ref: '#/components/schemas/AuthResponse' } } } }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '429': { $ref: '#/components/responses/TooManyRequests' }
   /actuator/health:
     get:
       summary: 网关健康检查
@@ -810,6 +841,38 @@ components:
         type: string
         maxLength: 128
   schemas:
+    RegisterRequest:
+      type: object
+      additionalProperties: false
+      required: [phoneNumber, realName, loginPassword, paymentPassword]
+      properties:
+        phoneNumber: { type: string, pattern: '^1[3-9]\d{9}$', description: 中国大陆手机号，同一手机号只允许注册一次。 }
+        realName: { type: string, minLength: 2, maxLength: 32, description: 真实姓名，用于转账收款人查询和确认展示。 }
+        nickname: { type: string, maxLength: 20, description: 可选展示昵称；空缺时使用真实姓名。 }
+        loginPassword: { type: string, format: password, minLength: 8, maxLength: 32 }
+        paymentPassword: { type: string, format: password, pattern: '^\d{6}$', description: 6 位数字支付密码，不得记录日志。 }
+    LoginRequest:
+      type: object
+      additionalProperties: false
+      required: [loginIdentifier, loginPassword]
+      properties:
+        loginIdentifier: { type: string, minLength: 11, maxLength: 20, description: 完整手机号或系统生成的 16 位账户号。 }
+        loginPassword: { type: string, format: password, minLength: 8, maxLength: 32 }
+    AuthResponse:
+      allOf:
+        - $ref: '#/components/schemas/ApiResponse'
+        - type: object
+          required: [data]
+          properties:
+            data:
+              type: object
+              required: [accessToken, userId, accountNumber, nickname, status]
+              properties:
+                accessToken: { type: string, minLength: 16 }
+                userId: { type: string, minLength: 1, maxLength: 26 }
+                accountNumber: { type: string, pattern: '^62\d{14}$', description: 系统生成的账户号，可用于登录。 }
+                nickname: { type: string, minLength: 1, maxLength: 20 }
+                status: { type: string, enum: [ACTIVE, PROVISIONING] }
     CreditSummary:
       type: object
       additionalProperties: false

@@ -5,18 +5,38 @@ import { login } from '@/services/auth';
 import './index.less';
 
 const LoginPage: React.FC = () => {
-  const [loginName, setLoginName] = useState('');
+  const [loginIdentifier, setLoginIdentifier] = useState('');
   const [loginPassword, setLoginPassword] = useState('');
   const [loading, setLoading] = useState(false);
+  const [errors, setErrors] = useState<Record<string, string>>({});
+
+  const validateIdentifier = (value: string) => {
+    if (!value) return '请输入手机号或账户号';
+    if (!/^1[3-9]\d{9}$/.test(value) && !/^62\d{14}$/.test(value)) {
+      return '请输入正确的11位手机号或62开头的16位账户号';
+    }
+    return '';
+  };
+
+  const validatePassword = (value: string) => {
+    if (!value) return '请输入登录密码';
+    if (value.length < 8 || value.length > 32) return '登录密码长度必须为8-32位';
+    return '';
+  };
+
+  const updateError = (field: string, message: string) => {
+    setErrors((current) => ({ ...current, [field]: message }));
+  };
 
   const handleSubmit = async () => {
-    if (!loginName || loginName.length < 4) {
-      Toast.show({ content: '请输入登录名（4-20位）', icon: 'fail' });
-      return;
-    }
-
-    if (!loginPassword || loginPassword.length < 8) {
-      Toast.show({ content: '请输入密码（8-32位）', icon: 'fail' });
+    const nextErrors = {
+      loginIdentifier: validateIdentifier(loginIdentifier),
+      loginPassword: validatePassword(loginPassword),
+    };
+    setErrors(nextErrors);
+    const firstError = Object.values(nextErrors).find(Boolean);
+    if (firstError) {
+      Toast.show({ content: firstError, icon: 'fail' });
       return;
     }
 
@@ -24,11 +44,12 @@ const LoginPage: React.FC = () => {
 
     try {
       // 调用真实登录接口
-      const result = await login({ loginName, loginPassword });
+      const result = await login({ loginIdentifier, loginPassword });
 
       // 保存会话令牌到 localStorage
       localStorage.setItem('accessToken', result.accessToken);
       localStorage.setItem('userId', result.userId);
+      localStorage.setItem('accountNumber', result.accountNumber);
       localStorage.setItem('nickname', result.nickname);
 
       // 显示登录成功提示
@@ -58,22 +79,39 @@ const LoginPage: React.FC = () => {
       <div className="login-card">
         <h2>登录</h2>
 
-        <div className="field">
+        <div className={`field ${errors.loginIdentifier ? 'has-error' : ''}`}>
           <input
             type="text"
-            placeholder="请输入登录名"
-            value={loginName}
-            onChange={(e) => setLoginName(e.target.value)}
+            inputMode="numeric"
+            placeholder="请输入手机号或账户号"
+            value={loginIdentifier}
+            maxLength={16}
+            aria-invalid={Boolean(errors.loginIdentifier)}
+            onBlur={() => updateError('loginIdentifier', validateIdentifier(loginIdentifier))}
+            onChange={(e) => {
+              const value = e.target.value.replace(/\D/g, '');
+              setLoginIdentifier(value);
+              if (errors.loginIdentifier) updateError('loginIdentifier', validateIdentifier(value));
+            }}
           />
+          {errors.loginIdentifier && <div className="field-error">{errors.loginIdentifier}</div>}
         </div>
 
-        <div className="field">
+        <div className={`field ${errors.loginPassword ? 'has-error' : ''}`}>
           <input
             type="password"
             placeholder="请输入密码"
             value={loginPassword}
-            onChange={(e) => setLoginPassword(e.target.value)}
+            maxLength={32}
+            aria-invalid={Boolean(errors.loginPassword)}
+            onBlur={() => updateError('loginPassword', validatePassword(loginPassword))}
+            onChange={(e) => {
+              const value = e.target.value;
+              setLoginPassword(value);
+              if (errors.loginPassword) updateError('loginPassword', validatePassword(value));
+            }}
           />
+          {errors.loginPassword && <div className="field-error">{errors.loginPassword}</div>}
         </div>
 
         <button

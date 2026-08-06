@@ -30,7 +30,10 @@ public record RegisterRequest(
          * <p>用于登录和唯一识别，系统内唯一。
          * 注册时规范化处理（转小写、去空格）。</p>
          */
-        String loginName,
+        String phoneNumber,
+
+        /** 真实姓名，用于身份展示和转账收款人查询。 */
+        String realName,
 
         /**
          * 昵称（必填，2-20 位）。
@@ -43,6 +46,9 @@ public record RegisterRequest(
          * <p>至少包含一个大写字母、一个小写字母和一个数字。
          * 存储时使用 BCrypt 强哈希，不存储明文。</p>
          */
-        String loginPassword
+        String loginPassword,
+
+        /** 6 位数字支付密码，与登录密码分别哈希保存。 */
+        String paymentPassword
 ) {
 }

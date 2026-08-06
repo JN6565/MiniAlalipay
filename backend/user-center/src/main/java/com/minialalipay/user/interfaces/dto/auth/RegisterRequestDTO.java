@@ -34,17 +34,21 @@ public record RegisterRequestDTO(
          * <p>用于登录和唯一识别，系统内唯一。
          * 注册时规范化处理（转小写、去空格）。</p>
          */
-        @NotBlank(message = "登录名不能为空")
-        @Size(min = 4, max = 20, message = "登录名长度必须在 4-20 位之间")
-        @Pattern(regexp = "^[a-zA-Z0-9_]+$", message = "登录名只能包含字母、数字、下划线")
-        String loginName,
+        @NotBlank(message = "手机号不能为空")
+        @Pattern(regexp = "^1[3-9]\\d{9}$", message = "手机号格式不正确")
+        String phoneNumber,
+
+        /** 真实姓名，2-32 个中文、英文字符或中间点。 */
+        @NotBlank(message = "真实姓名不能为空")
+        @Size(min = 2, max = 32, message = "真实姓名长度必须在 2-32 位之间")
+        @Pattern(regexp = "^[\\p{L}·•. ]+$", message = "真实姓名格式不正确")
+        String realName,
 
         /**
          * 昵称（必填，2-20 位）。
          * <p>可重复的展示名称和模糊搜索条件，不要求唯一。</p>
          */
-        @NotBlank(message = "昵称不能为空")
-        @Size(min = 2, max = 20, message = "昵称长度必须在 2-20 位之间")
+        @Size(max = 20, message = "昵称长度不能超过 20 位")
         String nickname,
 
         /**
@@ -54,6 +58,11 @@ public record RegisterRequestDTO(
          */
         @NotBlank(message = "密码不能为空")
         @Size(min = 8, max = 32, message = "密码长度必须在 8-32 位之间")
-        String loginPassword
+        String loginPassword,
+
+        /** 支付密码，仅允许 6 位数字。 */
+        @NotBlank(message = "支付密码不能为空")
+        @Pattern(regexp = "^\\d{6}$", message = "支付密码必须为 6 位数字")
+        String paymentPassword
 ) {
 }

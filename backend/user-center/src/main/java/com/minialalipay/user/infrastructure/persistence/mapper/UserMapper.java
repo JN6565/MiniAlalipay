@@ -62,7 +62,10 @@ public interface UserMapper {
      * @param loginName 登录名（已规范化）
      * @return 用户持久化对象，如果不存在则返回 null
      */
-    UserPO selectByLoginName(@Param("loginName") String loginName);
+    UserPO selectByAccountNumber(@Param("accountNumber") String accountNumber);
+
+    /** 根据完整手机号查询用户。 */
+    UserPO selectByPhoneNumber(@Param("phoneNumber") String phoneNumber);
 
     /**
      * 根据注册幂等键查询用户。
@@ -94,7 +97,10 @@ public interface UserMapper {
      * @param loginName 登录名（已规范化）
      * @return 如果登录名已存在则返回 true
      */
-    boolean existsByLoginName(@Param("loginName") String loginName);
+    boolean existsByAccountNumber(@Param("accountNumber") String accountNumber);
+
+    /** 检查手机号唯一性。 */
+    boolean existsByPhoneNumber(@Param("phoneNumber") String phoneNumber);
 
     /**
      * 按关键词搜索用户。
@@ -114,6 +120,7 @@ public interface UserMapper {
      * @return 用户列表
      */
     List<UserPO> searchByKeyword(
+            @Param("keyword") String keyword,
             @Param("searchPattern") String searchPattern,
             @Param("excludeId") String excludeId,
             @Param("limit") int limit
