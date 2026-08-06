@@ -1,4 +1,5 @@
 import { useRef, useState } from 'react';
+import { flushSync } from 'react-dom';
 import { StreamHandlers } from '../types';
 
 function getToken(): string {
@@ -53,6 +54,8 @@ export function useSSEStream() {
         const lines = buffer.split('\n');
         buffer = lines.pop() || '';
 
+        // 先收集所有事件
+        const events: Array<{ type: string; payload: any }> = [];
         let eventType = '';
         let data = '';
         for (let line of lines) {
@@ -63,14 +66,22 @@ export function useSSEStream() {
             data = line.slice(5).replace(/^ /, '');
           } else if (line === '' && eventType && data) {
             try {
-              const parsed = JSON.parse(data);
-              const handler = (handlers as Record<string, Function>)[eventType];
-              handler?.(parsed);
-              // 让浏览器有时间渲染，产生逐句出现的流式效果
-              await new Promise((r) => setTimeout(r, 80));
-            } catch { /* 解析失败跳过 */ }
+              events.push({ type: eventType, payload: JSON.parse(data) });
+            } catch { /* skip */ }
             eventType = '';
             data = '';
+          }
+        }
+
+        // 逐个事件同步渲染 + 延迟，产生逐句流式效果
+        for (const evt of events) {
+          const handler = (handlers as Record<string, Function>)[evt.type];
+          if (handler && evt.type === 'agent-content') {
+            // content 事件用 flushSync 强制立即渲染
+            flushSync(() => handler(evt.payload));
+            await new Promise((r) => setTimeout(r, 80));
+          } else {
+            handler?.(evt.payload);
           }
         }
       }
