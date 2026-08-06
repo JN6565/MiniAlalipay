@@ -1,7 +1,20 @@
+/* 运营后台整体布局样式。
+   结构：Sider（左侧导航）+ Header（顶栏）+ Content（内容区）+ Footer（底部）。
+   颜色、阴影、圆角均取自 global.less 的 --admin-* 变量，与 theme.ts 的「晴空」主题同源。 */
+
+/* 整体容器：占满视口且禁止外层滚动，滚动只发生在内容区内。 */
 .shell {
-  min-height: 100vh;
+  height: 100vh;
+  overflow: hidden;
 }
 
+/* 右侧主区域：min-width/height 0 允许内部内容区正确收缩与滚动。 */
+.main {
+  min-width: 0;
+  min-height: 0;
+}
+
+/* 左侧导航：粘性定位于视口左侧，折叠/展开宽度变化带平滑过渡。 */
 .sider {
   position: sticky !important;
   top: 0;
@@ -10,67 +23,86 @@
   overflow: hidden;
   border-right: 1px solid var(--admin-border-soft);
   background: var(--admin-sider-bg) !important;
+  transition: width var(--admin-transition-smooth);
 }
 
+/* 品牌区：紧凑布局，展示品牌标识与名称，折叠时只保留标识（对齐方案 C 侧栏）。 */
 .brand {
   display: flex;
   align-items: center;
-  height: 72px;
-  padding: 0 20px;
+  height: auto;
+  padding: 18px 16px 20px;
   color: var(--admin-text-strong);
 }
 
+/* 品牌标识：扁平天空蓝方块承载 “M” 字，柔和投影。 */
 .brandMark {
   display: grid;
-  flex: 0 0 38px;
-  width: 38px;
-  height: 38px;
+  flex: 0 0 26px;
+  width: 26px;
+  height: 26px;
   place-items: center;
-  border-radius: 10px;
+  border-radius: 8px;
   color: #fff;
-  background: linear-gradient(135deg, var(--admin-primary) 0%, #59a5f6 100%);
-  box-shadow: 0 6px 14px rgba(47, 127, 242, 22%);
-  font-weight: 800;
-  font-size: 18px;
+  background: var(--admin-primary);
+  box-shadow: 0 2px 8px rgba(47, 127, 242, 18%);
+  font-weight: 700;
+  font-size: 13px;
 }
 
+/* 品牌名称区：主名 + 副标题纵向排列。 */
 .brandText {
   display: flex;
   min-width: 0;
-  margin-left: 12px;
+  margin-left: 10px;
   flex-direction: column;
 }
 
 .brandText strong {
   color: var(--admin-text-strong);
-  font-size: 15px;
-  line-height: 20px;
+  font-size: 13.5px;
+  line-height: 19px;
 }
 
 .brandText span {
-  color: #6d85a2;
-  font-size: 12px;
-  line-height: 18px;
+  color: #7286a3;
+  font-size: 10px;
+  line-height: 16px;
 }
 
+/* 导航菜单：去掉 antd 默认边框，圆角项 + 快速过渡。 */
 .menu {
-  padding: 8px 10px;
-  color: #49617e;
+  padding: 4px 10px 10px;
+  color: #4e5c72;
   background: transparent !important;
   border-inline-end: 0 !important;
 }
 
-.menu :global(.ant-menu-item) {
-  margin-block: 4px;
-  border-radius: 8px;
+/* 分组标题：小号弱化文字，对应方案 C 的「总览 / 数据 / 系统」分组标签。 */
+.menu :global(.ant-menu-item-group-title) {
+  padding: 12px 10px 5px;
+  color: var(--admin-text-secondary);
+  font-size: 10px;
+  letter-spacing: 0.1em;
+  font-weight: 600;
+  line-height: 1.4;
 }
 
+.menu :global(.ant-menu-item) {
+  margin-block: 3px;
+  border-radius: 8px;
+  font-size: 13px;
+  transition: background var(--admin-transition-fast), color var(--admin-transition-fast);
+}
+
+/* 选中项：淡蓝底 + 强调色文字，配合加粗形成明确当前位置。 */
 .menu :global(.ant-menu-item-selected) {
   color: var(--admin-primary-strong) !important;
-  background: #e3f0fe !important;
+  background: #e7eef9 !important;
   font-weight: 600;
 }
 
+/* 侧栏底部环境标识：提示当前为本地演示环境，防止误当生产。 */
 .environment {
   position: absolute;
   right: 16px;
@@ -83,11 +115,12 @@
   gap: 8px;
   border: 1px solid var(--admin-border-soft);
   border-radius: 8px;
-  background: #f2f8ff;
+  background: #f3f6fa;
   color: var(--admin-text-secondary);
   font-size: 12px;
 }
 
+/* 顶栏：半透明白底 + 毛玻璃，内容滚动时（headerScrolled）加深下边框与阴影形成层次。 */
 .header {
   position: sticky;
   z-index: 10;
@@ -99,21 +132,122 @@
   align-items: center;
   justify-content: space-between;
   gap: 16px;
-  border-bottom: 1px solid var(--admin-border-soft);
-  background: rgba(255, 255, 255, 96%) !important;
-  backdrop-filter: blur(8px);
+  border-bottom: 1px solid transparent;
+  background: rgba(255, 255, 255, 90%) !important;
+  backdrop-filter: blur(8px) saturate(120%);
+  box-shadow: 0 1px 0 0 rgba(22, 60, 120, 4%);
+  transition: border-color var(--admin-transition-normal), box-shadow var(--admin-transition-normal);
 }
 
-.headerAvatar {
-  flex: 0 0 auto;
+.headerScrolled {
+  border-bottom-color: var(--admin-border-soft);
+  box-shadow: 0 1px 4px rgba(22, 60, 120, 6%);
 }
 
-.content {
+/* 顶栏左侧：折叠按钮 + 当前页面标题区。 */
+.headerLeft {
+  display: flex;
   min-width: 0;
-  padding: 24px;
+  align-items: center;
+  gap: 16px;
+}
+
+/* 顶栏标题区：标题 + 补充说明横向排列，对齐方案 C 顶栏
+   （形如「可信运行看板 更新于刚刚 · 网关链路正常 · 本地演示骨架」）。 */
+.headerText {
+  display: flex;
+  min-width: 0;
+  align-items: baseline;
+  flex-direction: row;
+  gap: 16px;
+}
+
+/* 顶栏页面标题：24px 加粗，字距/行高与方案 C 一致，滚动时随顶栏固定。 */
+.headerTitle {
+  min-width: 0;
+  overflow: hidden;
+  color: var(--admin-text);
+  font-size: 24px;
+  font-weight: 700;
+  line-height: 1.1;
+  letter-spacing: -0.03em;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* 顶栏补充说明：12px 次要文字，字距对齐方案 C 的「更新于刚刚 · …」。 */
+.headerMeta {
+  min-width: 0;
+  overflow: hidden;
+  color: var(--admin-text-secondary);
+  font-size: 12px;
+  line-height: 1.4;
+  letter-spacing: 0.02em;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* 顶栏右侧用户标识：对齐方案 C 侧栏左下角的「头像 + 运营管理员 + 邮箱」组合，
+   仍固定在顶栏右端；头像白底圆 + 描边，与 C 方案 .who .av 保持一致。 */
+.headerUser {
+  display: flex;
+  flex: 0 0 auto;
+  align-items: center;
+  gap: 9px;
+}
+
+.headerUserAvatar {
+  flex: 0 0 auto;
+  width: 28px !important;
+  height: 28px !important;
+  border-radius: 50%;
+  background: #fff !important;
+  border: 1px solid var(--line-strong);
+  color: var(--ink-2) !important;
+  font-size: 11px;
+  font-weight: 600;
+}
+
+/* 姓名与邮箱纵向排列，字号、弱化色对齐 C 方案的 .who b / .who span。 */
+.headerUserText {
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+  line-height: 1.35;
+}
+
+.headerUserText strong {
+  color: var(--admin-text);
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.headerUserText span {
+  color: var(--ink-3);
+  font-size: 11px;
+}
+
+/* 内容区：唯一滚动容器，flex:1 占满剩余高度。 */
+.content {
+  flex: 1;
+  min-width: 0;
+  min-height: 0;
+  padding: 22px 26px;
+  overflow-y: auto;
   background: var(--admin-bg);
 }
 
+/* 底部：居中次要文本，与内容区分隔。 */
+.footer {
+  padding: 16px 28px;
+  border-top: 1px solid var(--admin-border-soft);
+  background: var(--admin-surface);
+  color: var(--admin-text-secondary);
+  font-size: 12px;
+  text-align: center;
+}
+
+/* 窄屏：压缩顶栏与内容区留白。 */
 @media (max-width: 768px) {
   .header {
     padding: 0 12px !important;
@@ -121,5 +255,9 @@
 
   .content {
     padding: 16px;
+  }
+
+  .footer {
+    padding: 12px 16px;
   }
 }

@@ -1,11 +1,6 @@
-.page {
-  display: flex;
-  max-width: 1440px;
-  margin: 0 auto;
-  flex-direction: column;
-  gap: 20px;
-}
+/* 可信运行看板页面样式。 */
 
+/* 看板标题区：标题与状态标签两端对齐。 */
 .heading {
   display: flex;
   align-items: flex-start;
@@ -17,15 +12,23 @@
   margin-bottom: 4px;
 }
 
-.page :global(.ant-card) {
+/* 指标卡片：固定高度保证四张卡片视觉对齐，悬浮轻抬 2px 增强可交互感知。 */
+.metricCard {
+  overflow: hidden;
   height: 144px;
   border: 1px solid var(--admin-border-soft);
   border-radius: 8px;
-  box-shadow: 0 1px 2px rgba(23, 58, 108, 4%);
+  box-shadow: var(--admin-shadow-sm);
+  transition: transform var(--admin-transition-fast), box-shadow var(--admin-transition-normal);
 }
 
-.metricCard {
-  overflow: hidden;
+.metricCard:hover {
+  transform: translateY(-2px);
+  box-shadow: var(--admin-shadow-md);
+}
+
+.metricCard:active {
+  transform: translateY(0);
 }
 
 .metricCard :global(.ant-card-body) {
@@ -35,6 +38,7 @@
   align-items: center;
 }
 
+/* 指标内容区：图标与数值横向排布，min-width 0 保证长文案可截断不撑破卡片。 */
 .metricBody {
   display: flex;
   min-width: 0;
@@ -52,12 +56,12 @@
   font-size: 13px;
 }
 
-.metricBody :global(.ant-statistic-content) {
-  color: var(--admin-text-strong);
-  font-size: 26px;
-  font-weight: 600;
+.metricBody :global(.ant-statistic-content-value) {
+  font-weight: 620;
+  transition: color var(--admin-transition-normal);
 }
 
+/* 指标图标底座：四种语义色（蓝/青绿/琥珀/青）区分不同指标类型。 */
 .metricIcon {
   display: grid;
   flex: 0 0 42px;
@@ -70,24 +74,25 @@
 
 .metricIconBlue {
   color: var(--admin-primary-strong);
-  background: #e3f0fe;
+  background: #e7eef9;
 }
 
 .metricIconTeal {
   color: var(--admin-teal);
-  background: #e0f5f2;
+  background: #e7f1ef;
 }
 
 .metricIconAmber {
   color: var(--admin-amber);
-  background: #fff2dc;
+  background: #f6f0e4;
 }
 
 .metricIconCyan {
   color: var(--admin-cyan);
-  background: #ddf4fa;
+  background: #e6f0f5;
 }
 
+/* 运营能力接入状态区：左右分栏，左文案右能力标签。 */
 .readiness {
   display: flex;
   min-height: 160px;
@@ -98,7 +103,12 @@
   border: 1px solid var(--admin-border-soft);
   border-radius: 8px;
   background: var(--admin-surface);
-  box-shadow: 0 1px 2px rgba(23, 58, 108, 4%);
+  box-shadow: var(--admin-shadow-sm);
+  transition: box-shadow var(--admin-transition-normal);
+}
+
+.readiness:hover {
+  box-shadow: var(--admin-shadow-md);
 }
 
 .readiness :global(.ant-typography) {
@@ -106,12 +116,14 @@
   margin-top: 0;
 }
 
+/* 最近检查时间：小号次要文本，与说明段落拉开间距。 */
 .checkedAt {
   display: block;
   margin-top: 8px;
   font-size: 12px;
 }
 
+/* 窄屏：标题区与接入状态区改为纵向堆叠。 */
 @media (max-width: 768px) {
   .heading,
   .readiness {

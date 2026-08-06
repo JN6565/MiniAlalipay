@@ -1,46 +1,64 @@
-import { DatePicker, Empty, Table, Tag, Typography } from 'antd';
+import { useQuery } from '@tanstack/react-query';
+import { Button, DatePicker, Empty, Table, Tag, Typography } from 'antd';
 import type { ColumnsType } from 'antd/es/table';
+import dayjs from 'dayjs';
+import { useState } from 'react';
 import PageHeader from '@/components/PageHeader';
+import { listDailyReports, type DailyMetricItem } from '@/services/ops';
 import pageStyles from '../page.less';
 
-interface DailyMetricRow {
-  metricCode: string;
-  metricName: string;
-  metricValue: string;
-  dataDate: string;
-  qualityStatus: string;
-  calibrationVersion: string;
-}
-
-const columns: ColumnsType<DailyMetricRow> = [
-  { title: '指标名称', dataIndex: 'metricName', key: 'metricName' },
-  { title: '指标编码', dataIndex: 'metricCode', key: 'metricCode' },
-  { title: '指标值', dataIndex: 'metricValue', key: 'metricValue' },
-  { title: '数据日期', dataIndex: 'dataDate', key: 'dataDate' },
-  { title: '质量状态', dataIndex: 'qualityStatus', key: 'qualityStatus' },
-  { title: '口径版本', dataIndex: 'calibrationVersion', key: 'calibrationVersion' },
-];
-
+/**
+ * T+1 报表页面。
+ *
+ * 读取通过质量门禁的真实日报指标，只读展示；指标值为整数，不做前端金额换算。
+ */
 export default function Reports() {
+  const [reportDate, setReportDate] = useState<string>(dayjs().subtract(1, 'day').format('YYYY-MM-DD'));
+
+  const reportsQuery = useQuery({
+    queryKey: ['ops', 'daily-reports', reportDate],
+    queryFn: () => listDailyReports(reportDate),
+  });
+
+  const columns: ColumnsType<DailyMetricItem> = [
+    { title: '指标编码', dataIndex: 'metricCode' },
+    { title: '数据日期', dataIndex: 'reportDate' },
+    { title: '指标值', dataIndex: 'value' },
+    { title: '口径版本', dataIndex: 'metricVersion' },
+    {
+      title: '质量状态',
+      dataIndex: 'qualityStatus',
+      render: (value: string) => <Tag color={value === 'PASSED' ? 'green' : 'orange'}>{value}</Tag>,
+    },
+  ];
+
   return (
     <main className={pageStyles.page}>
-      <PageHeader
-        title="T+1 报表"
-        description="查看上一自然日的业务指标、生成时间、质量状态和指标口径。"
-        extra={<Tag>只读</Tag>}
-        contractPending
-      />
+      <PageHeader extra={<Tag>只读</Tag>} />
       <section className={pageStyles.toolbar} aria-label="报表筛选">
         <Typography.Text>数据日期</Typography.Text>
-        <DatePicker aria-label="数据日期" />
+        <DatePicker
+          aria-label="数据日期"
+          value={dayjs(reportDate)}
+          allowClear={false}
+          onChange={(value) => value && setReportDate(value.format('YYYY-MM-DD'))}
+        />
+        <Button type="primary" onClick={() => reportsQuery.refetch()}>
+          查询
+        </Button>
       </section>
       <section className={pageStyles.panel} aria-label="日报指标">
-        <Table<DailyMetricRow>
+        <Table<DailyMetricItem>
           rowKey="metricCode"
           columns={columns}
-          dataSource={[]}
+          dataSource={reportsQuery.data?.data ?? []}
+          loading={reportsQuery.isLoading}
           pagination={false}
-          locale={{ emptyText: <Empty description="日报接口接入后展示最近七个数据日" /> }}
+          locale={{
+            emptyText: (
+              <Empty description={reportsQuery.isError ? '加载失败，请确认网关已启动' : '该日期报表尚未发布'} />
+            ),
+          }}
           scroll={{ x: 800 }}
         />
       </section>

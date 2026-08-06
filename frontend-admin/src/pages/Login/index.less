@@ -1,24 +1,29 @@
+/* 运营中心登录页样式。 */
+
+/* 登录页整屏容器：网格居中卡片，背景为浅蓝点阵纹理，营造干净、聚焦的登录氛围。 */
 .page {
   display: grid;
   min-height: 100vh;
   padding: 32px;
   place-items: center;
-  background-color: #eef5fc;
+  background-color: var(--admin-bg);
   background-image:
     linear-gradient(rgba(47, 127, 242, 6%) 1px, transparent 1px),
     linear-gradient(90deg, rgba(47, 127, 242, 6%) 1px, transparent 1px);
   background-size: 28px 28px;
 }
 
+/* 登录卡片：限宽 420px，白色近不透明，投影柔和以突出主体。 */
 .loginPanel {
   width: min(420px, 100%);
   padding: 32px;
-  border: 1px solid #d8e6f6;
+  border: 1px solid var(--admin-border);
   border-radius: 8px;
   background: rgba(255, 255, 255, 98%);
   box-shadow: 0 12px 32px rgba(27, 72, 133, 8%);
 }
 
+/* 品牌标识：扁平天空蓝方块承载 “M” 字，与布局侧栏品牌保持一致。 */
 .brandMark {
   display: grid;
   width: 46px;
@@ -27,18 +32,20 @@
   place-items: center;
   border-radius: 10px;
   color: #fff;
-  background: linear-gradient(135deg, var(--admin-primary) 0%, #59a5f6 100%);
-  box-shadow: 0 6px 14px rgba(47, 127, 242, 20%);
+  background: var(--admin-primary);
+  box-shadow: 0 6px 14px rgba(47, 127, 242, 18%);
   font-weight: 800;
   font-size: 22px;
 }
 
+/* 底部安全提示：小号次要文本，与表单保持间距。 */
 .notice {
   display: block;
   margin-top: 20px;
   font-size: 12px;
 }
 
+/* 小屏手机：压缩留白与卡片内边距。 */
 @media (max-width: 480px) {
   .page {
     padding: 16px;

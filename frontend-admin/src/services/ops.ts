@@ -1,0 +1,255 @@
+import { gatewayRequest } from './request';
+
+/**
+ * B 端监控运维、人工工单与演示任务网关服务。
+ *
+ * 只访问网关公开前缀（/api/v1），统一走 gatewayRequest 注入 X-Request-Id 并归一化错误。
+ * 金额统一为整数分；写操作全部携带服务端幂等键。
+ */
+
+/** 与 OpenAPI ApiResponse 对齐的统一响应外壳。 */
+export interface ApiResponse<T> {
+  /** 稳定结果码。 */
+  code: string;
+  /** 面向调用方的中文说明。 */
+  message: string;
+  /** 请求编号。 */
+  requestId?: string;
+  /** 链路编号。 */
+  traceId?: string;
+  /** 业务数据。 */
+  data: T;
+}
+
+/** 告警投影行，与 OpenAPI Alert 对齐。 */
+export interface AlertItem {
+  alertId: string;
+  alertType: string;
+  severity: string;
+  status: 'OPEN' | 'ACKNOWLEDGED' | 'RESOLVED' | 'CLOSED';
+  version: number;
+  createdAt: string;
+  updatedAt: string;
+}
+
+/** 告警分页，与 OpenAPI AlertPage 对齐。 */
+export interface AlertPage {
+  items: AlertItem[];
+  nextCursor: string | null;
+}
+
+/** 数据质量结果，与 OpenAPI DataQualityResult 对齐。 */
+export interface DataQualityItem {
+  resultId: string;
+  checkType: string;
+  status: string;
+  checkedCount: number;
+  failedCount: number;
+  completedAt: string;
+}
+
+/** 日报指标，与 OpenAPI DailyMetric 对齐。 */
+export interface DailyMetricItem {
+  metricCode: string;
+  reportDate: string;
+  value: number;
+  metricVersion: string;
+  qualityStatus: string;
+}
+
+/** 实时指标，与 OpenAPI RealtimeMetric 对齐。 */
+export interface RealtimeMetricItem {
+  metricCode: string;
+  bucketAt: string;
+  value: number;
+  metricVersion: string;
+  qualityStatus: string;
+}
+
+/** 人工工单行，与 OpenAPI ManualCase 对齐。 */
+export interface ManualCaseItem {
+  caseId: string;
+  caseType: string;
+  subjectType: string;
+  subjectId: string;
+  status: 'OPEN' | 'CLAIMED' | 'RESOLVED' | 'CLOSED';
+  version: number;
+  createdAt: string;
+}
+
+/** 人工工单分页，与 OpenAPI ManualCasePage 对齐。 */
+export interface ManualCasePage {
+  items: ManualCaseItem[];
+  nextCursor: string | null;
+}
+
+/** B 端脱敏交易摘要，与 OpenAPI OpsTransaction 对齐；不暴露完整用户或账户标识。 */
+export interface OpsTransactionItem {
+  transactionId: string;
+  businessType: string;
+  sourceType: string;
+  sourceOrderId: string;
+  initiatorMasked: string;
+  amountFen: number;
+  status: string;
+  riskLevel: string;
+  traceId: string;
+  createdAt: string;
+  updatedAt: string;
+}
+
+/** 交易分页，与 OpenAPI OpsTransactionPage 对齐。 */
+export interface OpsTransactionPage {
+  items: OpsTransactionItem[];
+  nextCursor: string | null;
+}
+
+/** 单笔交易详情，与 OpenAPI OpsTransactionDetail 对齐。 */
+export interface OpsTransactionDetailItem {
+  transaction: OpsTransactionItem;
+  fundingSource: string;
+  tccStatus: string | null;
+  tccRetryCount: number;
+  latestOutboxEventType: string | null;
+  outboxStatus: string | null;
+  activeManualCaseId: string | null;
+}
+
+/** 链路追溯片段，与 OpenAPI TraceSpan 对齐。 */
+export interface TraceSpanItem {
+  service: string;
+  operation: string;
+  status: string;
+  detail: string;
+  traceId: string;
+  occurredAt: string;
+}
+
+/** 告警规则及阈值配置，与 OpenAPI AlertRule 对齐。 */
+export interface AlertRuleItem {
+  ruleCode: string;
+  ruleName: string;
+  metricCode: string;
+  severity: 'CRITICAL' | 'WARNING' | 'INFO';
+  operator: 'GT' | 'GTE' | 'LT' | 'LTE';
+  thresholdValue: number;
+  enabled: boolean;
+  version: number;
+  updatedBy: string;
+  updatedAt: string;
+}
+
+/** 写操作统一携带随机幂等键，避免重复提交产生重复业务结果。 */
+function writeAction<T>(url: string, data: Record<string, unknown>): Promise<ApiResponse<T>> {
+  return gatewayRequest<ApiResponse<T>>(url, {
+    method: 'POST',
+    data,
+    headers: { 'Idempotency-Key': crypto.randomUUID() },
+  });
+}
+
+/** 查询告警投影。 */
+export function listAlerts(status?: string, limit = 50): Promise<ApiResponse<AlertPage>> {
+  const params = new URLSearchParams({ limit: String(limit) });
+  if (status) params.set('status', status);
+  return gatewayRequest<ApiResponse<AlertPage>>(`/api/v1/ops/alerts?${params.toString()}`);
+}
+
+/** 确认开放告警。 */
+export function acknowledgeAlert(alertId: string, version: number, reason: string): Promise<ApiResponse<AlertItem>> {
+  return writeAction(`/api/v1/ops/alerts/${alertId}/acknowledge`, { version, reason });
+}
+
+/** 恢复已确认告警。 */
+export function resolveAlert(alertId: string, version: number, reason: string, evidence: string): Promise<ApiResponse<AlertItem>> {
+  return writeAction(`/api/v1/ops/alerts/${alertId}/resolve`, { version, reason, evidence });
+}
+
+/** 关闭已恢复告警。 */
+export function closeAlert(alertId: string, version: number, reason: string, evidence: string): Promise<ApiResponse<AlertItem>> {
+  return writeAction(`/api/v1/ops/alerts/${alertId}/close`, { version, reason, evidence });
+}
+
+/** 查询数据质量结果。 */
+export function listDataQuality(dataDate?: string): Promise<ApiResponse<DataQualityItem[]>> {
+  const params = new URLSearchParams();
+  if (dataDate) params.set('dataDate', dataDate);
+  return gatewayRequest<ApiResponse<DataQualityItem[]>>(`/api/v1/ops/data-quality?${params.toString()}`);
+}
+
+/** 查询通过质量门禁的 T+1 报表。 */
+export function listDailyReports(reportDate?: string): Promise<ApiResponse<DailyMetricItem[]>> {
+  const params = new URLSearchParams();
+  if (reportDate) params.set('reportDate', reportDate);
+  return gatewayRequest<ApiResponse<DailyMetricItem[]>>(`/api/v1/ops/daily-reports?${params.toString()}`);
+}
+
+/** 查询分钟级实时指标。 */
+export function listRealtimeMetrics(metricCode?: string): Promise<ApiResponse<RealtimeMetricItem[]>> {
+  const params = new URLSearchParams();
+  if (metricCode) params.set('metricCode', metricCode);
+  return gatewayRequest<ApiResponse<RealtimeMetricItem[]>>(`/api/v1/ops/realtime-metrics?${params.toString()}`);
+}
+
+/** 查询运营可见人工工单。 */
+export function listManualCases(cursor?: string, limit = 50): Promise<ApiResponse<ManualCasePage>> {
+  const params = new URLSearchParams({ limit: String(limit) });
+  if (cursor) params.set('cursor', cursor);
+  return gatewayRequest<ApiResponse<ManualCasePage>>(`/api/v1/manual-cases?${params.toString()}`);
+}
+
+/** 处置人工工单（领取/解决/重开/关闭），带服务端幂等键。 */
+export function decideManualCase(
+  caseId: string,
+  decision: 'CLAIM' | 'RESOLVE' | 'REOPEN' | 'CLOSE',
+  version: number,
+  reason?: string,
+  evidence?: string,
+): Promise<ApiResponse<ManualCaseItem>> {
+  return writeAction(`/api/v1/manual-cases/${caseId}/decisions`, { decision, version, reason, evidence });
+}
+
+/** 触发信用出账任务（管理员受审计动作）。 */
+export function runCreditStatement(businessDate: string): Promise<ApiResponse<unknown>> {
+  return writeAction('/api/v1/ops/credit/statement-runs', { businessDate });
+}
+
+/** 触发信用到期检查任务（管理员受审计动作）。 */
+export function runCreditDueCheck(businessDate: string): Promise<ApiResponse<unknown>> {
+  return writeAction('/api/v1/ops/credit/due-check-runs', { businessDate });
+}
+
+/** 分页查询全平台脱敏交易摘要；金额为整数分，仅展示服务端确定的资金事实。 */
+export function listOpsTransactions(
+  params?: { status?: string; businessType?: string; cursor?: string; limit?: number },
+): Promise<ApiResponse<OpsTransactionPage>> {
+  const query = new URLSearchParams({ limit: String(params?.limit ?? 50) });
+  if (params?.status) query.set('status', params.status);
+  if (params?.businessType) query.set('businessType', params.businessType);
+  if (params?.cursor) query.set('cursor', params.cursor);
+  return gatewayRequest<ApiResponse<OpsTransactionPage>>(`/api/v1/ops/transactions?${query.toString()}`);
+}
+
+/** 查询单笔脱敏交易详情。 */
+export function getOpsTransaction(transactionId: string): Promise<ApiResponse<OpsTransactionDetailItem>> {
+  return gatewayRequest<ApiResponse<OpsTransactionDetailItem>>(`/api/v1/ops/transactions/${encodeURIComponent(transactionId)}`);
+}
+
+/** 查询交易链路片段；仅展示业务中心可核验的资金事实阶段。 */
+export function getOpsTransactionTrace(transactionId: string): Promise<ApiResponse<TraceSpanItem[]>> {
+  return gatewayRequest<ApiResponse<TraceSpanItem[]>>(`/api/v1/ops/transactions/${encodeURIComponent(transactionId)}/trace`);
+}
+
+/** 查询全部告警规则及阈值配置。 */
+export function listAlertRules(): Promise<ApiResponse<AlertRuleItem[]>> {
+  return gatewayRequest<ApiResponse<AlertRuleItem[]>>('/api/v1/ops/alert-rules');
+}
+
+/** 按版本 CAS 更新告警规则阈值（管理员受审计动作）。 */
+export function updateAlertRuleThreshold(
+  ruleCode: string,
+  thresholdValue: number,
+  version: number,
+): Promise<ApiResponse<AlertRuleItem>> {
+  return writeAction(`/api/v1/ops/alert-rules/${encodeURIComponent(ruleCode)}/thresholds`, { thresholdValue, version });
+}

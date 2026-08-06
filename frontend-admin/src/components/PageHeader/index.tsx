@@ -1,34 +1,31 @@
-import { Alert, Space, Typography } from 'antd';
+import { Alert, Space } from 'antd';
 import type { ReactNode } from 'react';
 import styles from './index.less';
 
+/**
+ * B 端业务页面统一头部辅助组件。
+ *
+ * 页面主标题与职责说明已上移到布局顶栏（按路由展示），本组件只收敛各页面头部
+ * 其余结构（右侧操作/状态区），并统一呈现“接口契约待接入”提示。
+ * 该组件只做展示编排，不承载具体业务页面实现，也不发起任何业务请求。
+ */
+
 export interface PageHeaderProps {
-  /** 页面主标题。 */
-  title: string;
-  /** 页面职责的简短说明。 */
-  description: string;
-  /** 标题区右侧操作或状态。 */
+  /** 头部右侧操作或状态。 */
   extra?: ReactNode;
   /** 是否展示契约未接入状态。 */
   contractPending?: boolean;
 }
 
-/** B 端业务页面统一标题区，不承载具体业务页面实现。 */
-export default function PageHeader({
-  title,
-  description,
-  extra,
-  contractPending = false,
-}: PageHeaderProps) {
+/** B 端业务页面统一头部辅助，不承载具体业务页面实现。 */
+export default function PageHeader({ extra, contractPending = false }: PageHeaderProps) {
   return (
     <>
-      <header className={styles.header}>
-        <div>
-          <Typography.Title level={2}>{title}</Typography.Title>
-          <Typography.Text type="secondary">{description}</Typography.Text>
-        </div>
-        {extra && <Space>{extra}</Space>}
-      </header>
+      {extra && (
+        <header className={styles.header}>
+          <Space>{extra}</Space>
+        </header>
+      )}
       {contractPending && (
         <Alert
           className={styles.alert}

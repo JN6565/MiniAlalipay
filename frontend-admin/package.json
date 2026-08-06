@@ -2,6 +2,7 @@
   "name": "minialalipay-admin",
   "version": "1.0.0",
   "private": true,
+  "packageManager": "npm@10.8.2",
   "description": "MiniAlalipay B 端运营管理后台",
   "scripts": {
     "dev": "max dev",
@@ -10,14 +11,13 @@
     "lint:fix": "max lint --fix",
     "setup": "max setup",
     "test": "jest",
-    "pretype-check": "max setup",
-    "type-check": "tsc --noEmit"
+    "type-check": "tsc --noEmit",
+    "type-check:fresh": "npm run setup && npm run type-check"
   },
   "dependencies": {
     "@ant-design/icons": "^5.6.1",
-    "@antv/g2plot": "^2.4.35",
     "@tanstack/react-query": "^5.24.0",
-    "@umijs/max": "^4.1.0",
+    "@umijs/max": "4.7.0",
     "antd": "^5.22.0",
     "dayjs": "^1.11.10",
     "react": "^18.2.0",
@@ -30,7 +30,7 @@
     "@types/jest": "^29.5.14",
     "@types/react": "^18.2.0",
     "@types/react-dom": "^18.2.0",
-    "@umijs/lint": "^4.1.0",
+    "@umijs/lint": "4.7.0",
     "eslint": "^8.56.0",
     "jest": "^29.7.0",
     "jest-environment-jsdom": "^29.7.0",
@@ -39,7 +39,25 @@
     "ts-jest": "^29.2.5",
     "typescript": "^5.3.0"
   },
+  "overrides": {
+    "@umijs/bundler-utoopack": {
+      "less-loader": "12.3.0"
+    },
+    "@umijs/bundler-vite": {
+      "vite": "^4.5.14"
+    },
+    "@umijs/plugins": {
+      "axios": "^1.19.0"
+    },
+    "@umijs/preset-umi": {
+      "path-to-regexp": "^1.9.0"
+    },
+    "@ant-design/pro-layout": {
+      "path-to-regexp": "^8.4.0"
+    },
+    "immer": "^10.1.3"
+  },
   "engines": {
-    "node": ">=18.0.0"
+    "node": ">=20.0.0"
   }
 }

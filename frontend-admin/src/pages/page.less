@@ -1,3 +1,9 @@
+/* B 端业务页面公共样式。
+   所有 /admin/* 页面统一消费：.page（页面容器）、.toolbar（筛选栏）、.panel（内容面板）、
+   .searchInput（检索输入）等。颜色、阴影与圆角均取自 global.less 的 --admin-* 变量，
+   与 theme.ts 的「晴空」主题保持同源。 */
+
+/* 页面容器：内容居中，纵向排列，最大宽度限制避免大屏过度拉伸。 */
 .page {
   display: flex;
   width: 100%;
@@ -7,6 +13,7 @@
   gap: 20px;
 }
 
+/* 筛选工具栏：表单控件横向排布，允许换行；窄屏降级为纵向堆叠。 */
 .toolbar {
   display: flex;
   padding: 16px;
@@ -16,29 +23,50 @@
   border: 1px solid var(--admin-border-soft);
   border-radius: 8px;
   background: var(--admin-surface);
-  box-shadow: 0 1px 2px rgba(23, 58, 108, 4%);
+  box-shadow: var(--admin-shadow-sm);
 }
 
+/* 筛选控件交互态统一过渡节奏，避免生硬跳变。 */
+.toolbar :global(.ant-select),
+.toolbar :global(.ant-picker),
+.toolbar :global(.ant-input-affix-wrapper) {
+  transition: border-color var(--admin-transition-fast), box-shadow var(--admin-transition-fast);
+}
+
+.toolbar :global(.ant-btn) {
+  transition: all var(--admin-transition-fast);
+}
+
+/* 内容面板：承载表格、时间线或详情区，悬浮时轻微抬升以提示可交互区域。 */
 .panel {
   padding: 20px;
   border: 1px solid var(--admin-border-soft);
   border-radius: 8px;
   background: var(--admin-surface);
-  box-shadow: 0 1px 2px rgba(23, 58, 108, 4%);
+  box-shadow: var(--admin-shadow-sm);
+  transition: box-shadow var(--admin-transition-normal);
 }
 
+.panel:hover {
+  box-shadow: var(--admin-shadow-md);
+}
+
+/* 面板内标题：对齐面板内边距，去掉 antd 标题默认上边距。 */
 .panelTitle {
   margin-top: 0 !important;
 }
 
+/* 检索输入框：约束最大宽度，避免在宽屏上无限拉伸。 */
 .searchInput {
   width: min(480px, 100%);
 }
 
+/* 可伸缩控件：在剩余空间中弹性占位，配合 flex-wrap 实现自适应换行。 */
 .grow {
   flex: 1 1 240px;
 }
 
+/* 窄屏适配：筛选栏改为纵向，表单控件占满整行，保证移动端不横向溢出。 */
 @media (max-width: 768px) {
   .toolbar {
     align-items: stretch;
@@ -48,7 +76,9 @@
   .toolbar :global(.ant-picker),
   .toolbar :global(.ant-select),
   .toolbar :global(.ant-input-search),
-  .toolbar :global(.ant-input-group-wrapper) {
+  .toolbar :global(.ant-input-group-wrapper),
+  .toolbar :global(.ant-input-affix-wrapper),
+  .toolbar :global(.ant-input) {
     width: 100% !important;
   }
 }

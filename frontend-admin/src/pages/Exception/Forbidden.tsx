@@ -1,6 +1,12 @@
 import { history } from '@umijs/max';
 import { Button, Result } from 'antd';
 
+/**
+ * 403 无权访问页。
+ *
+ * 由 PermissionGuard 在身份不具备目标页面权限时统一跳转至此。
+ * 提供返回看板入口，避免无权限运营停留在无导航的空白路由。
+ */
 export default function Forbidden() {
   return (
     <Result

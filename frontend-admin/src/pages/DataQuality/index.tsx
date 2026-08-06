@@ -1,57 +1,71 @@
-import { DatePicker, Empty, Input, Select, Table } from 'antd';
+import { useQuery } from '@tanstack/react-query';
+import { Button, DatePicker, Empty, Table } from 'antd';
 import type { ColumnsType } from 'antd/es/table';
+import dayjs from 'dayjs';
+import { useState } from 'react';
 import PageHeader from '@/components/PageHeader';
+import { listDataQuality, type DataQualityItem } from '@/services/ops';
 import pageStyles from '../page.less';
 
-interface QualityResultRow {
-  resultId: string;
-  taskCode: string;
-  ruleCode: string;
-  dataDate: string;
-  status: string;
-  checkedAt: string;
-}
+/** 质量状态中文标签。 */
+const STATUS_LABEL: Record<string, string> = {
+  PASSED: '通过',
+  WARNING: '警告',
+  FAILED: '失败',
+};
 
-const columns: ColumnsType<QualityResultRow> = [
-  { title: '检查结果号', dataIndex: 'resultId', key: 'resultId' },
-  { title: '任务', dataIndex: 'taskCode', key: 'taskCode' },
-  { title: '规则', dataIndex: 'ruleCode', key: 'ruleCode' },
-  { title: '数据日期', dataIndex: 'dataDate', key: 'dataDate' },
-  { title: '状态', dataIndex: 'status', key: 'status' },
-  { title: '检查时间', dataIndex: 'checkedAt', key: 'checkedAt' },
-];
-
+/**
+ * 数据质量页面。
+ *
+ * 读取真实质量检查投影，按数据日期查询；展示检查数量与失败数量，不展示敏感字段。
+ */
 export default function DataQuality() {
+  const [dataDate, setDataDate] = useState<string>(dayjs().subtract(1, 'day').format('YYYY-MM-DD'));
+
+  const qualityQuery = useQuery({
+    queryKey: ['ops', 'data-quality', dataDate],
+    queryFn: () => listDataQuality(dataDate),
+  });
+
+  const columns: ColumnsType<DataQualityItem> = [
+    { title: '检查结果号', dataIndex: 'resultId' },
+    { title: '检查类型', dataIndex: 'checkType' },
+    { title: '检查数量', dataIndex: 'checkedCount' },
+    { title: '失败数量', dataIndex: 'failedCount' },
+    {
+      title: '状态',
+      dataIndex: 'status',
+      render: (value: string) => STATUS_LABEL[value] ?? value,
+    },
+    { title: '检查时间', dataIndex: 'completedAt' },
+  ];
+
   return (
     <main className={pageStyles.page}>
-      <PageHeader
-        title="数据质量"
-        description="核查事件完整性、唯一性、合法性、及时性及报表发布门禁。"
-        contractPending
-      />
+      <PageHeader />
       <section className={pageStyles.toolbar} aria-label="质量结果筛选">
-        <DatePicker aria-label="数据日期" placeholder="数据日期" />
-        <Input aria-label="任务编码" placeholder="任务编码" style={{ width: 200 }} />
-        <Input aria-label="规则编码" placeholder="规则编码" style={{ width: 200 }} />
-        <Select
-          aria-label="质量状态"
-          allowClear
-          placeholder="质量状态"
-          style={{ width: 160 }}
-          options={[
-            { value: 'PASSED', label: '通过' },
-            { value: 'WARNING', label: '警告' },
-            { value: 'FAILED', label: '失败' },
-          ]}
+        <DatePicker
+          aria-label="数据日期"
+          value={dayjs(dataDate)}
+          allowClear={false}
+          onChange={(value) => value && setDataDate(value.format('YYYY-MM-DD'))}
         />
+        <Button type="primary" onClick={() => qualityQuery.refetch()}>
+          查询
+        </Button>
       </section>
       <section className={pageStyles.panel} aria-label="质量检查结果">
-        <Table<QualityResultRow>
+        <Table<DataQualityItem>
           rowKey="resultId"
           columns={columns}
-          dataSource={[]}
+          dataSource={qualityQuery.data?.data ?? []}
+          loading={qualityQuery.isLoading}
           pagination={false}
-          locale={{ emptyText: <Empty description="质量接口接入后展示检查结果和隔离摘要" /> }}
+          locale={{
+            emptyText: (
+              <Empty description={qualityQuery.isError ? '加载失败，请确认网关已启动' : '该日期暂无质量结果'} />
+            ),
+          }}
           scroll={{ x: 760 }}
         />
       </section>

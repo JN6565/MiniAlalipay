@@ -1,3 +1,6 @@
+/* B 端业务页面统一标题区样式。 */
+
+/* 标题区：左侧标题/说明，右侧操作区；左侧留出竖条装饰空间。 */
 .header {
   position: relative;
   display: flex;
@@ -7,15 +10,22 @@
   gap: 24px;
 }
 
+/* 左侧主题色竖条：为标题区增加品牌识别，两端收窄成圆角。 */
 .header::before {
   position: absolute;
-  top: 5px;
-  bottom: 5px;
+  top: 4px;
+  bottom: 4px;
   left: 0;
   width: 4px;
   border-radius: 4px;
-  background: linear-gradient(180deg, var(--admin-primary) 0%, #69b3f8 100%);
+  background: var(--admin-primary);
   content: '';
+}
+
+/* 主标题加粗，保持排版统一。 */
+.header :global(.ant-typography h2) {
+  font-weight: 700;
+  letter-spacing: 0;
 }
 
 .header :global(.ant-typography) {
@@ -23,11 +33,13 @@
   margin-bottom: 4px;
 }
 
+/* 契约待接入提示：与标题区保持间距。 */
 .alert {
   margin-top: 20px;
   border-radius: 8px;
 }
 
+/* 窄屏：标题区纵向堆叠，避免右侧操作区挤压标题。 */
 @media (max-width: 768px) {
   .header {
     flex-direction: column;
