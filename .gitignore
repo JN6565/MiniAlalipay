@@ -67,3 +67,5 @@ redis-data/
 
 # 本地 Superpowers 过程产物
 /docs/superpowers/
+
+frontend-admin/demo
