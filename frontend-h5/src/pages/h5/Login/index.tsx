@@ -1,7 +1,8 @@
 import React, { useState } from 'react';
-import { history } from 'umi';
+import { history } from '@umijs/max';
 import { Toast } from 'antd-mobile';
 import { login } from '@/services/auth';
+import { ApiError } from '@/services/request';
 import './index.less';
 
 const LoginPage: React.FC = () => {
@@ -47,19 +48,31 @@ const LoginPage: React.FC = () => {
       const result = await login({ loginIdentifier, loginPassword });
 
       // 保存会话令牌到 localStorage
+      if (!result?.accessToken || !result?.userId || !result?.accountNumber) {
+        throw new Error('登录响应缺少必要的会话信息');
+      }
+
+      // 先完整保存会话，再进入首页，保证首页首批请求能够携带认证信息。
       localStorage.setItem('accessToken', result.accessToken);
       localStorage.setItem('userId', result.userId);
       localStorage.setItem('accountNumber', result.accountNumber);
-      localStorage.setItem('nickname', result.nickname);
+      localStorage.setItem('nickname', result.nickname || result.accountNumber);
 
       // 显示登录成功提示
       Toast.show({ content: '登录成功', icon: 'success' });
 
       // 跳转到首页
-      history.push('/h5/home');
+      // 登录页不应保留在历史栈中；浏览器级跳转还能避免旧的路由实例阻止导航。
+      history.replace('/h5/home');
     } catch (error: any) {
-      // 错误已在 request 拦截器中处理，这里可以添加额外处理
-      console.error('登录失败:', error);
+      const code = error instanceof ApiError ? error.code : 'UNKNOWN';
+      const messages: Record<string, string> = {
+        LOGIN_INVALID: '手机号、账户号或密码错误',
+        LOGIN_LOCKED: '登录已被临时锁定，请稍后再试',
+        REGISTRATION_PROCESSING: '注册开户处理中，请稍后再试',
+        NETWORK_ERROR: '网络异常，请检查网络连接',
+      };
+      Toast.show({ content: messages[code] || error.message || '登录失败', icon: 'fail' });
     } finally {
       setLoading(false);
     }
@@ -125,7 +138,7 @@ const LoginPage: React.FC = () => {
         <div className="links">
           <span onClick={() => history.push('/h5/register')}>注册账号</span>
           <span>|</span>
-          <span>忘记密码</span>
+          <span onClick={() => Toast.show({ content: '忘记密码功能暂未开放' })}>忘记密码</span>
         </div>
       </div>
     </div>

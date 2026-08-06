@@ -1,5 +1,5 @@
 import React from 'react';
-import { history } from 'umi';
+import { history } from '@umijs/max';
 import { Toast, Dialog } from 'antd-mobile';
 import './index.less';
 
@@ -16,8 +16,10 @@ const SettingsPage: React.FC = () => {
       localStorage.removeItem('userId');
       localStorage.removeItem('nickname');
       localStorage.removeItem('userType');
+      localStorage.removeItem('accountNumber');
+      localStorage.removeItem('session-storage');
       Toast.show({ icon: 'success', content: '已退出登录' });
-      history.push('/h5/login');
+      window.location.replace('/h5/login');
     }
   };
 

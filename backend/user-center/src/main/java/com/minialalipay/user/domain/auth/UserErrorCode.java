@@ -34,6 +34,12 @@ public enum UserErrorCode implements ErrorCode {
      */
     LOGIN_INVALID("LOGIN_INVALID", "登录名或登录密码错误", 401),
 
+    /** 修改密码时当前登录密码错误，不代表会话失效。 */
+    CURRENT_LOGIN_PASSWORD_INVALID("CURRENT_LOGIN_PASSWORD_INVALID", "当前登录密码错误", 422),
+
+    /** 新登录密码不得复用当前密码。 */
+    PASSWORD_REUSE_NOT_ALLOWED("PASSWORD_REUSE_NOT_ALLOWED", "新密码不能与当前密码相同", 422),
+
     /**
      * 登录已被临时锁定。
      */

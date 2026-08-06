@@ -3925,3 +3925,8 @@ P2P Collection 验收映射：
 - [MiniAlalipay 后端系统分析](./minialalipay-backend-system-analysis.md)
 - [MiniAlalipay 前端系统分析](./miniaialipay%20-frontend-system-analysis.md)
 - [MiniAlalipay OpenAPI 契约](../../contracts/openapi/minialalipay-api.yaml)
+# 网关真实会话认证
+
+网关从 `Authorization: Bearer <token>` 提取会话令牌，使用内部服务凭证直连用户中心的 `/internal/v1/auth/sessions/introspect`。用户中心依据服务端会话存储返回真实 `userId` 和角色；网关删除客户端提交的同名身份头，再注入可信 `X-User-Id` 与 `X-User-Roles` 后转发。令牌无效或过期返回 401；用户中心不可用、超时或内部凭证错误返回 503，禁止降级为固定测试用户。当前 MVP 会话仍存储在用户中心进程内存中，服务重启会使已有会话失效，后续可在不改变接口契约的前提下替换为 Redis。
+
+登录密码修改只允许作用于网关从有效会话解析出的真实用户 ID，不接受客户端指定目标账号。当前密码错误属于业务校验失败，不得清理会话；修改成功并提交数据库事务后，用户中心销毁该用户的全部设备会话。网关调用用户中心超时或不可用时返回 503，不得伪装成令牌失效。

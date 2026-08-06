@@ -134,6 +134,12 @@ public class SessionManager implements SessionManagerPort {
         sessions.remove(token);
     }
 
+    @Override
+    public void destroyAllSessions(String userId) {
+        if (userId == null || userId.isBlank()) return;
+        sessions.entrySet().removeIf(entry -> userId.equals(entry.getValue().userId()));
+    }
+
     /**
      * 清理过期会话。
      */

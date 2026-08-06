@@ -38,4 +38,7 @@ public interface SessionManagerPort {
      * @param token 会话令牌
      */
     void destroySession(String token);
+
+    /** 销毁指定用户的全部设备会话。 */
+    void destroyAllSessions(String userId);
 }

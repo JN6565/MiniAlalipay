@@ -7,9 +7,7 @@ import request from './request';
  * @returns 成功响应
  */
 export const setupPaymentPassword = (paymentPassword: string) => {
-  return request.put('/api/v1/payment-password', {
-    data: { paymentPassword },
-  });
+  return request.put('/api/v1/payment-password', { paymentPassword });
 };
 
 /**
@@ -23,7 +21,7 @@ export const changePaymentPassword = (params: {
   currentPassword: string;
   newPassword: string;
 }) => {
-  return request.patch('/api/v1/payment-password', { data: params });
+  return request.patch('/api/v1/payment-password', params);
 };
 
 /**
@@ -33,7 +31,5 @@ export const changePaymentPassword = (params: {
  * @returns 成功响应
  */
 export const verifyPaymentPassword = (paymentPassword: string) => {
-  return request.post('/api/v1/payment-password/verify', {
-    data: { paymentPassword },
-  });
+  return request.post('/api/v1/payment-password/verify', { paymentPassword });
 };

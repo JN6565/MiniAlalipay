@@ -203,6 +203,8 @@ spring:
 # ========== 阶段二受控鉴权（dev/test profile 显式启用） ==========
 gateway:
   authentication:
+    user-center-uri: ${USER_CENTER_URI:http://localhost:8081}
+    service-token: ${INTERNAL_AUTH_SERVICE_TOKEN:local-internal-token}
     stub:
       enabled: ${GATEWAY_AUTH_STUB_ENABLED:true}
       token: ${GATEWAY_AUTH_STUB_TOKEN:any}

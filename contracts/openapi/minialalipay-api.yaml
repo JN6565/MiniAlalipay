@@ -8,6 +8,19 @@ servers:
     description: 本地网关
 x-p0-interface-catalog: ./p0-interface-catalog.yaml
 paths:
+  /internal/v1/auth/sessions/introspect:
+    post:
+      summary: 网关校验用户中心会话并解析可信用户身份
+      operationId: introspectSession
+      x-client-scope: INTERNAL
+      security:
+        - internalServiceAuth: []
+      requestBody:
+        required: true
+        content: { application/json: { schema: { $ref: '#/components/schemas/SessionIntrospectionRequest' } } }
+      responses:
+        '200': { description: 返回会话有效性及真实用户身份, content: { application/json: { schema: { $ref: '#/components/schemas/SessionIntrospectionResponse' } } } }
+        '403': { $ref: '#/components/responses/Forbidden' }
   /api/v1/auth/register:
     post:
       summary: 使用手机号、真实姓名和两套密码注册并自动开立零余额账户
@@ -39,6 +52,20 @@ paths:
         '200': { description: 登录成功, content: { application/json: { schema: { $ref: '#/components/schemas/AuthResponse' } } } }
         '401': { $ref: '#/components/responses/Unauthorized' }
         '429': { $ref: '#/components/responses/TooManyRequests' }
+  /api/v1/auth/login-password:
+    patch:
+      summary: 校验当前密码后修改登录密码并使该用户全部会话失效
+      operationId: changeLoginPassword
+      x-client-scope: C
+      parameters:
+        - $ref: '#/components/parameters/RequestIdHeader'
+      requestBody:
+        required: true
+        content: { application/json: { schema: { $ref: '#/components/schemas/ChangeLoginPasswordRequest' } } }
+      responses:
+        '200': { description: 修改成功，该用户全部旧令牌失效，客户端必须重新登录 }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '422': { $ref: '#/components/responses/UnprocessableEntity' }
   /actuator/health:
     get:
       summary: 网关健康检查
@@ -1695,6 +1722,20 @@ components:
         type: string
         maxLength: 128
   schemas:
+    SessionIntrospectionRequest:
+      type: object
+      additionalProperties: false
+      required: [accessToken]
+      properties:
+        accessToken: { type: string, minLength: 16, description: 待校验的会话令牌，不得写入日志。 }
+    SessionIntrospectionResponse:
+      type: object
+      additionalProperties: false
+      required: [active, roles]
+      properties:
+        active: { type: boolean }
+        userId: { type: [string, 'null'], description: 有效会话对应的真实用户 ID。 }
+        roles: { type: array, items: { type: string } }
     RegisterRequest:
       type: object
       additionalProperties: false
@@ -1712,6 +1753,13 @@ components:
       properties:
         loginIdentifier: { type: string, minLength: 11, maxLength: 20, description: 完整手机号或系统生成的 16 位账户号。 }
         loginPassword: { type: string, format: password, minLength: 8, maxLength: 32 }
+    ChangeLoginPasswordRequest:
+      type: object
+      additionalProperties: false
+      required: [currentPassword, newPassword]
+      properties:
+        currentPassword: { type: string, format: password, minLength: 8, maxLength: 32 }
+        newPassword: { type: string, format: password, minLength: 8, maxLength: 32, description: 必须包含大写字母、小写字母和数字。 }
     AuthResponse:
       allOf:
         - $ref: '#/components/schemas/ApiResponse'
