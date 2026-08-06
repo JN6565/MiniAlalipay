@@ -159,19 +159,26 @@ public class AgentStreamController {
         @Override public void onStatus(SseEvent.StatusPayload e) { emit("agent-status", e); }
         @Override public void onToolCall(SseEvent.ToolCallPayload e) { emit("agent-tool-call", e); }
         @Override public void onToolResult(SseEvent.ToolResultPayload e) { emit("agent-tool-result", e); }
-        @Override public void onContentDelta(SseEvent.ContentPayload e) { emit("agent-content", e); }
+        @Override public void onContentDelta(SseEvent.ContentPayload e) { emit("agent-content", e, 120); }
         @Override public void onConfirmation(SseEvent.ConfirmationPayload e) { emit("agent-confirmation", e); }
         @Override public void onClarification(SseEvent.ClarificationPayload e) { emit("agent-clarification", e); }
         @Override public void onDone(SseEvent.DonePayload e) { emit("agent-done", e); }
         @Override public void onError(SseEvent.ErrorPayload e) { emit("agent-error", e); }
 
-        private void emit(String eventName, Object payload) {
+        private void emit(String eventName, Object payload) { emit(eventName, payload, 0); }
+
+        private void emit(String eventName, Object payload, int delayMs) {
             try {
                 emitter.send(SseEmitter.event()
                         .name(eventName)
                         .data(mapper.writeValueAsString(payload)));
+                if (delayMs > 0) {
+                    Thread.sleep(delayMs);
+                }
             } catch (IOException e) {
                 log.warn("SSE 事件发送失败: event={}, error={}", eventName, e.getMessage());
+            } catch (InterruptedException e) {
+                Thread.currentThread().interrupt();
             }
         }
     }
