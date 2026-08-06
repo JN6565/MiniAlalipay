@@ -30,9 +30,7 @@ const handleExpiredSession = (code?: string) => {
 
 request.interceptors.request.use((config: any) => {
   config.headers = { ...config.headers, 'X-Request-Id': generateUUID() };
-  if (['post', 'put', 'patch'].includes(config.method || '')) {
-    config.headers['Idempotency-Key'] = generateUUID();
-  }
+  // Idempotency-Key 由各服务自行管理，不在这里自动生成
   const url = config.url || '';
   if (!isPublicAuthEndpoint(url)) {
     const token = localStorage.getItem('accessToken');

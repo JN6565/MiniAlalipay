@@ -78,6 +78,7 @@ function getPageTitle(pathname: string): string {
     '/h5/settings/about': '关于',
     '/h5/transfer': '转账',
     '/h5/transfer/confirm': '确认转账',
+    '/h5/recharge': '充值',
     '/h5/ai-talk': 'AI助手',
     '/h5/contacts': '联系人',
     '/h5/profile': '我的',

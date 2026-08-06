@@ -1,14 +1,24 @@
 import React, { useState } from 'react';
 import { history } from 'umi';
-import { Toast, Button, Input } from 'antd-mobile';
+import { Toast, Button, Input, Dialog } from 'antd-mobile';
+import * as rechargeService from '@/services/recharge';
 import './index.less';
 
 const RechargePage: React.FC = () => {
   const [amount, setAmount] = useState('');
   const [loading, setLoading] = useState(false);
+  const [currentIdempotencyKey, setCurrentIdempotencyKey] = useState<string | null>(null);
 
   // 预设金额选项
   const presetAmounts = [100, 200, 500, 1000, 2000, 5000];
+
+  // 生成幂等键
+  const generateIdempotencyKey = (): string => {
+    return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, (c) => {
+      const r = (Math.random() * 16) | 0;
+      return (c === 'x' ? r : (r & 0x3) | 0x8).toString(16);
+    });
+  };
 
   const handleRecharge = async () => {
     const amountNum = parseFloat(amount);
@@ -28,21 +38,42 @@ const RechargePage: React.FC = () => {
       return;
     }
 
+    // 大额充值确认
+    if (amountNum >= 5000) {
+      const confirmed = await Dialog.confirm({
+        content: `确认充值 ¥${amountNum.toFixed(2)} 元？`,
+        confirmText: '确认充值',
+        cancelText: '取消',
+      });
+      if (!confirmed) return;
+    }
+
     setLoading(true);
 
+    // 生成新的幂等键（首次请求）或重用现有的（重试）
+    const idempotencyKey = currentIdempotencyKey || generateIdempotencyKey();
+    if (!currentIdempotencyKey) {
+      setCurrentIdempotencyKey(idempotencyKey);
+    }
+
     try {
-      // TODO: 调用充值接口
-      // await recharge({ amountFen: Math.round(amountNum * 100) });
+      const amountFen = Math.round(amountNum * 100);
+      const result = await rechargeService.createRecharge(amountFen, idempotencyKey);
 
-      Toast.show({ content: '充值功能开发中...', icon: 'success' });
+      Toast.show({ content: '充值成功！', icon: 'success' });
+      setCurrentIdempotencyKey(null); // 清除幂等键
 
-      // 模拟充值成功后返回首页
+      // 充值成功后跳转到首页
       setTimeout(() => {
         history.push('/h5/home');
-      }, 1500);
+      }, 1000);
     } catch (error: any) {
       console.error('充值失败:', error);
-      Toast.show({ content: '充值失败，请重试', icon: 'fail' });
+      // 超时错误不清除幂等键，允许重试
+      if (error.code !== 'ECONNABORTED') {
+        setCurrentIdempotencyKey(null); // 非超时错误清除幂等键
+      }
+      Toast.show({ content: error.message || '充值失败，请重试', icon: 'fail' });
     } finally {
       setLoading(false);
     }
@@ -54,15 +85,6 @@ const RechargePage: React.FC = () => {
 
   return (
     <div className="recharge-page">
-      {/* 头部 */}
-      <div className="header">
-        <div className="back" onClick={() => history.goBack()}>
-          ← 返回
-        </div>
-        <h1>充值</h1>
-        <div className="placeholder" />
-      </div>
-
       {/* 充值说明 */}
       <div className="notice">
         <p>💰 模拟充值 - 虚拟资金</p>
@@ -101,8 +123,8 @@ const RechargePage: React.FC = () => {
         <h3>充值规则</h3>
         <ul>
           <li>单笔限额：0.01 - 50,000 元</li>
-          <li>每日限额：100,000 元</li>
-          <li>每日次数：10 次</li>
+          <li>每日限额：250,000 元</li>
+          <li>每日次数：5 次</li>
           <li>充值方式：模拟充值（虚拟资金）</li>
         </ul>
       </div>

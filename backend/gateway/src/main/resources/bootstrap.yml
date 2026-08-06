@@ -1,12 +1,8 @@
-# Nacos 服务发现与配置引导
+# Nacos 服务发现与配置引导（本地开发禁用）
 spring:
   application:
     name: minialalipay-gateway
   cloud:
     nacos:
       discovery:
-        server-addr: ${NACOS_SERVER_ADDR:121.43.51.164:8848}
-        username: ${NACOS_USERNAME:nacos}
-        password: ${NACOS_PASSWORD:nacos}
-        namespace: ${NACOS_NAMESPACE:}
-        group: DEFAULT_GROUP
+        enabled: false

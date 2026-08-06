@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { history } from 'umi';
 import { Toast, SpinLoading } from 'antd-mobile';
+import { ScanCodeOutline } from 'antd-mobile-icons';
 import * as accountService from '@/services/account';
 import * as creditService from '@/services/credit';
 import './index.less';
@@ -80,7 +81,7 @@ const HomePage: React.FC = () => {
             <span>{nickname}</span>
           </div>
           <div className="header-btns">
-            <span onClick={() => history.push('/h5/scan')}>📷</span>
+            <span onClick={() => history.push('/h5/scan')}><ScanCodeOutline /></span>
           </div>
         </div>
 

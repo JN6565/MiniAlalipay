@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { history, useSearchParams } from 'umi';
-import { Card, Button, Toast, SpinLoading } from 'antd-mobile';
+import { Card, Button, Toast, SpinLoading, Dialog } from 'antd-mobile';
 import * as transferService from '@/services/transfer';
 import * as paymentPasswordService from '@/services/paymentPassword';
 import { AmountDisplay } from '@/components/h5/AmountDisplay';
@@ -11,12 +11,40 @@ const TransferConfirmPage: React.FC = () => {
   const [searchParams] = useSearchParams();
   const draftId = searchParams.get('draftId');
   const [loading, setLoading] = useState(false);
+  const [draftLoading, setDraftLoading] = useState(true);
   const [draft, setDraft] = useState<transferService.TransferDraft | null>(null);
   const [password, setPassword] = useState('');
+  const [riskWarning, setRiskWarning] = useState<string | null>(null);
 
   useEffect(() => {
-    // TODO: 加载草稿详情
+    if (draftId) {
+      loadDraft();
+    }
   }, [draftId]);
+
+  const loadDraft = async () => {
+    try {
+      setDraftLoading(true);
+      const draftData = await transferService.getDraft(draftId!);
+      setDraft(draftData);
+
+      // 风控预检
+      const riskResult = await transferService.validateDraft(draftId!);
+      if (riskResult.riskAction === 'REJECT') {
+        Toast.show({ content: riskResult.riskMessage || '转账被拒绝', icon: 'fail' });
+        history.back();
+        return;
+      }
+      if (riskResult.riskMessage) {
+        setRiskWarning(riskResult.riskMessage);
+      }
+    } catch (error: any) {
+      Toast.show({ content: error.message || '加载草稿失败', icon: 'fail' });
+      history.back();
+    } finally {
+      setDraftLoading(false);
+    }
+  };
 
   const handleConfirm = async () => {
     if (!password || password.length !== 6) {
@@ -24,21 +52,39 @@ const TransferConfirmPage: React.FC = () => {
       return;
     }
 
+    // 大额转账二次确认
+    if (draft && draft.amountFen >= 500000) {
+      const confirmed = await Dialog.confirm({
+        content: `确认转账 ¥${(draft.amountFen / 100).toFixed(2)} 元？`,
+        confirmText: '确认',
+        cancelText: '取消',
+      });
+      if (!confirmed) return;
+    }
+
     setLoading(true);
     try {
-      // 1. 校验支付密码，获取确认令牌
-      const { confirmationToken } = await paymentPasswordService.verifyPaymentPassword({
+      // 1. 校验支付密码，获取支付凭证
+      const { paymentProof } = await paymentPasswordService.verifyPaymentPassword({
         paymentPassword: password,
         subjectType: 'TRANSFER_DRAFT',
         subjectId: draftId!,
       });
 
-      // 2. 提交转账
+      // 2. 生成确认令牌
+      const { confirmationToken } = await transferService.createConfirmation({
+        subjectType: 'TRANSFER_DRAFT',
+        subjectId: draftId!,
+        paymentProof,
+      });
+
+      // 3. 提交转账
       const result = await transferService.submitTransfer({
         draftId: draftId!,
         confirmationToken,
       });
 
+      // 跳转到结果页
       history.push(`/h5/transfer/result/${result.transactionId}`);
     } catch (error: any) {
       Toast.show({ icon: 'fail', content: error.message || '转账失败' });
@@ -51,25 +97,37 @@ const TransferConfirmPage: React.FC = () => {
     return <div className="error-state">缺少草稿ID</div>;
   }
 
+  if (draftLoading) {
+    return (
+      <div className="loading-container">
+        <SpinLoading />
+        <div className="loading-text">加载中...</div>
+      </div>
+    );
+  }
+
   return (
     <div className="transfer-confirm-page">
       <Card className="confirm-card">
-        <div className="confirm-title">确认转账</div>
+        <div className="confirm-title">请确认转账信息</div>
 
         <div className="confirm-row">
-          <span className="confirm-label">付款账户</span>
+          <span className="confirm-label">付款方</span>
           <span className="confirm-value">我的账户</span>
         </div>
 
         <div className="confirm-row">
-          <span className="confirm-label">收款人</span>
-          <span className="confirm-value">{draft?.payeeNickname || '-'}</span>
+          <span className="confirm-label">收款方</span>
+          <span className="confirm-value">
+            {draft?.payeeNickname || '-'}
+            {draft?.payeeAccountMasked && ` (${draft.payeeAccountMasked})`}
+          </span>
         </div>
 
         <div className="confirm-row">
-          <span className="confirm-label">转账金额</span>
-          <span className="confirm-value">
-            {draft && <AmountDisplay amountFen={draft.amountFen} />}
+          <span className="confirm-label">金额</span>
+          <span className="confirm-value amount">
+            {draft && <AmountDisplay amountFen={draft.amountFen} size="large" />}
           </span>
         </div>
 
@@ -84,6 +142,13 @@ const TransferConfirmPage: React.FC = () => {
         </div>
       </Card>
 
+      {riskWarning && (
+        <Card className="risk-warning-card">
+          <div className="risk-icon">⚠️</div>
+          <div className="risk-message">{riskWarning}</div>
+        </Card>
+      )}
+
       <Card className="password-card">
         <div className="password-title">请输入支付密码</div>
         <PasswordInput value={password} onChange={setPassword} length={6} />
@@ -96,6 +161,7 @@ const TransferConfirmPage: React.FC = () => {
           size="large"
           loading={loading}
           onClick={handleConfirm}
+          disabled={!password || password.length !== 6}
         >
           确认转账
         </Button>
