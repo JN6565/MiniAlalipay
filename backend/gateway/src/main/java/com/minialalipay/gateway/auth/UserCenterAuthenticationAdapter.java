@@ -12,7 +12,10 @@ import java.util.Set;
 import java.time.Duration;
 
 /**
- * 用户中心真实会话认证适配器。
+ * 用户中心会话认证适配器。
+ *
+ * <p>网关通过用户中心的会话校验接口（{@code POST /internal/v1/auth/sessions/introspect}）
+ * 验证 Bearer 令牌的真实性，并将返回的用户标识和角色写入认证上下文。</p>
  *
  * <p>通过调用用户中心 {@code /internal/v1/auth/sessions/introspect} 校验会话令牌。
  * 网关只信任用户中心返回的用户 ID 和角色，客户端提交的身份头会由全局过滤器覆盖。</p>
