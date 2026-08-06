@@ -11,6 +11,9 @@ public interface LedgerAccountRepository {
     /** @return 信用账户对应的信用应收资产科目，不存在时为空 */
     Optional<LedgerAccount> findCreditReceivableByCreditAccountId(String creditAccountId);
 
+    /** 查询系统发行权益科目，充值复式记账的借方科目。 */
+    default Optional<LedgerAccount> findSystemIssuance() { return Optional.empty(); }
+
     /** 新增不可变科目身份。 */
     void create(LedgerAccount account);
 }

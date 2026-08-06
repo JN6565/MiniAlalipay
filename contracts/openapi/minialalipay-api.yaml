@@ -562,7 +562,7 @@ paths:
   /internal/v1/recharges/{rechargeOrderId}/channel-result:
     post:
       summary: 记录受控模拟渠道结果并推进充值资金受理
-      description: 渠道成功时推进充值订单到 PROCESSING 并创建 RECHARGE 统一交易；重复回调幂等。当前账户中心充值 TCC 参与者尚未交付，成功入账依赖后续资金内核实现。
+      description: 渠道成功时推进充值订单到 PROCESSING 并创建 RECHARGE 统一交易；账户中心充值 TCC 在 Confirm 阶段增加目标账户可用余额并完成 RECHARGE 复式记账；重复回调幂等。
       operationId: recordRechargeChannelResult
       x-client-scope: INTERNAL
       x-service-auth: required
@@ -935,7 +935,7 @@ paths:
   /api/v1/recharges:
     post:
       summary: 创建受控模拟充值来源订单
-      description: 仅创建待渠道处理的来源订单；单笔不超过 5000000 分，单用户单日累计不超过 25000000 分且最多 5 次；未形成统一交易前不得视为余额入账成功。
+      description: 创建模拟充值并自动确认受控渠道；单笔不超过 5000000 分，单用户单日累计不超过 25000000 分且最多 5 次；返回处理中或成功状态，最终以账户和账本事实为准。
       operationId: createRecharge
       x-client-scope: C
       parameters:

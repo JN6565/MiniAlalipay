@@ -30,6 +30,23 @@ class FundTransactionTest {
         assertEquals(2L, transaction.getVersion());
     }
 
+    @Test
+    void 充值交易允许系统发行且付款账户为空() {
+        FundTransaction transaction = FundTransaction.accept("tx-recharge", TransactionType.RECHARGE,
+                SourceType.RECHARGE_ORDER, "order-1", "user-1", null, "payee-account",
+                FundingSource.SYSTEM_ISSUANCE, 100L, "idem-recharge", "LOW",
+                "0123456789abcdef0123456789abcdef", NOW);
+        assertEquals(null, transaction.getPayerAccountId());
+        assertEquals(FundingSource.SYSTEM_ISSUANCE, transaction.getFundingSource());
+    }
+
+    @Test
+    void 普通交易不得缺少付款账户() {
+        assertThrows(IllegalArgumentException.class, () -> FundTransaction.accept("tx-transfer", TransactionType.TRANSFER,
+                SourceType.TRANSFER_DRAFT, "draft-2", "user-1", null, "payee-account", FundingSource.BALANCE,
+                100L, "idem-transfer", "LOW", "0123456789abcdef0123456789abcdef", NOW));
+    }
+
     private FundTransaction transaction() {
         return FundTransaction.accept("tx-1", TransactionType.TRANSFER, SourceType.TRANSFER_DRAFT,
                 "draft-1", "payer-user", "payer-account", "payee-account", FundingSource.BALANCE,

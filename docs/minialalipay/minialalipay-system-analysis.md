@@ -2495,7 +2495,7 @@ erDiagram
 | 方法 | 路径 | 权限 | 用途 | 幂等/并发要求 |
 |---|---|---|---|---|
 | POST | `/api/v1/auth/register` | 匿名 | 注册并创建初始余额为 0 的账户 | `Idempotency-Key`；登录名唯一 |
-| POST | `/api/v1/recharges` | 登录用户 | 创建模拟充值订单 | `X-Request-Id`、`Idempotency-Key`；单笔不超过 `5000000` 分，单用户单日累计不超过 `25000000` 分且最多 `5` 次；阶段四接入前只创建 `PENDING_CHANNEL` 来源订单 |
+| POST | `/api/v1/recharges` | 登录用户 | 创建模拟充值订单 | `X-Request-Id`、`Idempotency-Key`；单笔不超过 `5000000` 分，单用户单日累计不超过 `25000000` 分且最多 `5` 次；渠道成功后由充值 TCC Confirm 增加余额并完成 RECHARGE 复式记账 |
 | POST | `/api/v1/auth/login` | 匿名 | 登录并建立会话 | IP + 登录名限流 |
 | POST | `/api/v1/auth/logout` | 登录用户 | 销毁当前会话 | 重复退出返回成功 |
 | PUT | `/api/v1/payment-password` | 首次注册/登录用户 | 设置独立 6 位支付密码 | 已设置时拒绝覆盖；只存强哈希 |

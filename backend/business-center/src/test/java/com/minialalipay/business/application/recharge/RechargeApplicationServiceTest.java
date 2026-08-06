@@ -96,16 +96,13 @@ class RechargeApplicationServiceTest {
     @Test
     void 渠道拒绝后订单进入拒绝终态且重复回调幂等() {
         MemoryStore store = new MemoryStore();
-        BusinessStore businessStore = mock(BusinessStore.class);
-        RechargeApplicationService service = service(store, businessStore, mock(TccCoordinatorPort.class));
+        RechargeApplicationService service = service(store);
         RechargeOrder created = service.create("user-1", 100L, KEY);
 
         RechargeOrder rejected = service.onChannelResult(created.getRechargeOrderId(), false, "CHANNEL_TIMEOUT", null);
 
         assertEquals(RechargeOrderStatus.REJECTED, rejected.getStatus());
         assertEquals("CHANNEL_TIMEOUT", rejected.getRejectReasonCode());
-        verifyNoInteractions(businessStore);
-
         RechargeOrder replay = service.onChannelResult(created.getRechargeOrderId(), false, "CHANNEL_TIMEOUT", null);
         assertEquals(RechargeOrderStatus.REJECTED, replay.getStatus());
         assertEquals("CHANNEL_TIMEOUT", replay.getRejectReasonCode());

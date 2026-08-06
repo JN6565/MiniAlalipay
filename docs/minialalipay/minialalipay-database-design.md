@@ -1191,7 +1191,7 @@ MVP 退款仅支持单笔全额受控虚拟退款，不接入真实支付通道�
 
 **键与索引**：UK `(transaction_id)`；索引 `(user_id,business_date,status,created_at)`。
 
-**写入规则**：不要求支付密码，但必须校验登录态、账户、策略、日额度、限流、幂等和审计。`status` 从 `PENDING_CHANNEL` 起，由业务中心内部渠道回调推进：渠道成功经 `acceptFundTransaction` 进入 `PROCESSING` 并创建 `fund_transaction(RECHARGE)`，付款对手为虚拟发行权益科目；渠道拒绝进入 `REJECTED` 并记录 `reject_reason_code`；重复回调幂等。账户中心充值 TCC 参与者与虚拟发行权益科目尚未交付前，成功入账依赖后续资金内核实现。
+**写入规则**：不要求支付密码，但必须校验登录态、账户、策略、日额度、限流、幂等和审计。`status` 从 `PENDING_CHANNEL` 起，由业务中心内部渠道回调推进：渠道成功经 `acceptFundTransaction` 进入 `PROCESSING` 并创建 `fund_transaction(RECHARGE)`，付款账户为空且资金来源为 `SYSTEM_ISSUANCE`；账户中心充值 TCC 的 Try 创建 `PREPARED` 充值凭证，Confirm 原子增加目标账户可用余额并借记系统发行权益、贷记用户余额负债，Cancel 取消未过账凭证；重复回调幂等。
 
 ### 9.4 `refund_order`
 

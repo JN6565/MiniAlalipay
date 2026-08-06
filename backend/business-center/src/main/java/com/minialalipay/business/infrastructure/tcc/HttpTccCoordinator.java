@@ -37,6 +37,10 @@ public class HttpTccCoordinator implements TccCoordinatorPort {
         Artifacts a = artifacts(transaction);
         Instant now = Instant.now();
         store.createTccGlobal(a.xid(), transaction.getTransactionId(), now);
+        if (transaction.getBusinessType() == com.minialalipay.business.domain.transaction.TransactionType.RECHARGE) {
+            recharge(transaction, a);
+            return;
+        }
         if (transaction.getStatus() == TransactionStatus.COMPENSATING) {
             cancelAndFinalize(transaction, a);
             return;
@@ -63,6 +67,42 @@ public class HttpTccCoordinator implements TccCoordinatorPort {
         }
         store.updateTccGlobal(a.xid(), "COMMITTING", "{\"result\":\"CONFIRMED\"}", null, Instant.now());
         finalizeSuccess(transaction, a);
+    }
+
+    private void recharge(FundTransaction transaction, Artifacts a) {
+        try {
+            if (transaction.getStatus() == TransactionStatus.COMPENSATING) {
+                rechargeCall("cancel", transaction, a);
+                long version = transaction.getVersion();
+                transaction.publishCancelled(true, Instant.now());
+                store.finalizeTransaction(transaction, version, a.xid(), "CANCELLED", secure.newId(), Instant.now());
+                return;
+            }
+            rechargeCall("try", transaction, a);
+            store.updateTccGlobal(a.xid(), "COMMITTING", "{\"phase\":\"CONFIRM\"}", Instant.now(), Instant.now());
+            rechargeCall("confirm", transaction, a);
+            store.updateTccGlobal(a.xid(), "COMMITTING", "{\"result\":\"CONFIRMED\"}", null, Instant.now());
+            long version = transaction.getVersion();
+            transaction.publishSuccess(true, Instant.now());
+            store.finalizeTransaction(transaction, version, a.xid(), "SUCCESS", secure.newId(), Instant.now());
+        } catch (RuntimeException failure) {
+            try {
+                rechargeCall("cancel", transaction, a);
+                transaction.startCompensating(Instant.now());
+                long version = transaction.getVersion();
+                transaction.publishCancelled(true, Instant.now());
+                store.finalizeTransaction(transaction, version, a.xid(), "CANCELLED", secure.newId(), Instant.now());
+            } catch (RuntimeException cancelFailure) {
+                store.updateTccGlobal(a.xid(), "ROLLING_BACK", "{\"result\":\"UNKNOWN\"}", Instant.now().plusSeconds(10), Instant.now());
+            }
+        }
+    }
+
+    private void rechargeCall(String action, FundTransaction t, Artifacts a) {
+        accountClient.post().uri("/internal/v1/tcc/recharge/{action}", action)
+                .body(new RechargeCommand(a.xid(), t.getTransactionId(), t.getPayeeAccountId(), t.getAmountFen(),
+                        a.voucherId(), a.debitEntryId(), a.creditEntryId(), a.ledgerEventId(), t.getTraceId()))
+                .retrieve().toBodilessEntity();
     }
 
     private void finalizeSuccess(FundTransaction transaction, Artifacts a) {
@@ -167,6 +207,8 @@ public class HttpTccCoordinator implements TccCoordinatorPort {
     private record BalanceCommand(String xid, String transactionId, String accountId, long amountFen, String freezeId) { }
     private record LedgerCommand(String xid, String transactionId, String payerAccountId, String payeeAccountId,
             long amountFen, String voucherId, long debitEntryId, long creditEntryId, String eventId, String traceId) { }
+    private record RechargeCommand(String xid, String transactionId, String targetAccountId, long amountFen,
+            String voucherId, long debitEntryId, long creditEntryId, String eventId, String traceId) { }
     private record Facts(boolean successConsistent, boolean cancelConsistent, boolean accountsConfirmed,
             boolean ledgerConfirmed, boolean freezeConfirmed, boolean ledgerPosted, boolean accountsCancelled,
             boolean ledgerCancelled, boolean noActiveFreeze) { }

@@ -40,9 +40,20 @@ public final class FundTransaction {
                            String traceId, long version, Instant createdAt, Instant updatedAt) {
         this.transactionId = required(transactionId); this.businessType = Objects.requireNonNull(businessType);
         this.sourceType = Objects.requireNonNull(sourceType); this.sourceOrderId = required(sourceOrderId);
-        this.initiatorUserId = required(initiatorUserId); this.payerAccountId = required(payerAccountId);
+        this.initiatorUserId = required(initiatorUserId);
+        if (businessType == TransactionType.RECHARGE) {
+            if (payerAccountId != null && !payerAccountId.isBlank()) {
+                throw new IllegalArgumentException("充值交易不得指定付款账户");
+            }
+            if (fundingSource != FundingSource.SYSTEM_ISSUANCE) {
+                throw new IllegalArgumentException("充值交易必须使用系统发行资金");
+            }
+            this.payerAccountId = null;
+        } else {
+            this.payerAccountId = required(payerAccountId);
+        }
         this.payeeAccountId = required(payeeAccountId); this.fundingSource = Objects.requireNonNull(fundingSource);
-        if (payerAccountId.equals(payeeAccountId)) throw new IllegalArgumentException("付款和收款账户不能相同");
+        if (payerAccountId != null && payerAccountId.equals(payeeAccountId)) throw new IllegalArgumentException("付款和收款账户不能相同");
         if (amountFen < 1 || amountFen > 5_000_000L) throw new IllegalArgumentException("金额超出允许范围");
         this.amountFen = amountFen; this.idempotencyKey = required(idempotencyKey);
         this.status = Objects.requireNonNull(status); this.riskLevel = required(riskLevel);
