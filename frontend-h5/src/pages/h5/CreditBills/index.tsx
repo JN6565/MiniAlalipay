@@ -16,8 +16,8 @@ const CreditBillsPage: React.FC = () => {
 
   const loadBills = async () => {
     try {
-      const data = await creditService.getBills({ pageSize: 50 });
-      setBills(data.items || []);
+      const data = await creditService.getBills();
+      setBills(data);
     } catch (error) {
       Toast.show({ content: '加载失败', icon: 'fail' });
     } finally {
