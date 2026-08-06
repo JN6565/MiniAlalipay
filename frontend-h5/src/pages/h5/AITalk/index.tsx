@@ -1,4 +1,4 @@
-import React, { useState, useCallback, useRef } from 'react';
+import React, { useState, useCallback, useRef, useEffect } from 'react';
 import { history } from 'umi';
 import { Button, Toast } from 'antd-mobile';
 import { useSession } from './hooks/useSession';
