@@ -167,6 +167,11 @@ class AccountApplicationServiceTest {
         @Override public Optional<CreditAccount> findById(String creditAccountId) {
             return Optional.ofNullable(accounts.get(creditAccountId));
         }
+        @Override public List<CreditAccount> findByStatus(CreditAccountStatus status) {
+            return accounts.values().stream()
+                    .filter(a -> a.getStatus() == status)
+                    .toList();
+        }
         @Override public void save(CreditAccount account) {
             accounts.put(account.getCreditAccountId(), account);
             createCount++;
