@@ -46,7 +46,10 @@ public interface UserRepository {
      * @param loginName 登录名（已规范化）
      * @return 用户对象，如果不存在则返回 empty
      */
-    Optional<User> findByLoginName(String loginName);
+    Optional<User> findByAccountNumber(String accountNumber);
+
+    /** 根据手机号或系统账户号查询登录用户。 */
+    Optional<User> findByLoginIdentifier(String loginIdentifier);
 
     /**
      * 根据注册幂等键查询用户。
@@ -63,7 +66,7 @@ public interface UserRepository {
      * 保存新用户。
      *
      * <p>注册时调用，插入新用户记录。
-     * 如果 {@code login_name} 已存在，抛出 {@link com.minialalipay.user.domain.auth.UserErrorCode#LOGIN_NAME_EXISTS}。</p>
+     * 如果 {@code account_number} 已存在，抛出 {@link com.minialalipay.user.domain.auth.UserErrorCode#ACCOUNT_NUMBER_EXISTS}。</p>
      *
      * @param user 用户聚合根
      * @throws com.minialalipay.common.error.BusinessException 如果登录名已存在
@@ -89,7 +92,10 @@ public interface UserRepository {
      * @param loginName 登录名（已规范化）
      * @return 如果登录名已存在则返回 true
      */
-    boolean existsByLoginName(String loginName);
+    boolean existsByAccountNumber(String accountNumber);
+
+    /** 检查完整手机号是否已经注册。 */
+    boolean existsByPhoneNumber(String phoneNumber);
 
     /**
      * 按关键词搜索用户。

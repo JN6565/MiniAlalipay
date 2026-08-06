@@ -85,9 +85,10 @@ request.interceptors.response.use(
       case 429:
         Toast.show({ content: '操作过于频繁，请稍后再试', icon: 'fail' });
         break;
-      case 'LOGIN_NAME_EXISTS':
+      case 'ACCOUNT_NUMBER_EXISTS':
+      case 'PHONE_NUMBER_EXISTS':
       case 409:
-        Toast.show({ content: '登录名已存在', icon: 'fail' });
+        Toast.show({ content: code === 'PHONE_NUMBER_EXISTS' ? '该手机号已注册' : '账户号已存在', icon: 'fail' });
         break;
       case 'PASSWORD_POLICY_VIOLATION':
       case 422:

@@ -43,6 +43,9 @@ public record AuthResponseDTO(
          */
         String userId,
 
+        /** 系统生成的账户号，可用于后续登录。 */
+        String accountNumber,
+
         /**
          * 昵称。
          * <p>用于前端展示，可重复的展示名称和模糊搜索条件。</p>

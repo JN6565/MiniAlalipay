@@ -121,7 +121,9 @@ erDiagram
     APP_USER {
         char26 user_id PK
         char26 registration_id UK
-        varchar login_name UK
+        varchar account_number UK "系统生成的16位账户号"
+        varchar phone_number UK "完整手机号，仅用户中心持有"
+        varchar real_name "注册真实姓名"
         varchar status
     }
     CREDENTIAL {
@@ -624,7 +626,9 @@ erDiagram
 | --- | --- | --- | --- |
 | `user_id` | `CHAR(26)` | PK，必填 | 用户 ULID，跨模块引用用户的稳定标识 |
 | `registration_id` | `CHAR(26)` | 必填 | 用户中心生成的注册幂等键，用于开户恢复和既有资源查询 |
-| `login_name` | `VARCHAR(64)` | 必填 | 规范化登录名，用于登录和唯一识别 |
+| `account_number` | `VARCHAR(64)` | 必填 | 系统生成的 16 位账户号，以 `62` 开头，用于登录和唯一识别 |
+| `phone_number` | `VARCHAR(11)` | 新注册必填、历史数据可空 | 完整手机号，用于登录及转账查询；禁止跨上下文透传或写日志 |
+| `real_name` | `VARCHAR(64)` | 新注册必填、历史数据可空 | 注册真实姓名，用于转账收款人查询和确认展示 |
 | `nickname` | `VARCHAR(64)` | 必填 | 可重复的展示名称和模糊搜索条件 |
 | `phone_tail` | `CHAR(4)` | 可空 | 手机号尾号，仅用于辅助检索和脱敏展示 |
 | `identity_status` | `VARCHAR(16)` | 必填 | 演示身份状态，不代表真实 KYC |
@@ -633,7 +637,7 @@ erDiagram
 | `created_at` | `DATETIME(3)` | 必填 | 用户注册时间 |
 | `updated_at` | `DATETIME(3)` | 必填 | 最近资料或状态变更时间 |
 
-**键与索引**：UK `(registration_id)`、UK `(login_name)`；索引 `(nickname,status)`、`(status,created_at)`。
+**键与索引**：UK `(registration_id)`、UK `(account_number)`、UK `(phone_number)`；索引 `(real_name,status)`、`(nickname,status)`、`(status,created_at)`。手机号唯一索引是并发重复注册的最终一致性防线。
 
 **写入规则**：注册事务以 `PROVISIONING` 创建用户并触发开户，但不得写初始资金；账户中心以 `registration_id` 作为开户幂等键，用户中心核验余额账户和适用的信用账户后才能 CAS 更新为 `ACTIVE`。恢复期间禁止登录，超过自动恢复阈值后仍保持 `PROVISIONING` 并创建人工工单。临时登录锁定只更新 `credential.login_fail_count/login_lock_until`，不修改用户状态；管理停用使用 `DISABLED`。RBAC 角色只写 `role_assignment`，不得在本表重复保存 `user_type`。
 

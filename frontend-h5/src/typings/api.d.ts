@@ -2,7 +2,7 @@ declare namespace API {
   // 当前用户
   interface CurrentUser {
     userId: string;
-    loginName: string;
+    accountNumber: string;
     nickname: string;
     avatar?: string;
     userType: 'NORMAL' | 'MERCHANT' | 'OPERATOR' | 'ADMIN';

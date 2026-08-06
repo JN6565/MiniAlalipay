@@ -30,7 +30,7 @@ import java.util.stream.Collectors;
  *
  * <p>异常处理：
  * <ul>
- *   <li>唯一约束冲突（如 {@code login_name} 重复）捕获后转换为 {@link UserErrorCode#LOGIN_NAME_EXISTS}</li>
+ *   <li>唯一约束冲突（如 {@code account_number} 重复）捕获后转换为 {@link UserErrorCode#ACCOUNT_NUMBER_EXISTS}</li>
  *   <li>版本冲突时抛出 {@link BusinessException}，包含版本冲突错误码</li>
  * </ul>
  * </p>
@@ -74,8 +74,16 @@ public class UserRepositoryImpl implements UserRepository {
      * @return 用户对象，如果不存在则返回 empty
      */
     @Override
-    public Optional<User> findByLoginName(String loginName) {
-        UserPO userPO = userMapper.selectByLoginName(loginName);
+    public Optional<User> findByAccountNumber(String accountNumber) {
+        UserPO userPO = userMapper.selectByAccountNumber(accountNumber);
+        return Optional.ofNullable(userPO).map(this::toDomain);
+    }
+
+    @Override
+    public Optional<User> findByLoginIdentifier(String loginIdentifier) {
+        UserPO userPO = loginIdentifier.matches("^1[3-9]\\d{9}$")
+                ? userMapper.selectByPhoneNumber(loginIdentifier)
+                : userMapper.selectByAccountNumber(loginIdentifier);
         return Optional.ofNullable(userPO).map(this::toDomain);
     }
 
@@ -98,7 +106,7 @@ public class UserRepositoryImpl implements UserRepository {
      * 保存新用户。
      *
      * <p>注册时调用，插入新用户记录。
-     * 如果 {@code login_name} 已存在，抛出 {@link UserErrorCode#LOGIN_NAME_EXISTS}。</p>
+     * 如果 {@code account_number} 已存在，抛出 {@link UserErrorCode#ACCOUNT_NUMBER_EXISTS}。</p>
      *
      * @param user 用户聚合根
      * @throws BusinessException 如果登录名已存在
@@ -110,8 +118,11 @@ public class UserRepositoryImpl implements UserRepository {
             userMapper.insert(userPO);
         } catch (Exception e) {
             // 唯一约束冲突（login_name 重复）
-            if (e.getMessage() != null && e.getMessage().contains("uk_app_user_login_name")) {
-                throw new BusinessException(UserErrorCode.LOGIN_NAME_EXISTS);
+            if (e.getMessage() != null && e.getMessage().contains("uk_app_user_phone_number")) {
+                throw new BusinessException(UserErrorCode.PHONE_NUMBER_EXISTS);
+            }
+            if (e.getMessage() != null && e.getMessage().contains("uk_app_user_account_number")) {
+                throw new BusinessException(UserErrorCode.ACCOUNT_NUMBER_EXISTS);
             }
             throw e;
         }
@@ -144,8 +155,13 @@ public class UserRepositoryImpl implements UserRepository {
      * @return 如果登录名已存在则返回 true
      */
     @Override
-    public boolean existsByLoginName(String loginName) {
-        return userMapper.existsByLoginName(loginName);
+    public boolean existsByAccountNumber(String accountNumber) {
+        return userMapper.existsByAccountNumber(accountNumber);
+    }
+
+    @Override
+    public boolean existsByPhoneNumber(String phoneNumber) {
+        return userMapper.existsByPhoneNumber(phoneNumber);
     }
 
     /**
@@ -168,7 +184,7 @@ public class UserRepositoryImpl implements UserRepository {
     @Override
     public List<User> searchByKeyword(String keyword, String excludeId, int limit) {
         String searchPattern = "%" + keyword + "%";
-        return userMapper.searchByKeyword(searchPattern, excludeId, limit).stream()
+        return userMapper.searchByKeyword(keyword, searchPattern, excludeId, limit).stream()
                 .map(this::toDomain)
                 .collect(Collectors.toList());
     }
@@ -185,7 +201,9 @@ public class UserRepositoryImpl implements UserRepository {
         return new UserPO(
                 user.getUserId(),
                 user.getRegistrationId(),
-                user.getLoginName(),
+                user.getAccountNumber(),
+                user.getPhoneNumber(),
+                user.getRealName(),
                 user.getNickname(),
                 user.getPhoneTail(),
                 user.getIdentityStatus(),
@@ -208,7 +226,9 @@ public class UserRepositoryImpl implements UserRepository {
         return new User(
                 userPO.getUserId(),
                 userPO.getRegistrationId(),
-                userPO.getLoginName(),
+                userPO.getAccountNumber(),
+                userPO.getPhoneNumber(),
+                userPO.getRealName(),
                 userPO.getNickname(),
                 userPO.getPhoneTail(),
                 userPO.getIdentityStatus(),

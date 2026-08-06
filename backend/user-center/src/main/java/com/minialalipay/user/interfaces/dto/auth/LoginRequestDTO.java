@@ -30,9 +30,9 @@ public record LoginRequestDTO(
          * 登录名（必填）。
          * <p>用于查询用户，登录时规范化处理（转小写、去空格）。</p>
          */
-        @NotBlank(message = "登录名不能为空")
-        @Size(min = 4, max = 20, message = "登录名长度必须在 4-20 位之间")
-        String loginName,
+        @NotBlank(message = "手机号或账户号不能为空")
+        @Size(min = 11, max = 20, message = "手机号或账户号格式不合法")
+        String loginIdentifier,
 
         /**
          * 登录密码（必填）。

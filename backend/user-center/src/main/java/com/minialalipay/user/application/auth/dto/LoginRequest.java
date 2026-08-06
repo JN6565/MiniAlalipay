@@ -27,7 +27,7 @@ public record LoginRequest(
          * 登录名（必填）。
          * <p>用于查询用户，登录时规范化处理（转小写、去空格）。</p>
          */
-        String loginName,
+        String loginIdentifier,
 
         /**
          * 登录密码（必填）。

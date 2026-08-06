@@ -8,6 +8,37 @@ servers:
     description: 本地网关
 x-p0-interface-catalog: ./p0-interface-catalog.yaml
 paths:
+  /api/v1/auth/register:
+    post:
+      summary: 使用手机号、真实姓名和两套密码注册并自动开立零余额账户
+      operationId: registerUser
+      x-client-scope: C
+      security: []
+      parameters:
+        - $ref: '#/components/parameters/RequestIdHeader'
+        - $ref: '#/components/parameters/IdempotencyKeyHeader'
+      requestBody:
+        required: true
+        content: { application/json: { schema: { $ref: '#/components/schemas/RegisterRequest' } } }
+      responses:
+        '200': { description: 注册及开户成功, content: { application/json: { schema: { $ref: '#/components/schemas/AuthResponse' } } } }
+        '409': { $ref: '#/components/responses/Conflict' }
+        '422': { $ref: '#/components/responses/UnprocessableEntity' }
+  /api/v1/auth/login:
+    post:
+      summary: 使用手机号或系统账户号和登录密码登录
+      operationId: loginUser
+      x-client-scope: C
+      security: []
+      parameters:
+        - $ref: '#/components/parameters/RequestIdHeader'
+      requestBody:
+        required: true
+        content: { application/json: { schema: { $ref: '#/components/schemas/LoginRequest' } } }
+      responses:
+        '200': { description: 登录成功, content: { application/json: { schema: { $ref: '#/components/schemas/AuthResponse' } } } }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '429': { $ref: '#/components/responses/TooManyRequests' }
   /actuator/health:
     get:
       summary: 网关健康检查
@@ -1626,11 +1657,6 @@ components:
       name: X-Internal-Service-Token
       description: 账户中心既有内部资金接口使用的服务身份令牌，不得经过前端网关或写入日志。
   parameters:
-    ResourceId:
-      name: id
-      in: path
-      required: true
-      schema: { type: string, minLength: 1, maxLength: 26 }
     RequestIdHeader:
       name: X-Request-Id
       in: header
@@ -1669,50 +1695,24 @@ components:
         type: string
         maxLength: 128
   schemas:
-    CreateRechargeRequest:
+    RegisterRequest:
       type: object
       additionalProperties: false
-      required: [amountFen]
+      required: [phoneNumber, realName, loginPassword, paymentPassword]
       properties:
-        amountFen: { type: integer, format: int64, minimum: 1, maximum: 5000000, description: 模拟充值金额，单位分。 }
-    RechargeOrderResponse:
-      allOf:
-        - $ref: '#/components/schemas/ApiResponse'
-        - type: object
-          required: [data]
-          properties: { data: { type: object, additionalProperties: false, required: [rechargeOrderId, amountFen, status, version, createdAt], properties: { rechargeOrderId: { type: string, maxLength: 26 }, amountFen: { type: integer, format: int64, minimum: 1 }, status: { type: string }, version: { type: integer, format: int64, minimum: 0 }, createdAt: { type: string, format: date-time } } } }
-    RechargeChannelResultRequest:
+        phoneNumber: { type: string, pattern: '^1[3-9]\d{9}$', description: 中国大陆手机号，同一手机号只允许注册一次。 }
+        realName: { type: string, minLength: 2, maxLength: 32, description: 真实姓名，用于转账收款人查询和确认展示。 }
+        nickname: { type: string, maxLength: 20, description: 可选展示昵称；空缺时使用真实姓名。 }
+        loginPassword: { type: string, format: password, minLength: 8, maxLength: 32 }
+        paymentPassword: { type: string, format: password, pattern: '^\d{6}$', description: 6 位数字支付密码，不得记录日志。 }
+    LoginRequest:
       type: object
       additionalProperties: false
-      required: [success]
+      required: [loginIdentifier, loginPassword]
       properties:
-        success: { type: boolean, description: 模拟渠道是否成功 }
-        rejectReasonCode: { type: string, maxLength: 64, description: 渠道拒绝原因码，success 为 true 时忽略 }
-        traceId: { type: string, minLength: 32, maxLength: 32 }
-    RechargeOrderReference:
-      type: object
-      additionalProperties: false
-      required: [rechargeOrderId, userId, amountFen, status, version]
-      properties:
-        rechargeOrderId: { type: string, maxLength: 26 }
-        userId: { type: string, maxLength: 26 }
-        amountFen: { type: integer, format: int64, minimum: 1 }
-        status: { type: string, description: 充值订单状态，渠道成功推进到 PROCESSING 或渠道拒绝到 REJECTED }
-        transactionId: { type: [string, 'null'], maxLength: 26 }
-        version: { type: integer, format: int64, minimum: 0 }
-    CreateQrPayOrderRequest:
-      type: object
-      additionalProperties: false
-      required: [amountFen]
-      properties:
-        amountFen: { type: integer, format: int64, minimum: 1, maximum: 5000000, description: 收款金额，单位分。 }
-        subject: { type: string, maxLength: 50, description: 服务端会移除控制字符的收款说明。 }
-    TokenExchangeRequest:
-      type: object
-      additionalProperties: false
-      required: [token]
-      properties: { token: { type: string, minLength: 16, maxLength: 256, writeOnly: true } }
-    QrCollectionAnalyticsResponse:
+        loginIdentifier: { type: string, minLength: 11, maxLength: 20, description: 完整手机号或系统生成的 16 位账户号。 }
+        loginPassword: { type: string, format: password, minLength: 8, maxLength: 32 }
+    AuthResponse:
       allOf:
         - $ref: '#/components/schemas/ApiResponse'
         - type: object
@@ -1720,518 +1720,13 @@ components:
           properties:
             data:
               type: object
-              additionalProperties: false
-              required: [orderCount, transactionCount, grossAmountFen, refundAmountFen, netAmountFen, range, byPaymentMethod, since, now]
+              required: [accessToken, userId, accountNumber, nickname, status]
               properties:
-                orderCount: { type: integer, format: int64, minimum: 0, description: 去重来源订单数，避免一单多次入账重复计数。 }
-                transactionCount: { type: integer, format: int64, minimum: 0, description: 成功交易笔数，与去重订单数对比用于对账。 }
-                grossAmountFen: { type: integer, format: int64, minimum: 0, description: 收款总额，单位分。 }
-                refundAmountFen: { type: integer, format: int64, minimum: 0, description: 退款总额，单位分。 }
-                netAmountFen: { type: integer, format: int64, description: 净收款 = 收款总额 - 退款总额，单位分。 }
-                range: { type: string, enum: [today, month] }
-                byPaymentMethod:
-                  type: array
-                  items:
-                    type: object
-                    additionalProperties: false
-                    required: [businessType, orderCount, amountFen]
-                    properties:
-                      businessType: { type: string, description: 支付方式：QR_PAY 余额扫码、CREDIT_PAY 花呗扫码。 }
-                      orderCount: { type: integer, format: int64, minimum: 0 }
-                      amountFen: { type: integer, format: int64, minimum: 0 }
-                since: { type: string, format: date-time, description: 统计起始时间。 }
-                now: { type: string, format: date-time, description: 统计结束时间。 }
-    CreateRefundRequest:
-      type: object
-      additionalProperties: false
-      required: [originalTransactionId, reasonCode]
-      properties:
-        originalTransactionId: { type: string, minLength: 1, maxLength: 26, description: 原已成功的动态扫码统一交易号（QR_PAY/CREDIT_PAY）。 }
-        reasonCode: { type: string, maxLength: 32, description: 退款原因。 }
-    SubmitRefundRequest:
-      type: object
-      additionalProperties: false
-      required: [version]
-      properties: { version: { type: integer, format: int64, minimum: 0, description: 客户端读取到的退款订单 CAS 版本。 } }
-    RefundOrderResponse:
-      allOf:
-        - $ref: '#/components/schemas/ApiResponse'
-        - type: object
-          required: [data]
-          properties:
-            data:
-              type: object
-              additionalProperties: false
-              required: [refundOrderId, originalTransactionId, amountFen, status, version, createdAt]
-              properties:
-                refundOrderId: { type: string, maxLength: 26 }
-                originalTransactionId: { type: string, maxLength: 26 }
-                amountFen: { type: integer, format: int64, minimum: 1 }
-                status: { type: string, description: 退款订单状态，受理后不代表冲正成功。 }
-                transactionId: { type: [string, 'null'], maxLength: 26, description: REFUND 统一交易号，受理前为空。 }
-                version: { type: integer, format: int64, minimum: 0 }
-                createdAt: { type: string, format: date-time }
-    RefundOrderPageResponse:
-      allOf:
-        - $ref: '#/components/schemas/ApiResponse'
-        - type: object
-          required: [data]
-          properties:
-            data:
-              type: object
-              additionalProperties: false
-              required: [items]
-              properties:
-                items: { type: array, items: { type: object, additionalProperties: false, required: [refundOrderId, originalTransactionId, amountFen, status, version, createdAt], properties: { refundOrderId: { type: string, maxLength: 26 }, originalTransactionId: { type: string, maxLength: 26 }, amountFen: { type: integer, format: int64, minimum: 1 }, status: { type: string }, transactionId: { type: [string, 'null'], maxLength: 26 }, version: { type: integer, format: int64, minimum: 0 }, createdAt: { type: string, format: date-time } } } }
-                nextCursor: { type: [string, 'null'], maxLength: 128 }
-    QrPayOrderResponse:
-      allOf:
-        - $ref: '#/components/schemas/ApiResponse'
-        - type: object
-          required: [data]
-          properties: { data: { type: object, additionalProperties: false, properties: { qrOrderId: { type: string, maxLength: 26 }, amountFen: { type: integer, format: int64, minimum: 1 }, subject: { type: string }, status: { type: string }, transactionId: { type: [string, 'null'], maxLength: 26 }, qrCodeUrl: { type: [string, 'null'], writeOnly: true }, expiresAt: { type: string, format: date-time }, version: { type: integer, format: int64, minimum: 0 } } } }
-    CreateCollectionRequest:
-      type: object
-      additionalProperties: false
-      required: [amountFen]
-      properties:
-        amountFen: { type: integer, format: int64, minimum: 1, maximum: 5000000 }
-        subject: { type: string, maxLength: 50 }
-    VersionRequest:
-      type: object
-      additionalProperties: false
-      required: [version]
-      properties:
-        version: { type: integer, format: int64, minimum: 0, description: 当前资源的 CAS 版本。 }
-    IssueScenarioConfirmationRequest:
-      type: object
-      additionalProperties: false
-      required: [version, paymentProof, fundingSource]
-      properties:
-        version: { type: integer, format: int64, minimum: 0 }
-        paymentProof:
-          type: string
-          minLength: 1
-          maxLength: 256
-          writeOnly: true
-          description: 用户中心签发的一次性支付证明，禁止写入日志、URL 和持久化字段。
-        fundingSource: { type: string, enum: [BALANCE, MINI_CREDIT], description: 确认时绑定的资金来源。 }
-    PayScenarioOrderRequest:
-      type: object
-      additionalProperties: false
-      required: [confirmationToken]
-      properties:
-        confirmationToken:
-          type: string
-          minLength: 16
-          maxLength: 256
-          writeOnly: true
-          description: 已绑定订单快照的一次性确认令牌，禁止持久化或写入 URL。
-    ScenarioPayment:
-      type: object
-      additionalProperties: false
-      required: [orderId, transactionId, status, statusUrl, updatedAt]
-      properties:
-        orderId: { type: string, minLength: 1, maxLength: 26, description: 已真实创建或读取到的业务订单 ID。 }
-        transactionId: { type: [string, 'null'], maxLength: 26, description: 已受理时的真实统一交易 ID；未知受理结果时允许为空。 }
-        status: { type: string, enum: [PROCESSING, SUCCESS, CANCELLED, MANUAL_REVIEW, UNKNOWN], description: UNKNOWN 不得被客户端展示为成功。 }
-        statusUrl: { type: string, minLength: 1, maxLength: 256, description: 回源查询真实状态的相对路径。 }
-        updatedAt: { type: string, format: date-time }
-    ScenarioPaymentResponse:
-      allOf:
-        - $ref: '#/components/schemas/ApiResponse'
-        - type: object
-          required: [data]
-          properties: { data: { $ref: '#/components/schemas/ScenarioPayment' } }
-    ScenarioOrderEvent:
-      type: object
-      additionalProperties: false
-      required: [eventId, orderId, status, occurredAt]
-      properties:
-        eventId: { type: string, minLength: 1, maxLength: 128 }
-        orderId: { type: string, minLength: 1, maxLength: 26 }
-        transactionId: { type: [string, 'null'], maxLength: 26 }
-        status: { type: string }
-        occurredAt: { type: string, format: date-time }
-    CollectionRequestEvent:
-      type: object
-      additionalProperties: false
-      required: [eventId, requestId, status, occurredAt]
-      properties:
-        eventId: { type: string, minLength: 1, maxLength: 128, description: 可作为 Last-Event-ID 的持久化事件游标。 }
-        requestId: { type: string, minLength: 1, maxLength: 26 }
-        activeOrderId: { type: [string, 'null'], maxLength: 26 }
-        transactionId: { type: [string, 'null'], maxLength: 26 }
-        status: { type: string, enum: [OPEN, PENDING_CONFIRMATION, PROCESSING, SUCCESS, CANCELLED, EXPIRED, MANUAL_REVIEW] }
-        occurredAt: { type: string, format: date-time }
-    QrPayOrderPage:
-      type: object
-      additionalProperties: false
-      required: [items, nextCursor]
-      properties:
-        items: { type: array, items: { $ref: '#/components/schemas/QrPayOrder' } }
-        nextCursor: { type: [string, 'null'], maxLength: 128 }
-    QrPayOrderPageResponse:
-      allOf:
-        - $ref: '#/components/schemas/ApiResponse'
-        - type: object
-          required: [data]
-          properties: { data: { $ref: '#/components/schemas/QrPayOrderPage' } }
-    QrPayOrder:
-      type: object
-      additionalProperties: false
-      required: [qrOrderId, amountFen, subject, status, transactionId, expiresAt, version]
-      properties:
-        qrOrderId: { type: string, minLength: 1, maxLength: 26 }
-        payeeDisplayName: { type: [string, 'null'], maxLength: 64 }
-        amountFen: { type: integer, format: int64, minimum: 1, maximum: 5000000 }
-        subject: { type: string, maxLength: 50 }
-        status: { type: string, enum: [CREATED, SCANNED, PENDING_CONFIRMATION, RISK_REVIEW, PROCESSING, SUCCESS, CANCELLED, EXPIRED, MANUAL_REVIEW] }
-        transactionId: { type: [string, 'null'], maxLength: 26 }
-        qrCodeUrl: { type: [string, 'null'], maxLength: 256, writeOnly: true, description: 原始二维码令牌仅可存在于本次创建响应。 }
-        expiresAt: { type: string, format: date-time }
-        version: { type: integer, format: int64, minimum: 0 }
-    PersonalCollectionCode:
-      type: object
-      additionalProperties: false
-      required: [codeId, status, version]
-      properties:
-        codeId: { type: string, minLength: 1, maxLength: 26 }
-        status: { type: string, enum: [ACTIVE, REVOKED, DISABLED] }
-        collectionUrl: { type: [string, 'null'], maxLength: 256, writeOnly: true, description: 原始个人码令牌只在换码响应中出现。 }
-        version: { type: integer, format: int64, minimum: 0 }
-    PersonalCollectionCodeResponse:
-      allOf:
-        - $ref: '#/components/schemas/ApiResponse'
-        - type: object
-          required: [data]
-          properties: { data: { $ref: '#/components/schemas/PersonalCollectionCode' } }
-    CollectionRequest:
-      type: object
-      additionalProperties: false
-      required: [requestId, amountFen, subject, status, activeOrderId, transactionId, expiresAt, version]
-      properties:
-        requestId: { type: string, minLength: 1, maxLength: 26 }
-        amountFen: { type: integer, format: int64, minimum: 1, maximum: 5000000 }
-        subject: { type: string, maxLength: 50 }
-        status: { type: string, enum: [ACTIVE, PROCESSING, PAID, CANCELLED, EXPIRED] }
-        activeOrderId: { type: [string, 'null'], maxLength: 26 }
-        transactionId: { type: [string, 'null'], maxLength: 26 }
-        expiresAt: { type: string, format: date-time }
-        version: { type: integer, format: int64, minimum: 0 }
-    CollectionRequestResponse:
-      allOf:
-        - $ref: '#/components/schemas/ApiResponse'
-        - type: object
-          required: [data]
-          properties: { data: { $ref: '#/components/schemas/CollectionRequest' } }
-    LockPersonalCollectionOrderRequest:
-      type: object
-      additionalProperties: false
-      required: [version, amountFen]
-      properties:
-        version: { type: integer, format: int64, minimum: 0 }
-        amountFen: { type: integer, format: int64, minimum: 1, maximum: 5000000 }
-        subject: { type: string, maxLength: 50 }
-    IssueCollectionConfirmationRequest:
-      type: object
-      additionalProperties: false
-      required: [version, paymentProof]
-      properties:
-        version: { type: integer, format: int64, minimum: 0 }
-        paymentProof:
-          type: string
-          minLength: 1
-          maxLength: 256
-          writeOnly: true
-          description: 用户中心签发的一次性支付证明，禁止写入日志、URL 和持久化字段。
-    PayCollectionOrderRequest:
-      type: object
-      additionalProperties: false
-      required: [confirmationToken]
-      properties:
-        confirmationToken:
-          type: string
-          minLength: 16
-          maxLength: 256
-          writeOnly: true
-          description: 已绑定 BALANCE 和 C2C 订单快照的一次性确认令牌。
-    CollectionOrder:
-      type: object
-      additionalProperties: false
-      required: [collectionOrderId, kind, amountFen, subject, status, transactionId, expiresAt, version]
-      properties:
-        collectionOrderId: { type: string, minLength: 1, maxLength: 26 }
-        kind: { type: string, enum: [PERSONAL_QR, FIXED_REQUEST] }
-        amountFen: { type: [integer, 'null'], format: int64, minimum: 1, maximum: 5000000 }
-        subject: { type: [string, 'null'], maxLength: 50 }
-        status: { type: string, enum: [DRAFT, PENDING_CONFIRMATION, RISK_REVIEW, PROCESSING, SUCCESS, CANCELLED, EXPIRED, MANUAL_REVIEW] }
-        transactionId: { type: [string, 'null'], maxLength: 26 }
-        expiresAt: { type: string, format: date-time }
-        version: { type: integer, format: int64, minimum: 0 }
-    CollectionOrderResponse:
-      allOf:
-        - $ref: '#/components/schemas/ApiResponse'
-        - type: object
-          required: [data]
-          properties: { data: { $ref: '#/components/schemas/CollectionOrder' } }
-    DecideManualCaseRequest:
-      type: object
-      additionalProperties: false
-      required: [decision, version]
-      properties:
-        decision: { type: string, enum: [CLAIM, RESOLVE, REOPEN, CLOSE] }
-        version: { type: integer, format: int64, minimum: 0 }
-        reason: { type: string, maxLength: 500 }
-        evidence: { type: string, maxLength: 2000 }
-    ManualCase:
-      type: object
-      additionalProperties: false
-      required: [caseId, caseType, subjectType, subjectId, status, version, createdAt]
-      properties:
-        caseId: { type: string, minLength: 1, maxLength: 26 }
-        caseType: { type: string }
-        subjectType: { type: string }
-        subjectId: { type: string, maxLength: 26, description: 按角色脱敏后的业务主体标识。 }
-        status: { type: string, enum: [OPEN, CLAIMED, RESOLVED, CLOSED] }
-        version: { type: integer, format: int64, minimum: 0 }
-        createdAt: { type: string, format: date-time }
-    ManualCaseResponse:
-      allOf:
-        - $ref: '#/components/schemas/ApiResponse'
-        - type: object
-          required: [data]
-          properties: { data: { $ref: '#/components/schemas/ManualCase' } }
-    AcknowledgeAlertRequest:
-      type: object
-      additionalProperties: false
-      required: [version, reason]
-      properties:
-        version: { type: integer, format: int64, minimum: 0 }
-        reason: { type: string, minLength: 1, maxLength: 500 }
-    ResolveAlertRequest:
-      type: object
-      additionalProperties: false
-      required: [version, reason, evidence]
-      properties:
-        version: { type: integer, format: int64, minimum: 0 }
-        reason: { type: string, minLength: 1, maxLength: 500 }
-        evidence: { type: string, minLength: 1, maxLength: 2000 }
-    CloseAlertRequest:
-      type: object
-      additionalProperties: false
-      required: [version, reason, evidence]
-      properties:
-        version: { type: integer, format: int64, minimum: 0 }
-        reason: { type: string, minLength: 1, maxLength: 500 }
-        evidence: { type: string, minLength: 1, maxLength: 2000 }
-    Alert:
-      type: object
-      additionalProperties: false
-      required: [alertId, alertType, severity, status, version, createdAt, updatedAt]
-      properties:
-        alertId: { type: string, minLength: 1, maxLength: 26 }
-        alertType: { type: string, maxLength: 64 }
-        severity: { type: string, enum: [INFO, WARNING, CRITICAL] }
-        status: { type: string, enum: [OPEN, ACKNOWLEDGED, RESOLVED, CLOSED] }
-        version: { type: integer, format: int64, minimum: 0 }
-        createdAt: { type: string, format: date-time }
-        updatedAt: { type: string, format: date-time }
-    AlertResponse:
-      allOf:
-        - $ref: '#/components/schemas/ApiResponse'
-        - type: object
-          required: [data]
-          properties: { data: { $ref: '#/components/schemas/Alert' } }
-    DailyReportPageResponse:
-      allOf:
-        - $ref: '#/components/schemas/ApiResponse'
-        - type: object
-          required: [data]
-          properties: { data: { type: array, items: { $ref: '#/components/schemas/DailyMetric' } } }
-    DailyMetric:
-      type: object
-      additionalProperties: false
-      required: [metricCode, reportDate, value, metricVersion, qualityStatus]
-      properties:
-        metricCode: { type: string, maxLength: 64 }
-        reportDate: { type: string, format: date }
-        value: { type: integer, format: int64 }
-        metricVersion: { type: string, maxLength: 32 }
-        qualityStatus: { type: string, enum: [PASSED, WARNING] }
-    DataQualityPageResponse:
-      allOf:
-        - $ref: '#/components/schemas/ApiResponse'
-        - type: object
-          required: [data]
-          properties: { data: { type: array, items: { $ref: '#/components/schemas/DataQualityResult' } } }
-    DataQualityResult:
-      type: object
-      additionalProperties: false
-      required: [resultId, checkType, status, checkedCount, failedCount, completedAt]
-      properties:
-        resultId: { type: string, minLength: 1, maxLength: 26 }
-        checkType: { type: string, maxLength: 64 }
-        status: { type: string, enum: [PASSED, WARNING, FAILED] }
-        checkedCount: { type: integer, format: int64, minimum: 0 }
-        failedCount: { type: integer, format: int64, minimum: 0 }
-        completedAt: { type: string, format: date-time }
-    MetricDefinitionPageResponse:
-      allOf:
-        - $ref: '#/components/schemas/ApiResponse'
-        - type: object
-          required: [data]
-          properties: { data: { type: array, items: { $ref: '#/components/schemas/MetricDefinition' } } }
-    MetricDefinition:
-      type: object
-      additionalProperties: false
-      required: [metricCode, version, name, unit, formula]
-      properties:
-        metricCode: { type: string, maxLength: 64 }
-        version: { type: string, maxLength: 32 }
-        name: { type: string, maxLength: 100 }
-        unit: { type: string, maxLength: 32 }
-        formula: { type: string, maxLength: 1000 }
-    ManualCasePage:
-      type: object
-      additionalProperties: false
-      required: [items, nextCursor]
-      properties:
-        items: { type: array, items: { $ref: '#/components/schemas/ManualCase' } }
-        nextCursor: { type: [string, 'null'], maxLength: 128 }
-    ManualCasePageResponse:
-      allOf:
-        - $ref: '#/components/schemas/ApiResponse'
-        - type: object
-          required: [data]
-          properties: { data: { $ref: '#/components/schemas/ManualCasePage' } }
-    AlertPage:
-      type: object
-      additionalProperties: false
-      required: [items, nextCursor]
-      properties:
-        items: { type: array, items: { $ref: '#/components/schemas/Alert' } }
-        nextCursor: { type: [string, 'null'], maxLength: 128 }
-    AlertPageResponse:
-      allOf:
-        - $ref: '#/components/schemas/ApiResponse'
-        - type: object
-          required: [data]
-          properties: { data: { $ref: '#/components/schemas/AlertPage' } }
-    OpsTransaction:
-      type: object
-      additionalProperties: false
-      required: [transactionId, businessType, sourceType, sourceOrderId, initiatorMasked, amountFen, status, riskLevel, traceId, createdAt, updatedAt]
-      properties:
-        transactionId: { type: string, maxLength: 26 }
-        businessType: { type: string, enum: [TRANSFER, QR_PAY, CREDIT_PAY, CREDIT_REPAY, RECHARGE, REFUND] }
-        sourceType: { type: string, maxLength: 32 }
-        sourceOrderId: { type: string, maxLength: 26 }
-        initiatorMasked: { type: string, maxLength: 32 }
-        amountFen: { type: integer, format: int64, minimum: 0 }
-        status: { type: string, maxLength: 32 }
-        riskLevel: { type: string, maxLength: 16 }
-        traceId: { type: string, pattern: '^[a-fA-F0-9]{32}$' }
-        createdAt: { type: string, format: date-time }
-        updatedAt: { type: string, format: date-time }
-    OpsTransactionPage:
-      type: object
-      additionalProperties: false
-      required: [items, nextCursor]
-      properties:
-        items: { type: array, items: { $ref: '#/components/schemas/OpsTransaction' } }
-        nextCursor: { type: [string, 'null'], maxLength: 26 }
-    OpsTransactionPageResponse:
-      allOf:
-        - $ref: '#/components/schemas/ApiResponse'
-        - type: object
-          required: [data]
-          properties: { data: { $ref: '#/components/schemas/OpsTransactionPage' } }
-    OpsTransactionDetail:
-      type: object
-      additionalProperties: false
-      required: [transaction, fundingSource]
-      properties:
-        transaction: { $ref: '#/components/schemas/OpsTransaction' }
-        fundingSource: { type: string, enum: [BALANCE, CREDIT] }
-        tccStatus: { type: [string, 'null'], maxLength: 32 }
-        tccRetryCount: { type: integer, minimum: 0 }
-        latestOutboxEventType: { type: [string, 'null'], maxLength: 64 }
-        outboxStatus: { type: [string, 'null'], maxLength: 16 }
-        activeManualCaseId: { type: [string, 'null'], maxLength: 26 }
-    OpsTransactionDetailResponse:
-      allOf:
-        - $ref: '#/components/schemas/ApiResponse'
-        - type: object
-          required: [data]
-          properties: { data: { $ref: '#/components/schemas/OpsTransactionDetail' } }
-    TraceSpan:
-      type: object
-      additionalProperties: false
-      required: [service, operation, status, detail, traceId, occurredAt]
-      properties:
-        service: { type: string, maxLength: 64 }
-        operation: { type: string, maxLength: 64 }
-        status: { type: string, maxLength: 32 }
-        detail: { type: string, maxLength: 256 }
-        traceId: { type: string, pattern: '^[a-fA-F0-9]{32}$' }
-        occurredAt: { type: string, format: date-time }
-    TraceSpanListResponse:
-      allOf:
-        - $ref: '#/components/schemas/ApiResponse'
-        - type: object
-          required: [data]
-          properties: { data: { type: array, items: { $ref: '#/components/schemas/TraceSpan' } } }
-    AlertRule:
-      type: object
-      additionalProperties: false
-      required: [ruleCode, ruleName, metricCode, severity, operator, thresholdValue, enabled, version, updatedBy, updatedAt]
-      properties:
-        ruleCode: { type: string, maxLength: 64 }
-        ruleName: { type: string, maxLength: 100 }
-        metricCode: { type: string, maxLength: 64 }
-        severity: { type: string, enum: [CRITICAL, WARNING, INFO] }
-        operator: { type: string, enum: [GT, GTE, LT, LTE] }
-        thresholdValue: { type: integer, format: int64, minimum: 0 }
-        enabled: { type: boolean }
-        version: { type: integer, format: int64, minimum: 0 }
-        updatedBy: { type: string, maxLength: 128 }
-        updatedAt: { type: string, format: date-time }
-    AlertRuleListResponse:
-      allOf:
-        - $ref: '#/components/schemas/ApiResponse'
-        - type: object
-          required: [data]
-          properties: { data: { type: array, items: { $ref: '#/components/schemas/AlertRule' } } }
-    AlertRuleResponse:
-      allOf:
-        - $ref: '#/components/schemas/ApiResponse'
-        - type: object
-          required: [data]
-          properties: { data: { $ref: '#/components/schemas/AlertRule' } }
-    UpdateAlertRuleThresholdRequest:
-      type: object
-      additionalProperties: false
-      required: [thresholdValue, version]
-      properties:
-        thresholdValue: { type: integer, format: int64, minimum: 0 }
-        version: { type: integer, format: int64, minimum: 0 }
-    RealtimeMetric:
-      type: object
-      additionalProperties: false
-      required: [metricCode, bucketAt, value, metricVersion, qualityStatus]
-      properties:
-        metricCode: { type: string, maxLength: 64 }
-        bucketAt: { type: string, format: date-time }
-        value: { type: integer, format: int64 }
-        metricVersion: { type: string, maxLength: 32 }
-        qualityStatus: { type: string, enum: [PASSED, WARNING] }
-    RealtimeMetricPageResponse:
-      allOf:
-        - $ref: '#/components/schemas/ApiResponse'
-        - type: object
-          required: [data]
-          properties: { data: { type: array, items: { $ref: '#/components/schemas/RealtimeMetric' } } }
+                accessToken: { type: string, minLength: 16 }
+                userId: { type: string, minLength: 1, maxLength: 26 }
+                accountNumber: { type: string, pattern: '^62\d{14}$', description: 系统生成的账户号，可用于登录。 }
+                nickname: { type: string, minLength: 1, maxLength: 20 }
+                status: { type: string, enum: [ACTIVE, PROVISIONING] }
     CreditSummary:
       type: object
       additionalProperties: false

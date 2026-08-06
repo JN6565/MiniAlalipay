@@ -94,7 +94,7 @@ const TransferPage: React.FC = () => {
                     onClick={() => handleSelectPayee(payee)}
                   >
                     <span className="payee-name">{payee.nickname}</span>
-                    <span className="payee-account">{payee.loginNameMasked}</span>
+                    <span className="payee-account">{payee.accountNumber}</span>
                   </div>
                 ))}
               </div>

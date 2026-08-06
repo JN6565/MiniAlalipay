@@ -48,7 +48,13 @@ public class UserPO {
      * <p>唯一键，对应数据库字段 {@code login_name}。
      * 注册时规范化处理（转小写、去空格）。</p>
      */
-    private String loginName;
+    private String accountNumber;
+
+    /** 完整手机号，对应唯一列 {@code phone_number}。 */
+    private String phoneNumber;
+
+    /** 真实姓名，对应列 {@code real_name}。 */
+    private String realName;
 
     /**
      * 昵称（最大 64 字符）。
@@ -106,7 +112,9 @@ public class UserPO {
     public UserPO(
             String userId,
             String registrationId,
-            String loginName,
+            String accountNumber,
+            String phoneNumber,
+            String realName,
             String nickname,
             String phoneTail,
             String identityStatus,
@@ -117,7 +125,9 @@ public class UserPO {
     ) {
         this.userId = userId;
         this.registrationId = registrationId;
-        this.loginName = loginName;
+        this.accountNumber = accountNumber;
+        this.phoneNumber = phoneNumber;
+        this.realName = realName;
         this.nickname = nickname;
         this.phoneTail = phoneTail;
         this.identityStatus = identityStatus;
@@ -145,13 +155,21 @@ public class UserPO {
         this.registrationId = registrationId;
     }
 
-    public String getLoginName() {
-        return loginName;
+    public String getAccountNumber() {
+        return accountNumber;
     }
 
-    public void setLoginName(String loginName) {
-        this.loginName = loginName;
+    public void setAccountNumber(String accountNumber) {
+        this.accountNumber = accountNumber;
     }
+
+    public String getPhoneNumber() { return phoneNumber; }
+
+    public void setPhoneNumber(String phoneNumber) { this.phoneNumber = phoneNumber; }
+
+    public String getRealName() { return realName; }
+
+    public void setRealName(String realName) { this.realName = realName; }
 
     public String getNickname() {
         return nickname;

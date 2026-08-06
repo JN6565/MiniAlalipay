@@ -5,6 +5,11 @@ export default [
     redirect: '/h5/login',
   },
   {
+    path: '/',
+    redirect: '/h5/login',
+    exact: true,
+  },
+  {
     path: '/h5',
     component: '@/layouts/H5Layout',
     routes: [

@@ -1,25 +1,29 @@
 import request from './request';
 
 export interface LoginParams {
-  loginName: string;
+  loginIdentifier: string;
   loginPassword: string;
 }
 
 export interface RegisterParams {
-  loginName: string;
-  nickname: string;
+  phoneNumber: string;
+  realName: string;
+  nickname?: string;
   loginPassword: string;
+  paymentPassword: string;
 }
 
 export interface LoginResult {
   accessToken: string;
   userId: string;
+  accountNumber: string;
   nickname: string;
   userType: string;
 }
 
 export interface RegisterResult {
   userId: string;
+  accountNumber: string;
   accessToken: string;
   nickname: string;
   status: string;
@@ -27,14 +31,12 @@ export interface RegisterResult {
 
 // 登录
 export const login = (params: LoginParams) => {
-  console.log('登录请求参数:', params);
-  return request.post<LoginResult>('/api/v1/auth/login', params);
+  return request.post<LoginResult>('/api/v1/auth/login', params) as unknown as Promise<LoginResult>;
 };
 
 // 注册
 export const register = (params: RegisterParams) => {
-  console.log('注册请求参数:', params);
-  return request.post<RegisterResult>('/api/v1/auth/register', params);
+  return request.post<RegisterResult>('/api/v1/auth/register', params) as unknown as Promise<RegisterResult>;
 };
 
 // 退出登录

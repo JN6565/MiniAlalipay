@@ -2,7 +2,7 @@ import request from './request';
 
 export interface UserInfo {
   userId: string;
-  loginName: string;
+  accountNumber: string;
   nickname: string;
   avatar?: string;
   userType: string;
@@ -12,7 +12,7 @@ export interface UserInfo {
 export interface PayeeInfo {
   userId: string;
   nickname: string;
-  loginNameMasked: string;
+  accountNumber: string;
   phoneTail: string;
   successCount?: number;
   lastSuccessAt?: string;

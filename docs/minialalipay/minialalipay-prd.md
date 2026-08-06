@@ -1144,7 +1144,7 @@ Agent 不可以：
 
 | 实体 | 关键字段 | 说明 |
 |---|---|---|
-| User | user_id、login_name、nickname、mobile_masked、status、created_at | 用户主体 |
+| User | user_id、account_number、nickname、mobile_masked、status、created_at | 用户主体 |
 | AuthCredential | user_id、login_password_hash、pay_password_hash、login_locked_until、pay_locked_until | 登录与支付凭证 |
 | Contact | contact_id、owner_id、payee_user_id、alias | 常用收款人 |
 | Account | account_id、user_id、currency、status | 虚拟账户 |

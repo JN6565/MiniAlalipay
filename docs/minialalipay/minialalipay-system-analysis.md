@@ -54,7 +54,7 @@
 
 纳入范围：
 
-- 用户名/密码注册登录、自动开户（初始余额为 0）和受控模拟充值。
+- 手机号、真实姓名、登录密码、支付密码注册，手机号或系统账户号登录，自动开户（初始余额为 0）和受控模拟充值。
 - 支付密码、用户搜索、常用收款人和模拟身份状态。
 - 传统表单转账、AI Talk 转账、余额、明细、回执和资产分析。
 - C 端扫码收款、动态二维码、手机 H5 和 `QR_PAY` 虚拟资金支付。
@@ -1110,7 +1110,7 @@ sequenceDiagram
     participant CR as Mini Credit
     participant L as 账本
 
-    U->>G: 提交登录名、登录密码、支付密码
+    U->>G: 提交手机号、真实姓名、可选昵称、登录密码、支付密码
     G->>UC: 注册请求
     UC->>UC: 生成 registrationId 并创建 PROVISIONING 用户
     UC->>AC: 以 registrationId 幂等创建虚拟账户
@@ -1119,7 +1119,7 @@ sequenceDiagram
     CR-->>AC: total=available=500000，used=frozen=0
     AC-->>UC: 余额与信用开户成功
     UC->>UC: 激活用户
-    UC-->>U: 注册成功并返回会话
+    UC-->>U: 注册成功，返回系统账户号与会话
 ```
 
 异常规则：
@@ -1128,6 +1128,8 @@ sequenceDiagram
 - 开户失败：用户保持 `PROVISIONING` 并进入可重试/补偿，不得形成可登录但无账户的用户。
 - `registrationId` 由用户中心生成并持久化，是账户中心开户和恢复查询的幂等键；账户或信用账户已存在时返回原资源，不重复开户或发放额度。
 - 注册不得创建虚拟资金分录；模拟充值使用唯一业务键 `RECHARGE + recharge_order_id`，重复请求不得重复入账。
+- 手机号按 11 位数字规范化并由数据库唯一索引兜底；并发重复注册返回 `PHONE_NUMBER_EXISTS`。账户号由用户中心生成 16 位数字并以 `62` 开头，与手机号格式区分。
+- 登录密码和 6 位支付密码分别进行 BCrypt 强哈希。两套明文密码禁止进入日志、URL、浏览器存储或埋点；真实姓名仅用于受控资料展示和收款人查询。
 - 信用开户使用唯一业务键 `CREDIT_ACCOUNT_INIT + user_id`，额度不写入余额或虚拟金初始化凭证；任一步失败时用户保持不可用并由恢复任务接续。
 
 ### 9.2 传统转账
@@ -1716,7 +1718,7 @@ stateDiagram-v2
 
 | 表 | 关键字段 | 约束 |
 |---|---|---|
-| `user` | user_id、registration_id、login_name、nickname、status、version | registration_id、login_name 唯一；开户完成前保持 `PROVISIONING` |
+| `user` | user_id、registration_id、account_number、nickname、status、version | registration_id、account_number 唯一；开户完成前保持 `PROVISIONING` |
 | `credential` | user_id、login_hash、pay_hash、login/pay_fail_count、login/pay_lock_until | 密码强哈希，登录与支付失败分别原子锁定 |
 | `contact` | owner_id、payee_user_id、alias | owner + payee 唯一 |
 
@@ -1821,7 +1823,7 @@ stateDiagram-v2
 
 | 表 | 字段及类型 | 主键/唯一键 | 主要索引 |
 |---|---|---|---|
-| `app_user` | `user_id/registration_id CHAR(26)`、`login_name VARCHAR(64)`、`nickname VARCHAR(64)`、`identity_status/status VARCHAR(16)`、`version BIGINT UNSIGNED`、`created_at/updated_at DATETIME(3)` | PK `user_id`；UK `registration_id`；UK `login_name` | `(status, created_at)` |
+| `app_user` | `user_id/registration_id CHAR(26)`、`account_number VARCHAR(64)`、`phone_number VARCHAR(11)`、`real_name/nickname VARCHAR(64)`、`identity_status/status VARCHAR(16)`、`version BIGINT UNSIGNED`、`created_at/updated_at DATETIME(3)` | PK `user_id`；UK `registration_id`；UK `account_number`；UK `phone_number` | `(status, created_at)` |
 | `credential` | `user_id CHAR(26)`、`login_password_hash/payment_password_hash VARCHAR(255)`、`login_fail_count/pay_fail_count INT UNSIGNED`、`login_lock_until/pay_lock_until DATETIME(3)`、`updated_at DATETIME(3)` | PK/FK `user_id` | `(login_lock_until)`、`(pay_lock_until)` |
 | `contact` | `owner_user_id/payee_user_id CHAR(26)`、`alias VARCHAR(64)`、`success_count BIGINT UNSIGNED`、`last_success_at DATETIME(3)`、`pinned/hidden BOOLEAN`、`version BIGINT UNSIGNED`、`created_at/updated_at DATETIME(3)` | PK `(owner_user_id, payee_user_id)`；仅成功转账事件创建/累计 | `(owner_user_id, pinned, hidden, last_success_at)`、`(payee_user_id)` |
 | `role_assignment` | `user_id CHAR(26)`、`role_code VARCHAR(32)`、`created_at DATETIME(3)` | PK `(user_id, role_code)` | `(role_code)` |
@@ -2304,7 +2306,7 @@ CREATE TABLE idempotency_record (
 - `ledger_voucher` 必须校验 `total_debit_fen = total_credit_fen`，`ledger_entry` 必须校验 `amount_fen > 0`、`direction IN ('DEBIT','CREDIT')`；终态发布器再次执行跨行借贷合计校验。
 - 活跃工单键使用生成列表达式 `CASE WHEN status IN ('OPEN','IN_PROGRESS') THEN CONCAT(subject_type, ':', subject_id) ELSE NULL END` 并建立唯一索引；终态工单生成 `NULL`，允许保留历史记录。
 - 通用幂等流程先插入 `PROCESSING` 记录并锁定 `(principal_key, api_scope, idempotency_key)`；业务资源、响应摘要和 `COMPLETED` 在同一所有者本地事务提交。重试读取 `COMPLETED` 原响应；同键不同 `request_digest` 返回冲突；超时 `PROCESSING` 由恢复任务接管。
-- `principal_key` 取值固定：登录接口使用 `user_id`；匿名注册使用 `HMAC-SHA256(idempotency_secret, normalize(login_name))`，不得保存登录名明文；其他匿名安全交换使用 bootstrap 会话 ID。HMAC 密钥只存在于服务端密钥配置并支持版本轮换。
+- `principal_key` 取值固定：登录接口使用 `user_id`；匿名注册使用 `HMAC-SHA256(idempotency_secret, normalize(phone_number))`，不得保存手机号明文；其他匿名安全交换使用 bootstrap 会话 ID。HMAC 密钥只存在于服务端密钥配置并支持版本轮换。
 - 终态发布事务：CAS `fund_transaction`、同步来源订单投影和写 `transaction.status.changed` Outbox 一次提交。
 - 来源唯一键统一为 `(source_type, source_order_id)`：同一 `QR_PAY_ORDER` 在 `QR_PAY` 与 `CREDIT_PAY` 间只能成功受理一次；每个 `PERSONAL_QR_ORDER` 或 `COLLECTION_REQUEST_ORDER` 只能形成一笔 `TRANSFER`；长期个人码本身不作为交易来源键，因此可生成多笔彼此独立的订单。
 - 跨 Schema 不创建数据库级外键；对外部 ID 的存在性通过入口校验、事件投影和每日对账共同保证。
