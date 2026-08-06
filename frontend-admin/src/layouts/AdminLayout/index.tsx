@@ -5,18 +5,21 @@ import {
   BugOutlined,
   DashboardOutlined,
   DatabaseOutlined,
+  LogoutOutlined,
   MenuFoldOutlined,
   MenuUnfoldOutlined,
   ReconciliationOutlined,
   SafetyCertificateOutlined,
 } from '@ant-design/icons';
-import { history, Outlet, useAccess, useLocation } from '@umijs/max';
-import { Avatar, Button, Layout, Menu, Tag, Tooltip, Typography } from 'antd';
+import { history, Outlet, useAccess, useLocation, useModel } from '@umijs/max';
+import { App, Avatar, Button, Dropdown, Layout, Menu, Tag, Tooltip, Typography } from 'antd';
 import type { MenuProps } from 'antd';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import type { AdminAccess } from '@/access';
 import RouteErrorBoundary from '@/components/RouteErrorBoundary';
+import { adminLogout } from '@/services/auth';
 import { useAdminUiStore } from '@/stores/ui';
+import { clearToken } from '@/utils/adminToken';
 import { filterGroupedMenuByAccess } from './menu';
 import styles from './index.less';
 
@@ -95,6 +98,29 @@ export default function AdminLayout() {
   const access = useAccess() as AdminAccess;
   // 按统一权限模型过滤分组菜单（menu.tsx 的 filterGroupedMenuByAccess）。
   const filteredMenuItems = useMemo(() => filterGroupedMenuByAccess(menuItems, access), [access]);
+
+  // 当前运营身份（登录后由 /api/v1/auth/me 填充；开发环境回退 dev Stub 受控身份）。
+  const { initialState } = useModel('@@initialState');
+  const { message } = App.useApp();
+  const admin = initialState?.currentAdmin;
+  const displayName = admin?.displayName ?? '运营管理员';
+  const roleText = admin?.roles?.includes('ADMIN')
+    ? '系统管理员'
+    : admin?.roles?.includes('OPERATOR')
+      ? '运营人员'
+      : '已登录';
+
+  /** 退出登录：销毁服务端会话并清除本地令牌，回到登录页。 */
+  const handleLogout = async () => {
+    try {
+      await adminLogout();
+    } catch {
+      // 服务端会话可能已失效，本地清理后仍回到登录页。
+    }
+    clearToken();
+    message.success('已退出登录');
+    window.location.assign('/admin/login');
+  };
 
   /** 内容区滚动时在头部显示阴影，形成层次感知。 */
   const [scrolled, setScrolled] = useState(false);
@@ -175,13 +201,27 @@ export default function AdminLayout() {
             )}
           </div>
           <div className={styles.headerUser}>
-            <Avatar size="small" className={styles.headerUserAvatar}>
-              运
-            </Avatar>
-            <span className={styles.headerUserText}>
-              <strong>运营管理员</strong>
-              <span>ops@minialipay</span>
-            </span>
+            <Dropdown
+              menu={{
+                items: [{ key: 'logout', icon: <LogoutOutlined />, label: '退出登录' }],
+                onClick: ({ key }) => {
+                  if (key === 'logout') {
+                    void handleLogout();
+                  }
+                },
+              }}
+              placement="bottomRight"
+            >
+              <span>
+                <Avatar size="small" className={styles.headerUserAvatar}>
+                  {displayName.slice(0, 1)}
+                </Avatar>
+                <span className={styles.headerUserText}>
+                  <strong>{displayName}</strong>
+                  <span>{roleText}</span>
+                </span>
+              </span>
+            </Dropdown>
           </div>
         </Header>
         <Content className={styles.content} ref={contentRef}>

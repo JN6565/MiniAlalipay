@@ -10,13 +10,13 @@
  */
 
 /**
- * B 端登录角色，用于计算界面可见性和操作能力，服务端仍是最终授权方。
+ * 角色集合含普通用户与 B 端运营/管理员，用于计算界面可见性和操作能力，服务端仍是最终授权方。
  *
- * - `OPERATOR`：运营人员，可处理人工工单和告警。
- * - `OBSERVER`：观察者，只读查看公共运营页面。
- * - `ADMIN`：管理员，可管理用户、配置非资金告警阈值并触发演示任务。
+ * - `USER`：普通用户（C 端），无 B 端准入权限，是 /api/v1/auth/me 的默认角色。
+ * - `OPERATOR`：运营人员，可查看与处置人工工单、告警，并触发演示任务。
+ * - `ADMIN`：管理员，具备运营人员全部能力，并可配置非资金告警阈值和管理 B 端用户。
  */
-export type AdminRole = 'OPERATOR' | 'OBSERVER' | 'ADMIN';
+export type AdminRole = 'USER' | 'OPERATOR' | 'ADMIN';
 
 /** 当前 B 端身份的最小客户端视图，正式字段应在身份契约落地后由 OpenAPI 生成。 */
 export interface AdminIdentity {
@@ -59,32 +59,28 @@ export interface AdminAccess {
   canRunDemoTasks: boolean;
   /** 是否允许管理 B 端用户。 */
   canManageUsers: boolean;
-  /** 当前身份是否只有观察者权限。 */
-  isReadOnlyObserver: boolean;
 }
 
 /** 根据服务端授予的角色计算 B 端界面权限。 */
 export default function access(initialState?: { currentAdmin?: AdminIdentity }): AdminAccess {
   const roles = new Set(initialState?.currentAdmin?.roles ?? []);
   const isOperator = roles.has('OPERATOR');
-  const isObserver = roles.has('OBSERVER');
   const isAdmin = roles.has('ADMIN');
-  const canEnterAdmin = isOperator || isObserver || isAdmin;
+  const canEnterAdmin = isOperator || isAdmin;
 
   return {
     canEnterAdmin,
     canViewDashboard: canEnterAdmin,
-    canViewManualCases: isOperator,
-    canOperateManualCases: isOperator,
+    canViewManualCases: isOperator || isAdmin,
+    canOperateManualCases: isOperator || isAdmin,
     canViewReports: canEnterAdmin,
     canViewAlerts: canEnterAdmin,
-    canOperateAlerts: isOperator,
+    canOperateAlerts: isOperator || isAdmin,
     canConfigureAlertThresholds: isAdmin,
     canViewDataQuality: canEnterAdmin,
     canViewTransactions: canEnterAdmin,
     canViewTrace: canEnterAdmin,
     canRunDemoTasks: isAdmin,
     canManageUsers: isAdmin,
-    isReadOnlyObserver: isObserver && !isOperator && !isAdmin,
   };
 }

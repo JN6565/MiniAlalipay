@@ -1,5 +1,6 @@
+import { useAccess } from '@umijs/max';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { App, Button, Empty, Form, Input, Modal, Select, Table } from 'antd';
+import { App, Button, Empty, Form, Input, Modal, Select, Space, Table } from 'antd';
 import type { ColumnsType } from 'antd/es/table';
 import { useState } from 'react';
 import PageHeader from '@/components/PageHeader';
@@ -26,26 +27,51 @@ const TYPE_LABEL: Record<string, string> = {
 /**
  * 人工确认台。
  *
- * 读取真实人工工单，运营人员可领取、解决、关闭；处置携带服务端幂等键与 CAS 版本。
+ * 读取真实人工工单，管理员与运营人员可领取、解决、关闭；处置携带服务端幂等键与 CAS 版本。
  * 页面只展示服务端确定的脱敏状态，不直接修改资金事实。
  */
 export default function ManualCases() {
   const { message } = App.useApp();
+  const access = useAccess();
   const queryClient = useQueryClient();
   const [status, setStatus] = useState<string>();
   const [action, setAction] = useState<{ case: ManualCaseItem; decision: CaseDecision }>();
   const [form] = Form.useForm();
+  // 服务端仅提供正向游标，使用游标栈回退上一页；空字符串表示第一页。
+  const [cursor, setCursor] = useState<string>();
+  const [cursorStack, setCursorStack] = useState<string[]>([]);
 
   const casesQuery = useQuery({
-    queryKey: ['manual-cases', status],
-    queryFn: () => listManualCases(),
+    queryKey: ['manual-cases', status, cursor],
+    queryFn: () => listManualCases(status, undefined, cursor),
   });
 
+  const nextCursor = casesQuery.data?.data.nextCursor ?? null;
+
+  function changeStatus(value?: string) {
+    setStatus(value);
+    setCursor(undefined);
+    setCursorStack([]);
+  }
+
+  function goNextPage() {
+    if (!nextCursor) return;
+    setCursorStack((prev) => [...prev, cursor ?? '']);
+    setCursor(nextCursor);
+  }
+
+  function goPrevPage() {
+    const prevCursor = cursorStack.at(-1);
+    if (prevCursor === undefined) return;
+    setCursorStack((prev) => prev.slice(0, -1));
+    setCursor(prevCursor === '' ? undefined : prevCursor);
+  }
+
   const mutation = useMutation({
-    mutationFn: () => {
+    mutationFn: async () => {
       const target = action;
       if (!target) throw new Error('缺少处置对象');
-      const values = form.getFieldsValue();
+      const values = await form.validateFields();
       const needsEvidence = target.decision === 'RESOLVE' || target.decision === 'CLOSE';
       return decideManualCase(
         target.case.caseId,
@@ -84,6 +110,7 @@ export default function ManualCases() {
       title: '操作',
       key: 'actions',
       render: (_, record) => {
+        if (!access.canOperateManualCases) return null;
         const decision = nextDecision(record.status);
         if (!decision) return null;
         const label = decision === 'CLAIM' ? '领取' : decision === 'RESOLVE' ? '解决' : '关闭';
@@ -106,11 +133,19 @@ export default function ManualCases() {
           placeholder="工单状态"
           style={{ width: 180 }}
           options={Object.entries(STATUS_LABEL).map(([value, label]) => ({ value, label }))}
-          onChange={setStatus}
+          onChange={changeStatus}
         />
         <Button type="primary" onClick={() => casesQuery.refetch()}>
           查询
         </Button>
+        <Space>
+          <Button onClick={goPrevPage} disabled={cursorStack.length === 0}>
+            上一页
+          </Button>
+          <Button onClick={goNextPage} disabled={!nextCursor}>
+            下一页
+          </Button>
+        </Space>
       </section>
       <section className={pageStyles.panel} aria-label="工单列表">
         <Table<ManualCaseItem>
@@ -121,7 +156,13 @@ export default function ManualCases() {
           pagination={false}
           locale={{
             emptyText: (
-              <Empty description={casesQuery.isError ? '加载失败，请确认网关已启动' : '暂无待处理工单'} />
+              <Empty
+                description={casesQuery.isError
+                  ? '加载失败，请确认网关已启动'
+                  : status
+                    ? '暂无该状态工单'
+                    : '暂无待处理工单'}
+              />
             ),
           }}
           scroll={{ x: 960 }}

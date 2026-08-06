@@ -139,6 +139,26 @@ export interface AlertRuleItem {
   updatedAt: string;
 }
 
+/** 指标口径定义，与 OpenAPI MetricDefinition 对齐。 */
+export interface MetricDefinitionItem {
+  metricCode: string;
+  version: string;
+  name: string;
+  unit: string;
+  formula?: string;
+}
+
+/** 信用运维任务运行记录，与 OpenAPI CreditJobRun 对齐。 */
+export interface CreditJobRun {
+  runId: string;
+  jobType: 'STATEMENT' | 'DUE_CHECK';
+  businessDate: string;
+  status: 'PENDING' | 'RUNNING' | 'SUCCESS' | 'FAILED' | 'MANUAL_REVIEW';
+  startedAt?: string | null;
+  completedAt?: string | null;
+  errorCode?: string | null;
+}
+
 /** 写操作统一携带随机幂等键，避免重复提交产生重复业务结果。 */
 function writeAction<T>(url: string, data: Record<string, unknown>): Promise<ApiResponse<T>> {
   return gatewayRequest<ApiResponse<T>>(url, {
@@ -148,10 +168,11 @@ function writeAction<T>(url: string, data: Record<string, unknown>): Promise<Api
   });
 }
 
-/** 查询告警投影。 */
-export function listAlerts(status?: string, limit = 50): Promise<ApiResponse<AlertPage>> {
+/** 查询告警投影，支持状态筛选与稳定游标分页。 */
+export function listAlerts(status?: string, cursor?: string, limit = 50): Promise<ApiResponse<AlertPage>> {
   const params = new URLSearchParams({ limit: String(limit) });
   if (status) params.set('status', status);
+  if (cursor) params.set('cursor', cursor);
   return gatewayRequest<ApiResponse<AlertPage>>(`/api/v1/ops/alerts?${params.toString()}`);
 }
 
@@ -191,9 +212,16 @@ export function listRealtimeMetrics(metricCode?: string): Promise<ApiResponse<Re
   return gatewayRequest<ApiResponse<RealtimeMetricItem[]>>(`/api/v1/ops/realtime-metrics?${params.toString()}`);
 }
 
-/** 查询运营可见人工工单。 */
-export function listManualCases(cursor?: string, limit = 50): Promise<ApiResponse<ManualCasePage>> {
+/** 查询运营可见人工工单，支持按状态、类型筛选与稳定游标分页。 */
+export function listManualCases(
+  status?: string,
+  type?: string,
+  cursor?: string,
+  limit = 50,
+): Promise<ApiResponse<ManualCasePage>> {
   const params = new URLSearchParams({ limit: String(limit) });
+  if (status) params.set('status', status);
+  if (type) params.set('type', type);
   if (cursor) params.set('cursor', cursor);
   return gatewayRequest<ApiResponse<ManualCasePage>>(`/api/v1/manual-cases?${params.toString()}`);
 }
@@ -209,14 +237,19 @@ export function decideManualCase(
   return writeAction(`/api/v1/manual-cases/${caseId}/decisions`, { decision, version, reason, evidence });
 }
 
-/** 触发信用出账任务（管理员受审计动作）。 */
-export function runCreditStatement(businessDate: string): Promise<ApiResponse<unknown>> {
+/** 触发信用出账任务（仅系统管理员的受审计动作，系统分析 16.7）。 */
+export function runCreditStatement(businessDate: string): Promise<ApiResponse<CreditJobRun>> {
   return writeAction('/api/v1/ops/credit/statement-runs', { businessDate });
 }
 
-/** 触发信用到期检查任务（管理员受审计动作）。 */
-export function runCreditDueCheck(businessDate: string): Promise<ApiResponse<unknown>> {
+/** 触发信用到期检查任务（仅系统管理员的受审计动作，系统分析 16.7）。 */
+export function runCreditDueCheck(businessDate: string): Promise<ApiResponse<CreditJobRun>> {
   return writeAction('/api/v1/ops/credit/due-check-runs', { businessDate });
+}
+
+/** 查询历史指标口径版本，供报表按 metricCode 展示名称与单位。 */
+export function listMetricDefinitions(): Promise<ApiResponse<MetricDefinitionItem[]>> {
+  return gatewayRequest<ApiResponse<MetricDefinitionItem[]>>('/api/v1/ops/metric-definitions');
 }
 
 /** 分页查询全平台脱敏交易摘要；金额为整数分，仅展示服务端确定的资金事实。 */

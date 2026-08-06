@@ -1,3 +1,4 @@
+import { useAccess } from '@umijs/max';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { Button, Form, InputNumber, Modal, Space, Table, Tag, Typography, App } from 'antd';
 import type { TableProps } from 'antd';
@@ -29,6 +30,7 @@ const operatorLabels: Record<string, string> = {
  */
 export default function AlertRules() {
   const { message } = App.useApp();
+  const access = useAccess();
   const queryClient = useQueryClient();
   const [editing, setEditing] = useState<AlertRuleItem | null>(null);
   const [form] = Form.useForm<{ thresholdValue: number }>();
@@ -91,16 +93,18 @@ export default function AlertRules() {
     },
     { title: '最近更新', dataIndex: 'updatedAt', width: 180, render: (value: string) => new Date(value).toLocaleString() },
     { title: '操作者', dataIndex: 'updatedBy', width: 140 },
-    {
-      title: '操作',
-      key: 'action',
-      width: 120,
-      render: (_, record) => (
-        <Button type="link" size="small" onClick={() => openEdit(record)}>
-          调整阈值
-        </Button>
-      ),
-    },
+    ...(access.canConfigureAlertThresholds
+      ? [{
+          title: '操作' as const,
+          key: 'action' as const,
+          width: 120,
+          render: (_: unknown, record: AlertRuleItem) => (
+            <Button type="link" size="small" onClick={() => openEdit(record)}>
+              调整阈值
+            </Button>
+          ),
+        }]
+      : []),
   ];
 
   return (

@@ -2,7 +2,9 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { App, ConfigProvider } from 'antd';
 import zhCN from 'antd/locale/zh_CN';
 import React from 'react';
-import type { AdminIdentity } from './access';
+import { getCurrentIdentity } from '@/services/auth';
+import { DEV_STUB_TOKEN, readStoredToken, setActiveToken } from '@/utils/adminToken';
+import type { AdminIdentity, AdminRole } from './access';
 import './global.less';
 import { adminTheme } from './theme';
 
@@ -10,30 +12,62 @@ import { adminTheme } from './theme';
  * Umi 运行时入口（app.tsx）。
  *
  * 集中完成三件事：
- * 1. 为 Umi access 插件提供初始化状态（当前运营身份）；
+ * 1. 为 Umi access 插件提供初始化状态（当前运营身份，登录后由 /api/v1/auth/me 填充）；
  * 2. 配置 TanStack Query 的全局默认行为；
  * 3. 通过 rootContainer 包裹全局 Provider（主题、Antd App 上下文、QueryClient）。
  *
- * 身份字段待登录 OpenAPI 契约落地后由登录/当前身份接口填充。
+ * 身份来源：优先持久化登录令牌换取的真实身份；开发环境未登录时回退网关 dev Stub
+ * 提供的受控身份（见系统分析 16.8），生产构建则引导到登录页。
  */
 
-/** B 端运行时初始状态；正式身份字段需等待登录 OpenAPI 契约。 */
+/** B 端运行时初始状态。 */
 export interface AdminInitialState {
-  /** 当前运营身份，未接入登录接口时为空。 */
+  /** 当前运营身份，未认证时为空。 */
   currentAdmin?: AdminIdentity;
 }
+
+/** 服务端可能下发的 B 端角色白名单。 */
+const KNOWN_ROLES: readonly AdminRole[] = ['USER', 'OPERATOR', 'ADMIN'];
 
 /**
  * 初始化 Umi 权限插件依赖的状态模型。
  *
- * 当前 OpenAPI 尚无 B 端登录及当前身份接口，因此本地演示返回开发态 ADMIN 身份，
- * 解锁路由守卫与页面按钮；网关 dev 鉴权桩需同步配置 ADMIN 角色（GATEWAY_AUTH_STUB_ROLES=ADMIN）。
- * 身份契约落地后，应改为调用网关的当前身份接口并按服务端返回填充 currentAdmin。
+ * 优先级：
+ * 1. 持久化的真实登录令牌 → 调用 /api/v1/auth/me 换取服务端身份与角色；
+ * 2. 开发环境未登录 → 注入网关 dev Stub 令牌并回退本地演示身份（与 stub-roles 对齐）；
+ * 3. 生产未登录 → 返回空身份，由 AdminEntryGuard 引导到登录页。
  */
 export async function getInitialState(): Promise<AdminInitialState> {
-  return {
-    currentAdmin: { displayName: '开发运营', roles: ['ADMIN'] },
-  };
+  // 1. 确定生效令牌：优先真实登录令牌；开发环境未登录时注入网关 dev Stub 令牌。
+  const storedToken = readStoredToken();
+  const activeToken = storedToken ?? (process.env.NODE_ENV === 'development' ? DEV_STUB_TOKEN : null);
+  if (activeToken) {
+    setActiveToken(activeToken);
+  }
+
+  // 2. 有令牌则向网关查询当前身份（真实角色）；会话失效由请求层清理令牌并引导登录。
+  if (activeToken) {
+    try {
+      const me = await getCurrentIdentity();
+      const roles = me.data.roles.filter(
+        (role): role is AdminRole => KNOWN_ROLES.includes(role as AdminRole),
+      );
+      return {
+        currentAdmin: {
+          displayName: me.data.displayName,
+          roles,
+        },
+      };
+    } catch {
+      // 会话失效或 dev Stub 未启用：继续走下方回退逻辑。
+    }
+  }
+
+  // 3. 开发环境回退本地演示身份（与网关 dev Stub 的受控角色一致）；生产未登录时交由路由守卫引导登录。
+  if (process.env.NODE_ENV === 'development') {
+    return { currentAdmin: { displayName: '开发运营', roles: ['ADMIN'] } };
+  }
+  return {};
 }
 
 // 全局 QueryClient：管理服务端查询的缓存、失效与重试策略。

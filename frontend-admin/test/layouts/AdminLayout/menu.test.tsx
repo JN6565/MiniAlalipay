@@ -48,10 +48,9 @@ const noAccess: AdminAccess = {
   canViewTrace: false,
   canRunDemoTasks: false,
   canManageUsers: false,
-  isReadOnlyObserver: false,
 };
 
-/** 公共运营页面可见的权限组合（对应观察者）。 */
+/** 公共运营页面可见的权限组合。 */
 const publicPageAccess: AdminAccess = {
   ...noAccess,
   canEnterAdmin: true,
@@ -73,11 +72,11 @@ describe('B 端权限菜单', () => {
     expect(buildAdminMenuItems(noAccess)).toEqual([]);
   });
 
-  it('观察者只生成公共运营页面菜单', () => {
+  it('仅具备公共页面权限时只生成公共运营页面菜单', () => {
     expect(
       menuKeys({
         ...publicPageAccess,
-        isReadOnlyObserver: true,
+        canViewManualCases: false,
       }),
     ).toEqual([
       '/admin/dashboard',
@@ -139,10 +138,10 @@ describe('B 端权限菜单', () => {
 });
 
 describe('B 端分组菜单按权限过滤', () => {
-  it('观察者仅看到公共分组中的可见子项，隐藏无权限的运营菜单', () => {
+  it('仅具备公共页面权限时仅看到公共分组中的可见子项，隐藏无权限的运营菜单', () => {
     const filtered = filterGroupedMenuByAccess(groupedMenus, {
       ...publicPageAccess,
-      isReadOnlyObserver: true,
+      canViewManualCases: false,
     });
 
     expect(groupedKeys(filtered)).toEqual(['/admin/dashboard', '/admin/data-quality']);
