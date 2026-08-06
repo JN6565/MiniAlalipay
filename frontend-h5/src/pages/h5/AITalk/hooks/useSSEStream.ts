@@ -61,11 +61,11 @@ export function useSSEStream() {
         let data = '';
         for (let line of lines) {
           line = line.replace(/\r$/, '');
-          if (line.startsWith('event: ')) {
-            eventType = line.slice(7).trim();
+          if (line.startsWith('event:')) {
+            eventType = line.slice(6).replace(/^ /, '');
             console.log('[SSE] found event:', eventType);
-          } else if (line.startsWith('data: ')) {
-            data = line.slice(6);
+          } else if (line.startsWith('data:')) {
+            data = line.slice(5).replace(/^ /, '');
             console.log('[SSE] found data:', data.substring(0, 80));
           } else if (line === '' && eventType && data) {
             console.log('[SSE] DISPATCH:', eventType);
