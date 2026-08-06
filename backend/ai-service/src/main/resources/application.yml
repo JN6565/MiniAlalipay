@@ -54,16 +54,17 @@ ai:
       failure-threshold: 3
       open-state-duration: 30s
   client:
-    mock-mode: ${AI_CLIENT_MOCK_MODE:true}
+    mock-mode: ${AI_CLIENT_MOCK_MODE:false}
     timeout-ms: 3000
-    # AI 服务调用下游时应统一经过网关(localhost:8080)，由网关完成鉴权、限流和审计。
-    # 当前 Token 传播机制尚未完成，生产部署前需补充 Authorization 头传递链路。
+    # AI 服务通过网关(localhost:8080)调用下游，由网关完成鉴权、限流和审计。
     user-center:
       base-url: ${USER_CENTER_URI:http://localhost:8080}
     business-center:
       base-url: ${BUSINESS_CENTER_URI:http://localhost:8080}
     account-center:
       base-url: ${ACCOUNT_CENTER_URI:http://localhost:8080}
+  stream:
+    thread-pool-size: ${AI_STREAM_THREAD_POOL:4}
   mcp:
     tool-timeout: 3s
     max-retries: 1

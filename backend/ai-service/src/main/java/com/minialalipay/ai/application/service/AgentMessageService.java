@@ -302,7 +302,7 @@ public class AgentMessageService {
                         .map(AgentMessage::getContentRedacted)
                         .orElse("正在处理您的请求……");
                 callback.onDone(new SseEvent.DonePayload(
-                        session.getSessionId(), existingUser.get().getMessageId(), "UNKNOWN"));
+                        existingUser.get().getMessageId(), session.getSessionId(), "UNKNOWN"));
                 callback.onContentDelta(new SseEvent.ContentPayload(cachedContent));
                 return new SendMessageResult(
                         session.getSessionId(), existingUser.get().getMessageId(),
@@ -423,7 +423,7 @@ public class AgentMessageService {
             sessionRepository.save(session);
 
             callback.onDone(new SseEvent.DonePayload(
-                    session.getSessionId(), assistantMessageId, llmResponse.intent().name()));
+                    assistantMessageId, session.getSessionId(), llmResponse.intent().name()));
 
             return new SendMessageResult(
                     session.getSessionId(), assistantMessageId,

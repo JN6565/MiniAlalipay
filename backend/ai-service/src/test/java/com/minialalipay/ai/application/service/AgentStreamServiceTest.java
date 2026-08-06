@@ -48,7 +48,7 @@ class AgentStreamServiceTest {
         recorder.onToolCall(new SseEvent.ToolCallPayload("get_balance", "running"));
         recorder.onToolResult(new SseEvent.ToolResultPayload("get_balance", "success", "余额 10,000 元"));
         recorder.onContentDelta(new SseEvent.ContentPayload("您的余额为 10,000.00 元。"));
-        recorder.onDone(new SseEvent.DonePayload("s1", "m1", "BALANCE_QUERY"));
+        recorder.onDone(new SseEvent.DonePayload("m1", "s1", "BALANCE_QUERY"));
 
         assertThat(eventOrder).containsExactly(
                 "STATUS:INTENT", "TOOL_CALL:get_balance",
@@ -70,7 +70,7 @@ class AgentStreamServiceTest {
         };
 
         recorder.onClarification(new SseEvent.ClarificationPayload("请问要做什么？", List.of()));
-        recorder.onDone(new SseEvent.DonePayload("s1", "m1", "UNKNOWN"));
+        recorder.onDone(new SseEvent.DonePayload("m1", "s1", "UNKNOWN"));
 
         assertThat(eventOrder).containsExactly("CLARIFICATION", "DONE");
     }
