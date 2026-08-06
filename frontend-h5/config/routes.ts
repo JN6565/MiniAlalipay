@@ -111,6 +111,13 @@ export default [
         auth: true,
       },
       {
+        path: '/h5/scan',
+        component: '@/pages/h5/Scan',
+        exact: true,
+        title: '扫一扫',
+        auth: true,
+      },
+      {
         path: '/h5/contacts',
         component: '@/pages/h5/Contacts',
         exact: true,

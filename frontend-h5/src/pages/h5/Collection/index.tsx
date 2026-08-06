@@ -82,6 +82,11 @@ const CollectionPage: React.FC = () => {
               <div className="code-status">
                 状态：{personalCode.status === 'ACTIVE' ? '正常' : '已停用'}
               </div>
+              {personalCode.qrCodeUrl && (
+                <div className="code-qr">
+                  <img src={personalCode.qrCodeUrl} alt="收款码" />
+                </div>
+              )}
               <div className="code-actions">
                 <Button size="small" onClick={handleRegenerate}>
                   重新生成

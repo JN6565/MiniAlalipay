@@ -80,6 +80,7 @@ const HomePage: React.FC = () => {
             <span>{nickname}</span>
           </div>
           <div className="header-btns">
+            <span onClick={() => history.push('/h5/scan')}>📷</span>
           </div>
         </div>
 

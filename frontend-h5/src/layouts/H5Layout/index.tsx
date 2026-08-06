@@ -30,11 +30,13 @@ const H5Layout: React.FC = () => {
                    location.pathname !== '/h5/login' &&
                    location.pathname !== '/h5/ai-talk' &&
                    location.pathname !== '/h5/contacts' &&
-                   location.pathname !== '/h5/profile';
+                   location.pathname !== '/h5/profile' &&
+                   location.pathname !== '/h5/scan';
 
-  // 判断是否显示导航栏标题（首页、我的不显示）
+  // 判断是否显示导航栏标题（首页、我的、扫码不显示）
   const showTitle = location.pathname !== '/h5/home' &&
-                    location.pathname !== '/h5/profile';
+                    location.pathname !== '/h5/profile' &&
+                    location.pathname !== '/h5/scan';
 
   const handleBack = () => {
     history.back();
@@ -79,6 +81,7 @@ function getPageTitle(pathname: string): string {
     '/h5/ai-talk': 'AI助手',
     '/h5/contacts': '联系人',
     '/h5/profile': '我的',
+    '/h5/scan': '扫一扫',
     '/h5/collection': '收款',
     '/h5/credit': 'Mini花呗',
     '/h5/credit/bills': '账单',
