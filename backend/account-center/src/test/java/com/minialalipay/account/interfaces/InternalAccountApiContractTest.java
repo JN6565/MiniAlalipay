@@ -25,10 +25,14 @@ class InternalAccountApiContractTest {
                     "put", "provisionAccount");
             assertInternalOperation(paths, "/internal/v1/accounts/by-user/{userId}",
                     "get", "resolvePersonalAccount");
+            assertInternalOperation(paths, "/internal/v1/credit-accounts/by-user/{userId}",
+                    "get", "resolveCreditAccount");
             assertInternalOperation(paths, "/internal/v1/tcc/balance/{role}/{action}",
                     "post", "executeBalanceTccBranch");
             assertInternalOperation(paths, "/internal/v1/tcc/ledger/{action}",
                     "post", "executeLedgerTccBranch");
+            assertInternalOperation(paths, "/internal/v1/tcc/credit-ledger/{action}",
+                    "post", "executeCreditPayLedgerTccBranch");
             assertInternalOperation(paths, "/internal/v1/transaction-facts/{transactionId}",
                     "get", "getTransactionFacts");
             assertInternalOperation(paths, "/internal/v1/reconciliation-diffs",
@@ -38,8 +42,8 @@ class InternalAccountApiContractTest {
             Map<String, Object> components = (Map<String, Object>) root.get("components");
             @SuppressWarnings("unchecked")
             Map<String, Object> schemas = (Map<String, Object>) components.get("schemas");
-            assertThat(schemas).containsKeys("ProvisionAccountRequest", "InternalAccountReference",
-                    "BalanceTccCommand", "TccBranchResult", "LedgerTccCommand",
+            assertThat(schemas).containsKeys("ProvisionAccountRequest", "InternalAccountReference", "InternalCreditAccountReference",
+                    "BalanceTccCommand", "TccBranchResult", "LedgerTccCommand", "CreditPayLedgerTccCommand",
                     "TransactionFacts", "ReconciliationDiffRequest");
 
             @SuppressWarnings("unchecked")

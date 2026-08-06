@@ -91,9 +91,10 @@ public class AccountApplicationService {
         }
 
         // 3. 创建信用账户（如果不存在）
-        if (creditAccountRepository.findByUserId(userId).isEmpty()) {
+        CreditAccount creditAccount = creditAccountRepository.findByUserId(userId).orElse(null);
+        if (creditAccount == null) {
             String creditAccountId = generateCreditAccountId();
-            CreditAccount creditAccount = new CreditAccount(creditAccountId, userId, now);
+            creditAccount = new CreditAccount(creditAccountId, userId, now);
             creditAccountRepository.save(creditAccount);
             log.info("创建信用账户成功: creditAccountId={}, userId={}, 额度={}分",
                     creditAccountId, userId, CreditAccount.FIXED_TOTAL_LIMIT_FEN);
@@ -102,6 +103,13 @@ public class AccountApplicationService {
             CreditReceivable receivable = new CreditReceivable(creditAccountId, now);
             creditReceivableRepository.save(receivable);
             log.info("创建信用应收记录成功: creditAccountId={}", creditAccountId);
+        }
+
+        // 信用应收必须有独立资产科目，禁止在信用支付时退化为付款用户余额科目。
+        if (ledgerAccountRepository.findCreditReceivableByCreditAccountId(creditAccount.getCreditAccountId()).isEmpty()) {
+            ledgerAccountRepository.create(LedgerAccount.creditReceivable(
+                    creditAccount.getCreditAccountId(), creditAccount.getCreditAccountId(), now));
+            log.info("创建信用应收账本科目成功: creditAccountId={}", creditAccount.getCreditAccountId());
         }
 
         return summary(account, requiredBalance(account.getAccountId()));

@@ -32,6 +32,19 @@ public final class LedgerAccount {
                 LedgerAccountStatus.ACTIVE, now, now);
     }
 
+    /**
+     * 创建信用账户对应的信用应收资产科目。
+     *
+     * <p>该科目不代表可用余额，只用于 {@code CREDIT_PAY} 和信用退款的应收事实。
+     * 信用支付必须借记该科目、贷记收款用户余额负债，禁止将信用账户作为普通付款余额科目。</p>
+     */
+    public static LedgerAccount creditReceivable(String ledgerAccountId, String creditAccountId, Instant now) {
+        return new LedgerAccount(ledgerAccountId, LedgerOwnerType.CREDIT_ACCOUNT, creditAccountId,
+                "CREDIT_RECEIVABLE_" + creditAccountId, "CREDIT_RECEIVABLE_ASSET",
+                LedgerAccountClass.ASSET, LedgerDirection.DEBIT, "CNY",
+                LedgerAccountStatus.ACTIVE, now, now);
+    }
+
     /** 从持久化事实重建账本科目。 */
     public LedgerAccount(String ledgerAccountId, LedgerOwnerType ownerType, String ownerId, String accountCode,
                          String accountType, LedgerAccountClass accountClass, LedgerDirection normalDirection,

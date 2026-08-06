@@ -4,6 +4,7 @@ import com.minialalipay.account.interfaces.account.AccountOpeningController.Open
 import com.minialalipay.account.interfaces.reconciliation.ReconciliationDiffController.ReconciliationDiffRequest;
 import com.minialalipay.account.interfaces.tcc.BalanceTccController.BranchRequest;
 import com.minialalipay.account.interfaces.tcc.LedgerTccController.Request;
+import com.minialalipay.account.interfaces.tcc.CreditPayLedgerTccController;
 import jakarta.validation.Validation;
 import jakarta.validation.Validator;
 import org.junit.jupiter.api.Test;
@@ -25,6 +26,8 @@ class InternalRequestValidationTest {
         assertThat(validator.validate(new BranchRequest("tcc:" + ID, ID, TOO_LONG_ID, 1L, ID))).isNotEmpty();
         assertThat(validator.validate(new Request("tcc:" + ID, ID, ID, ID, 1L,
                 TOO_LONG_ID, 1L, 2L, ID, "0123456789abcdef0123456789abcdef"))).isNotEmpty();
+        assertThat(validator.validate(new CreditPayLedgerTccController.Request("tcc:" + ID, ID,
+                TOO_LONG_ID, ID, 1L, ID, 1L, 2L, ID, "0123456789abcdef0123456789abcdef"))).isNotEmpty();
     }
 
     @Test

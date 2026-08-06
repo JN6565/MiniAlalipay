@@ -46,24 +46,35 @@ final class InMemoryTccBranchRepository implements TccBranchRepository {
 
     @Override
     public Optional<TccBranch> findLedgerBranchForUpdate(String xid, String resourceId) {
-        return Optional.ofNullable(ledgerBranches.get(xid + ':' + resourceId));
+        return findLedgerBranchForUpdate(xid, TccBranchType.LEDGER, resourceId);
+    }
+
+    @Override
+    public Optional<TccBranch> findLedgerBranchForUpdate(String xid, TccBranchType type, String resourceId) {
+        return Optional.ofNullable(ledgerBranches.get(key(xid, type, resourceId)));
     }
 
     @Override
     public void createLedgerBranch(TccBranch branch) {
-        ledgerBranches.put(branch.getXid() + ':' + branch.getResourceId(), branch);
+        ledgerBranches.put(key(branch.getXid(), branch.getBranchType(), branch.getResourceId()), branch);
     }
 
     @Override
     public boolean updateLedgerBranch(TccBranch branch, long expectedVersion) {
-        ledgerBranches.put(branch.getXid() + ':' + branch.getResourceId(), branch);
+        ledgerBranches.put(key(branch.getXid(), branch.getBranchType(), branch.getResourceId()), branch);
         return branch.getBarrierVersion() == expectedVersion + 1;
     }
 
     @Override
     public boolean ledgerBranchIs(String transactionId, TccBranchStatus status) {
+        return ledgerBranchIs(transactionId, TccBranchType.LEDGER, status);
+    }
+
+    @Override
+    public boolean ledgerBranchIs(String transactionId, TccBranchType type, TccBranchStatus status) {
         return ledgerBranches.values().stream().anyMatch(branch ->
-                branch.getTransactionId().equals(transactionId) && branch.getStatus() == status);
+                branch.getTransactionId().equals(transactionId) && branch.getBranchType() == type
+                        && branch.getStatus() == status);
     }
 
     private static String key(String xid, TccBranchType type, String resourceId) {

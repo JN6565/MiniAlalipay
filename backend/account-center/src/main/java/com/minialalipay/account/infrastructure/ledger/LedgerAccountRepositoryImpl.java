@@ -25,14 +25,15 @@ public class LedgerAccountRepositoryImpl implements LedgerAccountRepository {
     public Optional<LedgerAccount> findUserBalanceByUserId(String userId) {
         return jdbcTemplate.query("SELECT * FROM ledger_db.ledger_account WHERE owner_type='USER' "
                         + "AND owner_id=? AND account_type='USER_BALANCE_LIABILITY' AND currency='CNY'",
-                (rs, rowNum) -> new LedgerAccount(rs.getString("ledger_account_id"),
-                        LedgerOwnerType.valueOf(rs.getString("owner_type")), rs.getString("owner_id"),
-                        rs.getString("account_code"), rs.getString("account_type"),
-                        LedgerAccountClass.valueOf(rs.getString("account_class")),
-                        LedgerDirection.valueOf(rs.getString("normal_direction")), rs.getString("currency"),
-                        LedgerAccountStatus.valueOf(rs.getString("status")),
-                        rs.getTimestamp("created_at").toInstant(), rs.getTimestamp("updated_at").toInstant()),
+                this::map,
                 userId).stream().findFirst();
+    }
+
+    @Override
+    public Optional<LedgerAccount> findCreditReceivableByCreditAccountId(String creditAccountId) {
+        return jdbcTemplate.query("SELECT * FROM ledger_db.ledger_account WHERE owner_type='CREDIT_ACCOUNT' "
+                        + "AND owner_id=? AND account_type='CREDIT_RECEIVABLE_ASSET' AND currency='CNY'",
+                this::map, creditAccountId).stream().findFirst();
     }
 
     @Override
@@ -44,5 +45,15 @@ public class LedgerAccountRepositoryImpl implements LedgerAccountRepository {
                 account.getAccountCode(), account.getAccountType(), account.getAccountClass().name(),
                 account.getNormalDirection().name(), account.getCurrency(), account.getStatus().name(),
                 account.getCreatedAt(), account.getUpdatedAt());
+    }
+
+    private LedgerAccount map(java.sql.ResultSet rs, int rowNum) throws java.sql.SQLException {
+        return new LedgerAccount(rs.getString("ledger_account_id"),
+                LedgerOwnerType.valueOf(rs.getString("owner_type")), rs.getString("owner_id"),
+                rs.getString("account_code"), rs.getString("account_type"),
+                LedgerAccountClass.valueOf(rs.getString("account_class")),
+                LedgerDirection.valueOf(rs.getString("normal_direction")), rs.getString("currency"),
+                LedgerAccountStatus.valueOf(rs.getString("status")),
+                rs.getTimestamp("created_at").toInstant(), rs.getTimestamp("updated_at").toInstant());
     }
 }

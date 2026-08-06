@@ -8,6 +8,9 @@ public interface LedgerAccountRepository {
     /** @return 用户余额负债科目，不存在时为空 */
     Optional<LedgerAccount> findUserBalanceByUserId(String userId);
 
+    /** @return 信用账户对应的信用应收资产科目，不存在时为空 */
+    Optional<LedgerAccount> findCreditReceivableByCreditAccountId(String creditAccountId);
+
     /** 新增不可变科目身份。 */
     void create(LedgerAccount account);
 }

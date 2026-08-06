@@ -35,7 +35,7 @@ class AccountApplicationServiceTest {
         assertThat(repeated.accountId()).isEqualTo(first.accountId()).isEqualTo("account-1");
         assertThat(repeated.availableFen()).isZero();
         assertThat(repository.createCount).isEqualTo(1);
-        assertThat(ledgerAccounts.createCount).isEqualTo(1);
+        assertThat(ledgerAccounts.createCount).isEqualTo(2);
     }
 
     @Test
@@ -122,6 +122,10 @@ class AccountApplicationServiceTest {
         int createCount;
         @Override public Optional<LedgerAccount> findUserBalanceByUserId(String userId) {
             return accounts.values().stream().filter(a -> a.getOwnerId().equals(userId)).findFirst();
+        }
+        @Override public Optional<LedgerAccount> findCreditReceivableByCreditAccountId(String creditAccountId) {
+            return accounts.values().stream().filter(a -> a.getOwnerId().equals(creditAccountId)
+                    && a.getAccountType().equals("CREDIT_RECEIVABLE_ASSET")).findFirst();
         }
         @Override public void create(LedgerAccount account) {
             accounts.put(account.getLedgerAccountId(), account);

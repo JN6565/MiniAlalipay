@@ -50,8 +50,11 @@ public class JdbcTccBranchRepository implements TccBranchRepository {
     }
 
     @Override public Optional<TccBranch> findLedgerBranchForUpdate(String xid, String resourceId) {
-        return jdbcTemplate.query("SELECT * FROM ledger_db.tcc_branch WHERE xid=? AND branch_type='LEDGER' AND resource_id=? FOR UPDATE",
-                this::first, xid, resourceId);
+        return findLedgerBranchForUpdate(xid, TccBranchType.LEDGER, resourceId);
+    }
+    @Override public Optional<TccBranch> findLedgerBranchForUpdate(String xid, TccBranchType branchType, String resourceId) {
+        return jdbcTemplate.query("SELECT * FROM ledger_db.tcc_branch WHERE xid=? AND branch_type=? AND resource_id=? FOR UPDATE",
+                this::first, xid, branchType.name(), resourceId);
     }
     @Override public void createLedgerBranch(TccBranch branch) {
         insert("ledger_db.tcc_branch", branch);
@@ -60,8 +63,11 @@ public class JdbcTccBranchRepository implements TccBranchRepository {
         return update("ledger_db.tcc_branch", branch, expectedVersion);
     }
     @Override public boolean ledgerBranchIs(String transactionId, TccBranchStatus status) {
-        Integer count = jdbcTemplate.queryForObject("SELECT COUNT(*) FROM ledger_db.tcc_branch WHERE transaction_id=? AND branch_type='LEDGER' AND status=?",
-                Integer.class, transactionId, status.name());
+        return ledgerBranchIs(transactionId, TccBranchType.LEDGER, status);
+    }
+    @Override public boolean ledgerBranchIs(String transactionId, TccBranchType branchType, TccBranchStatus status) {
+        Integer count = jdbcTemplate.queryForObject("SELECT COUNT(*) FROM ledger_db.tcc_branch WHERE transaction_id=? AND branch_type=? AND status=?",
+                Integer.class, transactionId, branchType.name(), status.name());
         return count != null && count == 1;
     }
 
