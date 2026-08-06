@@ -440,10 +440,10 @@ B 端页面中以下能力已由 PRD 和前端系分提出，但当前总体端�
 |---|---|---|---|---|---|
 | `/actuator/health` | 运维探针 | gateway | Actuator | 已定义 | 可联调 |
 | `/api/v1/auth/**`、`users/**`、`contacts/**`、`payment-password` | C；登录/退出为 B/C 共用 | user-center | `AuthController` 等 | 未定义 | 禁止实现业务 Controller |
-| `/api/v1/transfer-drafts/**`、`transfers/**`、`confirmations` | C；Trace 为 B | business-center | `TransferController` 等 | 未定义 | 先补契约 |
-| `/api/v1/qr-pay/**`、`p2p-collections/**` | C | business-center | `QrPayController`、`CollectionController` | 未定义 | 先补契约与网关路由 |
-| `/api/v1/recharges/**` | C | business-center | `RechargeController` | 未定义 | 先补契约与网关路由 |
-| `/api/v1/manual-cases/**`、`/api/v1/ops/**`（不含 `ops/credit/**`） | B | business-center | 对应用途 Controller | 未定义 | 先补契约与网关路由 |
+| `/api/v1/transfer-drafts/**`、`transfers/**`、`confirmations` | C；Trace 为 B | business-center | `TransferController` 等 | 已定义 | 契约门禁与网关路由已具备 |
+| `/api/v1/qr-pay/**`、`p2p-collections/**` | C | business-center | `QrPayController`、`CollectionController` | 已定义 | 契约门禁与网关路由已具备 |
+| `/api/v1/recharges/**` | C | business-center | `RechargeController` | 已定义 | 契约门禁与网关路由已具备 |
+| `/api/v1/manual-cases/**`、`/api/v1/ops/**`（不含 `ops/credit/**`） | B | business-center | 对应用途 Controller | 已定义 | 契约门禁与网关路由已具备 |
 | `/api/v1/accounts/**`、`/api/v1/credit/**`、`/api/v1/ops/credit/**` | C/B | account-center | `AccountController`、`CreditController`、`CreditJobController` | 未定义 | 先补契约；还款资金执行调用 business-center 内部契约 |
 | `/api/v1/agent/**` | C | ai-service | `AgentController` | 未定义 | 先补契约 |
 
@@ -510,7 +510,7 @@ B 端页面中以下能力已由 PRD 和前端系分提出，但当前总体端�
 | 方法与路径 | 请求参数/DTO | 成功返回 `data` | 主要错误 |
 |---|---|---|---|
 | `POST /api/v1/agent/messages` | `AgentMessageRequest(sessionId,message,clientMessageId)`；同会话串行 | `AgentMessageView(sessionId,messageId,reply,cards[],toolStatus,createdAt)` | `AGENT_BUSY`、`TOOL_UNAVAILABLE`、`PROMPT_INJECTION_REJECTED` |
-| `GET /api/v1/ops/realtime-metrics` | `metricCode`、`from`、`to`、`cursor` | `MetricPage(items,definitionVersion,nextCursor)` | `INVALID_TIME_RANGE` |
+| `GET /api/v1/ops/realtime-metrics` | `metricCode`、`from`、`to`、`cursor`；未指定时间范围默认回看最近 60 分钟 | `MetricPage(items,definitionVersion,nextCursor)` | `INVALID_TIME_RANGE` |
 | `GET /api/v1/ops/alerts` | `severity`、`status`、`cursor`、`limit` | `AlertPage(items,nextCursor)` | `OPS_PERMISSION_REQUIRED` |
 | `POST /api/v1/ops/alerts/{id}/acknowledge` | `AlertDecisionRequest(version,comment)` | `AlertView(id,status,assigneeId,version,updatedAt)` | `VERSION_CONFLICT`、`ALERT_STATE_INVALID` |
 | `POST /api/v1/ops/alerts/{id}/resolve` | `ResolveAlertRequest(version,comment,evidenceRefs[])` | `AlertView` | `EVIDENCE_REQUIRED` |

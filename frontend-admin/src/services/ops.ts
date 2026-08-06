@@ -210,10 +210,16 @@ export function listDailyReports(reportDate?: string): Promise<ApiResponse<Daily
   return gatewayRequest<ApiResponse<DailyMetricItem[]>>(`/api/v1/ops/daily-reports?${params.toString()}`);
 }
 
-/** 查询分钟级实时指标。 */
-export function listRealtimeMetrics(metricCode?: string): Promise<ApiResponse<RealtimeMetricItem[]>> {
+/** 查询分钟级实时指标；可指定指标代码与时间范围，未指定范围由服务端回看默认窗口（60 分钟）。 */
+export function listRealtimeMetrics(
+  metricCode?: string,
+  from?: string,
+  to?: string,
+): Promise<ApiResponse<RealtimeMetricItem[]>> {
   const params = new URLSearchParams();
   if (metricCode) params.set('metricCode', metricCode);
+  if (from) params.set('from', from);
+  if (to) params.set('to', to);
   return gatewayRequest<ApiResponse<RealtimeMetricItem[]>>(`/api/v1/ops/realtime-metrics?${params.toString()}`);
 }
 

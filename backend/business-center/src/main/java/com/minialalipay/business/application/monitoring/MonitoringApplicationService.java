@@ -29,8 +29,8 @@ import java.util.List;
  */
 @Service
 public class MonitoringApplicationService {
-    /** 未指定实时指标时间范围时的默认回看窗口。 */
-    private static final long DEFAULT_REALTIME_WINDOW_SECONDS = 5 * 60;
+    /** 未指定实时指标时间范围时的默认回看窗口（PRD：实时概览默认最近 60 分钟）。 */
+    private static final long DEFAULT_REALTIME_WINDOW_SECONDS = 60 * 60;
 
     private final MonitoringProjectionStore store;
     private final SecurityMaterialPort secure;
