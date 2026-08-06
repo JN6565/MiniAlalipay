@@ -65,13 +65,63 @@ spring:
                 redis-rate-limiter.burstCapacity: 60
                 redis-rate-limiter.requestedTokens: 1
         # ---- 以下路由已列入契约但对应 Controller 尚未实现，暂禁用 ----
-        # qr-pay → 王春桂 阶段五实现
-        # p2p-collections → 王春桂 阶段五实现
+        # 二维码非资金来源订单已实现；确认与支付仍由业务中心受控返回依赖不可用。
+        - id: business-center-qr-pay
+          uri: ${BUSINESS_CENTER_URI:lb://business-center}
+          predicates:
+            - Path=/api/v1/qr-pay/**
+          filters:
+            - name: RequestRateLimiter
+              args:
+                key-resolver: "#{@userKeyResolver}"
+                redis-rate-limiter.replenishRate: 1
+                redis-rate-limiter.burstCapacity: 30
+                redis-rate-limiter.requestedTokens: 1
+        - id: business-center-p2p-collections
+          uri: ${BUSINESS_CENTER_URI:lb://business-center}
+          predicates:
+            - Path=/api/v1/p2p-collections/**
+          filters:
+            - name: RequestRateLimiter
+              args:
+                key-resolver: "#{@userKeyResolver}"
+                redis-rate-limiter.replenishRate: 1
+                redis-rate-limiter.burstCapacity: 30
+                redis-rate-limiter.requestedTokens: 1
         # transactions → 王钧平 阶段四已完成，Controller 待补充
-        # monitoring → 王春桂 阶段五实现
-        # recharges → 王春桂 阶段五实现
-        # manual-cases → 王春桂 阶段五实现
-        # ops (通用) → 王春桂 阶段五实现
+        - id: business-center-recharges
+          uri: ${BUSINESS_CENTER_URI:lb://business-center}
+          predicates:
+            - Path=/api/v1/recharges/**
+          filters:
+            - name: RequestRateLimiter
+              args:
+                key-resolver: "#{@userKeyResolver}"
+                redis-rate-limiter.replenishRate: 1
+                redis-rate-limiter.burstCapacity: 10
+                redis-rate-limiter.requestedTokens: 1
+        - id: business-center-refunds
+          uri: ${BUSINESS_CENTER_URI:lb://business-center}
+          predicates:
+            - Path=/api/v1/refunds/**
+          filters:
+            - name: RequestRateLimiter
+              args:
+                key-resolver: "#{@userKeyResolver}"
+                redis-rate-limiter.replenishRate: 1
+                redis-rate-limiter.burstCapacity: 10
+                redis-rate-limiter.requestedTokens: 1
+        - id: business-center-manual-cases
+          uri: ${BUSINESS_CENTER_URI:lb://business-center}
+          predicates:
+            - Path=/api/v1/manual-cases/**
+          filters:
+            - name: RequestRateLimiter
+              args:
+                key-resolver: "#{@userKeyResolver}"
+                redis-rate-limiter.replenishRate: 1
+                redis-rate-limiter.burstCapacity: 20
+                redis-rate-limiter.requestedTokens: 1
         - id: business-center-transfer-drafts
           uri: ${BUSINESS_CENTER_URI:lb://business-center}
           predicates:
@@ -106,7 +156,18 @@ spring:
                 redis-rate-limiter.replenishRate: 1
                 redis-rate-limiter.burstCapacity: 10
                 redis-rate-limiter.requestedTokens: 1
-        # ---- business-center-ops 禁用：对应 Controller 尚未实现（王春桂 阶段五） ----
+        # 监控运维路由：实时指标、告警处置、日报、数据质量、指标口径由业务中心提供；必须位于 credit-ops 之后。
+        - id: business-center-ops
+          uri: ${BUSINESS_CENTER_URI:lb://business-center}
+          predicates:
+            - Path=/api/v1/ops/**
+          filters:
+            - name: RequestRateLimiter
+              args:
+                key-resolver: "#{@userKeyResolver}"
+                redis-rate-limiter.replenishRate: 1
+                redis-rate-limiter.burstCapacity: 20
+                redis-rate-limiter.requestedTokens: 1
 
         # ========== 账户中心路由（仅已实现 Controller 的操作） ==========
         - id: account-center

@@ -85,6 +85,9 @@ class GatewayRouteForwardingIntegrationTest {
         return Stream.of(
                 Arguments.of("/api/v1/users/stage-two", "user-center"),
                 Arguments.of("/api/v1/transfers/stage-two", "business-center"),
+                Arguments.of("/api/v1/recharges/stage-two", "business-center"),
+                Arguments.of("/api/v1/manual-cases/stage-two", "business-center"),
+                Arguments.of("/api/v1/qr-pay/orders/stage-two", "business-center"),
                 Arguments.of("/api/v1/accounts/stage-two", "account-center"),
                 Arguments.of("/api/v1/agent/stage-two", "ai-service"),
                 Arguments.of("/api/v1/ops/credit/stage-two", "account-center")

@@ -37,10 +37,27 @@ class GatewayRouteConfigurationTest {
     }
 
     @Test
+    void routesImplementedRechargeAndManualCaseOperationsToBusinessCenter() {
+        assertBusinessRoute("business-center-recharges", "/api/v1/recharges/**");
+        assertBusinessRoute("business-center-manual-cases", "/api/v1/manual-cases/**");
+        assertBusinessRoute("business-center-qr-pay", "/api/v1/qr-pay/**");
+    }
+
+    @Test
     void doesNotRouteInternalServiceOperations() {
         assertThat(gatewayProperties.getRoutes())
                 .flatExtracting(RouteDefinition::getPredicates)
                 .flatExtracting(predicate -> predicate.getArgs().values())
                 .noneMatch(path -> path.contains("/internal/"));
+    }
+
+    private void assertBusinessRoute(String routeId, String path) {
+        RouteDefinition route = gatewayProperties.getRoutes().stream()
+                .filter(candidate -> routeId.equals(candidate.getId()))
+                .findFirst()
+                .orElseThrow(() -> new AssertionError("缺少业务中心路由: " + routeId));
+        assertThat(route.getUri().toString()).containsAnyOf("business-center", "8082");
+        assertThat(route.getPredicates())
+                .anySatisfy(predicate -> assertThat(predicate.getArgs().values()).contains(path));
     }
 }
