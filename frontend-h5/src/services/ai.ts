@@ -23,5 +23,5 @@ interface SendMessageResult {
  * @returns AI 回复
  */
 export async function sendMessage(params: SendMessageParams): Promise<SendMessageResult> {
-  return request.post('/api/v1/agent/messages', params);
+  return request.post('/v1/agent/messages', params);
 }

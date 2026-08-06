@@ -39,20 +39,20 @@ export interface BillDetail extends CreditBill {
 
 // 查询Mini花呗摘要
 export const getCreditSummary = () => {
-  return request.get<CreditSummary>('/api/v1/credit/me');
+  return request.get<CreditSummary>('/v1/credit/me');
 };
 
 // 查询账单列表
 export const getBills = (params?: { page?: number; pageSize?: number }) => {
   return request.get<{ items: CreditBill[]; total: number }>(
-    '/api/v1/credit/bills',
+    '/v1/credit/bills',
     { params },
   );
 };
 
 // 查询账单详情
 export const getBillDetail = (billId: string) => {
-  return request.get<BillDetail>(`/api/v1/credit/bills/${billId}`);
+  return request.get<BillDetail>(`/v1/credit/bills/${billId}`);
 };
 
 // 创建还款草稿
@@ -66,7 +66,7 @@ export const createRepaymentDraft = (amountFen: number) => {
       amountFen: number;
     }>;
     expiresAt: string;
-  }>('/api/v1/credit/repayment-drafts', { data: { amountFen } });
+  }>('/v1/credit/repayment-drafts', { data: { amountFen } });
 };
 
 // 提交还款
@@ -78,7 +78,7 @@ export const submitRepayment = (params: {
     repaymentId: string;
     transactionId: string;
     status: string;
-  }>('/api/v1/credit/repayments', { data: params });
+  }>('/v1/credit/repayments', { data: params });
 };
 
 // 查询还款状态
@@ -89,5 +89,5 @@ export const getRepaymentStatus = (repaymentId: string) => {
     amountFen: number;
     status: string;
     restoredLimitFen: number;
-  }>(`/api/v1/credit/repayments/${repaymentId}`);
+  }>(`/v1/credit/repayments/${repaymentId}`);
 };

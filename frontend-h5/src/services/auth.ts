@@ -28,18 +28,18 @@ export interface RegisterResult {
 // 登录
 export const login = (params: LoginParams) => {
   console.log('登录请求参数:', params);
-  return request.post<LoginResult>('/api/v1/auth/login', params);
+  return request.post<LoginResult>('/v1/auth/login', params);
 };
 
 // 注册
 export const register = (params: RegisterParams) => {
   console.log('注册请求参数:', params);
-  return request.post<RegisterResult>('/api/v1/auth/register', params);
+  return request.post<RegisterResult>('/v1/auth/register', params);
 };
 
 // 退出登录
 export const logout = () => {
-  return request.post('/api/v1/auth/logout');
+  return request.post('/v1/auth/logout');
 };
 
 // 修改登录密码
@@ -47,5 +47,5 @@ export const changeLoginPassword = (params: {
   currentPassword: string;
   newPassword: string;
 }) => {
-  return request.patch('/api/v1/auth/login-password', params);
+  return request.patch('/v1/auth/login-password', params);
 };
