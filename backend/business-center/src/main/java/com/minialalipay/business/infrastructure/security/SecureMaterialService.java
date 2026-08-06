@@ -31,6 +31,16 @@ public class SecureMaterialService implements SecurityMaterialPort {
         byte[] bytes = new byte[32]; random.nextBytes(bytes);
         return "cfm_" + Base64.getUrlEncoder().withoutPadding().encodeToString(bytes);
     }
+    /** 生成仅用于二维码 H5 引导与短期交换的随机令牌。 */
+    @Override public String newQrToken() {
+        byte[] bytes = new byte[32]; random.nextBytes(bytes);
+        return "qr_" + Base64.getUrlEncoder().withoutPadding().encodeToString(bytes);
+    }
+    /** 生成个人收款公开入口使用的随机令牌。 */
+    @Override public String newCollectionToken() {
+        byte[] bytes = new byte[32]; random.nextBytes(bytes);
+        return "pc_" + Base64.getUrlEncoder().withoutPadding().encodeToString(bytes);
+    }
     /** 对规范化 UTF-8 文本计算 SHA-256 摘要。 */
     @Override public byte[] digest(String value) {
         try { return MessageDigest.getInstance("SHA-256").digest(value.getBytes(StandardCharsets.UTF_8)); }

@@ -5,6 +5,7 @@ import com.minialalipay.business.domain.transaction.FundTransaction;
 import com.minialalipay.business.domain.transaction.TransactionStatus;
 import com.minialalipay.business.domain.transaction.TransactionType;
 import com.minialalipay.business.domain.transfer.TransferDraft;
+import com.minialalipay.business.domain.qrpay.QrPayOrder;
 
 import java.time.Instant;
 import java.util.List;
@@ -22,6 +23,18 @@ public interface BusinessStore {
     Optional<TransferDraft> findDraft(String draftId);
     boolean updateDraft(TransferDraft draft, long expectedVersion);
     void replaceConfirmation(Confirmation confirmation, long draftExpectedVersion, TransferDraft draft);
+    /**
+     * 原子撤销同一二维码订单旧确认、写入新确认并以订单版本 CAS 锁定付款人。
+     *
+     * <p>确认与订单更新必须同属 business_db 本地事务，避免旧确认可消费而付款人或订单版本尚未落库。</p>
+     */
+    void replaceQrPayConfirmation(Confirmation confirmation, long orderExpectedVersion, QrPayOrder order);
+    /**
+     * 原子撤销同一 C2C 订单的旧确认并写入新确认。
+     *
+     * <p>订单付款人已在令牌交换阶段由服务端身份派生，因此确认替换无需再次修改订单身份字段。</p>
+     */
+    void replaceCollectionConfirmation(Confirmation confirmation);
     Optional<Confirmation> findConfirmationForUpdate(byte[] tokenDigest);
     boolean updateConfirmation(Confirmation confirmation, String expectedStatus);
     Optional<FundTransactionRecord> findByIdempotency(String userId, TransactionType type, String key);
