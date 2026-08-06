@@ -2,6 +2,7 @@ package com.minialalipay.ai.infrastructure.client;
 
 import com.minialalipay.ai.application.port.ChatMessage;
 import com.minialalipay.ai.application.port.ChatResponse;
+import com.minialalipay.ai.application.service.StructuredOutputValidator;
 import com.minialalipay.ai.domain.agent.AgentErrorCode;
 import com.minialalipay.ai.domain.agent.IntentType;
 import com.minialalipay.common.error.BusinessException;
@@ -42,11 +43,33 @@ public class OpenAiLanguageModelAdapter {
 
     private static final Logger log = LoggerFactory.getLogger(OpenAiLanguageModelAdapter.class);
 
+    private static final String OUTPUT_FORMAT_INSTRUCTION = """
+
+            ---
+            你必须使用以下 JSON 格式回复，不要包含任何 JSON 之外的内容：
+            {
+              "intent": "TRANSFER|BALANCE_QUERY|TRANSACTION_LIST|TRANSACTION_STATUS|USER_SEARCH|CREDIT_SUMMARY|CREDIT_BILL|CREDIT_REPAYMENT|UNKNOWN",
+              "slots": {"槽位名": "槽位值"},
+              "missingFields": ["缺失的必填字段"],
+              "confidence": 0.0到1.0之间的数值,
+              "clarificationNeeded": true或false,
+              "naturalReply": "面向用户展示的自然语言回复"
+            }
+            规则：
+            - intent 必须是枚举值之一
+            - amountFen 必须是整数（分），例如 10000 表示 100.00 元
+            - payeeId 留 null，由工具查询后填入
+            - 缺失必填字段时 clarificationNeeded=true，missingFields 列出字段名
+            - naturalReply 是给用户看的自然语言回复
+            - 不要编造任何金额、账户或交易状态
+            """;
+
     private final ChatModel chatModel;
     private final String model;
     private final Semaphore semaphore;
     private final CircuitBreaker circuitBreaker;
     private final boolean mockMode;
+    private final StructuredOutputValidator validator;
 
     public OpenAiLanguageModelAdapter(
             @Value("${spring.ai.openai.api-key:}") String apiKey,
@@ -54,7 +77,8 @@ public class OpenAiLanguageModelAdapter {
             @Value("${ai.llm.max-concurrent:20}") int maxConcurrent,
             @Value("${ai.llm.circuit-breaker.failure-threshold:3}") int failureThreshold,
             @Value("${ai.llm.circuit-breaker.open-state-duration:30s}") String openStateDuration,
-            ObjectProvider<ChatModel> chatModelProvider
+            ObjectProvider<ChatModel> chatModelProvider,
+            StructuredOutputValidator validator
     ) {
         this.model = model;
         // API Key 以 "sk-" 开头 → 真实模式；否则 → Mock 模式
@@ -63,6 +87,7 @@ public class OpenAiLanguageModelAdapter {
         this.chatModel = mockMode ? null : chatModelProvider.getIfAvailable();
         this.semaphore = new Semaphore(maxConcurrent);
         this.circuitBreaker = new CircuitBreaker(failureThreshold, parseDurationSeconds(openStateDuration));
+        this.validator = validator;
         log.info("LLM 适配器启动: mode={}, model={}, apiKeyPrefix={}",
                 mockMode ? "Mock" : "Spring AI + DeepSeek", model,
                 apiKey.isEmpty() ? "(空)" : apiKey.substring(0, Math.min(5, apiKey.length())) + "***");
@@ -109,7 +134,8 @@ public class OpenAiLanguageModelAdapter {
      */
     private ChatResponse realLlmCall(String systemPrompt, List<ChatMessage> history, String userMessage) {
         List<Message> messages = new ArrayList<>();
-        messages.add(new SystemMessage(systemPrompt));
+        // 在 System Prompt 末尾追加结构化输出格式指令
+        messages.add(new SystemMessage(systemPrompt + OUTPUT_FORMAT_INSTRUCTION));
         for (ChatMessage msg : history) {
             messages.add(switch (msg.role()) {
                 case USER -> new UserMessage(msg.content());
@@ -129,81 +155,95 @@ public class OpenAiLanguageModelAdapter {
             return fallbackResponse();
         }
 
-        // 简单估算 token 数（中文约 0.5 token/字）
-        int estimatedTokens = estimateTokens(userMessage) + estimateTokens(content);
-
-        return parseLlmOutput(content, userMessage, estimatedTokens);
+        // 尝试结构化校验
+        try {
+            StructuredOutputValidator.ValidatedResponse validated = validator.validate(content);
+            log.debug("结构化输出校验通过: intent={}, confidence={}",
+                    validated.chatResponse().intent(), content.length());
+            return validated.chatResponse();
+        } catch (IllegalArgumentException e) {
+            log.warn("结构化输出校验失败，回退到关键词匹配: {}", e.getMessage());
+            // 校验失败回退到关键词匹配（保持兼容）
+            int estimatedTokens = estimateTokens(userMessage) + estimateTokens(content);
+            return parseLlmOutput(content, userMessage, estimatedTokens);
+        }
     }
 
     // ---- 输出解析 ----
 
+    /**
+     * 从真实 LLM 回复中解析意图。仅从用户原文提取关键词匹配，不从 LLM 回复中匹配
+     *（LLM 回复会自然提及能力范围如"我可以帮你转账…"，导致误判）。
+     */
     private ChatResponse parseLlmOutput(String content, String originalInput, int tokens) {
-        String lower = content.toLowerCase();
-        if (containsAny(lower, "转账", "转给")) {
+        String lower = originalInput.toLowerCase();
+        if (containsAny(lower, "转账", "转给", "汇款", "转钱")) {
+            long amount = inferAmountFen(lower);
+            boolean hasAmount = amount > 0;
             return new ChatResponse(content, IntentType.TRANSFER,
-                    Map.of("amountFen", inferAmountFen(originalInput + " " + content)), tokens, false);
+                    Map.of("amountFen", amount), tokens, !hasAmount);
         }
-        if (containsAny(lower, "余额")) {
+        if (containsAny(lower, "余额", "多少钱", "查余额")) {
             return new ChatResponse(content, IntentType.BALANCE_QUERY, Map.of(), tokens, false);
         }
-        if (containsAny(lower, "交易记录", "交易明细", "账单")) {
+        if (containsAny(lower, "交易记录", "交易明细", "流水")) {
             return new ChatResponse(content, IntentType.TRANSACTION_LIST, Map.of(), tokens, false);
         }
-        if (containsAny(lower, "交易状态", "处理中")) {
-            return new ChatResponse(content, IntentType.TRANSACTION_STATUS, Map.of(), tokens, false);
+        if (containsAny(lower, "交易状态", "转到哪了")) {
+            return new ChatResponse(content, IntentType.TRANSACTION_STATUS, Map.of(), tokens, true);
         }
-        if (containsAny(lower, "收款人", "搜索", "找到")) {
+        if (containsAny(lower, "找", "搜索", "收款人")) {
             return new ChatResponse(content, IntentType.USER_SEARCH, Map.of(), tokens, true);
         }
-        if (containsAny(lower, "花呗", "信用额度", "还款")) {
+        if (containsAny(lower, "花呗", "信用", "额度")) {
+            boolean isRepay = containsAny(lower, "还", "还款");
             return new ChatResponse(content,
-                    containsAny(lower, "还款", "还") ? IntentType.CREDIT_REPAYMENT : IntentType.CREDIT_SUMMARY,
-                    Map.of(), tokens, false);
+                    isRepay ? IntentType.CREDIT_REPAYMENT : IntentType.CREDIT_SUMMARY,
+                    Map.of(), tokens, isRepay);
         }
-        if (containsAny(lower, "?", "？", "请提供", "请告诉")) {
-            return new ChatResponse(content, IntentType.UNKNOWN, Map.of(), tokens, true);
-        }
-        return new ChatResponse(content, IntentType.UNKNOWN, Map.of(), tokens, false);
+        // 未匹配任何关键词 → LLM 生成自然回复即可
+        return new ChatResponse(content, IntentType.UNKNOWN, Map.of(), tokens, true);
     }
 
     // ---- Mock 降级 ----
 
     private ChatResponse mockLlmResponse(String userMessage) {
         String lower = userMessage.toLowerCase();
+        String json;
         if (containsAny(lower, "转账", "转给", "汇款", "转钱")) {
             if (!lower.contains("元") && !containsAny(lower, "金额", "多少")) {
-                return new ChatResponse("好的，请告诉我收款人是谁，以及转账金额是多少？",
-                        IntentType.TRANSFER, Map.of(), 30, true);
+                json = """
+                        {"intent":"TRANSFER","slots":{},"missingFields":["payeeId","amountFen"],"confidence":0.3,"clarificationNeeded":true,"naturalReply":"好的，请告诉我收款人是谁，以及转账金额是多少？"}""";
+            } else {
+                long amount = inferAmountFen(lower);
+                json = "{\"intent\":\"TRANSFER\",\"slots\":{\"amountFen\":" + amount + "},\"missingFields\":[\"payeeId\"],\"confidence\":0.6,\"clarificationNeeded\":true,\"naturalReply\":\"已记录金额，请告诉我收款人是谁？\"}";
             }
-            return new ChatResponse("已为您查找收款人并确认金额。请核对信息后在确认卡片中点击确认。",
-                    IntentType.TRANSFER, Map.of("amountFen", inferAmountFen(lower)), 45, false);
-        }
-        if (containsAny(lower, "余额", "多少钱", "查余额")) {
-            return new ChatResponse("您当前账户可用余额为 10,000.00 元。",
-                    IntentType.BALANCE_QUERY, Map.of(), 25, false);
-        }
-        if (containsAny(lower, "交易记录", "交易明细", "流水")) {
-            return new ChatResponse("以下是您最近的交易明细……需要查看更多吗？",
-                    IntentType.TRANSACTION_LIST, Map.of(), 35, false);
-        }
-        if (containsAny(lower, "交易状态", "转到哪了")) {
-            return new ChatResponse("请提供您要查询的交易编号。",
-                    IntentType.TRANSACTION_STATUS, Map.of(), 20, true);
-        }
-        if (containsAny(lower, "找", "搜索", "收款人")) {
-            return new ChatResponse("请告诉我您要搜索的收款人姓名或手机号尾号。",
-                    IntentType.USER_SEARCH, Map.of(), 18, true);
-        }
-        if (containsAny(lower, "花呗", "信用", "额度")) {
+        } else if (containsAny(lower, "余额", "多少钱", "查余额")) {
+            json = """
+                    {"intent":"BALANCE_QUERY","slots":{},"missingFields":[],"confidence":0.9,"clarificationNeeded":false,"naturalReply":"正在为您查询余额…"}""";
+        } else if (containsAny(lower, "交易记录", "交易明细", "流水")) {
+            json = """
+                    {"intent":"TRANSACTION_LIST","slots":{},"missingFields":[],"confidence":0.9,"clarificationNeeded":false,"naturalReply":"正在为您查询交易明细…"}""";
+        } else if (containsAny(lower, "交易状态", "转到哪了")) {
+            json = """
+                    {"intent":"TRANSACTION_STATUS","slots":{},"missingFields":["transactionId"],"confidence":0.4,"clarificationNeeded":true,"naturalReply":"请提供您要查询的交易编号。"}""";
+        } else if (containsAny(lower, "找", "搜索", "收款人")) {
+            json = """
+                    {"intent":"USER_SEARCH","slots":{},"missingFields":["query"],"confidence":0.3,"clarificationNeeded":true,"naturalReply":"请告诉我您要搜索的收款人姓名或手机号尾号。"}""";
+        } else if (containsAny(lower, "花呗", "信用", "额度")) {
             if (containsAny(lower, "还", "还款")) {
-                return new ChatResponse("您的花呗待还总额为 0 元。请问要还多少？",
-                        IntentType.CREDIT_REPAYMENT, Map.of(), 28, true);
+                json = """
+                        {"intent":"CREDIT_REPAYMENT","slots":{},"missingFields":["amountFen"],"confidence":0.5,"clarificationNeeded":true,"naturalReply":"您的花呗待还总额为 0 元。请问要还多少？"}""";
+            } else {
+                json = """
+                        {"intent":"CREDIT_SUMMARY","slots":{},"missingFields":[],"confidence":0.9,"clarificationNeeded":false,"naturalReply":"正在为您查询花呗额度…"}""";
             }
-            return new ChatResponse("您的 Mini 花呗总额度 5,000.00 元，已用 0 元。",
-                    IntentType.CREDIT_SUMMARY, Map.of(), 28, false);
+        } else {
+            json = """
+                    {"intent":"UNKNOWN","slots":{},"missingFields":[],"confidence":0.0,"clarificationNeeded":true,"naturalReply":"抱歉，我没有理解您的意图。我可以帮您：转账、查余额、查交易、查花呗、还花呗。"}""";
         }
-        return new ChatResponse("抱歉，我没有理解您的意图。我可以帮您：转账、查余额、查交易、查花呗、还花呗。",
-                IntentType.UNKNOWN, Map.of(), 40, true);
+        // 通过结构化校验（Mock 模式也走同一校验通道）
+        return validator.validate(json).chatResponse();
     }
 
     private ChatResponse fallbackResponse() {
