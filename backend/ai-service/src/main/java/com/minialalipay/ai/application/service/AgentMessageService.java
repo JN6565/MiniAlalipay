@@ -234,7 +234,7 @@ public class AgentMessageService {
             return new SendMessageResult(
                     session.getSessionId(), assistantMessageId,
                     finalContent, llmResponse.intent(),
-                    finalSlots, llmResponse.lowConfidence(), false
+                    finalSlots, llmResponse.clarificationNeeded(), false
             );
 
         } finally {
@@ -347,7 +347,7 @@ public class AgentMessageService {
      * 判断是否需要执行工具：意图明确且 LLM 不需要进一步澄清。
      */
     private boolean shouldExecuteTools(ChatResponse llmResponse) {
-        return !llmResponse.lowConfidence()
+        return !llmResponse.clarificationNeeded()
                 && llmResponse.intent() != IntentType.UNKNOWN;
     }
 
