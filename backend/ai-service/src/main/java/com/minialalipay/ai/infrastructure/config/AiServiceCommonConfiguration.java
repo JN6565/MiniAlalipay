@@ -2,8 +2,10 @@ package com.minialalipay.ai.infrastructure.config;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.minialalipay.ai.domain.tool.ToolCatalog;
+import com.minialalipay.common.context.UserContextFilter;
 import com.minialalipay.common.error.CommonExceptionMapper;
 import com.minialalipay.common.trace.RequestIdGenerator;
+import org.springframework.boot.web.servlet.FilterRegistrationBean;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 
@@ -46,5 +48,18 @@ public class AiServiceCommonConfiguration {
     @Bean
     public Clock clock() {
         return Clock.systemUTC();
+    }
+
+    /**
+     * 注册用户上下文过滤器，从网关透传头提取用户身份写入 ThreadLocal。
+     */
+    @Bean
+    public FilterRegistrationBean<UserContextFilter> userContextFilter() {
+        FilterRegistrationBean<UserContextFilter> registration = new FilterRegistrationBean<>();
+        registration.setFilter(new UserContextFilter());
+        registration.addUrlPatterns("/*");
+        registration.setOrder(1);
+        registration.setName("userContextFilter");
+        return registration;
     }
 }

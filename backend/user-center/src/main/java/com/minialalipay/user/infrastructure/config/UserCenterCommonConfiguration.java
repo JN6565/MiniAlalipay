@@ -1,8 +1,10 @@
 package com.minialalipay.user.infrastructure.config;
 
+import com.minialalipay.common.context.UserContextFilter;
 import com.minialalipay.common.error.CommonExceptionMapper;
 import com.minialalipay.common.idempotency.IdempotencyKeyValidator;
 import com.minialalipay.common.trace.RequestIdGenerator;
+import org.springframework.boot.web.servlet.FilterRegistrationBean;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.web.client.RestTemplate;
@@ -15,6 +17,7 @@ import org.springframework.web.client.RestTemplate;
  *   <li>{@link CommonExceptionMapper} - 框架无关的公共异常映射器</li>
  *   <li>{@link RequestIdGenerator} - 安全解析或生成请求编号的工具</li>
  *   <li>{@link IdempotencyKeyValidator} - 校验幂等键格式的工具</li>
+ *   <li>{@link UserContextFilter} - 从网关透传头提取用户上下文</li>
  * </ul>
  * </p>
  */
@@ -68,5 +71,23 @@ public class UserCenterCommonConfiguration {
     @Bean
     public RestTemplate restTemplate() {
         return new RestTemplate();
+    }
+
+    /**
+     * 注册用户上下文过滤器。
+     *
+     * <p>从网关透传的 {@code X-User-Id} 和 {@code X-User-Roles} 请求头提取用户身份，
+     * 写入 ThreadLocal 供业务层使用。优先级低于 RequestId 过滤器，确保请求编号先建立。</p>
+     *
+     * @return 过滤器注册 Bean
+     */
+    @Bean
+    public FilterRegistrationBean<UserContextFilter> userContextFilter() {
+        FilterRegistrationBean<UserContextFilter> registration = new FilterRegistrationBean<>();
+        registration.setFilter(new UserContextFilter());
+        registration.addUrlPatterns("/*");
+        registration.setOrder(1);
+        registration.setName("userContextFilter");
+        return registration;
     }
 }
