@@ -1,7 +1,8 @@
 import React, { useState } from 'react';
-import { history } from 'umi';
+import { history } from '@umijs/max';
 import { Form, Input, Button, Toast } from 'antd-mobile';
 import * as paymentPasswordService from '@/services/paymentPassword';
+import { ApiError } from '@/services/request';
 import { PasswordInput } from '@/components/h5/PasswordInput';
 import './index.less';
 
@@ -36,7 +37,14 @@ const PaymentPasswordChangePage: React.FC = () => {
       Toast.show({ icon: 'success', content: '支付密码修改成功' });
       history.push('/h5/settings');
     } catch (error: any) {
-      Toast.show({ icon: 'fail', content: error.message || '修改失败' });
+      const code = error instanceof ApiError ? error.code : 'UNKNOWN';
+      const messages: Record<string, string> = {
+        PAY_PASSWORD_INVALID: '当前支付密码错误',
+        PAYMENT_LOCKED: '支付密码已被临时锁定，请稍后再试',
+        PASSWORD_POLICY_VIOLATION: '支付密码必须为6位数字',
+        NETWORK_ERROR: '网络异常，请检查网络连接',
+      };
+      Toast.show({ icon: 'fail', content: messages[code] || error.message || '修改失败' });
     } finally {
       setLoading(false);
     }

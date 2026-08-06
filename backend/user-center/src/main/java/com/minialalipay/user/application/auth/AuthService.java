@@ -15,6 +15,8 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.transaction.support.TransactionSynchronization;
+import org.springframework.transaction.support.TransactionSynchronizationManager;
 
 import java.util.UUID;
 
@@ -186,6 +188,47 @@ public class AuthService {
      */
     public void logout(String token) {
         sessionManager.destroySession(token);
+    }
+
+    /** 供内部网关校验会话并解析真实用户 ID。 */
+    public String validateSession(String token) {
+        return sessionManager.validateSession(token);
+    }
+
+    /**
+     * 校验当前密码后更新登录密码，并销毁当前会话。
+     *
+     * @param userId 网关注入的可信用户 ID
+     * @param token 当前会话令牌
+     * @param currentPassword 当前登录密码
+     * @param newPassword 新登录密码
+     */
+    @Transactional
+    public void changeLoginPassword(String userId, String token, String currentPassword, String newPassword) {
+        Credential credential = credentialRepository.findByUserId(userId)
+                .orElseThrow(() -> new BusinessException(UserErrorCode.LOGIN_INVALID));
+        if (!passwordHasher.matches(currentPassword, credential.getLoginPasswordHash())) {
+            throw new BusinessException(UserErrorCode.CURRENT_LOGIN_PASSWORD_INVALID);
+        }
+        validatePassword(newPassword);
+        if (passwordHasher.matches(newPassword, credential.getLoginPasswordHash())) {
+            throw new BusinessException(UserErrorCode.PASSWORD_REUSE_NOT_ALLOWED);
+        }
+        credential.setLoginPasswordHash(passwordHasher.hashPassword(newPassword));
+        credential.resetLoginFailCount();
+        credentialRepository.update(credential);
+
+        // 只有数据库事务提交后才废弃全部会话，避免提交失败却提前把用户踢下线。
+        if (TransactionSynchronizationManager.isSynchronizationActive()) {
+            TransactionSynchronizationManager.registerSynchronization(new TransactionSynchronization() {
+                @Override
+                public void afterCommit() {
+                    sessionManager.destroyAllSessions(userId);
+                }
+            });
+        } else {
+            sessionManager.destroyAllSessions(userId);
+        }
     }
 
     private String normalizeLoginIdentifier(String loginIdentifier) {

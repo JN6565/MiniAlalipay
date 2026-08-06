@@ -27,6 +27,9 @@ mybatis:
 # 账户中心配置
 account-center:
   url: ${ACCOUNT_CENTER_URL:http://localhost:8083}
+internal:
+  auth:
+    service-token: ${INTERNAL_AUTH_SERVICE_TOKEN:local-internal-token}
 minialalipay:
   internal:
     service-token: ${INTERNAL_SERVICE_TOKEN:}

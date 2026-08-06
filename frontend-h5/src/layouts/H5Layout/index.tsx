@@ -1,11 +1,23 @@
 import React, { useEffect } from 'react';
-import { Outlet, useLocation, history } from 'umi';
+import { Outlet, useLocation, history } from '@umijs/max';
 import { ConfigProvider } from 'antd-mobile';
 import zhCN from 'antd-mobile/es/locales/zh-CN';
 import './index.less';
 
 const H5Layout: React.FC = () => {
   const location = useLocation();
+
+  useEffect(() => {
+    const publicPaths = ['/h5/login', '/h5/register'];
+    const isPublicPage = publicPaths.includes(location.pathname)
+      || location.pathname.startsWith('/h5/qr-pay/')
+      || location.pathname.startsWith('/h5/collection/pay/');
+
+    // 退出后禁止通过浏览器历史记录重新进入受保护页面并发起无令牌请求。
+    if (!isPublicPage && !localStorage.getItem('accessToken')) {
+      window.location.replace('/h5/login');
+    }
+  }, [location.pathname]);
 
   // 设置页面标题
   useEffect(() => {

@@ -14,6 +14,8 @@ codes:
   COMMON_GATEWAY_TIMEOUT: {httpStatus: 504, message: 请求处理超时}
   AUTH_REQUIRED: {httpStatus: 401, message: 会话无效或尚未登录}
   LOGIN_INVALID: {httpStatus: 401, message: 登录名或登录密码错误}
+  CURRENT_LOGIN_PASSWORD_INVALID: {httpStatus: 422, message: 当前登录密码错误}
+  PASSWORD_REUSE_NOT_ALLOWED: {httpStatus: 422, message: 新密码不能与当前密码相同}
   LOGIN_LOCKED: {httpStatus: 429, message: 登录已被临时锁定}
   ACCOUNT_NUMBER_EXISTS: {httpStatus: 409, message: 账户号已存在}
   PHONE_NUMBER_EXISTS: {httpStatus: 409, message: 手机号已注册}

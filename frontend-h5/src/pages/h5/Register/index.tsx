@@ -1,7 +1,8 @@
 import React, { useState } from 'react';
-import { history } from 'umi';
+import { history } from '@umijs/max';
 import { Toast } from 'antd-mobile';
 import { register } from '@/services/auth';
+import { ApiError } from '@/services/request';
 import './index.less';
 
 type FieldName = 'phoneNumber' | 'realName' | 'nickname' | 'loginPassword' |
@@ -67,9 +68,16 @@ const RegisterPage: React.FC = () => {
       localStorage.setItem('accountNumber', result.accountNumber);
       localStorage.setItem('nickname', result.nickname);
       Toast.show({ icon: 'success', content: `注册成功，账户号：${result.accountNumber}`, duration: 3000 });
-      history.push('/h5/home');
-    } catch (error) {
-      console.error('注册失败:', error);
+      history.replace('/h5/home');
+    } catch (error: any) {
+      const code = error instanceof ApiError ? error.code : 'UNKNOWN';
+      const messages: Record<string, string> = {
+        PHONE_NUMBER_EXISTS: '该手机号已注册',
+        PASSWORD_POLICY_VIOLATION: '登录密码不符合安全规则',
+        REGISTRATION_PROCESSING: '开户暂未完成，请稍后重试登录',
+        NETWORK_ERROR: '网络异常，请检查网络连接',
+      };
+      Toast.show({ content: messages[code] || error.message || '注册失败', icon: 'fail' });
     } finally {
       setLoading(false);
     }

@@ -107,4 +107,34 @@ class AuthServiceTest {
         assertEquals("session-token", result.accessToken());
         verify(userRepository).update(user);
     }
+
+    /** 验证修改密码会更新强哈希并立即销毁当前会话。 */
+    @Test
+    void shouldChangeLoginPasswordAndDestroyCurrentSession() {
+        Credential credential = new Credential("USER123", "old-hash");
+        when(credentialRepository.findByUserId("USER123")).thenReturn(Optional.of(credential));
+        when(passwordHasher.matches("OldPass1", "old-hash")).thenReturn(true);
+        when(passwordHasher.hashPassword("NewPass2")).thenReturn("new-hash");
+
+        service.changeLoginPassword("USER123", "old-token", "OldPass1", "NewPass2");
+
+        assertEquals("new-hash", credential.getLoginPasswordHash());
+        verify(credentialRepository).update(credential);
+        verify(sessionManager).destroyAllSessions("USER123");
+    }
+
+    /** 当前密码错误时不得更新凭证或销毁会话。 */
+    @Test
+    void shouldRejectWrongCurrentLoginPasswordWithoutDestroyingSessions() {
+        Credential credential = new Credential("USER123", "old-hash");
+        when(credentialRepository.findByUserId("USER123")).thenReturn(Optional.of(credential));
+        when(passwordHasher.matches("WrongPass1", "old-hash")).thenReturn(false);
+
+        BusinessException exception = assertThrows(BusinessException.class,
+                () -> service.changeLoginPassword("USER123", "token", "WrongPass1", "NewPass456"));
+
+        assertEquals(UserErrorCode.CURRENT_LOGIN_PASSWORD_INVALID, exception.errorCode());
+        verify(credentialRepository, never()).update(credential);
+        verify(sessionManager, never()).destroyAllSessions(anyString());
+    }
 }

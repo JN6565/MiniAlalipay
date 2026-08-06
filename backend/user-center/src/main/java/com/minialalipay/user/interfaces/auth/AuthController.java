@@ -8,12 +8,14 @@ import com.minialalipay.user.application.auth.dto.AuthResult;
 import com.minialalipay.user.application.auth.dto.LoginRequest;
 import com.minialalipay.user.application.auth.dto.RegisterRequest;
 import com.minialalipay.user.interfaces.dto.auth.AuthResponseDTO;
+import com.minialalipay.user.interfaces.dto.auth.ChangeLoginPasswordRequestDTO;
 import com.minialalipay.user.interfaces.dto.auth.LoginRequestDTO;
 import com.minialalipay.user.interfaces.dto.auth.RegisterRequestDTO;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.validation.Valid;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.PostMapping;
+import org.springframework.web.bind.annotation.PatchMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestHeader;
 import org.springframework.web.bind.annotation.RequestMapping;
@@ -229,5 +231,22 @@ public class AuthController {
 
         // 4. 返回成功响应
         return ResponseEntity.ok(ApiResponse.success(null, requestId, traceId));
+    }
+
+    /**
+     * 修改当前用户的登录密码。请求必须经过网关认证；成功后当前会话立即失效。
+     */
+    @PatchMapping("/login-password")
+    public ResponseEntity<ApiResponse<Void>> changeLoginPassword(
+            @RequestHeader("X-User-Id") String userId,
+            @RequestHeader("Authorization") String authorization,
+            @Valid @RequestBody ChangeLoginPasswordRequestDTO requestDTO,
+            HttpServletRequest httpRequest
+    ) {
+        String token = authorization.startsWith("Bearer ") ? authorization.substring(7) : authorization;
+        authService.changeLoginPassword(
+                userId, token, requestDTO.currentPassword(), requestDTO.newPassword());
+        String requestId = requestIdGenerator.resolve(httpRequest.getHeader("X-Request-Id"));
+        return ResponseEntity.ok(ApiResponse.success(null, requestId, httpRequest.getHeader("X-Trace-Id")));
     }
 }
