@@ -5,7 +5,7 @@ import org.slf4j.LoggerFactory;
 import org.springframework.cloud.gateway.filter.GatewayFilterChain;
 import org.springframework.cloud.gateway.filter.GlobalFilter;
 import org.springframework.core.Ordered;
-import org.springframework.http.HttpStatus;
+import org.springframework.http.HttpStatusCode;
 import org.springframework.stereotype.Component;
 import org.springframework.web.server.ServerWebExchange;
 import reactor.core.publisher.Mono;
@@ -110,7 +110,7 @@ public final class AccessLogGlobalFilter implements GlobalFilter, Ordered {
      * 对于异常场景，状态码可能由 {@code GatewayExceptionHandler} 在提交前设置。</p>
      */
     private int extractStatusCode(ServerWebExchange exchange) {
-        HttpStatus statusCode = exchange.getResponse().getStatusCode();
+        HttpStatusCode statusCode = exchange.getResponse().getStatusCode();
         if (statusCode != null) {
             return statusCode.value();
         }
