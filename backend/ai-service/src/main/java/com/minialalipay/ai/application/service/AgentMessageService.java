@@ -3,8 +3,11 @@ package com.minialalipay.ai.application.service;
 import com.minialalipay.ai.application.port.ChatMessage;
 import com.minialalipay.ai.application.port.ChatResponse;
 import com.minialalipay.ai.application.port.LanguageModelPort;
+import com.minialalipay.ai.application.port.ToolResult;
 import com.minialalipay.ai.application.security.InjectionDetector;
+import com.minialalipay.ai.application.security.ToolAuditService;
 import com.minialalipay.ai.domain.agent.*;
+import com.minialalipay.ai.infrastructure.client.ToolRouter;
 import com.minialalipay.common.error.BusinessException;
 
 import java.time.Instant;
@@ -61,6 +64,11 @@ public class AgentMessageService {
     private final AgentMessageRepository messageRepository;
     private final LanguageModelPort languageModelPort;
     private final InjectionDetector injectionDetector;
+    private final ToolRouter toolRouter;
+    private final ToolPolicyService toolPolicy;
+    private final ToolAuditService toolAudit;
+    private final ResultInterpreter resultInterpreter;
+    private final boolean mockMode;
     private final int sessionTimeoutMinutes;
 
     /** 会话级锁，保证同一会话串行处理 */
@@ -71,13 +79,23 @@ public class AgentMessageService {
             AgentMessageRepository messageRepository,
             LanguageModelPort languageModelPort,
             InjectionDetector injectionDetector,
-            @Value("${ai.session.timeout:30m}") String sessionTimeout
+            ToolRouter toolRouter,
+            ToolPolicyService toolPolicy,
+            ToolAuditService toolAudit,
+            ResultInterpreter resultInterpreter,
+            @Value("${ai.session.timeout:30m}") String sessionTimeout,
+            @Value("${ai.llm.mock-mode:true}") boolean mockMode
     ) {
         this.sessionRepository = sessionRepository;
         this.messageRepository = messageRepository;
         this.languageModelPort = languageModelPort;
         this.injectionDetector = injectionDetector;
+        this.toolRouter = toolRouter;
+        this.toolPolicy = toolPolicy;
+        this.toolAudit = toolAudit;
+        this.resultInterpreter = resultInterpreter;
         this.sessionTimeoutMinutes = (int) parseDurationMinutes(sessionTimeout);
+        this.mockMode = mockMode;
     }
 
     /**
@@ -149,19 +167,61 @@ public class AgentMessageService {
                     SYSTEM_PROMPT, context.subList(0, context.size() - 1),
                     context.get(context.size() - 1).content());
 
-            // 7. 保存 AI 回复
+            // 7. 工具执行分支：明确意图且无需澄清时调用工具获取真实数据
+            String finalContent;
+            Map<String, Object> finalSlots;
+
+            if (shouldExecuteTools(llmResponse)) {
+                String traceId = generateUlid();
+                List<ToolExecution> toolResults = executeTools(
+                        llmResponse.intent(), llmResponse.slots(), userId, session, traceId);
+
+                if (!toolResults.isEmpty()) {
+                    ToolExecution primary = toolResults.get(toolResults.size() - 1);
+
+                    // 合并工具返回数据到槽位
+                    finalSlots = new java.util.HashMap<>(llmResponse.slots());
+                    for (ToolExecution te : toolResults) {
+                        if (te.toolResult() != null && te.toolResult().data() != null) {
+                            finalSlots.putAll(te.toolResult().data());
+                        }
+                    }
+
+                    // Mock 模式：ResultInterpreter 直接生成回复
+                    // 真实模式：注入工具结果后做第二轮 LLM 推理
+                    if (mockMode) {
+                        finalContent = resultInterpreter.interpret(
+                                primary.toolName(), primary.toolResult());
+                    } else {
+                        String toolContext = formatToolResultsAsSystemMessage(toolResults);
+                        context.add(new ChatMessage(MessageRole.SYSTEM, toolContext));
+                        ChatResponse secondResponse = languageModelPort.chat(
+                                SYSTEM_PROMPT, context.subList(0, context.size() - 1),
+                                "请基于工具调用结果回复用户，使用自然语言。");
+                        finalContent = secondResponse.content();
+                    }
+                } else {
+                    finalContent = llmResponse.content();
+                    finalSlots = llmResponse.slots();
+                }
+            } else {
+                finalContent = llmResponse.content();
+                finalSlots = llmResponse.slots();
+            }
+
+            // 8. 保存 AI 回复
             String assistantMessageId = generateUlid();
             AgentMessage assistantMessage = new AgentMessage(
                     assistantMessageId, session.getSessionId(), clientMessageId,
-                    MessageRole.ASSISTANT, llmResponse.content(), llmResponse.tokenCount(), now);
+                    MessageRole.ASSISTANT, finalContent, llmResponse.tokenCount(), now);
             messageRepository.insert(assistantMessage);
 
-            // 8. 更新会话状态
-            if (llmResponse.slots() != null && !llmResponse.slots().isEmpty()) {
-                session.updateSlots(llmResponse.slots());
+            // 9. 更新会话状态
+            if (!finalSlots.isEmpty()) {
+                session.updateSlots(finalSlots);
             }
 
-            // 9. 上下文压缩
+            // 10. 上下文压缩
             long totalTokens = estimateContextTokens(context, llmResponse.tokenCount());
             if (totalTokens > MAX_CONTEXT_TOKENS) {
                 String summary = compressContext(session, context);
@@ -173,8 +233,8 @@ public class AgentMessageService {
 
             return new SendMessageResult(
                     session.getSessionId(), assistantMessageId,
-                    llmResponse.content(), llmResponse.intent(),
-                    llmResponse.slots(), llmResponse.lowConfidence(), false
+                    finalContent, llmResponse.intent(),
+                    finalSlots, llmResponse.lowConfidence(), false
             );
 
         } finally {
@@ -280,6 +340,149 @@ public class AgentMessageService {
         ReentrantLock lock = sessionLocks.get(sessionId);
         if (lock != null && !lock.isLocked() && !lock.hasQueuedThreads()) {
             sessionLocks.remove(sessionId);
+        }
+    }
+
+    /**
+     * 判断是否需要执行工具：意图明确且 LLM 不需要进一步澄清。
+     */
+    private boolean shouldExecuteTools(ChatResponse llmResponse) {
+        return !llmResponse.lowConfidence()
+                && llmResponse.intent() != IntentType.UNKNOWN;
+    }
+
+    /**
+     * 按意图→工具映射表执行有序工具调用链。
+     *
+     * <p>链式依赖的工具在前驱失败时自动跳过；权限拒绝的工具记录原因后跳过。</p>
+     */
+    private List<ToolExecution> executeTools(
+            IntentType intent, Map<String, Object> slots,
+            String userId, AgentSession session, String traceId
+    ) {
+        List<IntentToolMapping.ToolMapping> mappings =
+                IntentToolMapping.getToolsForIntent(intent);
+        if (mappings.isEmpty()) {
+            return List.of();
+        }
+
+        List<ToolExecution> results = new java.util.ArrayList<>();
+        Map<String, Object> cumulativeParams = new java.util.HashMap<>(slots);
+
+        for (IntentToolMapping.ToolMapping mapping : mappings) {
+            ToolPolicyService.PolicyDecision decision =
+                    toolPolicy.evaluate(mapping.toolName(), session);
+            if (!decision.allowed()) {
+                log.warn("工具执行被策略拒绝: tool={}, reason={}",
+                        mapping.toolName(), decision.reason());
+                results.add(ToolExecution.skipped(mapping.toolName(), decision.reason()));
+                if (mapping.isChainDependent()) {
+                    break;
+                }
+                continue;
+            }
+
+            Map<String, Object> params = extractParams(mapping, cumulativeParams, userId);
+
+            long startMs = System.currentTimeMillis();
+            ToolResult toolResult = toolRouter.route(mapping.toolName(), params, userId);
+            int duration = (int) (System.currentTimeMillis() - startMs);
+
+            toolAudit.audit(mapping.toolName(), params, toolResult.resultCode(),
+                    session.getSessionId(), traceId, duration, Instant.now());
+
+            results.add(ToolExecution.completed(mapping.toolName(), toolResult, params));
+
+            if (!toolResult.isSuccess()) {
+                log.warn("工具执行失败，中止链条: tool={}, resultCode={}",
+                        mapping.toolName(), toolResult.resultCode());
+                break;
+            }
+
+            if (toolResult.data() != null && !toolResult.data().isEmpty()) {
+                cumulativeParams.putAll(toolResult.data());
+            }
+        }
+        return results;
+    }
+
+    /**
+     * 根据映射定义的参数来源，从槽位或前驱结果中提取工具调用参数。
+     */
+    private Map<String, Object> extractParams(
+            IntentToolMapping.ToolMapping mapping,
+            Map<String, Object> cumulativeParams, String userId
+    ) {
+        Map<String, Object> params = new java.util.HashMap<>();
+        for (var entry : mapping.paramSources().entrySet()) {
+            String paramName = entry.getKey();
+            IntentToolMapping.ParamSource source = entry.getValue();
+            switch (source) {
+                case SLOTS -> {
+                    Object value = cumulativeParams.get(paramName);
+                    if (value != null) {
+                        params.put(paramName, value);
+                    }
+                }
+                case SLOTS_OPTIONAL -> {
+                    Object value = cumulativeParams.get(paramName);
+                    if (value != null) {
+                        params.put(paramName, value);
+                    }
+                }
+                case PREVIOUS_RESULT -> {
+                    Object value = cumulativeParams.get(paramName);
+                    if (value != null) {
+                        params.put(paramName, value);
+                    }
+                }
+                case CONSTANT -> {
+                    // 默认值由 ToolRouter.dispatch() 中的 getOrDefault 处理
+                }
+            }
+        }
+        params.put("idempotencyKey",
+                userId + "-" + mapping.toolName() + "-" + System.currentTimeMillis());
+        return params;
+    }
+
+    /**
+     * 将工具执行结果格式化为 System Message 注入上下文。
+     * 仅在真实 LLM 模式下使用。
+     */
+    private String formatToolResultsAsSystemMessage(List<ToolExecution> results) {
+        StringBuilder sb = new StringBuilder("【工具调用结果】\n");
+        for (ToolExecution te : results) {
+            sb.append("工具: ").append(te.toolName());
+            if (te.toolResult() != null) {
+                sb.append(" | 状态: ").append(te.toolResult().resultCode());
+                if (te.toolResult().data() != null && !te.toolResult().data().isEmpty()) {
+                    sb.append(" | 数据: ").append(te.toolResult().data());
+                }
+            } else {
+                sb.append(" | 状态: SKIPPED (").append(te.skipReason()).append(")");
+            }
+            sb.append("\n");
+        }
+        return sb.toString();
+    }
+
+    /**
+     * 单次工具执行记录（内部使用）。
+     */
+    private record ToolExecution(
+            String toolName,
+            ToolResult toolResult,
+            Map<String, Object> params,
+            String skipReason
+    ) {
+        static ToolExecution completed(String toolName, ToolResult result,
+                                        Map<String, Object> params) {
+            return new ToolExecution(toolName, result, params, null);
+        }
+
+        static ToolExecution skipped(String toolName, String reason) {
+            return new ToolExecution(toolName, null, Map.of(), reason);
         }
     }
 
