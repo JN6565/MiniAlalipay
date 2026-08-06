@@ -191,7 +191,7 @@ public class OpenAiLanguageModelAdapter {
                     IntentType.TRANSACTION_STATUS, Map.of(), 20, true);
         }
         if (containsAny(lower, "找", "搜索", "收款人")) {
-            return new ChatResponse("请告诉我您要搜索的收款人姓名或手机号尾号。",
+            return new ChatResponse("请告诉我您要搜索的收款人手机号（11 位）。",
                     IntentType.USER_SEARCH, Map.of(), 18, true);
         }
         if (containsAny(lower, "花呗", "信用", "额度")) {

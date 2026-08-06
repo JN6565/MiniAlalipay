@@ -58,7 +58,7 @@ public class UserPO {
 
     /**
      * 昵称（最大 64 字符）。
-     * <p>可重复的展示名称和模糊搜索条件，对应数据库字段 {@code nickname}。</p>
+     * <p>可重复的展示名称，对应数据库字段 {@code nickname}。</p>
      */
     private String nickname;
 

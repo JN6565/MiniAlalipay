@@ -628,9 +628,9 @@ erDiagram
 | `registration_id` | `CHAR(26)` | 必填 | 用户中心生成的注册幂等键，用于开户恢复和既有资源查询 |
 | `account_number` | `VARCHAR(64)` | 必填 | 系统生成的 16 位账户号，以 `62` 开头，用于登录和唯一识别 |
 | `phone_number` | `VARCHAR(11)` | 新注册必填、历史数据可空 | 完整手机号，用于登录及转账查询；禁止跨上下文透传或写日志 |
-| `real_name` | `VARCHAR(64)` | 新注册必填、历史数据可空 | 注册真实姓名，用于转账收款人查询和确认展示 |
-| `nickname` | `VARCHAR(64)` | 必填 | 可重复的展示名称和模糊搜索条件 |
-| `phone_tail` | `CHAR(4)` | 可空 | 手机号尾号，仅用于辅助检索和脱敏展示 |
+| `real_name` | `VARCHAR(64)` | 新注册必填、历史数据可空 | 注册真实姓名，用于收款确认展示 |
+| `nickname` | `VARCHAR(64)` | 必填 | 可重复的展示名称 |
+| `phone_tail` | `CHAR(4)` | 可空 | 手机号尾号，仅用于脱敏展示 |
 | `identity_status` | `VARCHAR(16)` | 必填 | 演示身份状态，不代表真实 KYC |
 | `status` | `VARCHAR(16)` | `PROVISIONING` | 用户状态：`PROVISIONING/ACTIVE/DISABLED` |
 | `disabled_by` | `CHAR(26)` | 可空 | 管理冻结操作者用户 ID，解冻后清空 |

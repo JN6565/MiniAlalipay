@@ -1,4 +1,4 @@
-server:
+﻿server:
   port: ${GATEWAY_PORT:8080}
 
 spring:
@@ -51,22 +51,10 @@ spring:
                 redis-rate-limiter.replenishRate: 1
                 redis-rate-limiter.burstCapacity: 5
                 redis-rate-limiter.requestedTokens: 1
-        # B 端用户管理：列表/冻结/解冻，仅系统管理员（角色门禁在 AuthenticationGlobalFilter 校验）
-        - id: user-center-admin-users
-          uri: ${USER_CENTER_URI:http://localhost:8081}
-          predicates:
-            - Path=/api/v1/admin/**
-          filters:
-            - name: RequestRateLimiter
-              args:
-                key-resolver: "#{@userKeyResolver}"
-                redis-rate-limiter.replenishRate: 1
-                redis-rate-limiter.burstCapacity: 10
-                redis-rate-limiter.requestedTokens: 1
 
         # ========== 业务中心路由（仅已实现 Controller 的操作） ==========
         - id: business-center-transfers
-          uri: ${BUSINESS_CENTER_URI:http://localhost:8082}
+          uri: ${BUSINESS_CENTER_URI:lb://business-center}
           predicates:
             - Path=/api/v1/transfers/**
           filters:
@@ -79,7 +67,7 @@ spring:
         # ---- 以下路由已列入契约但对应 Controller 尚未实现，暂禁用 ----
         # 二维码非资金来源订单已实现；确认与支付仍由业务中心受控返回依赖不可用。
         - id: business-center-qr-pay
-          uri: ${BUSINESS_CENTER_URI:http://localhost:8082}
+          uri: ${BUSINESS_CENTER_URI:lb://business-center}
           predicates:
             - Path=/api/v1/qr-pay/**
           filters:
@@ -89,21 +77,8 @@ spring:
                 redis-rate-limiter.replenishRate: 1
                 redis-rate-limiter.burstCapacity: 30
                 redis-rate-limiter.requestedTokens: 1
-        # C2C 令牌交换：公开匿名入口，IP 维度限流且容量更高，防止预取和批量扫描
-        - id: business-center-p2p-collections-token
-          uri: ${BUSINESS_CENTER_URI:lb://business-center}
-          predicates:
-            - Path=/api/v1/p2p-collections/by-token,/api/v1/p2p-collections/token-exchanges
-          filters:
-            - name: RequestRateLimiter
-              args:
-                key-resolver: "#{@qrTokenKeyResolver}"
-                redis-rate-limiter.replenishRate: 1
-                redis-rate-limiter.burstCapacity: 60
-                redis-rate-limiter.requestedTokens: 1
-        # C2C 通用操作：登录后的订单修改、确认、付款等，用户维度限流
         - id: business-center-p2p-collections
-          uri: ${BUSINESS_CENTER_URI:http://localhost:8082}
+          uri: ${BUSINESS_CENTER_URI:lb://business-center}
           predicates:
             - Path=/api/v1/p2p-collections/**
           filters:
@@ -113,8 +88,9 @@ spring:
                 redis-rate-limiter.replenishRate: 1
                 redis-rate-limiter.burstCapacity: 30
                 redis-rate-limiter.requestedTokens: 1
+        # transactions → 王钧平 阶段四已完成，Controller 待补充
         - id: business-center-recharges
-          uri: ${BUSINESS_CENTER_URI:http://localhost:8082}
+          uri: ${BUSINESS_CENTER_URI:lb://business-center}
           predicates:
             - Path=/api/v1/recharges/**
           filters:
@@ -125,7 +101,7 @@ spring:
                 redis-rate-limiter.burstCapacity: 10
                 redis-rate-limiter.requestedTokens: 1
         - id: business-center-refunds
-          uri: ${BUSINESS_CENTER_URI:http://localhost:8082}
+          uri: ${BUSINESS_CENTER_URI:lb://business-center}
           predicates:
             - Path=/api/v1/refunds/**
           filters:
@@ -136,7 +112,7 @@ spring:
                 redis-rate-limiter.burstCapacity: 10
                 redis-rate-limiter.requestedTokens: 1
         - id: business-center-manual-cases
-          uri: ${BUSINESS_CENTER_URI:http://localhost:8082}
+          uri: ${BUSINESS_CENTER_URI:lb://business-center}
           predicates:
             - Path=/api/v1/manual-cases/**
           filters:
@@ -147,7 +123,7 @@ spring:
                 redis-rate-limiter.burstCapacity: 20
                 redis-rate-limiter.requestedTokens: 1
         - id: business-center-transfer-drafts
-          uri: ${BUSINESS_CENTER_URI:http://localhost:8082}
+          uri: ${BUSINESS_CENTER_URI:lb://business-center}
           predicates:
             - Path=/api/v1/transfer-drafts/**
           filters:
@@ -158,7 +134,7 @@ spring:
                 redis-rate-limiter.burstCapacity: 60
                 redis-rate-limiter.requestedTokens: 1
         - id: business-center-confirmations
-          uri: ${BUSINESS_CENTER_URI:http://localhost:8082}
+          uri: ${BUSINESS_CENTER_URI:lb://business-center}
           predicates:
             - Path=/api/v1/confirmations/**
           filters:
@@ -182,7 +158,7 @@ spring:
                 redis-rate-limiter.requestedTokens: 1
         # 监控运维路由：实时指标、告警处置、日报、数据质量、指标口径由业务中心提供；必须位于 credit-ops 之后。
         - id: business-center-ops
-          uri: ${BUSINESS_CENTER_URI:http://localhost:8082}
+          uri: ${BUSINESS_CENTER_URI:lb://business-center}
           predicates:
             - Path=/api/v1/ops/**
           filters:
@@ -208,7 +184,7 @@ spring:
 
         # ========== AI 服务路由 ==========
         - id: ai-service
-          uri: ${AI_SERVICE_URI:http://localhost:8084}
+          uri: ${AI_SERVICE_URI:lb://ai-service}
           predicates:
             - Path=/api/v1/agent/**
           filters:
@@ -229,12 +205,11 @@ gateway:
   authentication:
     user-center-uri: ${USER_CENTER_URI:http://localhost:8081}
     service-token: ${INTERNAL_AUTH_SERVICE_TOKEN:local-internal-token}
-    # 本地演示鉴权桩：仅 GATEWAY_AUTH_STUB_ENABLED=true 时激活，用于无真实口令的本地 B 端演示；
-    # 生产环境必须保持关闭，关闭后回源 user-center 校验会话并解析真实角色。
-    stub-enabled: ${GATEWAY_AUTH_STUB_ENABLED:false}
-    stub-token: ${GATEWAY_AUTH_STUB_TOKEN:dev-admin-token}
-    stub-user: ${GATEWAY_AUTH_STUB_USER:dev-admin}
-    stub-roles: ${GATEWAY_AUTH_STUB_ROLES:ADMIN}
+    stub:
+      enabled: ${GATEWAY_AUTH_STUB_ENABLED:true}
+      token: ${GATEWAY_AUTH_STUB_TOKEN:any}
+      principal-id: ${GATEWAY_AUTH_STUB_PRINCIPAL:dev-user-001}
+      roles: ${GATEWAY_AUTH_STUB_ROLES:USER}
   cors:
     allowed-origins: ${GATEWAY_CORS_ORIGINS:http://localhost:8000,http://localhost:8001}
     max-age-seconds: ${GATEWAY_CORS_MAX_AGE:3600}

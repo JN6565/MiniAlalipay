@@ -21,7 +21,7 @@ import java.time.Instant;
  *   <li>只有 {@link UserStatus#ACTIVE} 状态的用户可以登录</li>
  *   <li>{@code registrationId} 是跨服务开户幂等键，由用户中心生成</li>
  *   <li>{@code loginName} 在系统内唯一，用于登录和唯一识别</li>
- *   <li>{@code nickname} 可重复，用于展示和模糊搜索</li>
+ *   <li>{@code nickname} 可重复，仅用于展示</li>
  * </ul>
  * </p>
  *
@@ -57,7 +57,7 @@ public class User {
 
     /**
      * 昵称（最大 64 字符）。
-     * <p>可重复的展示名称和模糊搜索条件，不要求唯一。</p>
+     * <p>可重复的展示名称，不要求唯一。</p>
      */
     private String nickname;
 

@@ -1159,6 +1159,29 @@ sequenceDiagram
     B-->>W: 交易状态与回执
 ```
 
+#### 联系人自动归档
+
+转账成功后，业务中心异步调用用户中心归档收款人到付款人的常用联系人列表。
+
+```mermaid
+sequenceDiagram
+    participant B as 业务中心
+    participant UC as 用户中心
+    participant DB as 联系人表
+
+    B->>B: 转账事务提交成功
+    B-->>UC: POST /internal/v1/contacts/archive（异步）
+    UC->>DB: INSERT ON DUPLICATE KEY UPDATE
+    DB-->>UC: 归档成功
+    UC-->>B: 200 OK
+```
+
+关键点：
+- 归档失败不影响转账主流程，仅记录告警日志
+- 归档接口使用 `X-Internal-Service-Token` 认证，禁止外部访问
+- upsert 语义天然幂等，重复调用安全
+- 联系人按置顶优先、最近成功转账时间倒序排列，最多展示 5 人
+
 ### 9.3 AI Talk 转账
 
 ```mermaid

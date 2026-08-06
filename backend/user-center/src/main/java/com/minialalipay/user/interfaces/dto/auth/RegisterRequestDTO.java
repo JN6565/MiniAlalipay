@@ -13,7 +13,7 @@ import jakarta.validation.constraints.Size;
  * <p>字段说明：
  * <ul>
  *   <li>{@code loginName} - 登录名（必填，4-20 位，用于登录和唯一识别）</li>
- *   <li>{@code nickname} - 昵称（必填，2-20 位，用于展示和模糊搜索）</li>
+ *   <li>{@code nickname} - 昵称（必填，2-20 位，仅用于展示）</li>
  *   <li>{@code loginPassword} - 登录密码（必填，8-32 位，至少包含大小写字母和数字）</li>
  * </ul>
  * </p>
@@ -46,7 +46,7 @@ public record RegisterRequestDTO(
 
         /**
          * 昵称（必填，2-20 位）。
-         * <p>可重复的展示名称和模糊搜索条件，不要求唯一。</p>
+         * <p>可重复的展示名称，不要求唯一。</p>
          */
         @Size(max = 20, message = "昵称长度不能超过 20 位")
         String nickname,

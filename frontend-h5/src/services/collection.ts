@@ -50,22 +50,20 @@ export const createRequest = (params: {
   amountFen: number;
   subject?: string;
 }) => {
-  return request.post<CollectionRequest>('/api/v1/p2p-collections/requests', {
-    data: params,
-  });
+  return request.post<CollectionRequest>('/api/v1/p2p-collections/requests', params);
 };
 
 // 查询固定请求状态
 export const getRequestStatus = (requestId: string) => {
   return request.get<CollectionRequest>(
-    `/v1/p2p-collections/requests/${requestId}`,
+    `/api/v1/p2p-collections/requests/${requestId}`,
   );
 };
 
 // 取消固定请求
 export const cancelRequest = (requestId: string) => {
   return request.post(
-    `/v1/p2p-collections/requests/${requestId}/cancel`,
+    `/api/v1/p2p-collections/requests/${requestId}/cancel`,
   );
 };
 
@@ -73,7 +71,7 @@ export const cancelRequest = (requestId: string) => {
 export const exchangeToken = (token: string) => {
   return request.post<CollectionOrder>(
     '/api/v1/p2p-collections/token-exchanges',
-    { data: { token } },
+    { token },
   );
 };
 
@@ -82,9 +80,7 @@ export const lockOrderAmount = (
   orderId: string,
   params: { amountFen: number; subject?: string },
 ) => {
-  return request.patch(`/v1/p2p-collections/orders/${orderId}`, {
-    data: params,
-  });
+  return request.patch(`/api/v1/p2p-collections/orders/${orderId}`, params);
 };
 
 // 生成确认令牌
@@ -93,8 +89,8 @@ export const createOrderConfirmation = (
   paymentPassword: string,
 ) => {
   return request.post<{ confirmationToken: string; expiresAt: string }>(
-    `/v1/p2p-collections/orders/${orderId}/confirmations`,
-    { data: { paymentPassword } },
+    `/api/v1/p2p-collections/orders/${orderId}/confirmations`,
+    { paymentPassword },
   );
 };
 
@@ -104,14 +100,14 @@ export const submitPayment = (
   confirmationToken: string,
 ) => {
   return request.post<{ transactionId: string; status: string }>(
-    `/v1/p2p-collections/orders/${orderId}/pay`,
-    { data: { confirmationToken } },
+    `/api/v1/p2p-collections/orders/${orderId}/pay`,
+    { confirmationToken },
   );
 };
 
 // 查询订单状态
 export const getOrderStatus = (orderId: string) => {
   return request.get<CollectionOrder>(
-    `/v1/p2p-collections/orders/${orderId}`,
+    `/api/v1/p2p-collections/orders/${orderId}`,
   );
 };

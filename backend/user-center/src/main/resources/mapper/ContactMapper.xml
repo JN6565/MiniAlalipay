@@ -1,0 +1,88 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+
+<!--
+  联系人 Mapper XML 映射文件。
+
+  定义 contact 表的 SQL 操作，包括归档（upsert）、查询和属性更新。
+  联系人表保存由成功转账自动形成的单向常用收款人投影。
+-->
+<mapper namespace="com.minialalipay.user.infrastructure.persistence.mapper.ContactMapper">
+
+    <!-- 结果映射：将数据库字段映射到 Java 对象 -->
+    <resultMap id="contactResultMap" type="com.minialalipay.user.infrastructure.persistence.po.ContactPO">
+        <result property="ownerUserId" column="owner_user_id"/>
+        <result property="payeeUserId" column="payee_user_id"/>
+        <result property="alias" column="alias"/>
+        <result property="successCount" column="success_count"/>
+        <result property="lastSuccessAt" column="last_success_at"/>
+        <result property="pinned" column="pinned"/>
+        <result property="hidden" column="hidden"/>
+        <result property="version" column="version"/>
+        <result property="createdAt" column="created_at"/>
+        <result property="updatedAt" column="updated_at"/>
+    </resultMap>
+
+    <!--
+      查询指定用户的常用联系人列表。
+
+      排序规则：置顶优先，然后按最近成功时间倒序。
+      排除已隐藏的联系人。
+    -->
+    <select id="listByOwner" resultMap="contactResultMap">
+        SELECT owner_user_id, payee_user_id, alias, success_count, last_success_at,
+               pinned, hidden, version, created_at, updated_at
+        FROM contact
+        WHERE owner_user_id = #{ownerUserId}
+          AND hidden = FALSE
+        ORDER BY pinned DESC, last_success_at DESC
+        LIMIT #{limit}
+    </select>
+
+    <!-- 查找指定所有者和收款人的联系人。 -->
+    <select id="selectByOwnerAndPayee" resultMap="contactResultMap">
+        SELECT owner_user_id, payee_user_id, alias, success_count, last_success_at,
+               pinned, hidden, version, created_at, updated_at
+        FROM contact
+        WHERE owner_user_id = #{ownerUserId}
+          AND payee_user_id = #{payeeUserId}
+    </select>
+
+    <!--
+      插入或更新联系人（归档）。
+
+      转账成功后调用：
+      - 如果联系人不存在，插入新记录（success_count = 1）
+      - 如果联系人已存在，递增 success_count 并更新 last_success_at
+      使用 MySQL INSERT ... ON DUPLICATE KEY UPDATE 实现幂等归档。
+    -->
+    <insert id="upsert">
+        INSERT INTO contact (owner_user_id, payee_user_id, alias, success_count,
+                             last_success_at, pinned, hidden, version, created_at, updated_at)
+        VALUES (#{ownerUserId}, #{payeeUserId}, NULL, 1,
+                #{lastSuccessAt}, FALSE, FALSE, 0, NOW(3), NOW(3))
+        ON DUPLICATE KEY UPDATE
+            success_count = success_count + 1,
+            last_success_at = #{lastSuccessAt},
+            updated_at = NOW(3)
+    </insert>
+
+    <!--
+      更新联系人属性（别名、置顶、隐藏）。
+
+      使用乐观锁（version）保证并发安全。
+      更新成功后 version 自动递增 1。
+    -->
+    <update id="update" parameterType="com.minialalipay.user.infrastructure.persistence.po.ContactPO">
+        UPDATE contact
+        SET alias = #{alias},
+            pinned = #{pinned},
+            hidden = #{hidden},
+            version = version + 1,
+            updated_at = #{updatedAt}
+        WHERE owner_user_id = #{ownerUserId}
+          AND payee_user_id = #{payeeUserId}
+          AND version = #{version}
+    </update>
+
+</mapper>

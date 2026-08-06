@@ -65,19 +65,21 @@ export const createRepaymentDraft = (amountFen: number) => {
       amountFen: number;
     }>;
     expiresAt: string;
-  }>('/api/v1/credit/repayment-drafts', { data: { amountFen } });
+  }>('/api/v1/credit/repayment-drafts', { amountFen });
 };
 
-// 提交还款
+// 提交还款；契约字段为 repaymentDraftId + paymentProofToken（一次性支付密码证明）
 export const submitRepayment = (params: {
   repaymentDraftId: string;
-  confirmationToken: string;
+  paymentProofToken: string;
 }) => {
   return request.post<{
     repaymentId: string;
-    transactionId: string;
+    amountFen: number;
     status: string;
-  }>('/api/v1/credit/repayments', { data: params });
+    createdAt: string;
+    updatedAt: string;
+  }>('/api/v1/credit/repayments', params);
 };
 
 // 查询还款状态
