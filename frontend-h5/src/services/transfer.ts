@@ -25,7 +25,7 @@ export const createDraft = (params: {
   amountFen: number;
   remark?: string;
 }) => {
-  return request.post<TransferDraft>('/v1/transfer-drafts', {
+  return request.post<TransferDraft>('/api/v1/transfer-drafts', {
     data: params,
   });
 };
@@ -58,7 +58,7 @@ export const submitTransfer = (params: {
   draftId: string;
   confirmationToken: string;
 }) => {
-  return request.post<TransferResult>('/v1/transfers', {
+  return request.post<TransferResult>('/api/v1/transfers', {
     data: params,
   });
 };

@@ -3,7 +3,10 @@ package com.minialalipay.account.application.account;
 import com.minialalipay.account.domain.account.Account;
 import com.minialalipay.account.domain.account.AccountBalance;
 import com.minialalipay.account.domain.account.AccountRepository;
-import com.minialalipay.account.domain.credit.*;
+import com.minialalipay.account.domain.credit.CreditAccount;
+import com.minialalipay.account.domain.credit.CreditAccountRepository;
+import com.minialalipay.account.domain.credit.CreditReceivable;
+import com.minialalipay.account.domain.credit.CreditReceivableRepository;
 import com.minialalipay.account.domain.ledger.LedgerAccount;
 import com.minialalipay.account.domain.ledger.LedgerAccountRepository;
 import org.junit.jupiter.api.Test;
@@ -12,7 +15,6 @@ import com.minialalipay.common.error.BusinessException;
 
 import java.time.Instant;
 import java.util.HashMap;
-import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 
@@ -27,7 +29,9 @@ class AccountApplicationServiceTest {
     void repeatedRegistrationReturnsExistingZeroBalanceAccount() {
         InMemoryAccountRepository repository = new InMemoryAccountRepository();
         InMemoryLedgerAccountRepository ledgerAccounts = new InMemoryLedgerAccountRepository();
-        AccountApplicationService service = service(repository, ledgerAccounts);
+        InMemoryCreditAccountRepository creditAccounts = new InMemoryCreditAccountRepository();
+        InMemoryCreditReceivableRepository creditReceivables = new InMemoryCreditReceivableRepository();
+        AccountApplicationService service = new AccountApplicationService(repository, ledgerAccounts, creditAccounts, creditReceivables);
 
         var first = service.openAccount("account-1", "user-1", "registration-1", NOW);
         var repeated = service.openAccount("account-2", "user-1", "registration-1", NOW.plusSeconds(1));
@@ -43,7 +47,8 @@ class AccountApplicationServiceTest {
         InMemoryAccountRepository repository = new InMemoryAccountRepository();
         repository.create(Account.open("account-1", "user-1", "registration-1", NOW),
                 new AccountBalance("account-1", 800L, 200L, 4L, NOW));
-        AccountApplicationService service = service(repository, new InMemoryLedgerAccountRepository());
+        AccountApplicationService service = new AccountApplicationService(repository, new InMemoryLedgerAccountRepository(),
+                new InMemoryCreditAccountRepository(), new InMemoryCreditReceivableRepository());
 
         var result = service.getMyAccount("user-1");
 
@@ -56,7 +61,9 @@ class AccountApplicationServiceTest {
     @Test
     void concurrentDuplicateRegistrationReadsCommittedAccountAfterUniqueConflict() {
         RacingAccountRepository repository = new RacingAccountRepository();
-        AccountApplicationService service = service(repository, new InMemoryLedgerAccountRepository());
+        AccountApplicationService service = new AccountApplicationService(repository,
+                new InMemoryLedgerAccountRepository(), new InMemoryCreditAccountRepository(),
+                new InMemoryCreditReceivableRepository());
 
         var result = service.openAccount("account-loser", "user-1", "registration-1", NOW);
 
@@ -69,7 +76,9 @@ class AccountApplicationServiceTest {
         InMemoryAccountRepository repository = new InMemoryAccountRepository();
         repository.create(Account.open("account-1", "user-1", "registration-1", NOW),
                 AccountBalance.zero("account-1", NOW));
-        AccountApplicationService service = service(repository, new InMemoryLedgerAccountRepository());
+        AccountApplicationService service = new AccountApplicationService(repository,
+                new InMemoryLedgerAccountRepository(), new InMemoryCreditAccountRepository(),
+                new InMemoryCreditReceivableRepository());
 
         assertThatThrownBy(() -> service.openAccount("account-2", "user-2", "registration-1", NOW))
                 .isInstanceOf(BusinessException.class)
@@ -111,12 +120,6 @@ class AccountApplicationServiceTest {
         }
     }
 
-    private static AccountApplicationService service(AccountRepository accounts,
-                                                      LedgerAccountRepository ledgerAccounts) {
-        return new AccountApplicationService(accounts, ledgerAccounts,
-                new InMemoryCreditAccountRepository(), new InMemoryCreditReceivableRepository());
-    }
-
     static final class InMemoryLedgerAccountRepository implements LedgerAccountRepository {
         private final Map<String, LedgerAccount> accounts = new HashMap<>();
         int createCount;
@@ -126,37 +129,6 @@ class AccountApplicationServiceTest {
         @Override public void create(LedgerAccount account) {
             accounts.put(account.getLedgerAccountId(), account);
             createCount++;
-        }
-    }
-
-    static final class InMemoryCreditAccountRepository implements CreditAccountRepository {
-        private final Map<String, CreditAccount> accounts = new HashMap<>();
-
-        @Override public Optional<CreditAccount> findByUserId(String userId) {
-            return accounts.values().stream().filter(a -> a.getUserId().equals(userId)).findFirst();
-        }
-        @Override public Optional<CreditAccount> findById(String creditAccountId) {
-            return Optional.ofNullable(accounts.get(creditAccountId));
-        }
-
-        @Override
-        public List<CreditAccount> findByStatus(CreditAccountStatus status) {
-            return List.of();
-        }
-
-        @Override public void save(CreditAccount account) {
-            accounts.put(account.getCreditAccountId(), account);
-        }
-    }
-
-    static final class InMemoryCreditReceivableRepository implements CreditReceivableRepository {
-        private final Map<String, CreditReceivable> receivables = new HashMap<>();
-
-        @Override public Optional<CreditReceivable> findByCreditAccountId(String creditAccountId) {
-            return Optional.ofNullable(receivables.get(creditAccountId));
-        }
-        @Override public void save(CreditReceivable receivable) {
-            receivables.put(receivable.getCreditAccountId(), receivable);
         }
     }
 
@@ -176,6 +148,35 @@ class AccountApplicationServiceTest {
                     account.getRegistrationId(), account.getCreatedAt());
             super.create(winner, AccountBalance.zero(winner.getAccountId(), account.getCreatedAt()));
             throw new DuplicateKeyException("模拟并发注册唯一键冲突");
+        }
+    }
+
+    static class InMemoryCreditAccountRepository implements CreditAccountRepository {
+        private final Map<String, CreditAccount> accounts = new HashMap<>();
+        int createCount;
+
+        @Override public Optional<CreditAccount> findByUserId(String userId) {
+            return accounts.values().stream().filter(a -> a.getUserId().equals(userId)).findFirst();
+        }
+        @Override public Optional<CreditAccount> findById(String creditAccountId) {
+            return Optional.ofNullable(accounts.get(creditAccountId));
+        }
+        @Override public void save(CreditAccount account) {
+            accounts.put(account.getCreditAccountId(), account);
+            createCount++;
+        }
+    }
+
+    static class InMemoryCreditReceivableRepository implements CreditReceivableRepository {
+        private final Map<String, CreditReceivable> receivables = new HashMap<>();
+        int createCount;
+
+        @Override public Optional<CreditReceivable> findByCreditAccountId(String creditAccountId) {
+            return Optional.ofNullable(receivables.get(creditAccountId));
+        }
+        @Override public void save(CreditReceivable receivable) {
+            receivables.put(receivable.getCreditAccountId(), receivable);
+            createCount++;
         }
     }
 }

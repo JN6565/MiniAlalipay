@@ -30,19 +30,19 @@ export interface CollectionOrder {
 
 // 查询本人个人码
 export const getMyCode = () => {
-  return request.get<PersonalCode | null>('/v1/p2p-collections/codes/me');
+  return request.get<PersonalCode | null>('/api/v1/p2p-collections/codes/me');
 };
 
 // 重新生成个人码
 export const regenerateCode = () => {
   return request.post<PersonalCode>(
-    '/v1/p2p-collections/codes/me/regenerations',
+    '/api/v1/p2p-collections/codes/me/regenerations',
   );
 };
 
 // 停用个人码
 export const disableCode = () => {
-  return request.post('/v1/p2p-collections/codes/me/disable');
+  return request.post('/api/v1/p2p-collections/codes/me/disable');
 };
 
 // 创建固定收款请求
@@ -50,7 +50,7 @@ export const createRequest = (params: {
   amountFen: number;
   subject?: string;
 }) => {
-  return request.post<CollectionRequest>('/v1/p2p-collections/requests', {
+  return request.post<CollectionRequest>('/api/v1/p2p-collections/requests', {
     data: params,
   });
 };
@@ -72,7 +72,7 @@ export const cancelRequest = (requestId: string) => {
 // 交换令牌
 export const exchangeToken = (token: string) => {
   return request.post<CollectionOrder>(
-    '/v1/p2p-collections/token-exchanges',
+    '/api/v1/p2p-collections/token-exchanges',
     { data: { token } },
   );
 };

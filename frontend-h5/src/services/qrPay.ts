@@ -12,12 +12,12 @@ export interface QrPayOrder {
 
 // 加载H5壳（不消费令牌）
 export const loadH5Shell = (token: string) => {
-  return request.get('/v1/qr-pay/orders/by-token', { params: { token } });
+  return request.get('/api/v1/qr-pay/orders/by-token', { params: { token } });
 };
 
 // 交换令牌并获取订单
 export const exchangeToken = (token: string) => {
-  return request.post<QrPayOrder>('/v1/qr-pay/token-exchanges', {
+  return request.post<QrPayOrder>('/api/v1/qr-pay/token-exchanges', {
     data: { token },
   });
 };

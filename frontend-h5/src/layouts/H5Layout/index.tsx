@@ -13,8 +13,16 @@ const H5Layout: React.FC = () => {
     document.title = title || 'MiniAlalipay';
   }, [location.pathname]);
 
-  // 判断是否显示返回按钮（首页不显示）
-  const showBack = location.pathname !== '/h5/home' && location.pathname !== '/h5/login';
+  // 判断是否显示返回按钮（AI助手、联系人不显示）
+  const showBack = location.pathname !== '/h5/home' &&
+                   location.pathname !== '/h5/login' &&
+                   location.pathname !== '/h5/ai-talk' &&
+                   location.pathname !== '/h5/contacts' &&
+                   location.pathname !== '/h5/profile';
+
+  // 判断是否显示导航栏标题（首页、我的不显示）
+  const showTitle = location.pathname !== '/h5/home' &&
+                    location.pathname !== '/h5/profile';
 
   const handleBack = () => {
     history.back();
@@ -24,10 +32,12 @@ const H5Layout: React.FC = () => {
     <ConfigProvider locale={zhCN}>
       <div className="h5-layout">
         {/* 导航栏 */}
-        {showBack && (
+        {showTitle && (
           <div className="navbar">
-            <div className="navbar-left" onClick={handleBack}>
-              <span className="navbar-back">←</span>
+            <div className="navbar-left">
+              {showBack && (
+                <span className="navbar-back" onClick={handleBack}>←</span>
+              )}
             </div>
             <div className="navbar-title">{getPageTitle(location.pathname)}</div>
             <div className="navbar-right"></div>
@@ -55,6 +65,8 @@ function getPageTitle(pathname: string): string {
     '/h5/transfer': '转账',
     '/h5/transfer/confirm': '确认转账',
     '/h5/ai-talk': 'AI助手',
+    '/h5/contacts': '联系人',
+    '/h5/profile': '我的',
     '/h5/collection': '收款',
     '/h5/credit': 'Mini花呗',
     '/h5/credit/bills': '账单',

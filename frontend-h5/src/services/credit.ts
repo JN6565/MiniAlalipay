@@ -7,6 +7,8 @@ export interface CreditSummary {
   frozenFen: number;
   availableFen: number;
   unbilledFen: number;
+  billedFen: number;
+  overdueFen: number;
   status: 'ACTIVE' | 'SUSPENDED' | 'CLOSED';
   suspendReason?: string;
 }
@@ -39,13 +41,13 @@ export interface BillDetail extends CreditBill {
 
 // 查询Mini花呗摘要
 export const getCreditSummary = () => {
-  return request.get<CreditSummary>('/v1/credit/me');
+  return request.get<CreditSummary>('/api/v1/credit/me');
 };
 
 // 查询账单列表
 export const getBills = (params?: { page?: number; pageSize?: number }) => {
   return request.get<{ items: CreditBill[]; total: number }>(
-    '/v1/credit/bills',
+    '/api/v1/credit/bills',
     { params },
   );
 };
@@ -66,7 +68,7 @@ export const createRepaymentDraft = (amountFen: number) => {
       amountFen: number;
     }>;
     expiresAt: string;
-  }>('/v1/credit/repayment-drafts', { data: { amountFen } });
+  }>('/api/v1/credit/repayment-drafts', { data: { amountFen } });
 };
 
 // 提交还款
@@ -78,7 +80,7 @@ export const submitRepayment = (params: {
     repaymentId: string;
     transactionId: string;
     status: string;
-  }>('/v1/credit/repayments', { data: params });
+  }>('/api/v1/credit/repayments', { data: params });
 };
 
 // 查询还款状态

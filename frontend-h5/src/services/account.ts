@@ -35,7 +35,7 @@ export interface AnalyticsData {
 
 // 查询本人账户
 export const getMyAccount = () => {
-  return request.get<AccountInfo>('/v1/accounts/me');
+  return request.get<AccountInfo>('/api/v1/accounts/me');
 };
 
 // 查询交易明细 - 使用账本明细接口
@@ -46,14 +46,14 @@ export const getTransactions = (params: {
   status?: string;
 }) => {
   return request.get<{ items: Transaction[]; total: number }>(
-    '/v1/accounts/me/entries',
+    '/api/v1/accounts/me/entries',
     { params: { limit: params.pageSize || 20 } },
   );
 };
 
 // 查询资产分析
 export const getAnalytics = (range: '7d' | '30d' = '7d') => {
-  return request.get<AnalyticsData>('/v1/accounts/me/analytics', {
+  return request.get<AnalyticsData>('/api/v1/accounts/me/analytics', {
     params: { range },
   });
 };

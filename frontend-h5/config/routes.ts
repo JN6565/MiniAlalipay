@@ -106,6 +106,20 @@ export default [
         auth: true,
       },
       {
+        path: '/h5/contacts',
+        component: '@/pages/h5/Contacts',
+        exact: true,
+        title: '联系人',
+        auth: true,
+      },
+      {
+        path: '/h5/profile',
+        component: '@/pages/h5/Profile',
+        exact: true,
+        title: '我的',
+        auth: true,
+      },
+      {
         path: '/h5/qr-pay/receipt/:id',
         component: '@/pages/h5/QrPayReceipt',
         exact: true,

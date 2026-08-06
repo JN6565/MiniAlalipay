@@ -23,12 +23,12 @@ export interface PayeeInfo {
 
 // 查询当前用户信息
 export const getMyInfo = () => {
-  return request.get<UserInfo>('/v1/users/me');
+  return request.get<UserInfo>('/api/v1/users/me');
 };
 
 // 搜索用户
 export const searchUsers = (keyword: string, limit: number = 10) => {
-  return request.get<{ items: PayeeInfo[] }>('/v1/users/search', {
+  return request.get<{ items: PayeeInfo[] }>('/api/v1/users/search', {
     params: { keyword, limit },
   });
 };
@@ -36,7 +36,7 @@ export const searchUsers = (keyword: string, limit: number = 10) => {
 // 查询常用收款人
 export const getContacts = (cursor?: string, limit: number = 20) => {
   return request.get<{ items: PayeeInfo[]; nextCursor?: string }>(
-    '/v1/contacts',
+    '/api/v1/contacts',
     { params: { cursor, limit } },
   );
 };

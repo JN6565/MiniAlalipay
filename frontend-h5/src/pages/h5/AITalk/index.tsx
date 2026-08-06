@@ -1,4 +1,5 @@
 import React, { useState, useRef, useEffect } from 'react';
+import { history } from 'umi';
 import { Input, Button, Toast } from 'antd-mobile';
 import { SendOutline } from 'antd-mobile-icons';
 import { sendMessage } from '@/services/ai';
@@ -91,7 +92,6 @@ const AITalkPage: React.FC = () => {
       <div className="ai-messages">
         {messages.length === 0 && (
           <div className="ai-welcome">
-            <div className="ai-welcome-title">AI助手</div>
             <div className="ai-welcome-desc">
               我可以帮你转账、查余额、查账单等
             </div>
@@ -126,6 +126,26 @@ const AITalkPage: React.FC = () => {
         >
           <SendOutline />
         </Button>
+      </div>
+
+      {/* 底部导航栏 */}
+      <div className="tabbar">
+        <div className="tab" onClick={() => history.push('/h5/home')}>
+          <span className="tab-icon">🏠</span>
+          <span className="tab-label">首页</span>
+        </div>
+        <div className="tab on">
+          <span className="tab-icon">💬</span>
+          <span className="tab-label">AI助手</span>
+        </div>
+        <div className="tab" onClick={() => history.push('/h5/contacts')}>
+          <span className="tab-icon">👥</span>
+          <span className="tab-label">联系人</span>
+        </div>
+        <div className="tab" onClick={() => history.push('/h5/profile')}>
+          <span className="tab-icon">👤</span>
+          <span className="tab-label">我的</span>
+        </div>
       </div>
     </div>
   );
