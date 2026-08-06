@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useRef, useEffect } from 'react';
 import { AssistantTextMessage } from '../types';
 
 interface Props {
@@ -6,50 +6,56 @@ interface Props {
 }
 
 const StreamingBubble: React.FC<Props> = ({ message }) => {
-  const [visibleLen, setVisibleLen] = useState(0);
+  const textRef = useRef<HTMLDivElement>(null);
   const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const lastContentRef = useRef('');
 
   useEffect(() => {
-    const full = message.content?.length || 0;
+    if (!textRef.current) return;
+    const full = message.content || '';
 
-    const tick = () => {
-      setVisibleLen((prev) => {
-        const next = prev + 1;
-        if (next >= full) {
-          if (timerRef.current) clearInterval(timerRef.current);
-          return full;
-        }
-        return next;
-      });
-    };
+    // 内容没变，跳过
+    if (full === lastContentRef.current) return;
+    lastContentRef.current = full;
 
-    // 清除旧定时器，启动新定时器
+    // 清除旧定时器
     if (timerRef.current) clearInterval(timerRef.current);
-    if (visibleLen < full) {
-      timerRef.current = setInterval(tick, 30);
+
+    if (!full) {
+      textRef.current.textContent = '...';
+      return;
     }
 
+    // 直接操作 DOM 逐字动画，不经过 React state
+    let i = textRef.current.textContent === '...' ? 0 : textRef.current.textContent!.length;
+    textRef.current.textContent = full.substring(0, i);
+
+    timerRef.current = setInterval(() => {
+      i++;
+      if (textRef.current) {
+        textRef.current.textContent = full.substring(0, i);
+      }
+      if (i >= full.length && timerRef.current) {
+        clearInterval(timerRef.current);
+        timerRef.current = null;
+      }
+    }, 25);
+
     return () => {
-      if (timerRef.current) clearInterval(timerRef.current);
+      if (timerRef.current) {
+        clearInterval(timerRef.current);
+        timerRef.current = null;
+      }
     };
   }, [message.content]);
 
-  const display = message.content?.substring(0, visibleLen) || '...';
-  const isTyping = visibleLen < (message.content?.length || 0);
-
-  if (!message.content && message.streaming) {
-    return (
-      <div className="ai-message ai-message-assistant">
-        <div className="ai-message-content ai-streaming">...</div>
-      </div>
-    );
-  }
-
   return (
     <div className="ai-message ai-message-assistant">
-      <div className={`ai-message-content ${message.streaming ? 'ai-streaming' : ''}`}>
-        {display}
-        {(message.streaming || isTyping) && <span className="ai-cursor">|</span>}
+      <div
+        ref={textRef}
+        className={`ai-message-content ${message.streaming ? 'ai-streaming' : ''}`}
+      >
+        {message.content || '...'}
       </div>
     </div>
   );
