@@ -66,7 +66,7 @@
 | `user_db` | `user-center` | `app_user`、`credential`、`payment_proof`、`contact`、`role_assignment`、`inbox_event`、`idempotency_record`、`audit_log`、`outbox_event` |
 | `account_db` | `account-center` 账户/额度模块 | `account`、`account_balance`、`freeze_record`、`credit_account`、`credit_freeze`、`tcc_branch`、`inbox_event`、`idempotency_record`、`audit_log`、`outbox_event` |
 | `ledger_db` | `account-center` 账本/信用模块 | `ledger_account`、`ledger_voucher`、`ledger_entry`、`credit_receivable`、`credit_purchase`、`credit_bill`、`credit_bill_item`、`credit_repayment`、`credit_repayment_allocation`、`credit_repayment_allocation_detail`、`credit_job_run`、`tcc_branch`、`reconciliation_diff`、`outbox_event` |
-| `business_db` | `business-center` | `recharge_policy`、`recharge_daily_usage`、`recharge_order`、`refund_order`、`transfer_draft`、`credit_repayment_draft`、`fund_transaction`、`qr_pay_order`、`qr_pay_token`、`personal_collection_code`、`collection_request`、`collection_order`、`confirmation_subject`、`confirmation`、`risk_decision`、`manual_case`、`tcc_global`、`inbox_event`、`idempotency_record`、`audit_log`、`outbox_event` |
+| `business_db` | `business-center` | `recharge_policy`、`recharge_daily_usage`、`recharge_order`、`refund_order`、`transfer_draft`、`credit_repayment_draft`、`fund_transaction`、`qr_pay_order`、`qr_pay_order_event`、`qr_pay_token`、`personal_collection_code`、`collection_request`、`collection_order`、`collection_order_event`、`confirmation_subject`、`confirmation`、`risk_decision`、`manual_case`、`tcc_global`、`inbox_event`、`idempotency_record`、`audit_log`、`outbox_event` |
 | `agent_db` | `ai-service` | `agent_session`、`agent_message`、`tool_call_log`、`preference`、`idempotency_record`、`audit_log`、`outbox_event` |
 | `metrics_db` | `business-center` 监控投影模块 | `inbox_event`、`analytics_event`、`personal_cashflow_daily`、`personal_counterparty_stat`、`merchant_business_daily`、`merchant_reconciliation_daily`、`quarantined_event`、`metric_definition`、`minute_metric`、`daily_metric`、`quality_result`、`monitor_alert` |
 
@@ -836,7 +836,7 @@ erDiagram
 
 **键与索引**：UK `(xid,branch_type,resource_id)`；索引 `(transaction_id)`、`(status,updated_at)`。
 
-**写入规则**：Cancel 先到时写 `CANCELLED/EMPTY` 屏障，晚到 Try 必须拒绝；普通 Cancel 使用 `NORMAL`，重复 Confirm/Cancel 返回已有终态。
+**写入规则**：Cancel 先到时写 `CANCELLED/EMPTY` 屏障，晚到 Try 必须拒绝；普通 Cancel 使用 `NORMAL`，重复 Confirm/Cancel 返回已有终态。`CREDIT_PAY_LEDGER` 是 `ledger_db` 中独立于普通 `LEDGER` 的信用支付账本分支，资源为稳定凭证 ID；它只允许保存 `CREDIT_PAY` 预记账凭证，Confirm 前必须汇总验平，已过账凭证不得由 Cancel 删除。
 
 ## 7. 信用应收、账单与还款表
 
@@ -1037,7 +1037,7 @@ credit_account.used_fen
 
 **键与索引**：UK `(owner_type,owner_id,account_type,currency)`、UK `(account_code)`；索引 `(owner_type,owner_id)`。
 
-**写入规则**：科目编码、分类和正常方向创建后不得修改；关闭只阻止新分录，不删除历史。普通用户扫码收款使用 `USER` 科目，禁止因现实生活中的商户称谓创建 `MERCHANT` 科目。
+**写入规则**：科目编码、分类和正常方向创建后不得修改；关闭只阻止新分录，不删除历史。普通用户开户时创建 `USER_BALANCE_LIABILITY`；同一事务创建的信用账户必须同时创建 `CREDIT_ACCOUNT` 所有的 `CREDIT_RECEIVABLE_ASSET`，其正常方向为借方。`CREDIT_PAY` 只能借记该信用应收资产、贷记收款用户余额负债，禁止将信用账户映射为付款余额科目。普通用户扫码收款使用 `USER` 科目，禁止因现实生活中的商户称谓创建 `MERCHANT` 科目。
 
 模拟充值使用唯一的系统发行权益科目，初始化数据如下：
 
@@ -1124,15 +1124,15 @@ MVP 退款仅支持单笔全额受控虚拟退款，不接入真实支付通道�
 
 ### 9.1 `recharge_policy`
 
-**功能与归属**：保存模拟充值的单笔、单日金额和次数策略版本。
+**功能与归属**：保存模拟充值的单笔、单日金额和次数策略版本。当前活动策略固定为单笔上限 `5000000` 分、单用户单日累计上限 `25000000` 分、单用户单日最多 `5` 次；后续调整必须新增策略版本，历史订单继续使用其受理快照。
 
 | 字段 | 类型 | 必填/默认 | 功能 |
 | --- | --- | --- | --- |
 | `policy_id` | `CHAR(26)` | PK，必填 | 策略版本 ID |
 | `policy_code` | `VARCHAR(32)` | 必填 | 稳定策略编码 |
-| `single_limit_fen` | `BIGINT UNSIGNED` | 必填 | 单笔充值上限 |
-| `daily_limit_fen` | `BIGINT UNSIGNED` | 必填 | 单用户单日金额上限 |
-| `daily_count_limit` | `INT UNSIGNED` | 必填 | 单用户单日次数上限 |
+| `single_limit_fen` | `BIGINT UNSIGNED` | 必填，当前 `5000000` | 单笔充值上限 |
+| `daily_limit_fen` | `BIGINT UNSIGNED` | 必填，当前 `25000000` | 单用户单日金额上限 |
+| `daily_count_limit` | `INT UNSIGNED` | 必填，当前 `5` | 单用户单日次数上限 |
 | `status` | `VARCHAR(16)` | `ACTIVE` | `ACTIVE/INACTIVE` |
 | `active_slot` | `TINYINT` | 生成/可空 | 活动策略唯一占位键 |
 | `version` | `BIGINT UNSIGNED` | `0` | 策略版本号，订单保存其快照版本 |
@@ -1187,7 +1187,7 @@ MVP 退款仅支持单笔全额受控虚拟退款，不接入真实支付通道�
 
 **键与索引**：UK `(transaction_id)`；索引 `(user_id,business_date,status,created_at)`。
 
-**写入规则**：不要求支付密码，但必须校验登录态、账户、策略、日额度、限流、幂等和审计。
+**写入规则**：不要求支付密码，但必须校验登录态、账户、策略、日额度、限流、幂等和审计。`status` 从 `PENDING_CHANNEL` 起，由业务中心内部渠道回调推进：渠道成功经 `acceptFundTransaction` 进入 `PROCESSING` 并创建 `fund_transaction(RECHARGE)`，付款对手为虚拟发行权益科目；渠道拒绝进入 `REJECTED` 并记录 `reject_reason_code`；重复回调幂等。账户中心充值 TCC 参与者与虚拟发行权益科目尚未交付前，成功入账依赖后续资金内核实现。
 
 ### 9.4 `refund_order`
 
@@ -1319,6 +1319,23 @@ MVP 退款仅支持单笔全额受控虚拟退款，不接入真实支付通道�
 
 **写入规则**：创建时从登录会话派生收款用户及其 `PERSONAL` 账户，客户端不得提交这两个物理字段。原支付成功后支付状态保持 `SUCCESS`；退款只更新退款字段，用于同时支持毛收款与净收款统计。
 
+### 9.8.1 `qr_pay_order_event`
+
+**功能与归属**：保存动态扫码订单 SSE 的可重放最小公开状态事件。订单受理、补偿、人工复核和统一交易终态投影均在同一 `business_db` 事务写入；事件保留七天，过期游标返回 `EVENT_CURSOR_EXPIRED`，客户端必须回源订单详情。
+
+| 字段 | 类型 | 必填/默认 | 功能 |
+| --- | --- | --- | --- |
+| `event_id` | `VARCHAR(64)` | PK，必填 | SSE 事件 ID，同时作为 `Last-Event-ID` 游标 |
+| `qr_order_id` | `CHAR(26)` | 必填 | 动态扫码来源订单 ID |
+| `transaction_id` | `CHAR(26)` | 可空 | 已受理的统一资金交易 ID |
+| `status` | `VARCHAR(32)` | 必填 | 公开订单状态，终态仅由统一交易事实投影 |
+| `occurred_at` | `DATETIME(3)` | 必填 | 状态发生时间 |
+| `retention_until` | `DATETIME(3)` | 必填 | 重放保留截止时间 |
+
+**键与索引**：PK `(event_id)`；`(qr_order_id,occurred_at,event_id)` 支持稳定顺序重放，`(retention_until)` 支持清理。
+
+**写入规则**：禁止写入付款/收款账户、H5 会话、二维码原始令牌、确认令牌、支付证明和支付密码。首次订阅发送当前权威快照；断线只补发游标后的保留事件。
+
 ### 9.9 `qr_pay_token`
 
 **功能与归属**：保存动态码的一次性令牌和 H5 会话绑定，防止二维码重放。
@@ -1371,7 +1388,7 @@ MVP 退款仅支持单笔全额受控虚拟退款，不接入真实支付通道�
 | `token_digest` | `BINARY(32)` | 必填 | 请求码令牌摘要 |
 | `amount_fen` | `BIGINT UNSIGNED` | 必填 | 固定金额 `1..5000000` |
 | `subject` | `VARCHAR(50)` | 可空 | 收款说明 |
-| `status` | `VARCHAR(32)` | `OPEN` | `OPEN/PROCESSING/SUCCESS/CANCELLED/EXPIRED/MANUAL_REVIEW` |
+| `status` | `VARCHAR(32)` | `OPEN` | `OPEN/RESERVED/PROCESSING/SUCCESS/CANCELLED/EXPIRED/MANUAL_REVIEW`；`RESERVED` 仅为受理前仲裁状态 |
 | `active_order_id` | `CHAR(26)` | 可空 | 当前抢占付款尝试 |
 | `transaction_id` | `CHAR(26)` | 可空 | 最终成功交易 |
 | `cancel_requested_at` | `DATETIME(3)` | 可空 | 在途期间的取消意图时间 |
@@ -1411,7 +1428,25 @@ MVP 退款仅支持单笔全额受控虚拟退款，不接入真实支付通道�
 
 **键与索引**：UK `(h5_session_id)`、UK `(transaction_id)`；索引 `(request_id,status)`、`(code_id,status)`、`(payer_user_id,created_at)`、`(payee_user_id,created_at)`。
 
-**写入规则**：两种来源字段必须二选一；固定请求只有被 `active_order_id` 选中的订单可进入处理。
+**写入规则**：两种来源字段必须二选一；固定请求只有被 `active_order_id` 选中的订单可进入处理。`status` 取值包括 `DRAFT`、`PENDING_CONFIRMATION`、`RISK_REVIEW`（命中前置风控转人工复核，受理前拦截）、`PROCESSING`、`SUCCESS`、`MANUAL_REVIEW`（统一交易终态发布器回填）、`CANCELLED`、`EXPIRED`；`RISK_REVIEW` 不创建资金交易或冻结，命中转人工规则时同步创建 `RISK_PRECHECK` 工单。`SUCCESS`、`MANUAL_REVIEW`、`FAILED` 是权威资金终态，只能由统一交易终态发布器在同一 `business_db` 事务内回填，Controller 不得自行写入；约束全集见 `V202608061000__restore_collection_order_terminal_states.sql`。
+
+### 9.13 `collection_order_event`
+
+**功能与归属**：保存固定收款请求 SSE 的可重放最小公开状态事件，由 `business-center` 在订单受理和统一交易终态发布的同一 `business_db` 事务中写入。
+
+| 字段 | 类型 | 必填/默认 | 功能 |
+| --- | --- | --- | --- |
+| `event_id` | `VARCHAR(64)` | PK，必填 | SSE 事件标识，同时作为 `Last-Event-ID` 续传游标 |
+| `request_id` | `CHAR(26)` | 必填 | 固定收款请求 ID |
+| `order_id` | `CHAR(26)` | 可空 | 当前抢占订单；请求尚未被抢占时为空 |
+| `transaction_id` | `CHAR(26)` | 可空 | 已受理统一交易 ID |
+| `status` | `VARCHAR(32)` | 必填 | 仅公开 `OPEN/PENDING_CONFIRMATION/PROCESSING/SUCCESS/CANCELLED/EXPIRED/MANUAL_REVIEW` |
+| `occurred_at` | `DATETIME(3)` | 必填 | 状态发生时间 |
+| `retention_until` | `DATETIME(3)` | 必填 | 可重放保留截止时间，当前为七天 |
+
+**键与索引**：PK `(event_id)`；索引 `(request_id,event_id)` 支持按游标补发，索引 `(retention_until)` 支持清理。
+
+**写入规则**：禁止写入付款/收款账户、H5 会话、原始二维码令牌、确认令牌和支付证明。游标不存在或超出保留期时返回 `EVENT_CURSOR_EXPIRED`，客户端必须回源查询权威请求或订单状态。
 
 ### 9.13 `confirmation_subject`
 
@@ -1786,6 +1821,28 @@ MVP 退款仅支持单笔全额受控虚拟退款，不接入真实支付通道�
 **键与索引**：索引 `(status,severity,opened_at)`、`(subject_id,opened_at)`。
 
 **写入规则**：恢复正常只生成恢复证据，P0/P1 仍需人工确认后关闭；证据不得删除。
+
+### 11.8.1 `monitor_alert_rule`
+
+**功能与归属**：保存告警规则及阈值配置，属于运营投影，不持有资金事实；阈值由管理员在版本 CAS 下修改，规则结构（指标、算符、级别）不可变更。迁移见 `V202608061100__create_monitor_alert_rule.sql`。
+
+| 字段 | 类型 | 必填/默认 | 功能 |
+| --- | --- | --- | --- |
+| `rule_code` | `VARCHAR(64)` | PK，必填 | 规则编码 |
+| `rule_name` | `VARCHAR(100)` | 必填 | 规则名称 |
+| `metric_code` | `VARCHAR(64)` | 必填 | 触发指标代码 |
+| `severity` | `VARCHAR(16)` | 必填 | `CRITICAL/WARNING/INFO` |
+| `operator` | `VARCHAR(8)` | 必填 | 比较算子 `GT/GTE/LT/LTE` |
+| `threshold_value` | `BIGINT UNSIGNED` | 必填 | 触发阈值 |
+| `enabled` | `TINYINT(1)` | `1` | 是否启用 |
+| `version` | `BIGINT UNSIGNED` | `0` | 阈值 CAS 版本 |
+| `updated_by` | `VARCHAR(128)` | 必填 | 最近更新操作者 |
+| `created_at` | `DATETIME(3)` | 必填 | 创建时间 |
+| `updated_at` | `DATETIME(3)` | 必填 | 最近更新时间 |
+
+**键与索引**：PK `(rule_code)`、索引 `(metric_code)`。
+
+**写入规则**：阈值更新必须携带读取版本，CAS 冲突拒绝；`updated_by` 记录操作者用于审计；种子规则对应系统分析 16.3 的 P0 告警，初始阈值为 0 表示出现即告警。
 
 ### 11.9 `personal_cashflow_daily`
 

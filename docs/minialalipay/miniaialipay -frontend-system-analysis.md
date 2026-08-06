@@ -1945,11 +1945,11 @@ sequenceDiagram
     participant H5 as C端H5
     participant API as 后端API
     U->>H5: 进入 /h5/qr-collection/analytics
-    H5->>API: GET /api/v1/accounts/me/qr-collection-analytics?range=today
+    H5->>API: GET /api/v1/qr-pay/me/qr-collection-analytics?range=today
     API-->>H5: {totalReceiptFen,orderCount,avgOrderFen,payMethodBreakdown,refundFen,netReceiptFen,reconciliationStatus,trend[]}
     H5-->>U: 今日收款概览卡片+趋势图
     U->>H5: 切换本月
-    H5->>API: GET /api/v1/accounts/me/qr-collection-analytics?range=month
+    H5->>API: GET /api/v1/qr-pay/me/qr-collection-analytics?range=month
     API-->>H5: 更新数据
     H5-->>U: 本月收款概览+趋势图
     Note over H5: 只统计本人收款的 SUCCESS QR_PAY/CREDIT_PAY 并按订单去重
@@ -1982,7 +1982,7 @@ sequenceDiagram
 
 | 方法 | 路径 | 说明 |
 | --- | --- | --- |
-| GET | `/api/v1/accounts/me/qr-collection-analytics?range=today | month` |
+| GET | `/api/v1/qr-pay/me/qr-collection-analytics?range=today | month` |
 
 
 #### 2.3.30 本人扫码收款订单与对账（C 端 H5）

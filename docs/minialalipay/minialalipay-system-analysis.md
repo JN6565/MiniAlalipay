@@ -314,7 +314,7 @@ flowchart TB
 - Mini 花呗额度账户、额度冻结、信用应收、消费明细、月度账单和还款分配。
 - TCC 付款冻结/扣款、收款预占/入账和账本凭证分支。
 - TCC 信用额度冻结/占用、应收确认/释放及余额还款分支。
-- 不可变复式账本、个人收支投影与扫码收款统计数据来源。
+- 不可变复式账本与个人收支投影；本人动态扫码收款统计改由业务中心基于统一交易投影提供（见 12.7.1）。
 - 账本是资金事实来源，任何余额修复必须通过冲正分录。
 
 ### 6.4 功能实现总览
@@ -663,7 +663,7 @@ export const h5Routes = [
 #### 7.6.5 普通用户收支与扫码收款统计边界
 
 - 普通用户统计按个人账户归属生成，只包含本人成功交易及账本投影；模拟充值属于资金流入而非收入，Mini 花呗还款属于偿债而非重复消费。
-- 扫码收款统计按 `payee_account_id` 隔离，只统计当前普通用户本人作为收款方的 `SUCCESS QR_PAY/CREDIT_PAY`，退款冲减净收款；失败、处理中、补偿中和人工处理订单不计入成功金额。
+- 扫码收款统计按 `payee_account_id` 隔离，只统计当前普通用户本人作为收款方的 `SUCCESS QR_PAY/CREDIT_PAY`，退款冲减净收款；失败、处理中、补偿中和人工处理订单不计入成功金额。统计基于业务中心统一交易主单投影实现，接口为 `/api/v1/qr-pay/me/qr-collection-analytics`。
 - 本人综合收支与扫码收款经营口径是同一普通用户的两个查询视图：前者反映个人全部资金流，后者只反映动态扫码订单，不创建第二账户或第二系统身份。
 - B 端只查看全平台聚合、脱敏运营与异常数据，不复用任何普通用户的本人查询权限。
 
@@ -1413,6 +1413,8 @@ flowchart TD
 
 `RISK_PRECHECK` 使用 `subject_type + subject_id` 关联转账草稿、动态扫码收款订单、个人收款订单、固定请求或信用还款草案。来源过期、换码失效或请求已被其他订单抢占时工单同步失效，运营审批必须重新检查来源状态、资金来源和版本 CAS。
 
+确认签发前执行 FR-RC-001 规则引擎预检：规则引擎按付款人统一交易投影评估高频、重复特征与新交易对手，按金额评估单笔限额与大额提示，并在每次预检落库一条 `risk_decision` 决策事实（含规则版本、风险等级与命中规则码）。拒绝直接拦截且不创建资金交易；命中转人工规则时创建 `RISK_PRECHECK` 工单并将来源订单置为 `RISK_REVIEW`。依赖账户余额与信用额度的规则由账户中心在 TCC 阶段校验，业务中心不重复评估。
+
 ### 9.7 事务恢复与对账
 
 ```mermaid
@@ -1439,8 +1441,10 @@ flowchart TD
 |---|---|---|
 | `PUT /internal/v1/accounts/registrations/{registrationId}` | `user-center` -> `account-center` | 以用户中心持久化的 `registrationId` 幂等创建或返回余额账户、零余额、账本科目、信用账户和信用应收；客户端不得提交账户 ID |
 | `GET /internal/v1/accounts/by-user/{userId}` | `business-center` -> `account-center` | 只返回个人账户引用和状态，不返回余额 |
+| `GET /internal/v1/credit-accounts/by-user/{userId}` | `business-center` -> `account-center` | 只返回信用账户 ID、状态和 CAS 版本，不返回可用、已用或冻结额度；业务中心仅可将引用绑定至信用确认摘要和 TCC 分支 |
 | `POST /internal/v1/tcc/balance/{role}/{action}` | `business-center` -> `account-center` | `role` 为 `payer/payee`，`action` 为 `try/confirm/cancel`；按 `xid + branch_type + resource_id` 幂等，支持空回滚和防悬挂 |
 | `POST /internal/v1/tcc/ledger/{action}` | `business-center` -> `account-center` | Try 持久化 `PREPARED` 平衡凭证，Confirm 汇总验平后过账，Cancel 只取消未过账凭证 |
+| `POST /internal/v1/tcc/credit-ledger/{action}` | `business-center` -> `account-center` | 仅用于 `CREDIT_PAY`；请求只传信用账户和收款余额账户，账户中心固定借记信用应收资产、贷记收款用户余额负债；按 `xid + CREDIT_PAY_LEDGER + voucher_id` 幂等，支持空回滚和防悬挂 |
 | `POST /internal/v1/tcc/credit-pay/{action}` | `business-center` -> `account-center` | `action` 为 `try/confirm/cancel`；Try 冻结额度，Confirm 占用额度并增加消费明细和信用应收，Cancel 释放冻结；按 `xid + CREDIT_PAY + credit_account_id` 幂等并持久化空回滚屏障 |
 | `POST /internal/v1/tcc/credit-repay/{action}` | `business-center` -> `account-center` | `action` 为 `try/confirm/cancel`；Try 冻结还款余额，Confirm 扣减余额、减少应收并恢复额度，Cancel 释放余额；按 `xid + CREDIT_REPAY + credit_account_id` 幂等并持久化空回滚屏障 |
 | `GET /internal/v1/transaction-facts/{transactionId}` | `business-center` -> `account-center` | 返回余额、冻结、TCC 分支和账本的脱敏布尔事实，终态发布器不得根据超时猜测成功 |
@@ -1744,10 +1748,12 @@ stateDiagram-v2
 | `confirmation_subject` | subject_type、subject_id、current_confirmation_id、version | 主体主键唯一；签发时锁定该活动槽位 |
 | `confirmation` | confirmation_id、subject_type、subject_id、draft_hash、active_subject_key、status、expires_at、consumed_at | 令牌摘要与活动主体键唯一；状态为 ACTIVE/CONSUMED/REVOKED/EXPIRED |
 | `qr_pay_order` | qr_order_id、payee_account_id、payer_user_id、transaction_id、amount、status、version、expires_at | version CAS；transaction_id 唯一 |
+| `qr_pay_order_event` | event_id、qr_order_id、transaction_id、status、occurred_at、retention_until | 动态扫码 SSE 最小公开事件；七天保留；禁止账户、会话和令牌字段 |
 | `qr_pay_token` | token_digest、qr_order_id、bootstrap_session_hash、h5_session_id、status、expires_at、consumed_at | token_digest 唯一，只存摘要；POST 交换并绑定浏览器引导会话 |
 | `personal_collection_code` | code_id、owner_user_id、payee_account_id、token_digest、status、active_owner_key、version | token_digest 唯一；生成列保证每个用户最多一个 ACTIVE 码 |
 | `collection_request` | request_id、requester_user_id、payee_account_id、token_digest、amount_fen、status、active_order_id、transaction_id、version、expires_at | 金额创建后不可变；30 分钟过期；请求 CAS 仲裁付款尝试 |
 | `collection_order` | order_id、mode、code_id/request_id、payer/payee、h5_session_id、amount_fen、funding_source、status、transaction_id、version | H5 会话唯一；仅 BALANCE；每个订单最多一笔 TRANSFER |
+| `collection_order_event` | event_id、request_id、order_id、transaction_id、status、occurred_at、retention_until | 固定请求 SSE 可重放最小公开事件；仅保留七天，禁止存账户、会话或任何令牌 |
 | `credit_repayment_draft` | repayment_draft_id、user_id、credit_account_id、amount_fen、allocation_hash、status、version、expires_at | 本人短期草稿；金额与分配快照绑定确认令牌 |
 | `tcc_global` | transaction_id、xid、status、started_at、updated_at | transaction_id 唯一；启动分支前持久化 xid |
 | `outbox_event` | event_id、aggregate_type、aggregate_id、event_type、payload、status、retry_count、next_retry_at | 与业务事实同库提交；event_id 唯一 |
@@ -1855,6 +1861,7 @@ stateDiagram-v2
 | `personal_collection_code` | `code_id CHAR(26)`、`owner_user_id/payee_account_id CHAR(26)`、`token_digest BINARY(32)`、`status VARCHAR(16)`、`active_owner_key CHAR(26) GENERATED`、`version BIGINT UNSIGNED`、`created_at/updated_at/revoked_at DATETIME(3)` | PK `code_id`；UK `token_digest`；UK `active_owner_key` | `(owner_user_id, created_at)`、`(status, updated_at)` |
 | `collection_request` | `request_id CHAR(26)`、`requester_user_id/payee_account_id CHAR(26)`、`token_digest BINARY(32)`、`amount_fen BIGINT UNSIGNED`、`subject VARCHAR(50)`、`status VARCHAR(32)`、`active_order_id/transaction_id CHAR(26)`、`cancel_requested_at DATETIME(3)`、`version BIGINT UNSIGNED`、`expires_at/created_at/updated_at DATETIME(3)` | PK `request_id`；UK `token_digest`；UK `transaction_id` | `(status, expires_at)`、`(active_order_id)`、`(requester_user_id, created_at)` |
 | `collection_order` | `order_id CHAR(26)`、`mode VARCHAR(24)`、`code_id/request_id CHAR(26)`、`payer_user_id/payer_account_id/payee_user_id/payee_account_id CHAR(26)`、`h5_session_id CHAR(26)`、`amount_fen BIGINT UNSIGNED`、`subject VARCHAR(50)`、`funding_source VARCHAR(16)`、`status VARCHAR(32)`、`transaction_id CHAR(26)`、`version BIGINT UNSIGNED`、`expires_at/created_at/updated_at DATETIME(3)` | PK `order_id`；UK `h5_session_id`；UK `transaction_id` | `(request_id, status)`、`(code_id, status)`、`(payer_user_id, created_at)`、`(payee_user_id, created_at)` |
+| `collection_order_event` | `event_id VARCHAR(64)`、`request_id CHAR(26)`、`order_id/transaction_id CHAR(26)`、`status VARCHAR(32)`、`occurred_at/retention_until DATETIME(3)` | PK `event_id` | `(request_id, event_id)`、`(retention_until)` |
 | `credit_repayment_draft` | `repayment_draft_id/user_id/credit_account_id CHAR(26)`、`amount_fen BIGINT UNSIGNED`、`allocation_hash BINARY(32)`、`status VARCHAR(16)`、`version BIGINT UNSIGNED`、`expires_at/created_at/updated_at DATETIME(3)` | PK `repayment_draft_id` | `(user_id, status, created_at)`、`(status, expires_at)` |
 | `risk_decision` | `decision_id CHAR(26)`、`subject_type VARCHAR(24)`、`subject_id CHAR(26)`、`transaction_id CHAR(26)`、`rule_version VARCHAR(32)`、`risk_level VARCHAR(16)`、`action VARCHAR(16)`、`reason_code VARCHAR(32)`、`created_at DATETIME(3)` | PK `decision_id` | `(subject_type, subject_id, created_at)`、`(transaction_id)` |
 | `manual_case` | `case_id CHAR(26)`、`case_type VARCHAR(32)`、`subject_type VARCHAR(24)`、`subject_id CHAR(26)`、`transaction_id CHAR(26)`、`reason_code VARCHAR(32)`、`status VARCHAR(16)`、`active_subject_key VARCHAR(64) GENERATED`、`operator_id CHAR(26)`、`version BIGINT UNSIGNED`、`created_at/updated_at DATETIME(3)` | PK `case_id`；UK `active_subject_key` | `(status, created_at)`、`(subject_type, subject_id, status)` |
@@ -2471,6 +2478,7 @@ erDiagram
 ### 12.6 SSE 接口
 
 - 仅推送订单 ID、状态、事件 ID、发生时间和可展示摘要。
+- 动态扫码订单在受理、补偿、人工复核和统一交易终态投影的同一业务事务写入 `qr_pay_order_event`；首次订阅先发送权威快照，游标仅可重放七天内事件，过期返回 `EVENT_CURSOR_EXPIRED`。
 - 使用 `Last-Event-ID` 恢复断线位置。
 - 服务端授权订单创建者或付款用户订阅对应订单。
 - 固定收款请求 SSE 仅允许请求创建者订阅；关联付款人通过订单查询获取本人尝试状态，不能枚举其他付款人的订单。
@@ -2485,7 +2493,7 @@ erDiagram
 | 方法 | 路径 | 权限 | 用途 | 幂等/并发要求 |
 |---|---|---|---|---|
 | POST | `/api/v1/auth/register` | 匿名 | 注册并创建初始余额为 0 的账户 | `Idempotency-Key`；登录名唯一 |
-| POST | `/api/v1/recharges` | 登录用户 | 创建模拟充值订单 | `Idempotency-Key`；单笔/单日限额与限流 |
+| POST | `/api/v1/recharges` | 登录用户 | 创建模拟充值订单 | `X-Request-Id`、`Idempotency-Key`；单笔不超过 `5000000` 分，单用户单日累计不超过 `25000000` 分且最多 `5` 次；阶段四接入前只创建 `PENDING_CHANNEL` 来源订单 |
 | POST | `/api/v1/auth/login` | 匿名 | 登录并建立会话 | IP + 登录名限流 |
 | POST | `/api/v1/auth/logout` | 登录用户 | 销毁当前会话 | 重复退出返回成功 |
 | PUT | `/api/v1/payment-password` | 首次注册/登录用户 | 设置独立 6 位支付密码 | 已设置时拒绝覆盖；只存强哈希 |
@@ -2497,7 +2505,10 @@ erDiagram
 | GET | `/api/v1/accounts/me` | 登录用户 | 查询本人账户和实时余额 | 不使用过期缓存代替资金事实 |
 | GET | `/api/v1/accounts/me/entries` | 登录用户 | 查询本人账本明细 | `cursor` + `limit<=100` |
 | GET | `/api/v1/accounts/me/analytics?range=7d\|30d\|month` | 登录用户 | 查询本人收支、余额资金流、信用消费/还款和对象分布 | 返回指标口径版本；充值不计收入、还款不重复计消费 |
-| GET | `/api/v1/accounts/me/qr-collection-analytics?range=today\|month` | 普通用户本人 | 查询本人动态扫码收款、订单、支付方式、退款、净收款和对账摘要 | 服务端从会话派生本人收款账户；只统计确定终态并按订单去重 |
+| GET | `/api/v1/qr-pay/me/qr-collection-analytics?range=today\|month` | 普通用户本人 | 查询本人动态扫码收款、订单、支付方式、退款、净收款和对账摘要 | 业务中心从会话派生本人收款账户；基于统一交易投影，只统计确定终态并按订单去重 |
+| POST | `/api/v1/refunds` | 原收款方本人 | 对本人已成功动态扫码交易创建受控退款订单 | `Idempotency-Key`；原交易为 SUCCESS QR_PAY 且收款方为本人，同一原交易至多一个退款订单 |
+| POST | `/api/v1/refunds/{id}/submit` | 原收款方本人 | 提交执行退款并受理 `REFUND` 统一交易 | 订单 `version` CAS + `Idempotency-Key`；受理不代表冲正成功，资金事实由账户中心 TCC 决定 |
+| GET | `/api/v1/refunds`、`/api/v1/refunds/{id}` | 原收款方本人 | 查询本人退款订单列表与详情 | 对象级权限 |
 
 #### 12.7.2 转账、交易与人工处置
 
@@ -2557,7 +2568,7 @@ Mini 花呗接口只能操作当前登录用户的信用账户。客户端不能
 | GET | `/api/v1/p2p-collections/requests/{id}` | 创建者或关联付款人 | 查询脱敏请求和本人尝试状态 | 对象级授权；付款人不可见其他尝试 |
 | POST | `/api/v1/p2p-collections/requests/{id}/cancel` | 请求创建者 | 取消未受理请求或记录处理中取消意图 | `version` CAS；处理中不得猜测资金结果 |
 | GET | `/api/v1/p2p-collections/by-token?t=` | 匿名 H5 | 加载无业务数据的 H5 壳和 bootstrap 会话 | `no-store/no-referrer`；不消费令牌 |
-| POST | `/api/v1/p2p-collections/token-exchanges` | 匿名 bootstrap 会话 | 校验长期码/固定请求并创建或恢复 H5 订单 | Origin/CSRF/Fetch Metadata；同会话幂等 |
+| POST | `/api/v1/p2p-collections/token-exchanges` | 已登录付款人 + 同一 bootstrap 会话 | 校验长期码/固定请求并创建或恢复 H5 订单 | 匿名 GET 只建立空壳会话；POST 从登录身份派生付款人，Origin/CSRF/Fetch Metadata；同会话幂等 |
 | PATCH | `/api/v1/p2p-collections/orders/{id}` | 登录付款人 + H5 会话 | 个人码订单填写并锁定金额、备注 | 仅 `PERSONAL_QR` 的 `DRAFT`；请求携带 `version` |
 | POST | `/api/v1/p2p-collections/orders/{id}/confirmations` | 登录付款人 + H5 会话 | 校验密码、余额、风控并签发确认令牌 | 绑定双方、金额、订单/请求版本和 `BALANCE` |
 | POST | `/api/v1/p2p-collections/orders/{id}/pay` | 登录付款人 + H5 会话 | 创建并执行 `TRANSFER` | `Idempotency-Key`；确认消费、CAS、来源唯一 |
@@ -3223,7 +3234,7 @@ SSE 只在终态发布事务的 Outbox 事件投递后发送 `SUCCESS`。断线�
 2. Try 只做可撤销的冻结/预占，不提前展示成功。
 3. Confirm 和 Cancel 必须幂等，允许协调器无限安全重试。
 4. 任一分支 Confirm 不得直接把主单标记为 `SUCCESS`；业务侧最多记录不可对外展示的 `CONFIRMED_PENDING_FINALIZE` 协调结果。
-5. 全局事务完成回调触发终态发布器。余额交易验证双方余额/冻结，`CREDIT_PAY` 验证额度、应收和收款用户余额，`CREDIT_REPAY` 验证余额、应收、额度与还款分配；全部类型还必须验证全部 TCC 分支 `CONFIRMED` 和账本平衡，才在 `business_db` 本地事务中 CAS 主单和来源聚合为 `SUCCESS`，并写入 Outbox。
+5. 全局事务完成回调触发终态发布器。余额交易验证双方余额/冻结，`CREDIT_PAY` 必须同时验证信用额度冻结已确认、信用应收与消费明细已增加、收款用户余额已入账、`CREDIT_PAY_LEDGER` 已过账且借贷平衡，`CREDIT_REPAY` 验证余额、应收、额度与还款分配；全部类型还必须验证全部 TCC 分支 `CONFIRMED` 和账本平衡，才在 `business_db` 本地事务中 CAS 主单和来源聚合为 `SUCCESS`，并写入 Outbox。
 6. 回调丢失或发布器崩溃时，恢复扫描依据 `PROCESSING + updated_at` 重跑相同校验；重复发布由 CAS 和 Outbox 事件唯一键消除。
 7. 分支状态不明时查询事实，不根据超时猜测结果；SSE、回执和监控均以终态发布后的主单状态为准。
 
@@ -3466,6 +3477,29 @@ flowchart LR
 - C2C 完整性：请求/订单、`TRANSFER`、双方余额和账本必须可由同一 `traceId` 关联；固定请求最多一笔成功。
 - 发布门禁：仅 `PASSED` 结果可正式发布，`FAILED` 不展示旧值冒充新数据。
 - Trace：OTel Collector 在导出前过滤密码、令牌、提示词敏感片段和完整账号；资金链路演示环境 100% 采样，普通查询 20% 采样，Tempo 保留 30 天并按 `traceId`、`transactionId` 关联查询。
+
+### 16.6 B 端运营交易查询与链路追溯
+
+B 端运营与观察者通过 `business-center` 的 `/api/v1/ops/transactions` 系列接口查看全平台脱敏交易与链路片段。该系列接口只读投影 `business_db` 中业务中心拥有的资金交易事实（统一交易、TCC 全局、Outbox 终态事件），不修改余额、账本或交易状态：
+
+- `GET /api/v1/ops/transactions`：按稳定交易 ID 游标分页返回脱敏交易摘要，可按状态、业务类型和时间范围过滤；发起用户 ID 只保留首尾片段，不暴露完整用户或账户标识，金额使用整数 `amountFen`。
+- `GET /api/v1/ops/transactions/{id}`：返回单笔脱敏交易详情及关联的 TCC 全局状态、最新 Outbox 终态事件和活动人工工单。
+- `GET /api/v1/ops/transactions/{id}/trace`：返回业务中心可核验的链路片段（统一交易受理、TCC 全局事务、终态事件发布），按 `traceId` 关联；完整跨服务 Trace（网关、用户中心、账户中心、AI）归阶段七 OTel/Tempo 集成。
+
+所有接口要求运营/观察者角色（`X-User-Roles`），未知交易按资源不存在返回；响应不包含确认令牌、支付密码或二维码原始令牌等敏感材料，B 端只展示全平台脱敏运营视图。
+
+### 16.7 告警规则与阈值配置
+
+B 端管理员可通过 `business-center` 的 `/api/v1/ops/alert-rules` 系列接口查看和调整告警规则阈值。告警规则（`monitor_alert_rule`）描述触发条件（指标代码、比较算子、阈值）与严重级别，属于运营投影，不持有资金事实：
+
+- `GET /api/v1/ops/alert-rules`：返回全部规则及阈值，运营、观察者和管理员均可只读。
+- `POST /api/v1/ops/alert-rules/{ruleCode}/thresholds`：按版本 CAS 更新阈值，仅管理员可执行并记录操作者；重复设置同一阈值无副作用，未知规则按资源不存在返回。
+
+规则结构（指标、算符、级别）不可通过运营接口变更，只能调整阈值；阈值更新只影响后续告警判断，不追溯历史告警。种子规则对应 16.3 的 P0 告警。
+
+### 16.8 B 端身份与用户管理边界
+
+B 端登录、当前身份、用户管理和角色管理依赖 `user-center`（负责人闫泽华）的身份与用户接口；`business-center` 与 `frontend-admin` 不持有用户身份与角色事实，只消费网关注入的可信 `X-User-Id`/`X-User-Roles`。当前网关 dev Stub 已提供可控身份用于本地演示；真实 B 端身份契约（运营登录、当前身份、用户列表）由用户中心合入 OpenAPI 后，B 端登录、用户管理和角色管理页面方可接通。在此之前这些页面保持诚实占位、不发起请求，`frontend-admin` 的 `getInitialState` 以开发身份兜底，B 端权限模型（OPERATOR/OBSERVER/ADMIN）已就绪，待身份契约合入后由当前身份接口填充。
 
 ## 17. 安全与合规分析
 

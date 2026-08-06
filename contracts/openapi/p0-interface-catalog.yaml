@@ -92,5 +92,8 @@ operations:
   - {method: POST, path: '/api/v1/ops/alerts/{id}/close', operationId: closeAlert, owner: business-center, clientScope: B, idempotency: VERSION_CAS}
   - {method: GET, path: /api/v1/ops/data-quality, operationId: listDataQualityResults, owner: business-center, clientScope: B, idempotency: READ_ONLY}
   - {method: GET, path: /api/v1/ops/metric-definitions, operationId: listMetricDefinitions, owner: business-center, clientScope: B, idempotency: READ_ONLY}
+  - {method: GET, path: /api/v1/ops/transactions, operationId: listOpsTransactions, owner: business-center, clientScope: B, idempotency: READ_ONLY}
+  - {method: GET, path: '/api/v1/ops/transactions/{id}', operationId: getOpsTransaction, owner: business-center, clientScope: B, idempotency: READ_ONLY}
+  - {method: GET, path: '/api/v1/ops/transactions/{id}/trace', operationId: getOpsTransactionTrace, owner: business-center, clientScope: B, idempotency: READ_ONLY}
   - {method: POST, path: /api/v1/ops/credit/statement-runs, operationId: runCreditStatement, owner: account-center, clientScope: B, idempotency: BUSINESS_DATE}
   - {method: POST, path: /api/v1/ops/credit/due-check-runs, operationId: runCreditDueCheck, owner: account-center, clientScope: B, idempotency: BUSINESS_DATE}

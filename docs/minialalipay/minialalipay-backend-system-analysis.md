@@ -521,7 +521,7 @@ B 端页面中以下能力已由 PRD 和前端系分提出，但当前总体端�
 | 方法与路径 | 请求参数/DTO | 成功返回 `data` | 主要错误 |
 |---|---|---|---|
 | `GET /api/v1/accounts/me/analytics` | `range=7d/30d/month` | `PersonalAnalyticsView(range,definitionVersion,incomeFen,expenseFen,balanceFlow,creditFlow,counterparties[])` | `RANGE_NOT_SUPPORTED` |
-| `GET /api/v1/accounts/me/qr-collection-analytics` | `range=today/month` | `QrCollectionAnalyticsView(receiptFen,orderCount,refundFen,netReceiptFen,fundingBreakdown,reconciliation)` | `ACCOUNT_UNAVAILABLE` |
+| `GET /api/v1/qr-pay/me/qr-collection-analytics` | `range=today/month` | `QrCollectionAnalyticsResponse(orderCount,transactionCount,grossAmountFen,refundAmountFen,netAmountFen,byPaymentMethod[],since,now)` | `RANGE_NOT_SUPPORTED`、`ACCOUNT_UNAVAILABLE` |
 | `GET /api/v1/transfers/{id}/trace` | 交易 ID | `TraceView(traceId,transactionId,spans[],masked=true)` | `OPS_PERMISSION_REQUIRED` |
 | `GET /api/v1/manual-cases` | `status,type,cursor,limit` | `ManualCasePage(items,nextCursor)` | `OPS_PERMISSION_REQUIRED` |
 | `POST /api/v1/manual-cases/{id}/decisions` | `ManualCaseDecisionRequest(decision,comment,version)` | `ManualCaseView(id,status,decision,version,updatedAt)` | `CASE_STATE_INVALID`、`VERSION_CONFLICT` |

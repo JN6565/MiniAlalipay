@@ -307,6 +307,27 @@ paths:
               schema: { $ref: '#/components/schemas/InternalAccountReference' }
         '400': { $ref: '#/components/responses/BadRequest' }
         '404': { $ref: '#/components/responses/NotFound' }
+  /internal/v1/credit-accounts/by-user/{userId}:
+    get:
+      summary: 解析用户信用账户版本化引用
+      operationId: resolveCreditAccount
+      x-client-scope: INTERNAL
+      x-service-auth: required
+      servers: [{ url: http://localhost:8083 }]
+      security: [{ internalServiceAuth: [] }]
+      parameters:
+        - name: userId
+          in: path
+          required: true
+          schema: { type: string, minLength: 26, maxLength: 26 }
+      responses:
+        '200':
+          description: 返回不含额度数值的信用账户 ID、状态和 CAS 版本
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/InternalCreditAccountReference' }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '404': { $ref: '#/components/responses/NotFound' }
   /internal/v1/tcc/balance/{role}/{action}:
     post:
       summary: 执行付款方或收款方余额 TCC 分支
@@ -365,6 +386,62 @@ paths:
         '400': { $ref: '#/components/responses/BadRequest' }
         '404': { $ref: '#/components/responses/NotFound' }
         '409': { $ref: '#/components/responses/Conflict' }
+  /internal/v1/tcc/credit-ledger/{action}:
+    post:
+      summary: 执行信用支付专用账本 TCC 分支
+      description: 该分支固定借记信用应收资产、贷记收款用户余额负债；请求不接受 payerAccountId，禁止将信用账户作为余额付款账户。
+      operationId: executeCreditPayLedgerTccBranch
+      x-client-scope: INTERNAL
+      x-service-auth: required
+      servers: [{ url: http://localhost:8083 }]
+      security: [{ internalServiceAuth: [] }]
+      parameters:
+        - name: action
+          in: path
+          required: true
+          schema: { type: string, enum: [try, confirm, cancel] }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/CreditPayLedgerTccCommand' }
+      responses:
+        '200':
+          description: 返回信用支付账本分支状态
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/TccBranchResult' }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409': { $ref: '#/components/responses/Conflict' }
+  /internal/v1/tcc/credit-ledger/{action}:
+    post:
+      summary: 执行信用支付专用账本 TCC 分支
+      description: 该分支固定借记信用应收资产、贷记收款用户余额负债；请求不接受 payerAccountId，禁止将信用账户作为余额付款账户。
+      operationId: executeCreditPayLedgerTccBranch
+      x-client-scope: INTERNAL
+      x-service-auth: required
+      servers: [{ url: http://localhost:8083 }]
+      security: [{ internalServiceAuth: [] }]
+      parameters:
+        - name: action
+          in: path
+          required: true
+          schema: { type: string, enum: [try, confirm, cancel] }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/CreditPayLedgerTccCommand' }
+      responses:
+        '200':
+          description: 返回信用支付账本分支状态
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/TccBranchResult' }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409': { $ref: '#/components/responses/Conflict' }
   /internal/v1/transaction-facts/{transactionId}:
     get:
       summary: 查询终态发布所需的脱敏资金事实
@@ -403,6 +480,34 @@ paths:
         '204': { description: 差异已记录或已幂等存在 }
         '400': { $ref: '#/components/responses/BadRequest' }
         '409': { $ref: '#/components/responses/Conflict' }
+        '500': { $ref: '#/components/responses/InternalError' }
+  /internal/v1/recharges/{rechargeOrderId}/channel-result:
+    post:
+      summary: 记录受控模拟渠道结果并推进充值资金受理
+      description: 渠道成功时推进充值订单到 PROCESSING 并创建 RECHARGE 统一交易；重复回调幂等。当前账户中心充值 TCC 参与者尚未交付，成功入账依赖后续资金内核实现。
+      operationId: recordRechargeChannelResult
+      x-client-scope: INTERNAL
+      x-service-auth: required
+      servers: [{ url: http://localhost:8082 }]
+      security: [{ internalServiceAuth: [] }]
+      parameters:
+        - name: rechargeOrderId
+          in: path
+          required: true
+          schema: { type: string, minLength: 26, maxLength: 26 }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/RechargeChannelResultRequest' }
+      responses:
+        '200':
+          description: 返回更新后的充值订单引用，不返回余额或敏感账户数据
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/RechargeOrderReference' }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '404': { $ref: '#/components/responses/NotFound' }
         '500': { $ref: '#/components/responses/InternalError' }
   /internal/v1/payment-proofs/verify:
     post:
@@ -749,6 +854,755 @@ paths:
         '401': { $ref: '#/components/responses/Unauthorized' }
         '403': { $ref: '#/components/responses/Forbidden' }
         '500': { $ref: '#/components/responses/InternalError' }
+  /api/v1/recharges:
+    post:
+      summary: 创建受控模拟充值来源订单
+      description: 仅创建待渠道处理的来源订单；单笔不超过 5000000 分，单用户单日累计不超过 25000000 分且最多 5 次；未形成统一交易前不得视为余额入账成功。
+      operationId: createRecharge
+      x-client-scope: C
+      parameters:
+        - $ref: '#/components/parameters/RequestIdHeader'
+        - $ref: '#/components/parameters/IdempotencyKeyHeader'
+      requestBody:
+        required: true
+        content: { application/json: { schema: { $ref: '#/components/schemas/CreateRechargeRequest' } } }
+      responses:
+        '202': { description: 渠道订单已受理, content: { application/json: { schema: { $ref: '#/components/schemas/RechargeOrderResponse' } } } }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '409': { $ref: '#/components/responses/Conflict' }
+        '422': { $ref: '#/components/responses/UnprocessableEntity' }
+  /api/v1/recharges/{id}:
+    get:
+      summary: 查询本人模拟充值来源订单
+      operationId: getRecharge
+      x-client-scope: C
+      parameters:
+        - $ref: '#/components/parameters/RequestIdHeader'
+        - $ref: '#/components/parameters/ResourceId'
+      responses:
+        '200': { description: 返回来源订单状态, content: { application/json: { schema: { $ref: '#/components/schemas/RechargeOrderResponse' } } } }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '404': { $ref: '#/components/responses/NotFound' }
+  /api/v1/qr-pay/me/qr-collection-analytics:
+    get:
+      summary: 查询本人动态扫码收款统计
+      description: 只统计本人作为收款方的确定终态收款，金额统一为整数分；失败、处理中与人工处理订单不计入。
+      operationId: getQrCollectionAnalytics
+      x-client-scope: C
+      parameters:
+        - $ref: '#/components/parameters/RequestIdHeader'
+        - name: range
+          in: query
+          required: false
+          description: 统计范围，today 为当日、month 为当月，默认 month。
+          schema: { type: string, enum: [today, month], default: month }
+      responses:
+        '200': { description: 返回本人收款金额、订单、支付方式、退款与净收款摘要, content: { application/json: { schema: { $ref: '#/components/schemas/QrCollectionAnalyticsResponse' } } } }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '422': { $ref: '#/components/responses/UnprocessableEntity' }
+  /api/v1/refunds:
+    post:
+      summary: 对本人已成功动态扫码交易创建受控退款订单
+      description: 只允许本人作为收款方的已成功 QR_PAY 交易发起受控全额退款；受理不代表冲正成功，资金事实由统一交易与账户中心 TCC 决定。
+      operationId: createRefund
+      x-client-scope: C
+      parameters:
+        - $ref: '#/components/parameters/RequestIdHeader'
+        - $ref: '#/components/parameters/IdempotencyKeyHeader'
+      requestBody:
+        required: true
+        content: { application/json: { schema: { $ref: '#/components/schemas/CreateRefundRequest' } } }
+      responses:
+        '202': { description: 已创建待提交退款订单, content: { application/json: { schema: { $ref: '#/components/schemas/RefundOrderResponse' } } } }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409': { $ref: '#/components/responses/Conflict' }
+        '422': { $ref: '#/components/responses/UnprocessableEntity' }
+    get:
+      summary: 查询本人退款订单列表
+      operationId: listRefunds
+      x-client-scope: C
+      parameters:
+        - $ref: '#/components/parameters/RequestIdHeader'
+        - name: status
+          in: query
+          required: false
+          schema: { type: string, maxLength: 32 }
+        - name: limit
+          in: query
+          required: false
+          schema: { type: integer, minimum: 1, maximum: 100, default: 50 }
+      responses:
+        '200': { description: 返回当前退款发起人创建的退款订单列表, content: { application/json: { schema: { $ref: '#/components/schemas/RefundOrderPageResponse' } } } }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+  /api/v1/refunds/{id}:
+    get:
+      summary: 查询本人退款订单
+      operationId: getRefund
+      x-client-scope: C
+      parameters:
+        - $ref: '#/components/parameters/RequestIdHeader'
+        - name: id
+          in: path
+          required: true
+          schema: { type: string, minLength: 1, maxLength: 26 }
+      responses:
+        '200': { description: 返回本人退款订单, content: { application/json: { schema: { $ref: '#/components/schemas/RefundOrderResponse' } } } }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '404': { $ref: '#/components/responses/NotFound' }
+  /api/v1/refunds/{id}/submit:
+    post:
+      summary: 提交执行退款并受理 REFUND 统一交易
+      description: 订单 CAS 从创建推进到处理中并绑定 REFUND 统一交易、启动 TCC；账户中心尚未提供退款参与者前受理会安全失败转人工处置。
+      operationId: submitRefund
+      x-client-scope: C
+      parameters:
+        - $ref: '#/components/parameters/RequestIdHeader'
+        - $ref: '#/components/parameters/IdempotencyKeyHeader'
+        - name: id
+          in: path
+          required: true
+          schema: { type: string, minLength: 1, maxLength: 26 }
+      requestBody:
+        required: true
+        content: { application/json: { schema: { $ref: '#/components/schemas/SubmitRefundRequest' } } }
+      responses:
+        '202': { description: 已受理 REFUND 统一交易, content: { application/json: { schema: { $ref: '#/components/schemas/RefundOrderResponse' } } } }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409': { $ref: '#/components/responses/Conflict' }
+  /api/v1/qr-pay/orders:
+    post:
+      summary: 创建本人动态扫码收款订单
+      operationId: createQrPayOrder
+      x-client-scope: C
+      parameters:
+        - $ref: '#/components/parameters/RequestIdHeader'
+        - $ref: '#/components/parameters/IdempotencyKeyHeader'
+      requestBody:
+        required: true
+        content: { application/json: { schema: { $ref: '#/components/schemas/CreateQrPayOrderRequest' } } }
+      responses:
+        '201': { description: 返回含一次性二维码入口的订单, content: { application/json: { schema: { $ref: '#/components/schemas/QrPayOrderResponse' } } } }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '409': { $ref: '#/components/responses/Conflict' }
+        '422': { $ref: '#/components/responses/UnprocessableEntity' }
+    get:
+      summary: 查询本人创建的动态扫码订单
+      operationId: listQrPayOrders
+      x-client-scope: C
+      parameters:
+        - $ref: '#/components/parameters/RequestIdHeader'
+        - name: status
+          in: query
+          required: false
+          schema: { type: string, maxLength: 32 }
+        - name: cursor
+          in: query
+          required: false
+          schema: { type: string, minLength: 1, maxLength: 128 }
+        - name: limit
+          in: query
+          required: false
+          schema: { type: integer, minimum: 1, maximum: 100, default: 50 }
+      responses:
+        '200': { description: 返回当前收款人创建的订单列表, content: { application/json: { schema: { $ref: '#/components/schemas/QrPayOrderPageResponse' } } } }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+  /api/v1/qr-pay/orders/by-token:
+    get:
+      summary: 建立二维码 H5 引导会话
+      description: 只返回 H5 壳，令牌不消费且不得返回订单业务信息。
+      operationId: bootstrapQrPay
+      x-client-scope: C
+      parameters:
+        - $ref: '#/components/parameters/RequestIdHeader'
+        - name: t
+          in: query
+          required: true
+          schema: { type: string, minLength: 16, maxLength: 256 }
+      responses:
+        '204': { description: H5 引导会话已建立 }
+        '404': { $ref: '#/components/responses/NotFound' }
+  /api/v1/qr-pay/token-exchanges:
+    post:
+      summary: 交换二维码原始令牌
+      operationId: exchangeQrPayToken
+      x-client-scope: C
+      parameters:
+        - $ref: '#/components/parameters/RequestIdHeader'
+        - $ref: '#/components/parameters/CsrfTokenHeader'
+      requestBody:
+        required: true
+        content: { application/json: { schema: { $ref: '#/components/schemas/TokenExchangeRequest' } } }
+      responses:
+        '200': { description: 返回脱敏订单, content: { application/json: { schema: { $ref: '#/components/schemas/QrPayOrderResponse' } } } }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409': { $ref: '#/components/responses/Conflict' }
+  /api/v1/p2p-collections/codes/me:
+    get:
+      summary: 查询本人长期个人收款码
+      operationId: getPersonalCollectionCode
+      x-client-scope: C
+      parameters: [ { $ref: '#/components/parameters/RequestIdHeader' } ]
+      responses:
+        '200': { description: 返回脱敏个人码状态，无有效码时 data 为 null, content: { application/json: { schema: { $ref: '#/components/schemas/PersonalCollectionCodeResponse' } } } }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+  /api/v1/p2p-collections/requests:
+    post:
+      summary: 创建固定金额收款请求
+      operationId: createCollectionRequest
+      x-client-scope: C
+      parameters:
+        - $ref: '#/components/parameters/RequestIdHeader'
+        - $ref: '#/components/parameters/IdempotencyKeyHeader'
+      requestBody:
+        required: true
+        content: { application/json: { schema: { $ref: '#/components/schemas/CreateCollectionRequest' } } }
+      responses:
+        '201': { description: 返回金额和备注均已锁定的固定请求, content: { application/json: { schema: { $ref: '#/components/schemas/CollectionRequestResponse' } } } }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '409': { $ref: '#/components/responses/Conflict' }
+        '422': { $ref: '#/components/responses/UnprocessableEntity' }
+  /api/v1/manual-cases:
+    get:
+      summary: 查询脱敏人工确认工单
+      operationId: listManualCases
+      x-client-scope: B
+      parameters:
+        - $ref: '#/components/parameters/RequestIdHeader'
+        - name: status
+          in: query
+          required: false
+          schema: { type: string, enum: [OPEN, CLAIMED, RESOLVED, CLOSED] }
+        - name: type
+          in: query
+          required: false
+          schema: { type: string, maxLength: 64 }
+        - name: cursor
+          in: query
+          required: false
+          schema: { type: string, minLength: 1, maxLength: 128 }
+        - name: limit
+          in: query
+          required: false
+          schema: { type: integer, minimum: 1, maximum: 100, default: 50 }
+      responses:
+        '200': { description: 返回稳定游标分页的脱敏工单, content: { application/json: { schema: { $ref: '#/components/schemas/ManualCasePageResponse' } } } }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+  /api/v1/ops/realtime-metrics:
+    get:
+      summary: 查询分钟级脱敏实时指标
+      operationId: getRealtimeMetrics
+      x-client-scope: B
+      parameters:
+        - $ref: '#/components/parameters/RequestIdHeader'
+        - name: metricCode
+          in: query
+          required: false
+          schema: { type: string, maxLength: 64 }
+        - name: from
+          in: query
+          required: false
+          schema: { type: string, format: date-time }
+        - name: to
+          in: query
+          required: false
+          schema: { type: string, format: date-time }
+      responses:
+        '200': { description: 返回分钟级只读指标投影, content: { application/json: { schema: { $ref: '#/components/schemas/RealtimeMetricPageResponse' } } } }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+  /api/v1/ops/alerts:
+    get:
+      summary: 查询告警投影
+      operationId: listAlerts
+      x-client-scope: B
+      parameters:
+        - $ref: '#/components/parameters/RequestIdHeader'
+        - name: status
+          in: query
+          required: false
+          schema: { type: string, enum: [OPEN, ACKNOWLEDGED, RESOLVED, CLOSED] }
+        - name: cursor
+          in: query
+          required: false
+          schema: { type: string, minLength: 1, maxLength: 128 }
+        - name: limit
+          in: query
+          required: false
+          schema: { type: integer, minimum: 1, maximum: 100, default: 50 }
+      responses:
+        '200': { description: 返回脱敏告警分页；观察者只有读取权限, content: { application/json: { schema: { $ref: '#/components/schemas/AlertPageResponse' } } } }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+  /api/v1/qr-pay/orders/{id}:
+    parameters:
+      - $ref: '#/components/parameters/RequestIdHeader'
+      - $ref: '#/components/parameters/ResourceId'
+    get:
+      summary: 查询动态扫码订单和统一交易真实状态
+      description: 仅订单创建者、付款人或绑定 H5 会话可访问；订单进入处理中后状态必须回源统一交易事实。
+      operationId: getQrPayOrder
+      x-client-scope: C
+      responses:
+        '200': { description: 返回脱敏订单及真实资金状态, content: { application/json: { schema: { $ref: '#/components/schemas/QrPayOrderResponse' } } } }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '404': { $ref: '#/components/responses/NotFound' }
+    delete:
+      summary: 取消未进入资金处理的动态扫码订单
+      operationId: cancelQrPayOrder
+      x-client-scope: C
+      parameters:
+        - $ref: '#/components/parameters/IdempotencyKeyHeader'
+      requestBody:
+        required: true
+        content: { application/json: { schema: { $ref: '#/components/schemas/VersionRequest' } } }
+      responses:
+        '200': { description: 返回已取消订单；重复请求返回同一资源, content: { application/json: { schema: { $ref: '#/components/schemas/QrPayOrderResponse' } } } }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409': { $ref: '#/components/responses/Conflict' }
+  /api/v1/qr-pay/orders/{id}/scan:
+    post:
+      summary: 标记绑定 H5 会话已扫码
+      operationId: scanQrPayOrder
+      x-client-scope: C
+      parameters:
+        - $ref: '#/components/parameters/RequestIdHeader'
+        - $ref: '#/components/parameters/ResourceId'
+      responses:
+        '200': { description: CREATED 到 SCANNED 的幂等 CAS 结果, content: { application/json: { schema: { $ref: '#/components/schemas/QrPayOrderResponse' } } } }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409': { $ref: '#/components/responses/Conflict' }
+  /api/v1/qr-pay/orders/{id}/confirmations:
+    post:
+      summary: 为动态扫码订单签发确认令牌
+      description: 从登录会话派生付款人；令牌绑定订单版本、双方身份、金额、资金来源和支付密码版本。
+      operationId: issueQrPayConfirmation
+      x-client-scope: C
+      parameters:
+        - $ref: '#/components/parameters/RequestIdHeader'
+        - $ref: '#/components/parameters/ResourceId'
+      requestBody:
+        required: true
+        content: { application/json: { schema: { $ref: '#/components/schemas/IssueScenarioConfirmationRequest' } } }
+      responses:
+        '200': { description: 原始确认令牌只在本次响应返回且两分钟有效, content: { application/json: { schema: { $ref: '#/components/schemas/ConfirmationResponse' } } } }
+        '202': { $ref: '#/components/responses/ScenarioReviewRequired' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409': { $ref: '#/components/responses/Conflict' }
+        '422': { $ref: '#/components/responses/UnprocessableEntity' }
+  /api/v1/qr-pay/orders/{id}/pay:
+    post:
+      summary: 受理动态扫码余额或信用支付
+      description: 原子消费确认令牌、订单 CAS 和 source_type 加 source_order_id 唯一约束；503 只表示资金结果未知，响应仍包含真实 qrOrderId 和 transactionId（如已受理）。
+      operationId: payQrPayOrder
+      x-client-scope: C
+      parameters:
+        - $ref: '#/components/parameters/RequestIdHeader'
+        - $ref: '#/components/parameters/IdempotencyKeyHeader'
+        - $ref: '#/components/parameters/ResourceId'
+      requestBody:
+        required: true
+        content: { application/json: { schema: { $ref: '#/components/schemas/PayScenarioOrderRequest' } } }
+      responses:
+        '202': { description: 已受理，客户端必须查询真实状态, content: { application/json: { schema: { $ref: '#/components/schemas/ScenarioPaymentResponse' } } } }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409': { $ref: '#/components/responses/Conflict' }
+        '422': { $ref: '#/components/responses/UnprocessableEntity' }
+        '503': { $ref: '#/components/responses/ScenarioOutcomeUnknown' }
+  /api/v1/qr-pay/orders/{id}/events:
+    get:
+      summary: 订阅动态扫码订单状态事件
+      description: 断线后带 Last-Event-ID 重连；游标过期时返回 410，客户端必须回源查询订单真实状态。
+      operationId: streamQrPayOrderEvents
+      x-client-scope: C
+      parameters:
+        - $ref: '#/components/parameters/RequestIdHeader'
+        - $ref: '#/components/parameters/LastEventIdHeader'
+        - $ref: '#/components/parameters/ResourceId'
+      responses:
+        '200':
+          description: text/event-stream 状态事件，event id 可用作 Last-Event-ID。
+          content: { text/event-stream: { schema: { $ref: '#/components/schemas/ScenarioOrderEvent' } } }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '410': { $ref: '#/components/responses/Gone' }
+  /api/v1/p2p-collections/codes/me/regenerations:
+    post:
+      summary: 首次生成或原子换发长期个人收款码
+      operationId: regeneratePersonalCollectionCode
+      x-client-scope: C
+      parameters:
+        - $ref: '#/components/parameters/RequestIdHeader'
+        - $ref: '#/components/parameters/IdempotencyKeyHeader'
+      responses:
+        '200': { description: 返回新码；旧码立即不能新建订单, content: { application/json: { schema: { $ref: '#/components/schemas/PersonalCollectionCodeResponse' } } } }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '409': { $ref: '#/components/responses/Conflict' }
+  /api/v1/p2p-collections/codes/me/disable:
+    post:
+      summary: 使用版本 CAS 停用本人长期个人收款码
+      operationId: disablePersonalCollectionCode
+      x-client-scope: C
+      parameters:
+        - $ref: '#/components/parameters/RequestIdHeader'
+        - $ref: '#/components/parameters/IdempotencyKeyHeader'
+      requestBody:
+        required: true
+        content: { application/json: { schema: { $ref: '#/components/schemas/VersionRequest' } } }
+      responses:
+        '200': { description: 重复停用返回当前停用事实, content: { application/json: { schema: { $ref: '#/components/schemas/PersonalCollectionCodeResponse' } } } }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '409': { $ref: '#/components/responses/Conflict' }
+  /api/v1/p2p-collections/requests/{id}:
+    get:
+      summary: 查询固定金额收款请求和本人付款尝试
+      operationId: getCollectionRequest
+      x-client-scope: C
+      parameters:
+        - $ref: '#/components/parameters/RequestIdHeader'
+        - $ref: '#/components/parameters/ResourceId'
+      responses:
+        '200': { description: 创建者或关联付款人的脱敏视图, content: { application/json: { schema: { $ref: '#/components/schemas/CollectionRequestResponse' } } } }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '404': { $ref: '#/components/responses/NotFound' }
+  /api/v1/p2p-collections/requests/{id}/cancel:
+    post:
+      summary: 取消固定金额收款请求或记录处理中取消意图
+      operationId: cancelCollectionRequest
+      x-client-scope: C
+      parameters:
+        - $ref: '#/components/parameters/RequestIdHeader'
+        - $ref: '#/components/parameters/IdempotencyKeyHeader'
+        - $ref: '#/components/parameters/ResourceId'
+      requestBody:
+        required: true
+        content: { application/json: { schema: { $ref: '#/components/schemas/VersionRequest' } } }
+      responses:
+        '200': { description: 返回请求当前状态，处理中不伪造支付结果, content: { application/json: { schema: { $ref: '#/components/schemas/CollectionRequestResponse' } } } }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409': { $ref: '#/components/responses/Conflict' }
+  /api/v1/p2p-collections/by-token:
+    get:
+      summary: 建立个人码或固定请求的匿名 H5 引导会话
+      description: 仅加载空壳，不返回金额、双方身份或订单；响应必须使用 no-store 和 no-referrer。
+      operationId: bootstrapCollection
+      x-client-scope: C
+      parameters:
+        - $ref: '#/components/parameters/RequestIdHeader'
+        - name: t
+          in: query
+          required: true
+          schema: { type: string, minLength: 16, maxLength: 256 }
+      responses:
+        '204': { description: H5 引导会话已建立，令牌未消费 }
+        '404': { $ref: '#/components/responses/NotFound' }
+  /api/v1/p2p-collections/token-exchanges:
+    post:
+      summary: 登录付款人交换个人码或固定请求令牌并创建或恢复 H5 订单
+      description: 匿名 GET 仅建立不含业务数据的 bootstrap 会话；本操作必须在同一会话登录后调用，付款人和付款账户仅由服务端会话派生。
+      operationId: exchangeCollectionToken
+      x-client-scope: C
+      parameters:
+        - $ref: '#/components/parameters/RequestIdHeader'
+        - $ref: '#/components/parameters/CsrfTokenHeader'
+      requestBody:
+        required: true
+        content: { application/json: { schema: { $ref: '#/components/schemas/TokenExchangeRequest' } } }
+      responses:
+        '200': { description: 返回绑定会话的脱敏 C2C 订单, content: { application/json: { schema: { $ref: '#/components/schemas/CollectionOrderResponse' } } } }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409': { $ref: '#/components/responses/Conflict' }
+  /api/v1/p2p-collections/orders/{id}:
+    parameters:
+      - $ref: '#/components/parameters/RequestIdHeader'
+      - $ref: '#/components/parameters/ResourceId'
+    patch:
+      summary: 锁定个人码 C2C 订单的金额和备注
+      description: 只允许 PERSONAL_QR 的 DRAFT 订单；固定请求订单不接受金额、备注或收款账户覆盖字段。
+      operationId: lockPersonalCollectionOrder
+      x-client-scope: C
+      requestBody:
+        required: true
+        content: { application/json: { schema: { $ref: '#/components/schemas/LockPersonalCollectionOrderRequest' } } }
+      responses:
+        '200': { description: 返回已锁定金额的订单, content: { application/json: { schema: { $ref: '#/components/schemas/CollectionOrderResponse' } } } }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409': { $ref: '#/components/responses/Conflict' }
+        '422': { $ref: '#/components/responses/UnprocessableEntity' }
+    get:
+      summary: 查询 C2C 订单和统一交易真实状态
+      operationId: getCollectionOrder
+      x-client-scope: C
+      responses:
+        '200': { description: 仅交易双方或绑定 H5 会话可读取, content: { application/json: { schema: { $ref: '#/components/schemas/CollectionOrderResponse' } } } }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '404': { $ref: '#/components/responses/NotFound' }
+  /api/v1/p2p-collections/orders/{id}/confirmations:
+    post:
+      summary: 为 C2C 订单签发余额支付确认令牌
+      description: 服务端绑定双方、订单或请求版本、金额和 BALANCE；拒绝 MINI_CREDIT。
+      operationId: issueCollectionConfirmation
+      x-client-scope: C
+      parameters:
+        - $ref: '#/components/parameters/RequestIdHeader'
+        - $ref: '#/components/parameters/ResourceId'
+      requestBody:
+        required: true
+        content: { application/json: { schema: { $ref: '#/components/schemas/IssueCollectionConfirmationRequest' } } }
+      responses:
+        '200': { description: 返回一次性确认令牌, content: { application/json: { schema: { $ref: '#/components/schemas/ConfirmationResponse' } } } }
+        '202': { $ref: '#/components/responses/ScenarioReviewRequired' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409': { $ref: '#/components/responses/Conflict' }
+        '422': { $ref: '#/components/responses/UnprocessableEntity' }
+  /api/v1/p2p-collections/orders/{id}/pay:
+    post:
+      summary: 受理 C2C 余额支付
+      description: 仅接受 BALANCE，消费确认令牌、使用来源唯一约束并启动统一 TRANSFER TCC；未知结果不得显示成功。
+      operationId: payCollectionOrder
+      x-client-scope: C
+      parameters:
+        - $ref: '#/components/parameters/RequestIdHeader'
+        - $ref: '#/components/parameters/IdempotencyKeyHeader'
+        - $ref: '#/components/parameters/ResourceId'
+      requestBody:
+        required: true
+        content: { application/json: { schema: { $ref: '#/components/schemas/PayCollectionOrderRequest' } } }
+      responses:
+        '202': { description: 已受理，状态必须回源统一交易, content: { application/json: { schema: { $ref: '#/components/schemas/ScenarioPaymentResponse' } } } }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409': { $ref: '#/components/responses/Conflict' }
+        '422': { $ref: '#/components/responses/UnprocessableEntity' }
+        '503': { $ref: '#/components/responses/ScenarioOutcomeUnknown' }
+  /api/v1/p2p-collections/requests/{id}/events:
+    get:
+      summary: 订阅固定金额收款请求状态
+      operationId: streamCollectionRequestEvents
+      x-client-scope: C
+      parameters:
+        - $ref: '#/components/parameters/RequestIdHeader'
+        - $ref: '#/components/parameters/LastEventIdHeader'
+        - $ref: '#/components/parameters/ResourceId'
+      responses:
+        '200': { description: text/event-stream，首次返回当前权威请求状态，断线后仅补发 Last-Event-ID 之后事件；终态后服务端结束连接, content: { text/event-stream: { schema: { $ref: '#/components/schemas/CollectionRequestEvent' } } } }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '410': { $ref: '#/components/responses/Gone' }
+  /api/v1/manual-cases/{id}/decisions:
+    post:
+      summary: 使用版本 CAS 处置人工工单
+      operationId: decideManualCase
+      x-client-scope: B
+      parameters:
+        - $ref: '#/components/parameters/RequestIdHeader'
+        - $ref: '#/components/parameters/IdempotencyKeyHeader'
+        - $ref: '#/components/parameters/ResourceId'
+      requestBody:
+        required: true
+        content: { application/json: { schema: { $ref: '#/components/schemas/DecideManualCaseRequest' } } }
+      responses:
+        '200': { description: 返回审计后的工单视图，不直接修改资金终态, content: { application/json: { schema: { $ref: '#/components/schemas/ManualCaseResponse' } } } }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409': { $ref: '#/components/responses/Conflict' }
+        '422': { $ref: '#/components/responses/UnprocessableEntity' }
+  /api/v1/ops/daily-reports:
+    get:
+      summary: 查询通过质量门禁的 T+1 报表
+      operationId: listDailyReports
+      x-client-scope: B
+      parameters:
+        - $ref: '#/components/parameters/RequestIdHeader'
+        - name: reportDate
+          in: query
+          required: false
+          schema: { type: string, format: date }
+      responses:
+        '200': { description: 返回指标口径与质量版本, content: { application/json: { schema: { $ref: '#/components/schemas/DailyReportPageResponse' } } } }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+  /api/v1/ops/alerts/{id}/acknowledge:
+    post:
+      summary: 确认告警
+      operationId: acknowledgeAlert
+      x-client-scope: B
+      parameters:
+        - $ref: '#/components/parameters/RequestIdHeader'
+        - $ref: '#/components/parameters/IdempotencyKeyHeader'
+        - $ref: '#/components/parameters/ResourceId'
+      requestBody:
+        required: true
+        content: { application/json: { schema: { $ref: '#/components/schemas/AcknowledgeAlertRequest' } } }
+      responses:
+        '200': { description: 返回 CAS 更新后的告警, content: { application/json: { schema: { $ref: '#/components/schemas/AlertResponse' } } } }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409': { $ref: '#/components/responses/Conflict' }
+        '422': { $ref: '#/components/responses/UnprocessableEntity' }
+  /api/v1/ops/alerts/{id}/resolve:
+    post:
+      summary: 标记告警已解决
+      operationId: resolveAlert
+      x-client-scope: B
+      parameters:
+        - $ref: '#/components/parameters/RequestIdHeader'
+        - $ref: '#/components/parameters/IdempotencyKeyHeader'
+        - $ref: '#/components/parameters/ResourceId'
+      requestBody:
+        required: true
+        content: { application/json: { schema: { $ref: '#/components/schemas/ResolveAlertRequest' } } }
+      responses:
+        '200': { description: 证据已审计并返回告警, content: { application/json: { schema: { $ref: '#/components/schemas/AlertResponse' } } } }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409': { $ref: '#/components/responses/Conflict' }
+        '422': { $ref: '#/components/responses/UnprocessableEntity' }
+  /api/v1/ops/alerts/{id}/close:
+    post:
+      summary: 关闭已恢复的告警
+      operationId: closeAlert
+      x-client-scope: B
+      parameters:
+        - $ref: '#/components/parameters/RequestIdHeader'
+        - $ref: '#/components/parameters/IdempotencyKeyHeader'
+        - $ref: '#/components/parameters/ResourceId'
+      requestBody:
+        required: true
+        content: { application/json: { schema: { $ref: '#/components/schemas/CloseAlertRequest' } } }
+      responses:
+        '200': { description: 仅 RESOLVED 到 CLOSED 的 CAS 更新, content: { application/json: { schema: { $ref: '#/components/schemas/AlertResponse' } } } }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409': { $ref: '#/components/responses/Conflict' }
+  /api/v1/ops/data-quality:
+    get:
+      summary: 查询数据质量结果
+      description: 数据质量为 FAILED 时不向观察者发布指标数值；WARNING 必须携带风险标记。
+      operationId: listDataQuality
+      x-client-scope: B
+      parameters:
+        - $ref: '#/components/parameters/RequestIdHeader'
+        - name: dataDate
+          in: query
+          required: false
+          schema: { type: string, format: date }
+        - name: jobCode
+          in: query
+          required: false
+          schema: { type: string, maxLength: 64 }
+        - name: ruleCode
+          in: query
+          required: false
+          schema: { type: string, maxLength: 64 }
+      responses:
+        '200': { description: 返回已脱敏质量结果, content: { application/json: { schema: { $ref: '#/components/schemas/DataQualityPageResponse' } } } }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+  /api/v1/ops/metric-definitions:
+    get:
+      summary: 查询历史指标口径版本
+      operationId: listMetricDefinitions
+      x-client-scope: B
+      parameters: [ { $ref: '#/components/parameters/RequestIdHeader' } ]
+      responses:
+        '200': { description: 返回只读指标定义, content: { application/json: { schema: { $ref: '#/components/schemas/MetricDefinitionPageResponse' } } } }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+  /api/v1/ops/transactions:
+    get:
+      summary: 分页查询全平台脱敏交易摘要
+      operationId: listOpsTransactions
+      x-client-scope: B
+      parameters:
+        - { $ref: '#/components/parameters/RequestIdHeader' }
+        - { name: status, in: query, required: false, schema: { type: string, maxLength: 32 } }
+        - { name: businessType, in: query, required: false, schema: { type: string, maxLength: 16 } }
+        - { name: cursor, in: query, required: false, schema: { type: string, maxLength: 26 } }
+        - { name: limit, in: query, required: false, schema: { type: integer, minimum: 1, maximum: 100, default: 50 } }
+        - { name: from, in: query, required: false, schema: { type: string, format: date-time } }
+        - { name: to, in: query, required: false, schema: { type: string, format: date-time } }
+      responses:
+        '200': { description: 返回脱敏交易分页, content: { application/json: { schema: { $ref: '#/components/schemas/OpsTransactionPageResponse' } } } }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+  /api/v1/ops/transactions/{id}:
+    get:
+      summary: 查询单笔脱敏交易详情与关联资金事实
+      operationId: getOpsTransaction
+      x-client-scope: B
+      parameters:
+        - { $ref: '#/components/parameters/RequestIdHeader' }
+        - { $ref: '#/components/parameters/ResourceId' }
+      responses:
+        '200': { description: 返回脱敏交易详情, content: { application/json: { schema: { $ref: '#/components/schemas/OpsTransactionDetailResponse' } } } }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+  /api/v1/ops/transactions/{id}/trace:
+    get:
+      summary: 查询交易链路片段
+      operationId: getOpsTransactionTrace
+      x-client-scope: B
+      parameters:
+        - { $ref: '#/components/parameters/RequestIdHeader' }
+        - { $ref: '#/components/parameters/ResourceId' }
+      responses:
+        '200': { description: 返回业务中心可核验的链路片段, content: { application/json: { schema: { $ref: '#/components/schemas/TraceSpanListResponse' } } } }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+  /api/v1/ops/alert-rules:
+    get:
+      summary: 查询全部告警规则及阈值配置
+      operationId: listAlertRules
+      x-client-scope: B
+      parameters: [ { $ref: '#/components/parameters/RequestIdHeader' } ]
+      responses:
+        '200': { description: 返回告警规则列表, content: { application/json: { schema: { $ref: '#/components/schemas/AlertRuleListResponse' } } } }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+  /api/v1/ops/alert-rules/{ruleCode}/thresholds:
+    post:
+      summary: 按版本 CAS 更新告警规则阈值
+      operationId: updateAlertRuleThreshold
+      x-client-scope: B
+      parameters:
+        - { $ref: '#/components/parameters/RequestIdHeader' }
+        - { $ref: '#/components/parameters/IdempotencyKeyHeader' }
+        - { name: ruleCode, in: path, required: true, schema: { type: string, maxLength: 64 } }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/UpdateAlertRuleThresholdRequest' }
+      responses:
+        '200': { description: 返回更新后的告警规则, content: { application/json: { schema: { $ref: '#/components/schemas/AlertRuleResponse' } } } }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
 components:
   securitySchemes:
     bearerAuth:
@@ -772,6 +1626,11 @@ components:
       name: X-Internal-Service-Token
       description: 账户中心既有内部资金接口使用的服务身份令牌，不得经过前端网关或写入日志。
   parameters:
+    ResourceId:
+      name: id
+      in: path
+      required: true
+      schema: { type: string, minLength: 1, maxLength: 26 }
     RequestIdHeader:
       name: X-Request-Id
       in: header
@@ -810,6 +1669,569 @@ components:
         type: string
         maxLength: 128
   schemas:
+    CreateRechargeRequest:
+      type: object
+      additionalProperties: false
+      required: [amountFen]
+      properties:
+        amountFen: { type: integer, format: int64, minimum: 1, maximum: 5000000, description: 模拟充值金额，单位分。 }
+    RechargeOrderResponse:
+      allOf:
+        - $ref: '#/components/schemas/ApiResponse'
+        - type: object
+          required: [data]
+          properties: { data: { type: object, additionalProperties: false, required: [rechargeOrderId, amountFen, status, version, createdAt], properties: { rechargeOrderId: { type: string, maxLength: 26 }, amountFen: { type: integer, format: int64, minimum: 1 }, status: { type: string }, version: { type: integer, format: int64, minimum: 0 }, createdAt: { type: string, format: date-time } } } }
+    RechargeChannelResultRequest:
+      type: object
+      additionalProperties: false
+      required: [success]
+      properties:
+        success: { type: boolean, description: 模拟渠道是否成功 }
+        rejectReasonCode: { type: string, maxLength: 64, description: 渠道拒绝原因码，success 为 true 时忽略 }
+        traceId: { type: string, minLength: 32, maxLength: 32 }
+    RechargeOrderReference:
+      type: object
+      additionalProperties: false
+      required: [rechargeOrderId, userId, amountFen, status, version]
+      properties:
+        rechargeOrderId: { type: string, maxLength: 26 }
+        userId: { type: string, maxLength: 26 }
+        amountFen: { type: integer, format: int64, minimum: 1 }
+        status: { type: string, description: 充值订单状态，渠道成功推进到 PROCESSING 或渠道拒绝到 REJECTED }
+        transactionId: { type: [string, 'null'], maxLength: 26 }
+        version: { type: integer, format: int64, minimum: 0 }
+    CreateQrPayOrderRequest:
+      type: object
+      additionalProperties: false
+      required: [amountFen]
+      properties:
+        amountFen: { type: integer, format: int64, minimum: 1, maximum: 5000000, description: 收款金额，单位分。 }
+        subject: { type: string, maxLength: 50, description: 服务端会移除控制字符的收款说明。 }
+    TokenExchangeRequest:
+      type: object
+      additionalProperties: false
+      required: [token]
+      properties: { token: { type: string, minLength: 16, maxLength: 256, writeOnly: true } }
+    QrCollectionAnalyticsResponse:
+      allOf:
+        - $ref: '#/components/schemas/ApiResponse'
+        - type: object
+          required: [data]
+          properties:
+            data:
+              type: object
+              additionalProperties: false
+              required: [orderCount, transactionCount, grossAmountFen, refundAmountFen, netAmountFen, range, byPaymentMethod, since, now]
+              properties:
+                orderCount: { type: integer, format: int64, minimum: 0, description: 去重来源订单数，避免一单多次入账重复计数。 }
+                transactionCount: { type: integer, format: int64, minimum: 0, description: 成功交易笔数，与去重订单数对比用于对账。 }
+                grossAmountFen: { type: integer, format: int64, minimum: 0, description: 收款总额，单位分。 }
+                refundAmountFen: { type: integer, format: int64, minimum: 0, description: 退款总额，单位分。 }
+                netAmountFen: { type: integer, format: int64, description: 净收款 = 收款总额 - 退款总额，单位分。 }
+                range: { type: string, enum: [today, month] }
+                byPaymentMethod:
+                  type: array
+                  items:
+                    type: object
+                    additionalProperties: false
+                    required: [businessType, orderCount, amountFen]
+                    properties:
+                      businessType: { type: string, description: 支付方式：QR_PAY 余额扫码、CREDIT_PAY 花呗扫码。 }
+                      orderCount: { type: integer, format: int64, minimum: 0 }
+                      amountFen: { type: integer, format: int64, minimum: 0 }
+                since: { type: string, format: date-time, description: 统计起始时间。 }
+                now: { type: string, format: date-time, description: 统计结束时间。 }
+    CreateRefundRequest:
+      type: object
+      additionalProperties: false
+      required: [originalTransactionId, reasonCode]
+      properties:
+        originalTransactionId: { type: string, minLength: 1, maxLength: 26, description: 原已成功的动态扫码统一交易号（QR_PAY/CREDIT_PAY）。 }
+        reasonCode: { type: string, maxLength: 32, description: 退款原因。 }
+    SubmitRefundRequest:
+      type: object
+      additionalProperties: false
+      required: [version]
+      properties: { version: { type: integer, format: int64, minimum: 0, description: 客户端读取到的退款订单 CAS 版本。 } }
+    RefundOrderResponse:
+      allOf:
+        - $ref: '#/components/schemas/ApiResponse'
+        - type: object
+          required: [data]
+          properties:
+            data:
+              type: object
+              additionalProperties: false
+              required: [refundOrderId, originalTransactionId, amountFen, status, version, createdAt]
+              properties:
+                refundOrderId: { type: string, maxLength: 26 }
+                originalTransactionId: { type: string, maxLength: 26 }
+                amountFen: { type: integer, format: int64, minimum: 1 }
+                status: { type: string, description: 退款订单状态，受理后不代表冲正成功。 }
+                transactionId: { type: [string, 'null'], maxLength: 26, description: REFUND 统一交易号，受理前为空。 }
+                version: { type: integer, format: int64, minimum: 0 }
+                createdAt: { type: string, format: date-time }
+    RefundOrderPageResponse:
+      allOf:
+        - $ref: '#/components/schemas/ApiResponse'
+        - type: object
+          required: [data]
+          properties:
+            data:
+              type: object
+              additionalProperties: false
+              required: [items]
+              properties:
+                items: { type: array, items: { type: object, additionalProperties: false, required: [refundOrderId, originalTransactionId, amountFen, status, version, createdAt], properties: { refundOrderId: { type: string, maxLength: 26 }, originalTransactionId: { type: string, maxLength: 26 }, amountFen: { type: integer, format: int64, minimum: 1 }, status: { type: string }, transactionId: { type: [string, 'null'], maxLength: 26 }, version: { type: integer, format: int64, minimum: 0 }, createdAt: { type: string, format: date-time } } } }
+                nextCursor: { type: [string, 'null'], maxLength: 128 }
+    QrPayOrderResponse:
+      allOf:
+        - $ref: '#/components/schemas/ApiResponse'
+        - type: object
+          required: [data]
+          properties: { data: { type: object, additionalProperties: false, properties: { qrOrderId: { type: string, maxLength: 26 }, amountFen: { type: integer, format: int64, minimum: 1 }, subject: { type: string }, status: { type: string }, transactionId: { type: [string, 'null'], maxLength: 26 }, qrCodeUrl: { type: [string, 'null'], writeOnly: true }, expiresAt: { type: string, format: date-time }, version: { type: integer, format: int64, minimum: 0 } } } }
+    CreateCollectionRequest:
+      type: object
+      additionalProperties: false
+      required: [amountFen]
+      properties:
+        amountFen: { type: integer, format: int64, minimum: 1, maximum: 5000000 }
+        subject: { type: string, maxLength: 50 }
+    VersionRequest:
+      type: object
+      additionalProperties: false
+      required: [version]
+      properties:
+        version: { type: integer, format: int64, minimum: 0, description: 当前资源的 CAS 版本。 }
+    IssueScenarioConfirmationRequest:
+      type: object
+      additionalProperties: false
+      required: [version, paymentProof, fundingSource]
+      properties:
+        version: { type: integer, format: int64, minimum: 0 }
+        paymentProof:
+          type: string
+          minLength: 1
+          maxLength: 256
+          writeOnly: true
+          description: 用户中心签发的一次性支付证明，禁止写入日志、URL 和持久化字段。
+        fundingSource: { type: string, enum: [BALANCE, MINI_CREDIT], description: 确认时绑定的资金来源。 }
+    PayScenarioOrderRequest:
+      type: object
+      additionalProperties: false
+      required: [confirmationToken]
+      properties:
+        confirmationToken:
+          type: string
+          minLength: 16
+          maxLength: 256
+          writeOnly: true
+          description: 已绑定订单快照的一次性确认令牌，禁止持久化或写入 URL。
+    ScenarioPayment:
+      type: object
+      additionalProperties: false
+      required: [orderId, transactionId, status, statusUrl, updatedAt]
+      properties:
+        orderId: { type: string, minLength: 1, maxLength: 26, description: 已真实创建或读取到的业务订单 ID。 }
+        transactionId: { type: [string, 'null'], maxLength: 26, description: 已受理时的真实统一交易 ID；未知受理结果时允许为空。 }
+        status: { type: string, enum: [PROCESSING, SUCCESS, CANCELLED, MANUAL_REVIEW, UNKNOWN], description: UNKNOWN 不得被客户端展示为成功。 }
+        statusUrl: { type: string, minLength: 1, maxLength: 256, description: 回源查询真实状态的相对路径。 }
+        updatedAt: { type: string, format: date-time }
+    ScenarioPaymentResponse:
+      allOf:
+        - $ref: '#/components/schemas/ApiResponse'
+        - type: object
+          required: [data]
+          properties: { data: { $ref: '#/components/schemas/ScenarioPayment' } }
+    ScenarioOrderEvent:
+      type: object
+      additionalProperties: false
+      required: [eventId, orderId, status, occurredAt]
+      properties:
+        eventId: { type: string, minLength: 1, maxLength: 128 }
+        orderId: { type: string, minLength: 1, maxLength: 26 }
+        transactionId: { type: [string, 'null'], maxLength: 26 }
+        status: { type: string }
+        occurredAt: { type: string, format: date-time }
+    CollectionRequestEvent:
+      type: object
+      additionalProperties: false
+      required: [eventId, requestId, status, occurredAt]
+      properties:
+        eventId: { type: string, minLength: 1, maxLength: 128, description: 可作为 Last-Event-ID 的持久化事件游标。 }
+        requestId: { type: string, minLength: 1, maxLength: 26 }
+        activeOrderId: { type: [string, 'null'], maxLength: 26 }
+        transactionId: { type: [string, 'null'], maxLength: 26 }
+        status: { type: string, enum: [OPEN, PENDING_CONFIRMATION, PROCESSING, SUCCESS, CANCELLED, EXPIRED, MANUAL_REVIEW] }
+        occurredAt: { type: string, format: date-time }
+    QrPayOrderPage:
+      type: object
+      additionalProperties: false
+      required: [items, nextCursor]
+      properties:
+        items: { type: array, items: { $ref: '#/components/schemas/QrPayOrder' } }
+        nextCursor: { type: [string, 'null'], maxLength: 128 }
+    QrPayOrderPageResponse:
+      allOf:
+        - $ref: '#/components/schemas/ApiResponse'
+        - type: object
+          required: [data]
+          properties: { data: { $ref: '#/components/schemas/QrPayOrderPage' } }
+    QrPayOrder:
+      type: object
+      additionalProperties: false
+      required: [qrOrderId, amountFen, subject, status, transactionId, expiresAt, version]
+      properties:
+        qrOrderId: { type: string, minLength: 1, maxLength: 26 }
+        payeeDisplayName: { type: [string, 'null'], maxLength: 64 }
+        amountFen: { type: integer, format: int64, minimum: 1, maximum: 5000000 }
+        subject: { type: string, maxLength: 50 }
+        status: { type: string, enum: [CREATED, SCANNED, PENDING_CONFIRMATION, RISK_REVIEW, PROCESSING, SUCCESS, CANCELLED, EXPIRED, MANUAL_REVIEW] }
+        transactionId: { type: [string, 'null'], maxLength: 26 }
+        qrCodeUrl: { type: [string, 'null'], maxLength: 256, writeOnly: true, description: 原始二维码令牌仅可存在于本次创建响应。 }
+        expiresAt: { type: string, format: date-time }
+        version: { type: integer, format: int64, minimum: 0 }
+    PersonalCollectionCode:
+      type: object
+      additionalProperties: false
+      required: [codeId, status, version]
+      properties:
+        codeId: { type: string, minLength: 1, maxLength: 26 }
+        status: { type: string, enum: [ACTIVE, REVOKED, DISABLED] }
+        collectionUrl: { type: [string, 'null'], maxLength: 256, writeOnly: true, description: 原始个人码令牌只在换码响应中出现。 }
+        version: { type: integer, format: int64, minimum: 0 }
+    PersonalCollectionCodeResponse:
+      allOf:
+        - $ref: '#/components/schemas/ApiResponse'
+        - type: object
+          required: [data]
+          properties: { data: { $ref: '#/components/schemas/PersonalCollectionCode' } }
+    CollectionRequest:
+      type: object
+      additionalProperties: false
+      required: [requestId, amountFen, subject, status, activeOrderId, transactionId, expiresAt, version]
+      properties:
+        requestId: { type: string, minLength: 1, maxLength: 26 }
+        amountFen: { type: integer, format: int64, minimum: 1, maximum: 5000000 }
+        subject: { type: string, maxLength: 50 }
+        status: { type: string, enum: [ACTIVE, PROCESSING, PAID, CANCELLED, EXPIRED] }
+        activeOrderId: { type: [string, 'null'], maxLength: 26 }
+        transactionId: { type: [string, 'null'], maxLength: 26 }
+        expiresAt: { type: string, format: date-time }
+        version: { type: integer, format: int64, minimum: 0 }
+    CollectionRequestResponse:
+      allOf:
+        - $ref: '#/components/schemas/ApiResponse'
+        - type: object
+          required: [data]
+          properties: { data: { $ref: '#/components/schemas/CollectionRequest' } }
+    LockPersonalCollectionOrderRequest:
+      type: object
+      additionalProperties: false
+      required: [version, amountFen]
+      properties:
+        version: { type: integer, format: int64, minimum: 0 }
+        amountFen: { type: integer, format: int64, minimum: 1, maximum: 5000000 }
+        subject: { type: string, maxLength: 50 }
+    IssueCollectionConfirmationRequest:
+      type: object
+      additionalProperties: false
+      required: [version, paymentProof]
+      properties:
+        version: { type: integer, format: int64, minimum: 0 }
+        paymentProof:
+          type: string
+          minLength: 1
+          maxLength: 256
+          writeOnly: true
+          description: 用户中心签发的一次性支付证明，禁止写入日志、URL 和持久化字段。
+    PayCollectionOrderRequest:
+      type: object
+      additionalProperties: false
+      required: [confirmationToken]
+      properties:
+        confirmationToken:
+          type: string
+          minLength: 16
+          maxLength: 256
+          writeOnly: true
+          description: 已绑定 BALANCE 和 C2C 订单快照的一次性确认令牌。
+    CollectionOrder:
+      type: object
+      additionalProperties: false
+      required: [collectionOrderId, kind, amountFen, subject, status, transactionId, expiresAt, version]
+      properties:
+        collectionOrderId: { type: string, minLength: 1, maxLength: 26 }
+        kind: { type: string, enum: [PERSONAL_QR, FIXED_REQUEST] }
+        amountFen: { type: [integer, 'null'], format: int64, minimum: 1, maximum: 5000000 }
+        subject: { type: [string, 'null'], maxLength: 50 }
+        status: { type: string, enum: [DRAFT, PENDING_CONFIRMATION, RISK_REVIEW, PROCESSING, SUCCESS, CANCELLED, EXPIRED, MANUAL_REVIEW] }
+        transactionId: { type: [string, 'null'], maxLength: 26 }
+        expiresAt: { type: string, format: date-time }
+        version: { type: integer, format: int64, minimum: 0 }
+    CollectionOrderResponse:
+      allOf:
+        - $ref: '#/components/schemas/ApiResponse'
+        - type: object
+          required: [data]
+          properties: { data: { $ref: '#/components/schemas/CollectionOrder' } }
+    DecideManualCaseRequest:
+      type: object
+      additionalProperties: false
+      required: [decision, version]
+      properties:
+        decision: { type: string, enum: [CLAIM, RESOLVE, REOPEN, CLOSE] }
+        version: { type: integer, format: int64, minimum: 0 }
+        reason: { type: string, maxLength: 500 }
+        evidence: { type: string, maxLength: 2000 }
+    ManualCase:
+      type: object
+      additionalProperties: false
+      required: [caseId, caseType, subjectType, subjectId, status, version, createdAt]
+      properties:
+        caseId: { type: string, minLength: 1, maxLength: 26 }
+        caseType: { type: string }
+        subjectType: { type: string }
+        subjectId: { type: string, maxLength: 26, description: 按角色脱敏后的业务主体标识。 }
+        status: { type: string, enum: [OPEN, CLAIMED, RESOLVED, CLOSED] }
+        version: { type: integer, format: int64, minimum: 0 }
+        createdAt: { type: string, format: date-time }
+    ManualCaseResponse:
+      allOf:
+        - $ref: '#/components/schemas/ApiResponse'
+        - type: object
+          required: [data]
+          properties: { data: { $ref: '#/components/schemas/ManualCase' } }
+    AcknowledgeAlertRequest:
+      type: object
+      additionalProperties: false
+      required: [version, reason]
+      properties:
+        version: { type: integer, format: int64, minimum: 0 }
+        reason: { type: string, minLength: 1, maxLength: 500 }
+    ResolveAlertRequest:
+      type: object
+      additionalProperties: false
+      required: [version, reason, evidence]
+      properties:
+        version: { type: integer, format: int64, minimum: 0 }
+        reason: { type: string, minLength: 1, maxLength: 500 }
+        evidence: { type: string, minLength: 1, maxLength: 2000 }
+    CloseAlertRequest:
+      type: object
+      additionalProperties: false
+      required: [version, reason, evidence]
+      properties:
+        version: { type: integer, format: int64, minimum: 0 }
+        reason: { type: string, minLength: 1, maxLength: 500 }
+        evidence: { type: string, minLength: 1, maxLength: 2000 }
+    Alert:
+      type: object
+      additionalProperties: false
+      required: [alertId, alertType, severity, status, version, createdAt, updatedAt]
+      properties:
+        alertId: { type: string, minLength: 1, maxLength: 26 }
+        alertType: { type: string, maxLength: 64 }
+        severity: { type: string, enum: [INFO, WARNING, CRITICAL] }
+        status: { type: string, enum: [OPEN, ACKNOWLEDGED, RESOLVED, CLOSED] }
+        version: { type: integer, format: int64, minimum: 0 }
+        createdAt: { type: string, format: date-time }
+        updatedAt: { type: string, format: date-time }
+    AlertResponse:
+      allOf:
+        - $ref: '#/components/schemas/ApiResponse'
+        - type: object
+          required: [data]
+          properties: { data: { $ref: '#/components/schemas/Alert' } }
+    DailyReportPageResponse:
+      allOf:
+        - $ref: '#/components/schemas/ApiResponse'
+        - type: object
+          required: [data]
+          properties: { data: { type: array, items: { $ref: '#/components/schemas/DailyMetric' } } }
+    DailyMetric:
+      type: object
+      additionalProperties: false
+      required: [metricCode, reportDate, value, metricVersion, qualityStatus]
+      properties:
+        metricCode: { type: string, maxLength: 64 }
+        reportDate: { type: string, format: date }
+        value: { type: integer, format: int64 }
+        metricVersion: { type: string, maxLength: 32 }
+        qualityStatus: { type: string, enum: [PASSED, WARNING] }
+    DataQualityPageResponse:
+      allOf:
+        - $ref: '#/components/schemas/ApiResponse'
+        - type: object
+          required: [data]
+          properties: { data: { type: array, items: { $ref: '#/components/schemas/DataQualityResult' } } }
+    DataQualityResult:
+      type: object
+      additionalProperties: false
+      required: [resultId, checkType, status, checkedCount, failedCount, completedAt]
+      properties:
+        resultId: { type: string, minLength: 1, maxLength: 26 }
+        checkType: { type: string, maxLength: 64 }
+        status: { type: string, enum: [PASSED, WARNING, FAILED] }
+        checkedCount: { type: integer, format: int64, minimum: 0 }
+        failedCount: { type: integer, format: int64, minimum: 0 }
+        completedAt: { type: string, format: date-time }
+    MetricDefinitionPageResponse:
+      allOf:
+        - $ref: '#/components/schemas/ApiResponse'
+        - type: object
+          required: [data]
+          properties: { data: { type: array, items: { $ref: '#/components/schemas/MetricDefinition' } } }
+    MetricDefinition:
+      type: object
+      additionalProperties: false
+      required: [metricCode, version, name, unit, formula]
+      properties:
+        metricCode: { type: string, maxLength: 64 }
+        version: { type: string, maxLength: 32 }
+        name: { type: string, maxLength: 100 }
+        unit: { type: string, maxLength: 32 }
+        formula: { type: string, maxLength: 1000 }
+    ManualCasePage:
+      type: object
+      additionalProperties: false
+      required: [items, nextCursor]
+      properties:
+        items: { type: array, items: { $ref: '#/components/schemas/ManualCase' } }
+        nextCursor: { type: [string, 'null'], maxLength: 128 }
+    ManualCasePageResponse:
+      allOf:
+        - $ref: '#/components/schemas/ApiResponse'
+        - type: object
+          required: [data]
+          properties: { data: { $ref: '#/components/schemas/ManualCasePage' } }
+    AlertPage:
+      type: object
+      additionalProperties: false
+      required: [items, nextCursor]
+      properties:
+        items: { type: array, items: { $ref: '#/components/schemas/Alert' } }
+        nextCursor: { type: [string, 'null'], maxLength: 128 }
+    AlertPageResponse:
+      allOf:
+        - $ref: '#/components/schemas/ApiResponse'
+        - type: object
+          required: [data]
+          properties: { data: { $ref: '#/components/schemas/AlertPage' } }
+    OpsTransaction:
+      type: object
+      additionalProperties: false
+      required: [transactionId, businessType, sourceType, sourceOrderId, initiatorMasked, amountFen, status, riskLevel, traceId, createdAt, updatedAt]
+      properties:
+        transactionId: { type: string, maxLength: 26 }
+        businessType: { type: string, enum: [TRANSFER, QR_PAY, CREDIT_PAY, CREDIT_REPAY, RECHARGE, REFUND] }
+        sourceType: { type: string, maxLength: 32 }
+        sourceOrderId: { type: string, maxLength: 26 }
+        initiatorMasked: { type: string, maxLength: 32 }
+        amountFen: { type: integer, format: int64, minimum: 0 }
+        status: { type: string, maxLength: 32 }
+        riskLevel: { type: string, maxLength: 16 }
+        traceId: { type: string, pattern: '^[a-fA-F0-9]{32}$' }
+        createdAt: { type: string, format: date-time }
+        updatedAt: { type: string, format: date-time }
+    OpsTransactionPage:
+      type: object
+      additionalProperties: false
+      required: [items, nextCursor]
+      properties:
+        items: { type: array, items: { $ref: '#/components/schemas/OpsTransaction' } }
+        nextCursor: { type: [string, 'null'], maxLength: 26 }
+    OpsTransactionPageResponse:
+      allOf:
+        - $ref: '#/components/schemas/ApiResponse'
+        - type: object
+          required: [data]
+          properties: { data: { $ref: '#/components/schemas/OpsTransactionPage' } }
+    OpsTransactionDetail:
+      type: object
+      additionalProperties: false
+      required: [transaction, fundingSource]
+      properties:
+        transaction: { $ref: '#/components/schemas/OpsTransaction' }
+        fundingSource: { type: string, enum: [BALANCE, CREDIT] }
+        tccStatus: { type: [string, 'null'], maxLength: 32 }
+        tccRetryCount: { type: integer, minimum: 0 }
+        latestOutboxEventType: { type: [string, 'null'], maxLength: 64 }
+        outboxStatus: { type: [string, 'null'], maxLength: 16 }
+        activeManualCaseId: { type: [string, 'null'], maxLength: 26 }
+    OpsTransactionDetailResponse:
+      allOf:
+        - $ref: '#/components/schemas/ApiResponse'
+        - type: object
+          required: [data]
+          properties: { data: { $ref: '#/components/schemas/OpsTransactionDetail' } }
+    TraceSpan:
+      type: object
+      additionalProperties: false
+      required: [service, operation, status, detail, traceId, occurredAt]
+      properties:
+        service: { type: string, maxLength: 64 }
+        operation: { type: string, maxLength: 64 }
+        status: { type: string, maxLength: 32 }
+        detail: { type: string, maxLength: 256 }
+        traceId: { type: string, pattern: '^[a-fA-F0-9]{32}$' }
+        occurredAt: { type: string, format: date-time }
+    TraceSpanListResponse:
+      allOf:
+        - $ref: '#/components/schemas/ApiResponse'
+        - type: object
+          required: [data]
+          properties: { data: { type: array, items: { $ref: '#/components/schemas/TraceSpan' } } }
+    AlertRule:
+      type: object
+      additionalProperties: false
+      required: [ruleCode, ruleName, metricCode, severity, operator, thresholdValue, enabled, version, updatedBy, updatedAt]
+      properties:
+        ruleCode: { type: string, maxLength: 64 }
+        ruleName: { type: string, maxLength: 100 }
+        metricCode: { type: string, maxLength: 64 }
+        severity: { type: string, enum: [CRITICAL, WARNING, INFO] }
+        operator: { type: string, enum: [GT, GTE, LT, LTE] }
+        thresholdValue: { type: integer, format: int64, minimum: 0 }
+        enabled: { type: boolean }
+        version: { type: integer, format: int64, minimum: 0 }
+        updatedBy: { type: string, maxLength: 128 }
+        updatedAt: { type: string, format: date-time }
+    AlertRuleListResponse:
+      allOf:
+        - $ref: '#/components/schemas/ApiResponse'
+        - type: object
+          required: [data]
+          properties: { data: { type: array, items: { $ref: '#/components/schemas/AlertRule' } } }
+    AlertRuleResponse:
+      allOf:
+        - $ref: '#/components/schemas/ApiResponse'
+        - type: object
+          required: [data]
+          properties: { data: { $ref: '#/components/schemas/AlertRule' } }
+    UpdateAlertRuleThresholdRequest:
+      type: object
+      additionalProperties: false
+      required: [thresholdValue, version]
+      properties:
+        thresholdValue: { type: integer, format: int64, minimum: 0 }
+        version: { type: integer, format: int64, minimum: 0 }
+    RealtimeMetric:
+      type: object
+      additionalProperties: false
+      required: [metricCode, bucketAt, value, metricVersion, qualityStatus]
+      properties:
+        metricCode: { type: string, maxLength: 64 }
+        bucketAt: { type: string, format: date-time }
+        value: { type: integer, format: int64 }
+        metricVersion: { type: string, maxLength: 32 }
+        qualityStatus: { type: string, enum: [PASSED, WARNING] }
+    RealtimeMetricPageResponse:
+      allOf:
+        - $ref: '#/components/schemas/ApiResponse'
+        - type: object
+          required: [data]
+          properties: { data: { type: array, items: { $ref: '#/components/schemas/RealtimeMetric' } } }
     CreditSummary:
       type: object
       additionalProperties: false
@@ -989,6 +2411,15 @@ components:
         accountId: { type: string, minLength: 26, maxLength: 26 }
         userId: { type: string, minLength: 26, maxLength: 26 }
         status: { type: string, enum: [ACTIVE, FROZEN, CLOSED] }
+    InternalCreditAccountReference:
+      type: object
+      additionalProperties: false
+      required: [creditAccountId, userId, status, version]
+      properties:
+        creditAccountId: { type: string, minLength: 26, maxLength: 26 }
+        userId: { type: string, minLength: 26, maxLength: 26 }
+        status: { type: string, enum: [ACTIVE, SUSPENDED, CLOSED] }
+        version: { type: integer, format: int64, minimum: 0 }
     BalanceTccCommand:
       type: object
       additionalProperties: false
@@ -1016,6 +2447,60 @@ components:
         payerAccountId: { type: string, minLength: 26, maxLength: 26 }
         payeeAccountId: { type: string, minLength: 26, maxLength: 26 }
         amountFen: { type: integer, format: int64, minimum: 1 }
+        voucherId: { type: string, minLength: 26, maxLength: 26 }
+        debitEntryId: { type: integer, format: int64, minimum: 1 }
+        creditEntryId: { type: integer, format: int64, minimum: 1 }
+        eventId: { type: string, minLength: 26, maxLength: 26 }
+        traceId: { type: string, pattern: '^[a-fA-F0-9]{32}$' }
+    CreditPayLedgerTccCommand:
+      type: object
+      additionalProperties: false
+      required: [xid, transactionId, creditAccountId, payeeAccountId, amountFen, voucherId, debitEntryId, creditEntryId, eventId, traceId]
+      properties:
+        xid:
+          type: string
+          minLength: 1
+          maxLength: 128
+          description: TCC 全局事务标识；同一分支重试时保持不变。
+        transactionId: { type: string, minLength: 26, maxLength: 26 }
+        creditAccountId:
+          type: string
+          minLength: 26
+          maxLength: 26
+          description: 付款人的信用账户，只用于派生信用应收资产科目。
+        payeeAccountId:
+          type: string
+          minLength: 26
+          maxLength: 26
+          description: 收款用户的普通余额账户；账户中心派生其余额负债科目。
+        amountFen: { type: integer, format: int64, minimum: 1, description: 金额，单位为分。 }
+        voucherId: { type: string, minLength: 26, maxLength: 26 }
+        debitEntryId: { type: integer, format: int64, minimum: 1 }
+        creditEntryId: { type: integer, format: int64, minimum: 1 }
+        eventId: { type: string, minLength: 26, maxLength: 26 }
+        traceId: { type: string, pattern: '^[a-fA-F0-9]{32}$' }
+    CreditPayLedgerTccCommand:
+      type: object
+      additionalProperties: false
+      required: [xid, transactionId, creditAccountId, payeeAccountId, amountFen, voucherId, debitEntryId, creditEntryId, eventId, traceId]
+      properties:
+        xid:
+          type: string
+          minLength: 1
+          maxLength: 128
+          description: TCC 全局事务标识；同一分支重试时保持不变。
+        transactionId: { type: string, minLength: 26, maxLength: 26 }
+        creditAccountId:
+          type: string
+          minLength: 26
+          maxLength: 26
+          description: 付款人的信用账户，只用于派生信用应收资产科目。
+        payeeAccountId:
+          type: string
+          minLength: 26
+          maxLength: 26
+          description: 收款用户的普通余额账户；账户中心派生其余额负债科目。
+        amountFen: { type: integer, format: int64, minimum: 1, description: 金额，单位为分。 }
         voucherId: { type: string, minLength: 26, maxLength: 26 }
         debitEntryId: { type: integer, format: int64, minimum: 1 }
         creditEntryId: { type: integer, format: int64, minimum: 1 }
@@ -1487,6 +2972,24 @@ components:
             $ref: '#/components/schemas/ErrorResponse'
     ServiceUnavailable:
       description: TCC、模型或关键依赖暂不可用
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+    ScenarioOutcomeUnknown:
+      description: 资金受理或执行结果暂未知；响应 data 必须携带真实业务订单编号和可查询状态，客户端不得展示成功。
+      content:
+        application/json:
+          schema:
+            allOf:
+              - $ref: '#/components/schemas/ApiResponse'
+              - type: object
+                required: [data]
+                properties:
+                  data:
+                    $ref: '#/components/schemas/ScenarioPayment'
+    ScenarioReviewRequired:
+      description: 前置风控命中人工复核，订单已进入 RISK_REVIEW 并创建预检工单；客户端不得签发或展示确认令牌，应引导用户等待运营审核。
       content:
         application/json:
           schema:

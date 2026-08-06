@@ -1194,7 +1194,7 @@ Agent 不可以：
 | `GET /api/v1/accounts/me` | 查询本人账户 | 实时回源 |
 | `GET /api/v1/users/search` | 按登录名/昵称查询收款人 | 仅返回脱敏数据 |
 | `GET /api/v1/accounts/me/analytics` | 查询资产分析 | 7/30 天口径 |
-| `GET /api/v1/accounts/me/qr-collection-analytics` | 查询本人扫码收款统计 | 普通用户本人身份与收款账户归属校验；按终态、支付方式和退款去重 |
+| `GET /api/v1/qr-pay/me/qr-collection-analytics` | 查询本人扫码收款统计 | 普通用户本人身份与收款账户归属校验；按终态、支付方式和退款去重 |
 | `POST /api/v1/transfer-drafts` | 创建草稿 | 幂等、Schema 校验 |
 | `PATCH /api/v1/transfer-drafts/{id}` | 更新草稿 | 版本号校验 |
 | `POST /api/v1/transfer-drafts/{id}/validate` | 校验与风控预检 | 不改变资金 |
