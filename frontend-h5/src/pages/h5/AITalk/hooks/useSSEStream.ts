@@ -55,7 +55,8 @@ export function useSSEStream() {
 
         let eventType = '';
         let data = '';
-        for (const line of lines) {
+        for (let line of lines) {
+          line = line.replace(/\r$/, '');
           if (line.startsWith('event: ')) {
             eventType = line.slice(7).trim();
           } else if (line.startsWith('data: ')) {
