@@ -56,16 +56,20 @@ const AITalkPage: React.FC = () => {
             console.debug('SSE tool result:', data.tool, data.status, data.summary);
           },
 
-          'agent-content': (data) => {
-            setMessages((prev) => {
-              const updated = [...prev];
-              const idx = updated.findIndex((m) => m.id === assistantId);
-              if (idx >= 0) {
-                const current = updated[idx] as AssistantTextMessage;
-                updated[idx] = { ...current, content: current.content + data.delta };
-              }
-              return updated;
-            });
+          'agent-content': async (data: any) => {
+            // 逐字追加到消息，每个字符间隔 15ms 产生打字效果
+            for (const ch of data.delta) {
+              setMessages((prev) => {
+                const updated = [...prev];
+                const idx = updated.findIndex((m) => m.id === assistantId);
+                if (idx >= 0) {
+                  const current = updated[idx] as AssistantTextMessage;
+                  updated[idx] = { ...current, content: current.content + ch };
+                }
+                return updated;
+              });
+              await new Promise((r) => setTimeout(r, 15));
+            }
           },
 
           'agent-confirmation': (data) => {

@@ -65,7 +65,8 @@ export function useSSEStream() {
             try {
               const parsed = JSON.parse(data);
               const handler = (handlers as Record<string, Function>)[eventType];
-              handler?.(parsed);
+              // await 以支持 handler 内部做逐字延迟
+              await handler?.(parsed);
             } catch { /* 解析失败跳过 */ }
             eventType = '';
             data = '';
