@@ -38,7 +38,7 @@ class StageFiveOpenApiContractTest {
                 "/api/v1/ops/alerts/{id}/acknowledge", "/api/v1/ops/alerts/{id}/resolve",
                 "/api/v1/ops/alerts/{id}/close", "/api/v1/ops/data-quality", "/api/v1/ops/metric-definitions",
                 "/api/v1/ops/transactions", "/api/v1/ops/transactions/{id}", "/api/v1/ops/transactions/{id}/trace",
-                "/api/v1/ops/alert-rules", "/api/v1/ops/alert-rules/{ruleCode}/thresholds"
+                "/api/v1/ops/traces/{traceId}", "/api/v1/ops/alert-rules", "/api/v1/ops/alert-rules/{ruleCode}/thresholds"
         );
         assertEventStream(paths, "/api/v1/qr-pay/orders/{id}/events");
         assertEventStream(paths, "/api/v1/p2p-collections/requests/{id}/events");

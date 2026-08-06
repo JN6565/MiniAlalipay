@@ -120,7 +120,7 @@ export interface OpsTransactionDetailItem {
   activeManualCaseId: string | null;
 }
 
-/** 链路追溯片段，与 OpenAPI TraceSpan 对齐。 */
+/** 链路追溯片段，与 OpenAPI TraceSpan 对齐；transactionId 表示片段归属的交易号，非交易归属的服务片段为空。 */
 export interface TraceSpanItem {
   service: string;
   operation: string;
@@ -128,6 +128,7 @@ export interface TraceSpanItem {
   detail: string;
   traceId: string;
   occurredAt: string;
+  transactionId?: string;
 }
 
 /** 告警规则及阈值配置，与 OpenAPI AlertRule 对齐。 */
@@ -287,9 +288,14 @@ export function getOpsTransaction(transactionId: string): Promise<ApiResponse<Op
   return gatewayRequest<ApiResponse<OpsTransactionDetailItem>>(`/api/v1/ops/transactions/${encodeURIComponent(transactionId)}`);
 }
 
-/** 查询交易链路片段；仅展示业务中心可核验的资金事实阶段。 */
+/** 查询交易链路片段；按交易归属的链路编号返回跨服务脱敏 Span。 */
 export function getOpsTransactionTrace(transactionId: string): Promise<ApiResponse<TraceSpanItem[]>> {
   return gatewayRequest<ApiResponse<TraceSpanItem[]>>(`/api/v1/ops/transactions/${encodeURIComponent(transactionId)}/trace`);
+}
+
+/** 按链路编号查询跨服务链路片段；无已核验片段时返回空列表。 */
+export function getOpsTraceByTraceId(traceId: string): Promise<ApiResponse<TraceSpanItem[]>> {
+  return gatewayRequest<ApiResponse<TraceSpanItem[]>>(`/api/v1/ops/traces/${encodeURIComponent(traceId)}`);
 }
 
 /** 查询全部告警规则及阈值配置。 */

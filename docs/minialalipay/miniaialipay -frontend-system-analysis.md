@@ -1905,40 +1905,44 @@ sequenceDiagram
     participant Web as B端Web
     participant API as 后端API
     O->>Web: 进入 /admin/trace
-    O->>Web: 输入交易号或链路编号
-    Web->>API: GET /api/v1/transfers/{id}/trace
-    API-->>Web: 脱敏全链路 Span 列表（按角色裁剪）
+    O->>Web: 输入交易号或链路编号（32 位 hex）
+    alt 32 位 hex 链路编号
+        Web->>API: GET /api/v1/ops/traces/{traceId}
+    else 交易号
+        Web->>API: GET /api/v1/ops/transactions/{id}/trace
+    end
+    API-->>Web: 脱敏跨服务 Span 列表（业务中心/账户账本/用户审计/AI）
     Web-->>O: 链路时间线视图
-    Note over Web: 展示 Agent→网关→风控→事务→账本<br/>各阶段 Span 耗时与状态
+    Note over Web: 以 service 标签区分服务来源<br/>各阶段 Span 状态与耗时
 ```
 
 **前端逻辑**
 
-+ 输入交易号或链路编号查询脱敏全链路，后端按角色裁剪 Span。
-+ 链路时间线展示 Agent→网关→风控→事务→账本各阶段 Span 的名称、状态、开始时间、耗时和服务来源。
++ 输入交易号或链路编号查询脱敏全链路：32 位 hex 自动按链路编号查询，其余按交易号查询。
++ 链路时间线展示跨服务 Span 的名称、状态、开始时间、耗时和服务来源（service 标签着色区分来源）。
 + `transactionId` 可点击跳转交易查询页，双向导航。
 + Span 详情已由后端脱敏，前端不二次处理敏感属性。
-+ 观察者与运营看到的 Span 范围不同，权限由后端对象级授权控制。
++ 观察者与运营看到的 Span 范围相同，权限由后端对象级授权控制。
 
 **前端逻辑 — 链路展示字段**
 
 | 字段名称 | 说明 | 交互 |
 | --- | --- | --- |
 | 链路编号 | traceId | 只读展示 |
-| 交易编号 | transactionId | 只读展示，可跳转交易查询页 |
-| Span 名称 | spanName | 只读展示，如 Agent/网关/风控/事务/账本 |
-| Span 状态 | spanStatus | 只读展示，OK/ERROR |
-| 开始时间 | startedAt | 只读展示 |
-| 耗时 | durationMs | 只读展示 |
-| 服务来源 | service | 只读展示，如 ai-service/gateway/business-center |
-| 脱敏详情 | sanitizedAttributes | 只读展示，后端已脱敏 |
+| 片段归属交易号 | transactionId | 只读展示，可跳转交易查询页；非交易归属的服务片段为空 |
+| 片段名称 | operation | 只读展示，如统一交易受理/TCC 全局事务/账本过账事件/AI 工具调用 |
+| 片段状态 | status | 只读展示，SUCCESS/ERROR/PROCESSING 等 |
+| 发生时间 | occurredAt | 只读展示 |
+| 片段详情 | detail | 只读展示，后端已脱敏 |
+| 服务来源 | service | 只读展示，如 ai-service/account-center/user-center/business-center |
 
 
 **所需 API**
 
 | 方法 | 路径 | 说明 |
 | --- | --- | --- |
-| GET | `/api/v1/transfers/{id}/trace` | 查询脱敏全链路，按角色裁剪 Span（后端 12.7.2） |
+| GET | `/api/v1/ops/transactions/{id}/trace` | 按交易号查询脱敏跨服务链路（后端 12.7.2） |
+| GET | `/api/v1/ops/traces/{traceId}` | 按链路编号（32 位 hex）查询脱敏跨服务链路 |
 
 
 #### 2.3.29 本人扫码收款统计（C 端 H5）

@@ -1740,10 +1740,22 @@ paths:
         - { $ref: '#/components/parameters/RequestIdHeader' }
         - { $ref: '#/components/parameters/ResourceId' }
       responses:
-        '200': { description: 返回业务中心可核验的链路片段, content: { application/json: { schema: { $ref: '#/components/schemas/TraceSpanListResponse' } } } }
+        '200': { description: 按交易归属链路编号返回跨服务脱敏 Span（业务中心、账户账本、用户审计、AI）, content: { application/json: { schema: { $ref: '#/components/schemas/TraceSpanListResponse' } } } }
         '401': { $ref: '#/components/responses/Unauthorized' }
         '403': { $ref: '#/components/responses/Forbidden' }
         '404': { $ref: '#/components/responses/NotFound' }
+  /api/v1/ops/traces/{traceId}:
+    get:
+      summary: 按链路编号查询跨服务链路片段
+      operationId: getOpsTraceByTraceId
+      x-client-scope: B
+      parameters:
+        - { $ref: '#/components/parameters/RequestIdHeader' }
+        - { $ref: '#/components/parameters/ResourceId' }
+      responses:
+        '200': { description: 链路无已核验片段时返回空列表, content: { application/json: { schema: { $ref: '#/components/schemas/TraceSpanListResponse' } } } }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
   /api/v1/ops/alert-rules:
     get:
       summary: 查询全部告警规则及阈值配置
@@ -3271,6 +3283,7 @@ components:
         detail: { type: string, maxLength: 256 }
         traceId: { type: string, pattern: '^[a-fA-F0-9]{32}$' }
         occurredAt: { type: string, format: date-time }
+        transactionId: { type: string, maxLength: 26, nullable: true, description: 该片段归属的交易号，非交易归属的服务片段为空。 }
     TraceSpanListResponse:
       allOf:
         - $ref: '#/components/schemas/ApiResponse'

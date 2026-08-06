@@ -137,7 +137,23 @@ class OpsControllerTest {
         mvc.perform(get("/api/v1/ops/transactions/tx-1/trace").header("X-User-Roles", "OPERATOR"))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.data[0].operation").value("统一交易受理"))
-                .andExpect(jsonPath("$.data[0].service").value("business-center"));
+                .andExpect(jsonPath("$.data[0].service").value("business-center"))
+                .andExpect(jsonPath("$.data[0].transactionId").value("tx-1"))
+                .andExpect(jsonPath("$.data[1].service").value("account-center"))
+                .andExpect(jsonPath("$.data[2].service").value("ai-service"));
+    }
+
+    @Test
+    void 按链路编号查询跨服务链路片段() throws Exception {
+        mvc.perform(get("/api/v1/ops/traces/abcdef0123456789abcdef0123456789").header("X-User-Roles", "OPERATOR"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data[0].operation").value("统一交易受理"))
+                .andExpect(jsonPath("$.data[1].service").value("account-center"));
+
+        // 未知链路编号返回空列表而非 404。
+        mvc.perform(get("/api/v1/ops/traces/trace-unknown").header("X-User-Roles", "OPERATOR"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data").isEmpty());
     }
 
     @Test
@@ -184,9 +200,15 @@ class OpsControllerTest {
             return Optional.of(new OpsTransactionDetail(row(), "BALANCE", "SUCCESS", 0,
                     "transaction.status.changed", "COMPLETED", "case-1"));
         }
-        @Override public List<TraceSpan> findTraceSpans(String transactionId) {
-            return List.of(new TraceSpan("business-center", "统一交易受理", "SUCCESS", "TRANSFER/TRANSFER_DRAFT",
-                    "abcdef0123456789abcdef0123456789", NOW));
+        @Override public List<TraceSpan> findTraceSpansByTraceId(String traceId) {
+            if ("trace-unknown".equals(traceId)) return List.of();
+            return List.of(
+                    new TraceSpan("business-center", "统一交易受理", "SUCCESS", "TRANSFER/TRANSFER_DRAFT",
+                            traceId, NOW, "tx-1"),
+                    new TraceSpan("account-center", "账本过账事件", "SUCCESS", "ledger.posted",
+                            traceId, NOW.plusSeconds(1), "tx-1"),
+                    new TraceSpan("ai-service", "AI 工具调用", "SUCCESS", "balance_query,duration_ms=12",
+                            traceId, NOW.plusSeconds(2), null));
         }
         private static OpsTransactionRow row() {
             return new OpsTransactionRow("tx-1", "TRANSFER", "TRANSFER_DRAFT", "order-1", "user01***1234", 5200L,
