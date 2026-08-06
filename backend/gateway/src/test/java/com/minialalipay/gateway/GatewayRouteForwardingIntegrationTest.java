@@ -1,5 +1,7 @@
 package com.minialalipay.gateway;
 
+import com.minialalipay.gateway.auth.GatewayAuthenticationPort;
+import com.minialalipay.gateway.filter.GatewayAuthContext;
 import org.junit.jupiter.api.AfterAll;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
@@ -20,6 +22,7 @@ import reactor.netty.DisposableServer;
 import reactor.netty.http.server.HttpServer;
 
 import java.util.Map;
+import java.util.Set;
 import java.util.stream.Stream;
 
 import static org.mockito.ArgumentMatchers.anyString;
@@ -50,6 +53,9 @@ class GatewayRouteForwardingIntegrationTest {
     @MockBean
     private RedisRateLimiter redisRateLimiter;
 
+    @MockBean
+    private GatewayAuthenticationPort authenticationPort;
+
     @DynamicPropertySource
     static void downstreamProperties(DynamicPropertyRegistry registry) {
         registry.add("spring.cloud.nacos.discovery.enabled", () -> "false");
@@ -63,6 +69,10 @@ class GatewayRouteForwardingIntegrationTest {
     void allowRequestsThroughRateLimiter() {
         when(redisRateLimiter.isAllowed(anyString(), anyString()))
                 .thenReturn(Mono.just(new RedisRateLimiter.Response(true, Map.of())));
+        // 认证端口 Mock：接受任意非空令牌，返回测试用 OPERATOR 用户（覆盖运维路径访问场景）
+        when(authenticationPort.authenticate(anyString()))
+                .thenReturn(Mono.just(new GatewayAuthContext("dev-user-001",
+                        Set.of("USER", "OPERATOR"))));
     }
 
     @ParameterizedTest(name = "{0} 转发到 {1}")

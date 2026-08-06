@@ -49,6 +49,30 @@ public class MockAccountCenterClient implements AccountCenterPort {
         return Map.of("bills", java.util.List.of());
     }
 
+    @Override
+    public Map<String, Object> createCreditRepaymentDraft(
+            String userId, long amountFen, String idempotencyKey) {
+        return Map.of(
+                "repaymentDraftId", "01J5Q000000000000000000100",
+                "version", 0L,
+                "amountFen", amountFen,
+                "allocations", java.util.List.of(
+                        Map.of("billId", "01J5Q000000000000000000101",
+                                "amountFen", amountFen)
+                )
+        );
+    }
+
+    @Override
+    public Map<String, Object> submitCreditRepayment(
+            String userId, String repaymentDraftId,
+            String paymentProofToken, String idempotencyKey) {
+        return Map.of(
+                "repaymentId", "01J5Q000000000000000000110",
+                "status", "PROCESSING"
+        );
+    }
+
     /**
      * 调用账户中心工具（兼容旧 ToolRouter 的调度模式）。
      */

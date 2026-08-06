@@ -3,6 +3,7 @@ package com.minialalipay.ai.interfaces.web;
 import com.minialalipay.ai.application.security.InjectionDetector;
 import com.minialalipay.ai.application.security.IOSanitizer;
 import com.minialalipay.ai.application.service.AgentMessageService;
+import com.minialalipay.ai.infrastructure.client.RequestContext;
 import com.minialalipay.ai.domain.agent.AgentErrorCode;
 import com.minialalipay.ai.interfaces.web.dto.SendMessageRequest;
 import com.minialalipay.ai.interfaces.web.dto.SendMessageResponse;
@@ -73,39 +74,49 @@ public class AgentController {
         String requestId = resolveRequestId(httpRequest);
         String traceId = MDC.get("traceId");
 
-        log.debug("收到 AI 消息: userId={}, sessionId={}, clientMessageId={}",
-                userId, request.sessionId(), request.clientMessageId());
-
-        // 1. 注入检测
-        InjectionDetector.InjectionCheckResult check =
-                injectionDetector.check(request.content());
-        if (!check.safe()) {
-            log.warn("提示注入被拒绝: userId={}, detectedPattern={}",
-                    userId, check.detectedPattern());
-            throw new BusinessException(
-                    AgentErrorCode.PROMPT_INJECTION_REJECTED,
-                    java.util.Map.of("reason", check.reason(), "detectedPattern", check.detectedPattern())
-            );
+        // 提取 Bearer Token 用于下游调用时经过网关鉴权
+        String authHeader = httpRequest.getHeader("Authorization");
+        if (authHeader != null && authHeader.startsWith("Bearer ")) {
+            RequestContext.setBearerToken(authHeader.substring("Bearer ".length()));
         }
 
-        // 2. 内容脱敏
-        String sanitizedContent = sanitizer.sanitizeContent(request.content());
+        try {
+            log.debug("收到 AI 消息: userId={}, sessionId={}, clientMessageId={}",
+                    userId, request.sessionId(), request.clientMessageId());
 
-        // 3. 委托应用服务
-        AgentMessageService.SendMessageResult result = agentMessageService.processMessage(
-                userId, request.clientMessageId(),
-                request.sessionId(), sanitizedContent, clock.instant());
+            // 1. 注入检测
+            InjectionDetector.InjectionCheckResult check =
+                    injectionDetector.check(request.content());
+            if (!check.safe()) {
+                log.warn("提示注入被拒绝: userId={}, detectedPattern={}",
+                        userId, check.detectedPattern());
+                throw new BusinessException(
+                        AgentErrorCode.PROMPT_INJECTION_REJECTED,
+                        java.util.Map.of("reason", check.reason(), "detectedPattern", check.detectedPattern())
+                );
+            }
 
-        // 4. 构建响应
-        SendMessageResponse data = new SendMessageResponse(
-                result.sessionId(),
-                result.messageId(),
-                result.content(),
-                result.intent().name(),
-                result.slots(),
-                result.clarificationNeeded()
-        );
-        return ResponseEntity.ok(ApiResponse.success(data, requestId, traceId));
+            // 2. 内容脱敏
+            String sanitizedContent = sanitizer.sanitizeContent(request.content());
+
+            // 3. 委托应用服务
+            AgentMessageService.SendMessageResult result = agentMessageService.processMessage(
+                    userId, request.clientMessageId(),
+                    request.sessionId(), sanitizedContent, clock.instant());
+
+            // 4. 构建响应
+            SendMessageResponse data = new SendMessageResponse(
+                    result.sessionId(),
+                    result.messageId(),
+                    result.content(),
+                    result.intent().name(),
+                    result.slots(),
+                    result.clarificationNeeded()
+            );
+            return ResponseEntity.ok(ApiResponse.success(data, requestId, traceId));
+        } finally {
+            RequestContext.clear();
+        }
     }
 
     private String resolveRequestId(HttpServletRequest request) {

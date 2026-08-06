@@ -46,13 +46,14 @@ public class HttpUserCenterClient implements UserCenterPort {
     public List<Map<String, Object>> searchPayees(String userId, String query, int limit) {
         log.debug("搜索收款人: userId={}, query={}, limit={}", userId, query, limit);
         try {
-            Map<String, Object> response = restClient.get()
+            var spec = restClient.get()
                     .uri(uriBuilder -> uriBuilder
                             .path("/api/v1/users/search")
                             .queryParam("q", query)
                             .queryParam("limit", limit)
                             .build())
-                    .header("X-User-Id", userId)
+                    .header("X-User-Id", userId);
+            Map<String, Object> response = withAuth(spec)
                     .retrieve()
                     .onStatus(HttpStatusCode::is4xxClientError, (req, res) -> {
                         log.warn("搜索收款人客户端错误: status={}", res.getStatusCode());
@@ -78,5 +79,17 @@ public class HttpUserCenterClient implements UserCenterPort {
             log.error("搜索收款人调用失败: {}", e.getMessage());
             throw new BusinessException(AgentErrorCode.TOOL_UNAVAILABLE);
         }
+    }
+
+    /**
+     * 条件注入 Authorization 头：通过网关调用时携带原始 Bearer Token。
+     */
+    private org.springframework.web.client.RestClient.RequestHeadersSpec<?> withAuth(
+            org.springframework.web.client.RestClient.RequestHeadersSpec<?> spec) {
+        String authHeader = RequestContext.getAuthorizationHeader();
+        if (authHeader != null) {
+            spec.header("Authorization", authHeader);
+        }
+        return spec;
     }
 }

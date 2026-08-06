@@ -14,14 +14,21 @@ import java.time.Duration;
 /**
  * 用户中心真实会话认证适配器。
  *
- * <p>网关只信任用户中心返回的用户 ID，客户端提交的身份头会由全局过滤器覆盖。</p>
+ * <p>通过调用用户中心 {@code /internal/v1/auth/sessions/introspect} 校验会话令牌。
+ * 网关只信任用户中心返回的用户 ID 和角色，客户端提交的身份头会由全局过滤器覆盖。</p>
+ *
+ * <h3>故障处理</h3>
+ * <ul>
+ *   <li>用户中心不可达时抛出 {@code SERVICE_UNAVAILABLE}，与令牌无效的 401 区分开</li>
+ *   <li>超时 2 秒，避免阻塞网关请求链</li>
+ * </ul>
  */
 @Component
-public final class ConfiguredStubAuthenticationAdapter implements GatewayAuthenticationPort {
+public final class UserCenterAuthenticationAdapter implements GatewayAuthenticationPort {
     private final WebClient webClient;
     private final String serviceToken;
 
-    public ConfiguredStubAuthenticationAdapter(
+    public UserCenterAuthenticationAdapter(
             WebClient.Builder builder,
             @Value("${gateway.authentication.user-center-uri:http://localhost:8081}") String userCenterUri,
             @Value("${gateway.authentication.service-token:local-internal-token}") String serviceToken) {

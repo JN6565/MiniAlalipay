@@ -1681,6 +1681,32 @@ paths:
         '401': { $ref: '#/components/responses/Unauthorized' }
         '403': { $ref: '#/components/responses/Forbidden' }
         '404': { $ref: '#/components/responses/NotFound' }
+  /api/v1/agent/messages:
+    post:
+      summary: AI 多轮对话入口
+      operationId: sendAgentMessage
+      x-client-scope: C
+      description: |
+        向 AI Talk 发送一条自然语言消息。
+        客户端通过 clientMessageId 保证消息幂等；首次对话时可省略 sessionId 让服务端自动创建新会话。
+      parameters:
+        - $ref: '#/components/parameters/RequestIdHeader'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/SendAgentMessageRequest' }
+      responses:
+        '200':
+          description: AI 回复
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/SendAgentMessageResponse' }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '409': { $ref: '#/components/responses/Conflict' }
+        '429': { $ref: '#/components/responses/TooManyRequests' }
+        '500': { $ref: '#/components/responses/InternalError' }
 components:
   securitySchemes:
     bearerAuth:
@@ -2204,6 +2230,44 @@ components:
           type: string
           enum: [TRIED, CONFIRMED, CANCELLED]
           description: 本次同步调用完成后的 TCC 分支状态。
+    SendAgentMessageRequest:
+      type: object
+      additionalProperties: false
+      required: [clientMessageId, content]
+      properties:
+        clientMessageId:
+          type: string
+          minLength: 16
+          maxLength: 64
+          description: 客户端消息幂等键，16-64 位随机字符串，同一消息重复发送返回既有结果。
+        sessionId:
+          type: string
+          maxLength: 26
+          description: 会话 ID（ULID），首次对话可省略，服务端自动创建新会话。
+        content:
+          type: string
+          minLength: 1
+          maxLength: 2000
+          description: 用户输入的自然语言消息。
+    SendAgentMessageResponseData:
+      type: object
+      additionalProperties: false
+      required: [sessionId, messageId, content, intent, clarificationNeeded]
+      properties:
+        sessionId: { type: string, minLength: 1, maxLength: 26, description: 当前会话 ID }
+        messageId: { type: string, minLength: 1, maxLength: 26, description: 本条 AI 回复的消息 ID }
+        content: { type: string, description: AI 的自然语言回复正文 }
+        intent: { type: string, enum: [TRANSFER, BALANCE_QUERY, TRANSACTION_LIST, TRANSACTION_STATUS, USER_SEARCH, CREDIT_SUMMARY, CREDIT_BILL, CREDIT_REPAYMENT], description: 识别出的意图类型 }
+        slots: { type: object, description: 当前会话的结构化槽位，键为字段名，值为提取的原始值 }
+        clarificationNeeded: { type: boolean, description: 是否需要用户进一步澄清 }
+    SendAgentMessageResponse:
+      allOf:
+        - $ref: '#/components/schemas/ApiResponse'
+        - type: object
+          required: [data]
+          properties:
+            data:
+              $ref: '#/components/schemas/SendAgentMessageResponseData'
     HealthResponse:
       type: object
       additionalProperties: false

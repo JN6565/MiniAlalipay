@@ -32,7 +32,7 @@ spring:
           min-idle: 2
   ai:
     openai:
-      # 真实 Key 以 sk- 开头，设置 SPRING_AI_OPENAI_API_KEY 环境变量覆盖；不设时默认 Mock
+      # 真实 Key 以 sk- 开头，设置 SPRING_AI_OPENAI_API_KEY 环境变量覆盖；未设置时使用 Mock 模式
       api-key: ${SPRING_AI_OPENAI_API_KEY:sk-0fbdcf2e0ae44affa6a4515f71680d8a}
       base-url: ${SPRING_AI_OPENAI_BASE_URL:https://api.deepseek.com}
       chat:
@@ -56,12 +56,14 @@ ai:
   client:
     mock-mode: ${AI_CLIENT_MOCK_MODE:true}
     timeout-ms: 3000
+    # AI 服务调用下游时应统一经过网关(localhost:8080)，由网关完成鉴权、限流和审计。
+    # 当前 Token 传播机制尚未完成，生产部署前需补充 Authorization 头传递链路。
     user-center:
-      base-url: ${USER_CENTER_URI:http://localhost:8081}
+      base-url: ${USER_CENTER_URI:http://localhost:8080}
     business-center:
-      base-url: ${BUSINESS_CENTER_URI:http://localhost:8082}
+      base-url: ${BUSINESS_CENTER_URI:http://localhost:8080}
     account-center:
-      base-url: ${ACCOUNT_CENTER_URI:http://localhost:8083}
+      base-url: ${ACCOUNT_CENTER_URI:http://localhost:8080}
   mcp:
     tool-timeout: 3s
     max-retries: 1

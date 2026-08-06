@@ -10,7 +10,8 @@ package com.minialalipay.gateway.filter;
  * <ol>
  *   <li>{@link #REQUEST_CONTEXT} — 请求编号生成与透传，必须在日志和异常记录之前</li>
  *   <li>{@link #SECURITY_HEADERS} — 安全响应头，在鉴权之前写入</li>
- *   <li>{@link #AUTHENTICATION} — 身份认证与 CSRF 校验</li>
+ *   <li>{@link #AUTHENTICATION} — 身份认证</li>
+ *   <li>{@link #CSRF} — CSRF Token 校验，在鉴权之后、限流之前</li>
  *   <li>{@link #RATE_LIMITER} — 限流，在鉴权之后、业务路由之前执行</li>
  *   <li>{@link #LOGGING} — 访问日志，在所有业务处理之后记录</li>
  * </ol>
@@ -29,6 +30,9 @@ public final class GatewayFilterOrders {
 
     /** 身份认证：提取会话令牌并校验身份，注入 principalId 和 roles。 */
     public static final int AUTHENTICATION = 20;
+
+    /** CSRF Token 校验：对 Cookie 会话写请求校验防跨站请求伪造令牌。 */
+    public static final int CSRF = 25;
 
     /** 限流：按用户、IP 和业务动作执行速率限制。 */
     public static final int RATE_LIMITER = 30;

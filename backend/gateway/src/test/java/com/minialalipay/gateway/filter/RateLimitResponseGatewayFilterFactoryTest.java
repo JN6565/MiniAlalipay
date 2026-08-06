@@ -1,6 +1,7 @@
 package com.minialalipay.gateway.filter;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.minialalipay.gateway.audit.GatewayAuditLogger;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.springframework.http.HttpStatus;
@@ -23,7 +24,7 @@ class RateLimitResponseGatewayFilterFactoryTest {
         );
         exchange.getAttributes().put(RequestIdGlobalFilter.ATTR_TRACE_ID, "trace-rate-limit-unit");
         RateLimitResponseGatewayFilterFactory factory =
-                new RateLimitResponseGatewayFilterFactory(new ObjectMapper());
+                new RateLimitResponseGatewayFilterFactory(new ObjectMapper(), new GatewayAuditLogger());
 
         factory.apply(new RateLimitResponseGatewayFilterFactory.Config())
                 .filter(exchange, current -> {

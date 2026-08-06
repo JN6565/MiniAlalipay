@@ -3,6 +3,8 @@ package com.minialalipay.gateway.filter;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.minialalipay.common.api.ApiResponse;
 import com.minialalipay.common.error.CommonErrorCode;
+import com.minialalipay.gateway.audit.AuditEvent;
+import com.minialalipay.gateway.audit.GatewayAuditLogger;
 import org.springframework.cloud.gateway.filter.GatewayFilter;
 import org.springframework.cloud.gateway.filter.factory.AbstractGatewayFilterFactory;
 import org.springframework.core.io.buffer.DataBuffer;
@@ -28,10 +30,12 @@ public class RateLimitResponseGatewayFilterFactory
         extends AbstractGatewayFilterFactory<RateLimitResponseGatewayFilterFactory.Config> {
 
     private final ObjectMapper objectMapper;
+    private final GatewayAuditLogger auditLogger;
 
-    public RateLimitResponseGatewayFilterFactory(ObjectMapper objectMapper) {
+    public RateLimitResponseGatewayFilterFactory(ObjectMapper objectMapper, GatewayAuditLogger auditLogger) {
         super(Config.class);
         this.objectMapper = objectMapper;
+        this.auditLogger = auditLogger;
     }
 
     @Override
@@ -56,6 +60,12 @@ public class RateLimitResponseGatewayFilterFactory
             requestId = exchange.getAttribute(RequestIdGlobalFilter.ATTR_REQUEST_ID);
         }
         String traceId = exchange.getAttribute(RequestIdGlobalFilter.ATTR_TRACE_ID);
+        String path = exchange.getRequest().getURI().getPath();
+        String method = exchange.getRequest().getMethod() != null
+                ? exchange.getRequest().getMethod().name()
+                : "GET";
+        auditLogger.logRejection(AuditEvent.RATE_LIMIT_TRIGGERED, requestId, traceId, "-",
+                path, method, "触发限流阈值", "请求被网关限流拒绝");
         ApiResponse<Void> body = ApiResponse.failure(CommonErrorCode.RATE_LIMITED, requestId, traceId);
         try {
             byte[] bytes = objectMapper.writeValueAsBytes(body);

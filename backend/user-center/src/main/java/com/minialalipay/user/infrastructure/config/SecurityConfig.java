@@ -16,10 +16,10 @@ import org.springframework.security.web.SecurityFilterChain;
  *
  * <p>配置说明：
  * <ul>
- *   <li>禁用 CSRF 保护 - 因为使用 JWT 令牌而不是 Cookie</li>
- *   <li>禁用默认登录页面 - 使用自定义的登录接口</li>
- *   <li>允许所有请求匿名访问 - 身份验证由网关处理</li>
- *   <li>禁用 Session - 使用无状态的 JWT 令牌</li>
+ *   <li>禁用 CSRF 保护 — 网关已通过 CsrfGlobalFilter 统一处理</li>
+ *   <li>禁用默认登录页面 — 使用自定义的登录接口</li>
+ *   <li>允许所有请求匿名访问 — 身份验证由网关统一处理</li>
+ *   <li>禁用 Session — 会话令牌由用户中心管理，网关通过 /internal/v1/auth/sessions/introspect 校验</li>
  * </ul>
  * </p>
  */

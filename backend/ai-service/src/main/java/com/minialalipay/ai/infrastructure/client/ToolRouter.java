@@ -166,11 +166,18 @@ public class ToolRouter {
             // ---- 账户中心（信用还款） ----
             case "create_credit_repayment_draft" -> {
                 long amountFen = ((Number) params.getOrDefault("amountFen", 0L)).longValue();
-                yield Map.of("repaymentDraftId", "01J5Q000000000000000000100", "version", 0L);
+                String idempotencyKey = (String) params.getOrDefault("idempotencyKey",
+                        userId + "-repay-draft-" + System.currentTimeMillis());
+                yield accountCenterPort.createCreditRepaymentDraft(
+                        userId, amountFen, idempotencyKey);
             }
             case "submit_confirmed_credit_repayment" -> {
                 String repaymentDraftId = (String) params.get("repaymentDraftId");
-                yield Map.of("transactionId", "01J5Q000000000000000000110", "status", "PROCESSING");
+                String paymentProofToken = (String) params.get("paymentProofToken");
+                String idempotencyKey = (String) params.getOrDefault("idempotencyKey",
+                        userId + "-repay-submit-" + System.currentTimeMillis());
+                yield accountCenterPort.submitCreditRepayment(
+                        userId, repaymentDraftId, paymentProofToken, idempotencyKey);
             }
 
             default -> throw new BusinessException(AgentErrorCode.TOOL_UNAVAILABLE);

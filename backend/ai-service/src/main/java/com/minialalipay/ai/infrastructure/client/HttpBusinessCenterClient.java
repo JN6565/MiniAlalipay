@@ -110,10 +110,10 @@ public class HttpBusinessCenterClient implements BusinessCenterPort {
     @SuppressWarnings("unchecked")
     private Map<String, Object> get(String userId, String path) {
         try {
-            return restClient.get()
+            var spec = restClient.get()
                     .uri(path)
-                    .header("X-User-Id", userId)
-                    .retrieve()
+                    .header("X-User-Id", userId);
+            return withAuth(spec).retrieve()
                     .onStatus(HttpStatusCode::is4xxClientError, (req, res) -> {
                         int status = res.getStatusCode().value();
                         if (status == 404) {
@@ -139,13 +139,13 @@ public class HttpBusinessCenterClient implements BusinessCenterPort {
     private Map<String, Object> postWithIdempotency(
             String userId, String path, String idempotencyKey, Map<String, Object> body) {
         try {
-            return restClient.post()
+            var spec = restClient.post()
                     .uri(path)
                     .header("X-User-Id", userId)
                     .header("Idempotency-Key", idempotencyKey)
                     .contentType(MediaType.APPLICATION_JSON)
-                    .body(body)
-                    .retrieve()
+                    .body(body);
+            return withAuth(spec).retrieve()
                     .onStatus(HttpStatusCode::is4xxClientError, (req, res) -> {
                         int status = res.getStatusCode().value();
                         if (status == 409) {
@@ -162,5 +162,17 @@ public class HttpBusinessCenterClient implements BusinessCenterPort {
             log.error("业务中心 POST 调用失败: path={}, error={}", path, e.getMessage());
             throw new BusinessException(AgentErrorCode.TOOL_UNAVAILABLE);
         }
+    }
+
+    /**
+     * 条件注入 Authorization 头：通过网关调用时携带原始 Bearer Token。
+     */
+    private org.springframework.web.client.RestClient.RequestHeadersSpec<?> withAuth(
+            org.springframework.web.client.RestClient.RequestHeadersSpec<?> spec) {
+        String authHeader = RequestContext.getAuthorizationHeader();
+        if (authHeader != null) {
+            spec.header("Authorization", authHeader);
+        }
+        return spec;
     }
 }

@@ -3,7 +3,10 @@ package com.minialalipay.gateway.filter;
 import com.minialalipay.common.api.ApiResponse;
 import com.minialalipay.common.error.CommonErrorCode;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.minialalipay.gateway.audit.AuditEvent;
+import com.minialalipay.gateway.audit.GatewayAuditLogger;
 import com.minialalipay.gateway.auth.GatewayAuthenticationPort;
+import com.minialalipay.gateway.auth.JwtService;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.cloud.gateway.filter.GatewayFilterChain;
@@ -31,9 +34,8 @@ import java.util.Optional;
  *   <li>未认证请求返回 401 {@code COMMON_UNAUTHORIZED}</li>
  * </ul>
  *
- * <p><b>阶段二 Stub 实现：</b>当前接受任意格式合法的 Bearer 令牌，
- * 映射为测试用户。待用户中心会话校验接口就绪后，切换为真实调用。
- * 本 Stub 不会绕过后续各服务自身的鉴权——下游仍必须校验对象权限。</p>
+ * <p>认证成功后，除设置 {@code X-User-Id} 和 {@code X-User-Roles} 明文头外，
+ * 还会签发短期 JWT（{@code X-Gateway-JWT} 响应头），供下游服务校验身份完整性。</p>
  *
  * <p>安全约束：</p>
  * <ul>
@@ -66,14 +68,23 @@ public final class AuthenticationGlobalFilter implements GlobalFilter, Ordered {
     /** 网关写给下游服务的可信角色头。 */
     public static final String ROLES_HEADER = "X-User-Roles";
 
+    /** 网关签发给下游服务的 JWT 身份头的名称。 */
+    public static final String GATEWAY_JWT_HEADER = "X-Gateway-JWT";
+
     private final ObjectMapper objectMapper;
     private final GatewayAuthenticationPort authenticationPort;
+    private final GatewayAuditLogger auditLogger;
+    private final JwtService jwtService;
 
     public AuthenticationGlobalFilter(
             ObjectMapper objectMapper,
-            GatewayAuthenticationPort authenticationPort) {
+            GatewayAuthenticationPort authenticationPort,
+            GatewayAuditLogger auditLogger,
+            JwtService jwtService) {
         this.objectMapper = objectMapper;
         this.authenticationPort = authenticationPort;
+        this.auditLogger = auditLogger;
+        this.jwtService = jwtService;
     }
 
     @Override
@@ -89,17 +100,22 @@ public final class AuthenticationGlobalFilter implements GlobalFilter, Ordered {
 
         String authHeader = exchange.getRequest().getHeaders().getFirst(HttpHeaders.AUTHORIZATION);
         if (authHeader == null || !authHeader.startsWith(BEARER_PREFIX)) {
+            auditRejection(exchange, AuditEvent.AUTH_MISSING_TOKEN, "缺少或格式不符合Bearer规范", "缺少有效的认证令牌");
             return writeUnauthorizedResponse(exchange, "缺少有效的认证令牌");
         }
 
         String token = authHeader.substring(BEARER_PREFIX.length()).trim();
         if (token.isEmpty()) {
+            auditRejection(exchange, AuditEvent.AUTH_MISSING_TOKEN, "令牌为空", "认证令牌不能为空");
             return writeUnauthorizedResponse(exchange, "认证令牌不能为空");
         }
 
         return authenticationPort.authenticate(token)
-                .switchIfEmpty(Mono.defer(() -> writeUnauthorizedResponse(exchange, "会话无效或已过期")
-                        .then(Mono.empty())))
+                .switchIfEmpty(Mono.defer(() -> {
+                    auditRejection(exchange, AuditEvent.AUTH_INVALID_TOKEN, "令牌无效或已过期", "会话无效或已过期");
+                    return writeUnauthorizedResponse(exchange, "会话无效或已过期")
+                            .then(Mono.empty());
+                }))
                 .flatMap(authContext -> authorizeAndContinue(exchange, chain, path, authContext));
     }
 
@@ -115,6 +131,8 @@ public final class AuthenticationGlobalFilter implements GlobalFilter, Ordered {
             GatewayAuthContext authContext) {
         if (path.startsWith("/api/v1/ops/") && authContext.roles().stream()
                 .noneMatch(role -> "ADMIN".equals(role) || "OPERATOR".equals(role) || "OBSERVER".equals(role))) {
+            auditRejection(exchange, authContext.principalId(), AuditEvent.AUTHORIZATION_DENIED,
+                    "角色不足", "普通用户访问运维路径: " + path);
             return writeForbiddenResponse(exchange);
         }
 
@@ -127,6 +145,13 @@ public final class AuthenticationGlobalFilter implements GlobalFilter, Ordered {
                     headers.set(ROLES_HEADER, String.join(",", authContext.roles()));
                 }))
                 .build();
+
+        // 签发短期 JWT 响应头，供下游服务校验身份完整性
+        String jwt = jwtService.createToken(authContext.principalId(), authContext.roles());
+        if (jwt != null) {
+            authenticatedExchange.getResponse().getHeaders().set(GATEWAY_JWT_HEADER, jwt);
+        }
+
         return chain.filter(authenticatedExchange)
                 .contextWrite(ctx -> ctx.put(GatewayAuthContext.CONTEXT_KEY, authContext));
     }
@@ -167,6 +192,36 @@ public final class AuthenticationGlobalFilter implements GlobalFilter, Ordered {
             }
         }
         return false;
+    }
+
+    /**
+     * 记录认证/授权拒绝审计事件，使用未认证主体标识。
+     */
+    private void auditRejection(ServerWebExchange exchange, AuditEvent event, String reason, String detail) {
+        auditRejection(exchange, "-", event, reason, detail);
+    }
+
+    /**
+     * 记录认证/授权拒绝审计事件。
+     *
+     * @param exchange    当前请求交换
+     * @param principalId 认证主体标识，未认证时为 "-"
+     * @param event       审计事件类型
+     * @param reason      拒绝原因分类
+     * @param detail      脱敏补充说明
+     */
+    private void auditRejection(ServerWebExchange exchange, String principalId,
+                                AuditEvent event, String reason, String detail) {
+        String requestId = exchange.getAttribute(RequestIdGlobalFilter.ATTR_REQUEST_ID);
+        if (requestId == null) {
+            requestId = exchange.getRequest().getHeaders().getFirst(RequestIdGlobalFilter.HEADER_NAME);
+        }
+        String traceId = exchange.getAttribute(RequestIdGlobalFilter.ATTR_TRACE_ID);
+        String path = exchange.getRequest().getURI().getPath();
+        String method = exchange.getRequest().getMethod() != null
+                ? exchange.getRequest().getMethod().name()
+                : "GET";
+        auditLogger.logRejection(event, requestId, traceId, principalId, path, method, reason, detail);
     }
 
     /**

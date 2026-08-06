@@ -77,14 +77,37 @@ public class HttpAccountCenterClient implements AccountCenterPort {
         return get(userId, "/api/v1/credit/bills?limit=" + limit);
     }
 
+    @Override
+    @SuppressWarnings("unchecked")
+    public Map<String, Object> createCreditRepaymentDraft(
+            String userId, long amountFen, String idempotencyKey) {
+        log.debug("创建还款草稿: userId={}, amountFen={}", userId, amountFen);
+        Map<String, Object> body = Map.of("amountFen", amountFen);
+        return post(userId, "/api/v1/credit/repayment-drafts", body, idempotencyKey);
+    }
+
+    @Override
+    @SuppressWarnings("unchecked")
+    public Map<String, Object> submitCreditRepayment(
+            String userId, String repaymentDraftId,
+            String paymentProofToken, String idempotencyKey) {
+        log.debug("提交还款: userId={}, repaymentDraftId={}", userId, repaymentDraftId);
+        Map<String, Object> body = Map.of(
+                "repaymentDraftId", repaymentDraftId,
+                "paymentProofToken", paymentProofToken
+        );
+        return post(userId, "/api/v1/credit/repayments", body, idempotencyKey);
+    }
+
     // ---- 内部方法 ----
 
     @SuppressWarnings("unchecked")
     private Map<String, Object> get(String userId, String path) {
         try {
-            return restClient.get()
+            var spec = restClient.get()
                     .uri(path)
-                    .header("X-User-Id", userId)
+                    .header("X-User-Id", userId);
+            return withAuth(spec)
                     .retrieve()
                     .onStatus(HttpStatusCode::is4xxClientError, (req, res) -> {
                         log.warn("账户中心客户端错误: status={}, path={}", res.getStatusCode(), path);
@@ -101,5 +124,49 @@ public class HttpAccountCenterClient implements AccountCenterPort {
             log.error("账户中心调用失败: path={}, error={}", path, e.getMessage());
             throw new BusinessException(AgentErrorCode.TOOL_UNAVAILABLE);
         }
+    }
+
+    @SuppressWarnings("unchecked")
+    private Map<String, Object> post(String userId, String path,
+                                     Map<String, Object> body, String idempotencyKey) {
+        try {
+            var spec = restClient.post()
+                    .uri(path)
+                    .header("X-User-Id", userId)
+                    .header("Idempotency-Key", idempotencyKey)
+                    .header("Content-Type", "application/json")
+                    .body(body);
+            return withAuth(spec)
+                    .retrieve()
+                    .onStatus(HttpStatusCode::is4xxClientError, (req, res) -> {
+                        log.warn("账户中心客户端错误: status={}, path={}", res.getStatusCode(), path);
+                        throw new BusinessException(AgentErrorCode.TOOL_UNAVAILABLE);
+                    })
+                    .onStatus(HttpStatusCode::is5xxServerError, (req, res) -> {
+                        log.warn("账户中心服务端错误: status={}, path={}", res.getStatusCode(), path);
+                        throw new BusinessException(AgentErrorCode.TOOL_UNAVAILABLE);
+                    })
+                    .body(Map.class);
+        } catch (BusinessException e) {
+            throw e;
+        } catch (Exception e) {
+            log.error("账户中心调用失败: path={}, error={}", path, e.getMessage());
+            throw new BusinessException(AgentErrorCode.TOOL_UNAVAILABLE);
+        }
+    }
+
+    /**
+     * 条件注入 Authorization 头：通过网关调用时携带原始 Bearer Token。
+     *
+     * <p>Token 由 AgentController 在请求开始时写入 {@link RequestContext}，
+     * 此处读取并附加到下游请求。未设置时不影响直连模式的调用。</p>
+     */
+    private org.springframework.web.client.RestClient.RequestHeadersSpec<?> withAuth(
+            org.springframework.web.client.RestClient.RequestHeadersSpec<?> spec) {
+        String authHeader = RequestContext.getAuthorizationHeader();
+        if (authHeader != null) {
+            spec.header("Authorization", authHeader);
+        }
+        return spec;
     }
 }

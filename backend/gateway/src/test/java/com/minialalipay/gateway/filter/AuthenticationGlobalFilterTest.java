@@ -1,7 +1,9 @@
 package com.minialalipay.gateway.filter;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.minialalipay.gateway.audit.GatewayAuditLogger;
 import com.minialalipay.gateway.auth.GatewayAuthenticationPort;
+import com.minialalipay.gateway.auth.JwtService;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.springframework.http.HttpHeaders;
@@ -40,13 +42,20 @@ class AuthenticationGlobalFilterTest {
             token -> Mono.empty();
 
     private final ObjectMapper objectMapper = new ObjectMapper();
+    private final GatewayAuditLogger auditLogger = new GatewayAuditLogger();
+    private final JwtService jwtService = new JwtService("test-secret-for-filter-tests");
+
+    /** 创建过滤器实例的便捷方法。 */
+    private AuthenticationGlobalFilter createFilter(GatewayAuthenticationPort port) {
+        return new AuthenticationGlobalFilter(objectMapper, port, auditLogger, jwtService);
+    }
 
     // ---- 白名单测试 ----
 
     @Test
     @DisplayName("白名单路径 /actuator/health 跳过认证")
     void actuatorHealthBypassesAuthentication() {
-        var filter = new AuthenticationGlobalFilter(objectMapper, REJECTING_PORT);
+        var filter = createFilter(REJECTING_PORT);
         var exchange = MockServerWebExchange.from(
                 MockServerHttpRequest.get("/actuator/health"));
 
@@ -63,7 +72,7 @@ class AuthenticationGlobalFilterTest {
     @Test
     @DisplayName("白名单路径 /api/v1/auth/register 跳过认证")
     void registerPathBypassesAuthentication() {
-        var filter = new AuthenticationGlobalFilter(objectMapper, REJECTING_PORT);
+        var filter = createFilter(REJECTING_PORT);
         var exchange = MockServerWebExchange.from(
                 MockServerHttpRequest.post("/api/v1/auth/register"));
 
@@ -80,7 +89,7 @@ class AuthenticationGlobalFilterTest {
     @Test
     @DisplayName("白名单路径 /api/v1/auth/login 跳过认证")
     void loginPathBypassesAuthentication() {
-        var filter = new AuthenticationGlobalFilter(objectMapper, REJECTING_PORT);
+        var filter = createFilter(REJECTING_PORT);
         var exchange = MockServerWebExchange.from(
                 MockServerHttpRequest.post("/api/v1/auth/login"));
 
@@ -99,7 +108,7 @@ class AuthenticationGlobalFilterTest {
     @Test
     @DisplayName("登录路径的相似前缀不能绕过认证")
     void loginLookalikePathRequiresAuthentication() {
-        var filter = new AuthenticationGlobalFilter(objectMapper, REJECTING_PORT);
+        var filter = createFilter(REJECTING_PORT);
         var exchange = MockServerWebExchange.from(
                 MockServerHttpRequest.post("/api/v1/auth/login-anything"));
 
@@ -111,7 +120,7 @@ class AuthenticationGlobalFilterTest {
     @Test
     @DisplayName("注册路径的下级路径不能绕过认证")
     void registerSubPathRequiresAuthentication() {
-        var filter = new AuthenticationGlobalFilter(objectMapper, REJECTING_PORT);
+        var filter = createFilter(REJECTING_PORT);
         var exchange = MockServerWebExchange.from(
                 MockServerHttpRequest.post("/api/v1/auth/register/anything"));
 
@@ -125,7 +134,7 @@ class AuthenticationGlobalFilterTest {
     @Test
     @DisplayName("缺少 Authorization 头返回 401")
     void missingAuthorizationHeaderReturns401() {
-        var filter = new AuthenticationGlobalFilter(objectMapper, REJECTING_PORT);
+        var filter = createFilter(REJECTING_PORT);
         var exchange = MockServerWebExchange.from(
                 MockServerHttpRequest.get("/api/v1/transfers"));
 
@@ -138,7 +147,7 @@ class AuthenticationGlobalFilterTest {
     @Test
     @DisplayName("非 Bearer 格式的 Authorization 头返回 401")
     void nonBearerAuthorizationReturns401() {
-        var filter = new AuthenticationGlobalFilter(objectMapper, REJECTING_PORT);
+        var filter = createFilter(REJECTING_PORT);
         var exchange = MockServerWebExchange.from(
                 MockServerHttpRequest.get("/api/v1/transfers")
                         .header(HttpHeaders.AUTHORIZATION, "Basic dXNlcjpwYXNz"));
@@ -152,7 +161,7 @@ class AuthenticationGlobalFilterTest {
     @Test
     @DisplayName("空的 Bearer 令牌返回 401")
     void emptyBearerTokenReturns401() {
-        var filter = new AuthenticationGlobalFilter(objectMapper, REJECTING_PORT);
+        var filter = createFilter(REJECTING_PORT);
         var exchange = MockServerWebExchange.from(
                 MockServerHttpRequest.get("/api/v1/transfers")
                         .header(HttpHeaders.AUTHORIZATION, "Bearer "));
@@ -166,7 +175,7 @@ class AuthenticationGlobalFilterTest {
     @Test
     @DisplayName("未配置令牌时全部拒绝")
     void rejectingPortRefusesAnyToken() {
-        var filter = new AuthenticationGlobalFilter(objectMapper, REJECTING_PORT);
+        var filter = createFilter(REJECTING_PORT);
         var exchange = MockServerWebExchange.from(
                 MockServerHttpRequest.get("/api/v1/transfers")
                         .header(HttpHeaders.AUTHORIZATION, "Bearer some-unknown-token"));
@@ -181,7 +190,7 @@ class AuthenticationGlobalFilterTest {
     @Test
     @DisplayName("精确匹配的令牌认证通过并写入上下文")
     void validTokenPassesAuthenticationAndWritesContext() {
-        var filter = new AuthenticationGlobalFilter(objectMapper, PASSING_PORT);
+        var filter = createFilter(PASSING_PORT);
         var exchange = MockServerWebExchange.from(
                 MockServerHttpRequest.get("/api/v1/transfers")
                         .header(HttpHeaders.AUTHORIZATION, "Bearer valid-dev-token"));
@@ -211,7 +220,7 @@ class AuthenticationGlobalFilterTest {
     @Test
     @DisplayName("认证主体覆盖客户端伪造的用户身份头")
     void authenticatedPrincipalOverridesForgedUserHeader() {
-        var filter = new AuthenticationGlobalFilter(objectMapper, PASSING_PORT);
+        var filter = createFilter(PASSING_PORT);
         var exchange = MockServerWebExchange.from(
                 MockServerHttpRequest.get("/api/v1/accounts/me")
                         .header(HttpHeaders.AUTHORIZATION, "Bearer valid-dev-token")
@@ -231,7 +240,7 @@ class AuthenticationGlobalFilterTest {
     @Test
     @DisplayName("白名单路径也清洗伪造身份头")
     void whitelistPathAlsoStripsForgedIdentityHeaders() {
-        var filter = new AuthenticationGlobalFilter(objectMapper, REJECTING_PORT);
+        var filter = createFilter(REJECTING_PORT);
         var exchange = MockServerWebExchange.from(
                 MockServerHttpRequest.post("/api/v1/auth/login")
                         .header(AuthenticationGlobalFilter.USER_ID_HEADER, "forged-user")
@@ -252,7 +261,7 @@ class AuthenticationGlobalFilterTest {
     @Test
     @DisplayName("普通用户访问运维路径返回 403")
     void normalUserAccessingOpsPathReturns403() {
-        var filter = new AuthenticationGlobalFilter(objectMapper, PASSING_PORT);
+        var filter = createFilter(PASSING_PORT);
         var exchange = MockServerWebExchange.from(
                 MockServerHttpRequest.get("/api/v1/ops/credit/status")
                         .header(HttpHeaders.AUTHORIZATION, "Bearer valid-dev-token"));
@@ -265,7 +274,7 @@ class AuthenticationGlobalFilterTest {
     @Test
     @DisplayName("运维角色可以访问运维路径")
     void operatorCanAccessOpsPath() {
-        var filter = new AuthenticationGlobalFilter(objectMapper, OPERATOR_PORT);
+        var filter = createFilter(OPERATOR_PORT);
         var exchange = MockServerWebExchange.from(
                 MockServerHttpRequest.get("/api/v1/ops/credit/status")
                         .header(HttpHeaders.AUTHORIZATION, "Bearer operator-token"));
@@ -285,7 +294,7 @@ class AuthenticationGlobalFilterTest {
     @Test
     @DisplayName("OPTIONS 预检请求跳过认证")
     void optionsPreflightBypassesAuthentication() {
-        var filter = new AuthenticationGlobalFilter(objectMapper, REJECTING_PORT);
+        var filter = createFilter(REJECTING_PORT);
         var exchange = MockServerWebExchange.from(
                 MockServerHttpRequest.options("/api/v1/transfers")
                         .header(HttpHeaders.ORIGIN, "http://localhost:8001")
@@ -306,14 +315,14 @@ class AuthenticationGlobalFilterTest {
     @Test
     @DisplayName("Filter 顺序使用命名常量")
     void usesNamedOrderConstant() {
-        var filter = new AuthenticationGlobalFilter(objectMapper, REJECTING_PORT);
+        var filter = createFilter(REJECTING_PORT);
         assertThat(filter.getOrder()).isEqualTo(GatewayFilterOrders.AUTHENTICATION);
     }
 
     @Test
     @DisplayName("POST 到白名单 auth 路径跳过认证")
     void postToAuthWhitelistPassesThrough() {
-        var filter = new AuthenticationGlobalFilter(objectMapper, REJECTING_PORT);
+        var filter = createFilter(REJECTING_PORT);
         var exchange = MockServerWebExchange.from(
                 MockServerHttpRequest.post("/api/v1/auth/login"));
 

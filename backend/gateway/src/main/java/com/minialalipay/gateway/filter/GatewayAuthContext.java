@@ -5,7 +5,8 @@ import java.util.Set;
 /**
  * 网关认证上下文，由 {@link AuthenticationGlobalFilter} 写入 Reactor Context。
  *
- * <p>当前为阶段二 Stub 实现，后续将切换为用户中心真实会话校验。</p>
+ * <p>由 {@link com.minialalipay.gateway.auth.UserCenterAuthenticationAdapter}
+ * 通过用户中心 {@code /internal/v1/auth/sessions/introspect} 校验会话令牌后填充。</p>
  *
  * @param principalId 认证主体标识
  * @param roles       主体拥有的角色集合

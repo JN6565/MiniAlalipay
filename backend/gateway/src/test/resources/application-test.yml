@@ -1,4 +1,5 @@
-# 网关集成测试配置：关闭 Nacos，Redis 限流器由测试替身接管，启用受控鉴权 Stub
+# 网关集成测试配置：关闭 Nacos，Redis 限流器由测试替身接管。
+# 认证由测试中的 @MockBean GatewayAuthenticationPort 接管，不调用真实 user-center。
 spring:
   cloud:
     nacos:
@@ -7,13 +8,8 @@ spring:
 
 gateway:
   authentication:
-    stub:
-      enabled: true
-      token: test-token-for-integration
-      principal-id: dev-user-001
-      roles:
-        - USER
-        - OPERATOR
+    user-center-uri: http://localhost:8081
+    service-token: test-service-token
   cors:
     allowed-origins:
       - http://localhost:8000
