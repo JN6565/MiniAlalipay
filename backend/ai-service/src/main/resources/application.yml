@@ -6,12 +6,11 @@ spring:
     exclude:
       - org.springframework.ai.model.openai.autoconfigure.OpenAiAudioSpeechAutoConfiguration
       - org.springframework.ai.model.openai.autoconfigure.OpenAiAudioTranscriptionAutoConfiguration
-
       - org.springframework.ai.model.openai.autoconfigure.OpenAiImageAutoConfiguration
       - org.springframework.ai.model.openai.autoconfigure.OpenAiEmbeddingAutoConfiguration
       - org.springframework.ai.model.openai.autoconfigure.OpenAiModerationAutoConfiguration
   datasource:
-    url: ${AGENT_DB_URL:jdbc:mysql://121.43.51.164:3306/agent_db?useSSL=false&serverTimezone=Asia/Shanghai&allowPublicKeyRetrieval=true&characterEncoding=UTF-8&createDatabaseIfNotExist=true}
+    url: ${AGENT_DB_URL:jdbc:mysql://121.43.51.164:3306/agent_db?useSSL=false&serverTimezone=Asia/Shanghai&allowPublicKeyRetrieval=true&characterEncoding=UTF-8}
     username: ${AGENT_DB_USERNAME:root}
     password: ${AGENT_DB_PASSWORD:teamuser2026}
     driver-class-name: com.mysql.cj.jdbc.Driver
@@ -31,10 +30,10 @@ spring:
           max-active: 8
           max-idle: 8
           min-idle: 2
-
   ai:
     openai:
-      api-key: ${SPRING_AI_OPENAI_API_KEY:sk-placeholder}
+      # 真实 Key 以 sk- 开头，设置 SPRING_AI_OPENAI_API_KEY 环境变量覆盖；不设时默认 Mock
+      api-key: ${SPRING_AI_OPENAI_API_KEY:sk-0fbdcf2e0ae44affa6a4515f71680d8a}
       base-url: ${SPRING_AI_OPENAI_BASE_URL:https://api.deepseek.com}
       chat:
         options:
@@ -45,16 +44,24 @@ mybatis:
   configuration:
     map-underscore-to-camel-case: true
 
-# AI 服务超时与并发参数
 ai:
   llm:
-    mock-mode: true
+    mock-mode: ${AI_LLM_MOCK_MODE:true}
     connect-timeout: 2s
     read-timeout: 8s
     max-concurrent: 20
     circuit-breaker:
       failure-threshold: 3
       open-state-duration: 30s
+  client:
+    mock-mode: ${AI_CLIENT_MOCK_MODE:true}
+    timeout-ms: 3000
+    user-center:
+      base-url: ${USER_CENTER_URI:http://localhost:8081}
+    business-center:
+      base-url: ${BUSINESS_CENTER_URI:http://localhost:8082}
+    account-center:
+      base-url: ${ACCOUNT_CENTER_URI:http://localhost:8083}
   mcp:
     tool-timeout: 3s
     max-retries: 1

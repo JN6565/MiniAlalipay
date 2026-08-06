@@ -81,13 +81,8 @@ public class McpToolAdapter {
             );
         }
 
-        // 2. 路由执行
-        ToolCatalog.ToolDefinition def = toolCatalog.lookup(toolName)
-                .orElseThrow(() -> new BusinessException(AgentErrorCode.TOOL_UNAVAILABLE));
-        boolean retryIfReadOnly = def.riskLevel()
-                == com.minialalipay.ai.domain.tool.ToolRiskLevel.READ_ONLY;
-
-        return toolRouter.route(toolName, params, userId, retryIfReadOnly);
+        // 2. 路由执行（超时/重试策略由 ToolRouter 根据风险等级自动决策）
+        return toolRouter.route(toolName, params, userId);
     }
 
     /**

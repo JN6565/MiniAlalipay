@@ -54,16 +54,18 @@ public class OpenAiLanguageModelAdapter {
             @Value("${ai.llm.max-concurrent:20}") int maxConcurrent,
             @Value("${ai.llm.circuit-breaker.failure-threshold:3}") int failureThreshold,
             @Value("${ai.llm.circuit-breaker.open-state-duration:30s}") String openStateDuration,
-            @Value("${ai.llm.mock-mode:true}") boolean mockModeConfig,
             ObjectProvider<ChatModel> chatModelProvider
     ) {
         this.model = model;
-        this.mockMode = mockModeConfig || apiKey == null || apiKey.isBlank();
-        // mock 模式下不获取 ChatModel Bean，避免因 API Key 缺失导致启动失败
+        // API Key 以 "sk-" 开头 → 真实模式；否则 → Mock 模式
+        this.mockMode = apiKey == null || apiKey.isBlank() || !apiKey.startsWith("sk-");
+        // mock 模式下不获取 ChatModel（Spring AI 必须删除了 ChatAutoConfiguration 排除才能创建该 Bean）
         this.chatModel = mockMode ? null : chatModelProvider.getIfAvailable();
         this.semaphore = new Semaphore(maxConcurrent);
         this.circuitBreaker = new CircuitBreaker(failureThreshold, parseDurationSeconds(openStateDuration));
-        log.info("LLM 适配器启动: mode={}, model={}", mockMode ? "Mock" : "Spring AI + DeepSeek", model);
+        log.info("LLM 适配器启动: mode={}, model={}, apiKeyPrefix={}",
+                mockMode ? "Mock" : "Spring AI + DeepSeek", model,
+                apiKey.isEmpty() ? "(空)" : apiKey.substring(0, Math.min(5, apiKey.length())) + "***");
     }
 
     /**

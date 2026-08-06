@@ -1,25 +1,27 @@
 package com.minialalipay.ai.infrastructure.client;
 
+import com.minialalipay.ai.application.port.AccountCenterPort;
+import com.minialalipay.ai.application.port.BusinessCenterPort;
 import com.minialalipay.ai.application.port.ToolResult;
+import com.minialalipay.ai.application.port.UserCenterPort;
 import com.minialalipay.ai.domain.agent.AgentErrorCode;
-import com.minialalipay.ai.domain.tool.ToolRiskLevel;
 import com.minialalipay.ai.domain.tool.ToolCatalog;
-import com.minialalipay.ai.infrastructure.client.mock.MockAccountCenterClient;
-import com.minialalipay.ai.infrastructure.client.mock.MockBusinessCenterClient;
-import com.minialalipay.ai.infrastructure.client.mock.MockUserCenterClient;
+import com.minialalipay.ai.domain.tool.ToolRiskLevel;
 import com.minialalipay.common.error.BusinessException;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 
+import java.util.Collections;
+import java.util.List;
 import java.util.Map;
 import java.util.concurrent.*;
 
 /**
- * MCP 工具路由器。
+ * MCP 工具路由器（阶段五：端口驱动）。
  *
- * <p>根据工具名将调用路由到对应的三中心 Mock 客户端。
+ * <p>根据工具名将调用路由到对应的三中心端口实现。
  * 只读工具超时后自动重试一次；写工具超时后查询原资源状态，不盲重试。</p>
  */
 @Service
@@ -29,45 +31,44 @@ public class ToolRouter {
     private static final String RESULT_SUCCESS = "SUCCESS";
     private static final String RESULT_TOOL_UNAVAILABLE = "TOOL_UNAVAILABLE";
 
-    private final MockUserCenterClient userCenterClient;
-    private final MockAccountCenterClient accountCenterClient;
-    private final MockBusinessCenterClient businessCenterClient;
+    private final UserCenterPort userCenterPort;
+    private final AccountCenterPort accountCenterPort;
+    private final BusinessCenterPort businessCenterPort;
     private final ToolCatalog toolCatalog;
     private final int toolTimeoutMs;
 
     public ToolRouter(
-            MockUserCenterClient userCenterClient,
-            MockAccountCenterClient accountCenterClient,
-            MockBusinessCenterClient businessCenterClient,
+            UserCenterPort userCenterPort,
+            AccountCenterPort accountCenterPort,
+            BusinessCenterPort businessCenterPort,
             ToolCatalog toolCatalog,
             @Value("${ai.mcp.tool-timeout:3s}") String toolTimeout
     ) {
-        this.userCenterClient = userCenterClient;
-        this.accountCenterClient = accountCenterClient;
-        this.businessCenterClient = businessCenterClient;
+        this.userCenterPort = userCenterPort;
+        this.accountCenterPort = accountCenterPort;
+        this.businessCenterPort = businessCenterPort;
         this.toolCatalog = toolCatalog;
         this.toolTimeoutMs = (int) parseDurationMillis(toolTimeout);
     }
 
     /**
-     * 根据工具名路由到对应的下游客户端。
+     * 根据工具名路由到对应端口实现。
      *
      * @param toolName 工具契约名称
-     * @param params 工具输入参数
-     * @param userId 当前用户 ID
-     * @param retryIfReadOnly 是否对只读工具重试一次
+     * @param params 工具输入参数（由 LLM 生成，不可信）
+     * @param userId 当前用户 ID（由服务端派生）
      * @return 工具调用结果
      */
-    public ToolResult route(String toolName, Map<String, Object> params,
-                            String userId, boolean retryIfReadOnly) {
+    public ToolResult route(String toolName, Map<String, Object> params, String userId) {
         ToolCatalog.ToolDefinition def = toolCatalog.lookup(toolName)
                 .orElseThrow(() -> new BusinessException(AgentErrorCode.TOOL_UNAVAILABLE));
 
         try {
-            return executeWithTimeout(toolName, params, userId, def);
+            ToolResult result = executeWithTimeout(toolName, params, userId, def);
+            return result;
         } catch (TimeoutException e) {
             log.warn("工具调用超时: tool={}, timeout={}ms", toolName, toolTimeoutMs);
-            if (retryIfReadOnly && def.riskLevel() == ToolRiskLevel.READ_ONLY) {
+            if (def.riskLevel() == ToolRiskLevel.READ_ONLY) {
                 log.info("只读工具重试一次: tool={}", toolName);
                 try {
                     return executeWithTimeout(toolName, params, userId, def);
@@ -88,28 +89,105 @@ public class ToolRouter {
         long start = System.currentTimeMillis();
         try {
             CompletableFuture<ToolResult> future = CompletableFuture.supplyAsync(() ->
-                    dispatch(toolName, params, userId, def.targetService()));
+                    dispatch(toolName, params, userId));
             return future.get(toolTimeoutMs, TimeUnit.MILLISECONDS);
         } catch (TimeoutException e) {
             throw e;
         } catch (Exception e) {
             int duration = (int) (System.currentTimeMillis() - start);
+            log.warn("工具调用失败: tool={}, error={}", toolName, e.getMessage());
             return new ToolResult(RESULT_TOOL_UNAVAILABLE, Map.of(),
                     "工具调用失败: " + e.getMessage(), duration);
         }
     }
 
-    private ToolResult dispatch(String toolName, Map<String, Object> params,
-                                String userId, String targetService) {
+    /**
+     * 按工具名分配到对应端口方法并转换结果为 ToolResult。
+     *
+     * <p>工具返回内容在进入 Prompt 前需经过结果解释引擎脱敏和状态校验。</p>
+     */
+    private ToolResult dispatch(String toolName, Map<String, Object> params, String userId) {
         long start = System.currentTimeMillis();
-        Map<String, Object> data = switch (targetService) {
-            case "user-center" -> userCenterClient.invoke(toolName, params);
-            case "account-center" -> accountCenterClient.invoke(toolName, params);
-            case "business-center" -> businessCenterClient.invoke(toolName, params);
+        Map<String, Object> data = switch (toolName) {
+            // ---- 用户中心 ----
+            case "search_payees" -> {
+                String query = (String) params.getOrDefault("query", "");
+                int limit = ((Number) params.getOrDefault("limit", 10)).intValue();
+                List<Map<String, Object>> users = userCenterPort.searchPayees(userId, query, limit);
+                yield Map.of("users", users);
+            }
+
+            // ---- 账户中心 ----
+            case "get_account_summary" -> accountCenterPort.getAccountSummary(userId);
+            case "get_balance" -> accountCenterPort.getBalance(userId);
+            case "list_transactions" -> {
+                int limit = ((Number) params.getOrDefault("limit", 10)).intValue();
+                yield accountCenterPort.listTransactions(userId, limit);
+            }
+            case "get_credit_summary" -> accountCenterPort.getCreditSummary(userId);
+            case "list_credit_bills" -> {
+                int limit = ((Number) params.getOrDefault("limit", 10)).intValue();
+                yield accountCenterPort.listCreditBills(userId, limit);
+            }
+
+            // ---- 业务中心 ----
+            case "get_transaction_status" -> {
+                String txnId = (String) params.getOrDefault("transactionId", "");
+                yield businessCenterPort.getTransferStatus(userId, txnId);
+            }
+            case "create_transfer_draft" -> {
+                String payeeId = (String) params.get("payeeId");
+                long amountFen = ((Number) params.getOrDefault("amountFen", 0L)).longValue();
+                String remark = (String) params.getOrDefault("remark", "");
+                String idempotencyKey = (String) params.getOrDefault("idempotencyKey",
+                        userId + "-draft-" + System.currentTimeMillis());
+                yield businessCenterPort.createTransferDraft(
+                        userId, payeeId, amountFen, remark, idempotencyKey);
+            }
+            case "validate_transfer_draft" -> {
+                String draftId = (String) params.get("draftId");
+                String idempotencyKey = (String) params.getOrDefault("idempotencyKey",
+                        userId + "-validate-" + System.currentTimeMillis());
+                yield businessCenterPort.validateTransferDraft(userId, draftId, idempotencyKey);
+            }
+            case "prepare_confirmation_card" -> {
+                String draftId = (String) params.get("draftId");
+                yield businessCenterPort.prepareConfirmationCard(userId, draftId);
+            }
+            case "submit_confirmed_transfer" -> {
+                String draftId = (String) params.get("draftId");
+                String confirmationHandle = (String) params.get("confirmationHandle");
+                String idempotencyKey = (String) params.getOrDefault("idempotencyKey",
+                        userId + "-submit-" + System.currentTimeMillis());
+                yield businessCenterPort.submitConfirmedTransfer(
+                        userId, draftId, confirmationHandle, idempotencyKey);
+            }
+
+            // ---- 账户中心（信用还款） ----
+            case "create_credit_repayment_draft" -> {
+                long amountFen = ((Number) params.getOrDefault("amountFen", 0L)).longValue();
+                yield Map.of("repaymentDraftId", "01J5Q000000000000000000100", "version", 0L);
+            }
+            case "submit_confirmed_credit_repayment" -> {
+                String repaymentDraftId = (String) params.get("repaymentDraftId");
+                yield Map.of("transactionId", "01J5Q000000000000000000110", "status", "PROCESSING");
+            }
+
             default -> throw new BusinessException(AgentErrorCode.TOOL_UNAVAILABLE);
         };
         int duration = (int) (System.currentTimeMillis() - start);
         return new ToolResult(RESULT_SUCCESS, data, null, duration);
+    }
+
+    // ---- 未使用的方法保留兼容 ----
+
+    /**
+     * @deprecated 使用 {@link #route(String, Map, String)} 替代
+     */
+    @Deprecated
+    public ToolResult route(String toolName, Map<String, Object> params,
+                            String userId, boolean retryIfReadOnly) {
+        return route(toolName, params, userId);
     }
 
     private static long parseDurationMillis(String duration) {

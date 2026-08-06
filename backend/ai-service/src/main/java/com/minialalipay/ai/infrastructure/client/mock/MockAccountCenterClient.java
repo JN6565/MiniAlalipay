@@ -1,24 +1,56 @@
 package com.minialalipay.ai.infrastructure.client.mock;
 
+import com.minialalipay.ai.application.port.AccountCenterPort;
+import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.stereotype.Service;
 
 import java.util.Map;
 
 /**
- * 账户中心 Mock 客户端。
+ * 账户中心 Mock 客户端（开发/测试用）。
  *
- * <p>阶段四使用 Mock 数据替代真实 HTTP 调用。
- * 待账户中心就绪后替换为真实 HTTP 客户端。</p>
+ * <p>当未配置真实 API Key 或显式启用 Mock 模式时使用。</p>
  */
 @Service
-public class MockAccountCenterClient {
+@ConditionalOnProperty(name = "ai.client.mock-mode", havingValue = "true", matchIfMissing = true)
+public class MockAccountCenterClient implements AccountCenterPort {
+
+    @Override
+    public Map<String, Object> getAccountSummary(String userId) {
+        return Map.of(
+                "accountId", "01J5Q000000000000000000080",
+                "availableFen", 1_000_000L,
+                "frozenFen", 0L,
+                "status", "ACTIVE"
+        );
+    }
+
+    @Override
+    public Map<String, Object> getBalance(String userId) {
+        return Map.of("availableFen", 1_000_000L, "frozenFen", 0L);
+    }
+
+    @Override
+    public Map<String, Object> listTransactions(String userId, int limit) {
+        return Map.of("transactions", java.util.List.of(
+                Map.of("transactionId", "01J5Q000000000000000000090",
+                        "amountFen", 50000L, "status", "SUCCESS",
+                        "occurredAt", "2026-08-04T06:00:00Z")
+        ));
+    }
+
+    @Override
+    public Map<String, Object> getCreditSummary(String userId) {
+        return Map.of("totalLimitFen", 500_000L, "usedFen", 0L, "availableFen", 500_000L);
+    }
+
+    @Override
+    public Map<String, Object> listCreditBills(String userId, int limit) {
+        return Map.of("bills", java.util.List.of());
+    }
 
     /**
-     * 调用账户中心工具。
-     *
-     * @param toolName 工具名
-     * @param params 参数
-     * @return Mock 响应数据（金额统一使用分）
+     * 调用账户中心工具（兼容旧 ToolRouter 的调度模式）。
      */
     public Map<String, Object> invoke(String toolName, Map<String, Object> params) {
         return switch (toolName) {

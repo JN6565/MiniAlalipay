@@ -29,14 +29,13 @@ public class ResilientLanguageModelAdapter implements LanguageModelPort {
     public ResilientLanguageModelAdapter(
             OpenAiLanguageModelAdapter primary,
             FallbackLanguageModelAdapter fallback,
-            @Value("${ai.llm.mock-mode:true}") boolean mockMode,
             @Value("${spring.ai.openai.api-key:}") String apiKey) {
         this.primary = primary;
         this.fallback = fallback;
-        this.useFallback = mockMode || apiKey.isBlank();
+        this.useFallback = apiKey == null || apiKey.isBlank();
         if (useFallback) {
-            log.info("LLM 适配器：使用中文降级模式（mock={}, apiKeySet={}）",
-                    mockMode, !apiKey.isBlank());
+            log.info("LLM 适配器：使用中文降级模式（apiKeySet={}）",
+                    !apiKey.isBlank());
         }
     }
 
