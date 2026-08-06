@@ -1,74 +1,244 @@
-import { Empty, Input, Select, Table, Tag } from 'antd';
+import { useAccess } from '@umijs/max';
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { App, Button, Descriptions, Drawer, Empty, Form, Input, Modal, Select, Space, Table, Tag } from 'antd';
 import type { ColumnsType } from 'antd/es/table';
+import { useState } from 'react';
 import PageHeader from '@/components/PageHeader';
+import {
+  freezeAdminUser,
+  listAdminUsers,
+  unfreezeAdminUser,
+  type AdminUserItem,
+  type AdminUserStatus,
+} from '@/services/users';
 import pageStyles from '../page.less';
 
+/** 用户状态中文标签（系统分析 2.3.26：DISABLED 即管理冻结）。 */
+const STATUS_LABEL: Record<string, string> = {
+  PROVISIONING: '注册中',
+  ACTIVE: '正常',
+  DISABLED: '已冻结',
+};
+
+/** 冻结理由占位提示。 */
+const FREEZE_REASON_PLACEHOLDER = '请填写冻结理由（将作为审计记录）';
+
 /**
- * 用户管理页面（P1）。
+ * 用户管理页面。
  *
- * B 端用户管理依赖 user-center（负责人闫泽华）提供的用户列表契约，OpenAPI 尚未定义该操作，
- * 因此本页仅为只读用户状态骨架，页面数据为空且不发起请求（系统分析 16.8 的 B 端身份边界）。
- * 正式契约落地并开放菜单入口前保持占位；登录名列展示脱敏值（loginNameMasked），禁止展示完整登录名。
+ * 读取真实用户只读列表（user-center），系统管理员可冻结/解冻；仅 ACTIVE 可冻结、
+ * 仅 DISABLED 可解冻，操作需二次确认并携带 CAS 版本。登录名仅展示服务端脱敏值，
+ * 不展示手机号与任何密码类字段。
  */
-
-/** 用户列表展示行；登录名必须是脱敏字段。 */
-interface UserRow {
-  /** 用户编号。 */
-  userId: string;
-  /** 脱敏后的登录名。 */
-  loginNameMasked: string;
-  /** 昵称。 */
-  nickname: string;
-  /** 用户状态：ACTIVE/FROZEN/CLOSED。 */
-  userStatus: string;
-  /** 账户状态，与用户中心账户状态口径一致。 */
-  accountStatus: string;
-  /** 登录锁定截止时间，未锁定时为空。 */
-  loginLockedUntil?: string;
-  /** 创建时间。 */
-  createdAt: string;
-}
-
-/** 用户列表列定义。 */
-const columns: ColumnsType<UserRow> = [
-  { title: '用户编号', dataIndex: 'userId', key: 'userId' },
-  { title: '登录名', dataIndex: 'loginNameMasked', key: 'loginNameMasked' },
-  { title: '昵称', dataIndex: 'nickname', key: 'nickname' },
-  { title: '用户状态', dataIndex: 'userStatus', key: 'userStatus' },
-  { title: '账户状态', dataIndex: 'accountStatus', key: 'accountStatus' },
-  { title: '登录锁定至', dataIndex: 'loginLockedUntil', key: 'loginLockedUntil' },
-  { title: '创建时间', dataIndex: 'createdAt', key: 'createdAt' },
-];
-
 export default function Users() {
+  const { message } = App.useApp();
+  const access = useAccess();
+  const queryClient = useQueryClient();
+  const [status, setStatus] = useState<AdminUserStatus>();
+  const [action, setAction] = useState<{ user: AdminUserItem; kind: 'FREEZE' | 'UNFREEZE' }>();
+  const [detail, setDetail] = useState<AdminUserItem>();
+  const [form] = Form.useForm();
+  // 服务端仅提供正向游标，使用游标栈回退上一页；空字符串表示第一页。
+  const [cursor, setCursor] = useState<string>();
+  const [cursorStack, setCursorStack] = useState<string[]>([]);
+
+  const usersQuery = useQuery({
+    queryKey: ['admin-users', status, cursor],
+    queryFn: () => listAdminUsers(status, cursor),
+  });
+
+  const nextCursor = usersQuery.data?.data.nextCursor ?? null;
+
+  function changeStatus(value?: AdminUserStatus) {
+    setStatus(value);
+    setCursor(undefined);
+    setCursorStack([]);
+  }
+
+  function goNextPage() {
+    if (!nextCursor) return;
+    setCursorStack((prev) => [...prev, cursor ?? '']);
+    setCursor(nextCursor);
+  }
+
+  function goPrevPage() {
+    const prevCursor = cursorStack.at(-1);
+    if (prevCursor === undefined) return;
+    setCursorStack((prev) => prev.slice(0, -1));
+    setCursor(prevCursor === '' ? undefined : prevCursor);
+  }
+
+  const mutation = useMutation({
+    mutationFn: async () => {
+      const target = action;
+      if (!target) throw new Error('缺少操作对象');
+      if (target.kind === 'FREEZE') {
+        const values = await form.validateFields();
+        return freezeAdminUser(target.user.userId, target.user.version, values.reason);
+      }
+      return unfreezeAdminUser(target.user.userId, target.user.version);
+    },
+    onSuccess: () => {
+      message.success(action?.kind === 'FREEZE' ? '用户已冻结' : '用户已解冻');
+      setAction(undefined);
+      queryClient.invalidateQueries({ queryKey: ['admin-users'] });
+    },
+    onError: (error) => {
+      message.error(error instanceof Error ? error.message : '操作失败');
+    },
+  });
+
+  /** 空值展示占位符。 */
+  function placeholder(value: string | null | undefined): string {
+    return value ? value : '—';
+  }
+
+  /** 冻结审计时间沿用 updatedAt（冻结/解冻都会刷新行更新时间）。 */
+  const columns: ColumnsType<AdminUserItem> = [
+    {
+      title: '用户编号',
+      dataIndex: 'userId',
+      render: (value: string, record) => (
+        <Button type="link" size="small" onClick={() => setDetail(record)}>
+          {value}
+        </Button>
+      ),
+    },
+    { title: '登录名', dataIndex: 'loginNameMasked', render: (value: string) => <code>{value}</code> },
+    { title: '昵称', dataIndex: 'nickname', render: (value: string) => placeholder(value) },
+    {
+      title: '状态',
+      dataIndex: 'status',
+      render: (value: AdminUserStatus) => (
+        <Tag color={value === 'ACTIVE' ? 'green' : value === 'DISABLED' ? 'red' : 'default'}>
+          {STATUS_LABEL[value] ?? value}
+        </Tag>
+      ),
+    },
+    {
+      title: '登录锁定至',
+      dataIndex: 'loginLockedUntil',
+      render: (value: string | null) => placeholder(value),
+    },
+    {
+      title: '操作',
+      key: 'actions',
+      render: (_, record) => {
+        if (!access.canManageUsers) return null;
+        if (record.status === 'ACTIVE') {
+          return (
+            <Button danger size="small" onClick={() => setAction({ user: record, kind: 'FREEZE' })}>
+              冻结
+            </Button>
+          );
+        }
+        if (record.status === 'DISABLED') {
+          return (
+            <Button size="small" onClick={() => setAction({ user: record, kind: 'UNFREEZE' })}>
+              解冻
+            </Button>
+          );
+        }
+        return null;
+      },
+    },
+  ];
+
   return (
     <main className={pageStyles.page}>
-      <PageHeader extra={<Tag>P1</Tag>} contractPending />
-      {/* 用户筛选：契约未接入前仅保留检索结构，不提交查询。 */}
+      <PageHeader />
       <section className={pageStyles.toolbar} aria-label="用户筛选">
-        <Input aria-label="用户检索" placeholder="用户编号、脱敏登录名或昵称" style={{ width: 320 }} />
         <Select
           aria-label="用户状态"
           allowClear
           placeholder="用户状态"
           style={{ width: 160 }}
-          options={[
-            { value: 'ACTIVE', label: '正常' },
-            { value: 'FROZEN', label: '已冻结' },
-            { value: 'CLOSED', label: '已关闭' },
-          ]}
+          options={Object.entries(STATUS_LABEL).map(([value, label]) => ({ value, label }))}
+          onChange={changeStatus}
         />
+        <Button type="primary" onClick={() => usersQuery.refetch()}>
+          查询
+        </Button>
+        <Space>
+          <Button onClick={goPrevPage} disabled={cursorStack.length === 0}>
+            上一页
+          </Button>
+          <Button onClick={goNextPage} disabled={!nextCursor}>
+            下一页
+          </Button>
+        </Space>
       </section>
       <section className={pageStyles.panel} aria-label="用户列表">
-        <Table<UserRow>
+        <Table<AdminUserItem>
           rowKey="userId"
           columns={columns}
-          dataSource={[]}
+          dataSource={usersQuery.data?.data.items ?? []}
+          loading={usersQuery.isLoading}
           pagination={false}
-          locale={{ emptyText: <Empty description="正式用户管理契约落地后开放菜单入口" /> }}
-          scroll={{ x: 880 }}
+          locale={{
+            emptyText: (
+              <Empty
+                description={usersQuery.isError
+                  ? '加载失败，请确认网关已启动'
+                  : status
+                    ? '暂无该状态用户'
+                    : '暂无用户数据'}
+              />
+            ),
+          }}
+          scroll={{ x: 760 }}
         />
       </section>
+      <Modal
+        title={action
+          ? action.kind === 'FREEZE'
+            ? '确认冻结用户（需二次确认）'
+            : '确认解冻用户（需二次确认）'
+          : ''}
+        open={!!action}
+        confirmLoading={mutation.isPending}
+        onOk={() => mutation.mutate()}
+        onCancel={() => setAction(undefined)}
+        destroyOnClose
+      >
+        {action?.kind === 'FREEZE' && (
+          <Form form={form} layout="vertical" initialValues={{ reason: '' }}>
+            <Form.Item
+              name="reason"
+              label="冻结理由"
+              rules={[{ required: true, whitespace: true, message: '请输入冻结理由' }]}
+            >
+              <Input.TextArea rows={3} maxLength={200} placeholder={FREEZE_REASON_PLACEHOLDER} />
+            </Form.Item>
+          </Form>
+        )}
+        {action?.kind === 'UNFREEZE' && (
+          <p>
+            确认解冻用户 <code>{action.user.loginNameMasked}</code>？解冻后该用户可重新登录。
+          </p>
+        )}
+      </Modal>
+      <Drawer
+        title={detail ? `用户详情（${STATUS_LABEL[detail.status] ?? detail.status}）` : ''}
+        open={!!detail}
+        width={560}
+        onClose={() => setDetail(undefined)}
+      >
+        {detail && (
+          <Descriptions column={1} bordered size="small">
+            <Descriptions.Item label="用户编号">{detail.userId}</Descriptions.Item>
+            <Descriptions.Item label="登录名">{detail.loginNameMasked}</Descriptions.Item>
+            <Descriptions.Item label="昵称">{placeholder(detail.nickname)}</Descriptions.Item>
+            <Descriptions.Item label="状态">{STATUS_LABEL[detail.status] ?? detail.status}</Descriptions.Item>
+            <Descriptions.Item label="登录锁定至">{placeholder(detail.loginLockedUntil)}</Descriptions.Item>
+            <Descriptions.Item label="冻结操作者">{placeholder(detail.disabledBy)}</Descriptions.Item>
+            <Descriptions.Item label="冻结理由">{placeholder(detail.disabledReason)}</Descriptions.Item>
+            <Descriptions.Item label="版本">{detail.version}</Descriptions.Item>
+            <Descriptions.Item label="创建时间">{detail.createdAt}</Descriptions.Item>
+            <Descriptions.Item label="更新时间">{detail.updatedAt}</Descriptions.Item>
+          </Descriptions>
+        )}
+      </Drawer>
     </main>
   );
 }

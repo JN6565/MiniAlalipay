@@ -325,6 +325,39 @@ class AuthenticationGlobalFilterTest {
         assertThat(chainCalled[0]).isTrue();
     }
 
+    // ---- B 端用户管理角色门禁 ----
+
+    @Test
+    @DisplayName("运营人员访问用户管理路径返回 403")
+    void operatorCannotAccessAdminUsers() {
+        var filter = createFilter(OPERATOR_PORT);
+        var exchange = MockServerWebExchange.from(
+                MockServerHttpRequest.get("/api/v1/admin/users")
+                        .header(HttpHeaders.AUTHORIZATION, "Bearer operator-token"));
+
+        filter.filter(exchange, downstream -> Mono.empty()).block();
+
+        assertThat(exchange.getResponse().getStatusCode()).isEqualTo(HttpStatus.FORBIDDEN);
+    }
+
+    @Test
+    @DisplayName("系统管理员可以访问用户管理路径")
+    void adminCanAccessAdminUsers() {
+        var filter = createFilter(ADMIN_PORT);
+        var exchange = MockServerWebExchange.from(
+                MockServerHttpRequest.post("/api/v1/admin/users/01J00000000000000000000001/freeze")
+                        .header(HttpHeaders.AUTHORIZATION, "Bearer admin-token"));
+
+        boolean[] chainCalled = {false};
+        Mono<Void> result = filter.filter(exchange, downstream -> {
+            chainCalled[0] = true;
+            return Mono.empty();
+        });
+
+        StepVerifier.create(result).verifyComplete();
+        assertThat(chainCalled[0]).isTrue();
+    }
+
     // ---- OPTIONS 预检 ----
 
     @Test

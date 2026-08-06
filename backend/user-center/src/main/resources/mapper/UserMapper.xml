@@ -34,6 +34,9 @@
         <result property="version" column="version"/>
         <result property="createdAt" column="created_at"/>
         <result property="updatedAt" column="updated_at"/>
+        <result property="disabledBy" column="disabled_by"/>
+        <result property="disabledReason" column="disabled_reason"/>
+        <result property="loginLockedUntil" column="login_lock_until"/>
     </resultMap>
 
     <!--
@@ -89,20 +92,24 @@
     -->
     <select id="selectByUserId" parameterType="string" resultMap="userResultMap">
         SELECT
-            user_id,
-            registration_id,
-            account_number,
-            phone_number,
-            real_name,
-            nickname,
-            phone_tail,
-            identity_status,
-            status,
-            version,
-            created_at,
-            updated_at
-        FROM app_user
-        WHERE user_id = #{userId}
+            u.user_id,
+            u.registration_id,
+            u.account_number,
+            u.phone_number,
+            u.real_name,
+            u.nickname,
+            u.phone_tail,
+            u.identity_status,
+            u.status,
+            u.version,
+            u.created_at,
+            u.updated_at,
+            u.disabled_by,
+            u.disabled_reason,
+            c.login_lock_until
+        FROM app_user u
+        LEFT JOIN credential c ON c.user_id = u.user_id
+        WHERE u.user_id = #{userId}
     </select>
 
     <!--
@@ -118,28 +125,34 @@
     -->
     <select id="selectByAccountNumber" parameterType="string" resultMap="userResultMap">
         SELECT
-            user_id,
-            registration_id,
-            account_number,
-            phone_number,
-            real_name,
-            nickname,
-            phone_tail,
-            identity_status,
-            status,
-            version,
-            created_at,
-            updated_at
-        FROM app_user
-        WHERE account_number = #{accountNumber}
+            u.user_id,
+            u.registration_id,
+            u.account_number,
+            u.phone_number,
+            u.real_name,
+            u.nickname,
+            u.phone_tail,
+            u.identity_status,
+            u.status,
+            u.version,
+            u.created_at,
+            u.updated_at,
+            u.disabled_by,
+            u.disabled_reason,
+            c.login_lock_until
+        FROM app_user u
+        LEFT JOIN credential c ON c.user_id = u.user_id
+        WHERE u.account_number = #{accountNumber}
     </select>
 
     <!-- 手机号是登录标识之一，只允许精确匹配。 -->
     <select id="selectByPhoneNumber" parameterType="string" resultMap="userResultMap">
-        SELECT user_id, registration_id, account_number, phone_number, real_name, nickname,
-               phone_tail, identity_status, status, version, created_at, updated_at
-        FROM app_user
-        WHERE phone_number = #{phoneNumber}
+        SELECT u.user_id, u.registration_id, u.account_number, u.phone_number, u.real_name, u.nickname,
+               u.phone_tail, u.identity_status, u.status, u.version, u.created_at, u.updated_at,
+               u.disabled_by, u.disabled_reason, c.login_lock_until
+        FROM app_user u
+        LEFT JOIN credential c ON c.user_id = u.user_id
+        WHERE u.phone_number = #{phoneNumber}
     </select>
 
     <!--
@@ -156,20 +169,24 @@
     -->
     <select id="selectByRegistrationId" parameterType="string" resultMap="userResultMap">
         SELECT
-            user_id,
-            registration_id,
-            account_number,
-            phone_number,
-            real_name,
-            nickname,
-            phone_tail,
-            identity_status,
-            status,
-            version,
-            created_at,
-            updated_at
-        FROM app_user
-        WHERE registration_id = #{registrationId}
+            u.user_id,
+            u.registration_id,
+            u.account_number,
+            u.phone_number,
+            u.real_name,
+            u.nickname,
+            u.phone_tail,
+            u.identity_status,
+            u.status,
+            u.version,
+            u.created_at,
+            u.updated_at,
+            u.disabled_by,
+            u.disabled_reason,
+            c.login_lock_until
+        FROM app_user u
+        LEFT JOIN credential c ON c.user_id = u.user_id
+        WHERE u.registration_id = #{registrationId}
     </select>
 
     <!--
@@ -194,6 +211,8 @@
             phone_tail = #{phoneTail},
             identity_status = #{identityStatus},
             status = #{status},
+            disabled_by = #{disabledBy},
+            disabled_reason = #{disabledReason},
             version = version + 1,
             updated_at = #{updatedAt}
         WHERE user_id = #{userId}
@@ -264,6 +283,51 @@
                 ELSE 1
             END,
             account_number ASC
+        LIMIT #{limit}
+    </select>
+
+    <!--
+      B 端管理分页查询用户（只读投影）。
+
+      按稳定 ID 游标分页（user_id > 上一页最后一条），可选按状态过滤，并 LEFT JOIN credential
+      带出登录锁定截止时间。只返回展示字段，不返回密码、支付密码或敏感原值。
+
+      参数：
+      - status: 用户状态过滤，为空表示不限定
+      - cursor: 上一页最后一条 user_id，为空表示第一页
+      - limit: 每页最大返回条数
+
+      返回值：
+      - 用户只读投影列表
+    -->
+    <select id="selectAdminPage" resultMap="userResultMap">
+        SELECT
+            u.user_id,
+            u.registration_id,
+            u.account_number,
+            u.phone_number,
+            u.real_name,
+            u.nickname,
+            u.phone_tail,
+            u.identity_status,
+            u.status,
+            u.version,
+            u.created_at,
+            u.updated_at,
+            u.disabled_by,
+            u.disabled_reason,
+            c.login_lock_until
+        FROM app_user u
+        LEFT JOIN credential c ON c.user_id = u.user_id
+        <where>
+            <if test="status != null and status != ''">
+                u.status = #{status}
+            </if>
+            <if test="cursor != null and cursor != ''">
+                AND u.user_id &gt; #{cursor}
+            </if>
+        </where>
+        ORDER BY u.user_id ASC
         LIMIT #{limit}
     </select>
 

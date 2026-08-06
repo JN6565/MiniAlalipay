@@ -129,6 +129,14 @@ public final class AuthenticationGlobalFilter implements GlobalFilter, Ordered {
             GatewayFilterChain chain,
             String path,
             GatewayAuthContext authContext) {
+        // B 端用户管理（列表/冻结/解冻）仅系统管理员可访问；先于通用门禁判定。
+        if (path.startsWith("/api/v1/admin/") && authContext.roles().stream()
+                .noneMatch(role -> "ADMIN".equals(role))) {
+            auditRejection(exchange, authContext.principalId(), AuditEvent.AUTHORIZATION_DENIED,
+                    "角色不足", "非管理员访问用户管理路径: " + path);
+            return writeForbiddenResponse(exchange);
+        }
+
         // 信用运维任务（出账/到期检查）仅系统管理员可触发；先于通用运维门禁判定，运营人员无权限。
         if (path.startsWith("/api/v1/ops/credit/") && authContext.roles().stream()
                 .noneMatch(role -> "ADMIN".equals(role))) {

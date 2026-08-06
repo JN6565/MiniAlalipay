@@ -1786,37 +1786,39 @@ sequenceDiagram
 
 
 #### 2.3.26 用户管理页（B 端 Web，P1）
-> **说明：** 此页面为 P1 优先级。后端 `user-center` 模块负责用户、身份、登录密码、支付密码、联系人等领域（后端 7.6.2），用户管理功能通过 `user-center` 内部领域接口提供服务，未在 12.7 端点目录中定义独立 REST 路由。前端 MVP 阶段提供基础框架和只读展示，API 端点待 `user-center` 模块扩展后对接。
->
+> **说明：** 此页面为 P1 优先级。后端 `user-center` 模块负责用户、身份、登录密码、支付密码、联系人等领域，用户管理通过 `/api/v1/admin/users/**` 提供（仅系统管理员，见后端 8.2.3 与 OpenAPI）。列表为只读脱敏投影，冻结/解冻携带 `version` CAS 并记录操作者与理由。
 
 **UI&交互**
 
 ```mermaid
 sequenceDiagram
-    participant O as 运营人员
+    participant O as 系统管理员
     participant Web as B端Web
     participant API as 后端API
     O->>Web: 进入 /admin/users
     Web->>API: GET /api/v1/admin/users?cursor=&status=
-    API-->>Web: {users[], nextCursor}
-    Web-->>O: 用户列表(状态/账户状态/登录锁定)
+    API-->>Web: {items[], nextCursor}
+    Web-->>O: 用户列表(状态/登录锁定/冻结审计)
+    O->>Web: 冻结/解冻（二次确认）
+    Web->>API: POST /api/v1/admin/users/{id}/freeze|unfreeze
+    API-->>Web: 用户最新视图(含版本)
 ```
 
 **前端逻辑**
 
-+ 查询用户列表（cursor 分页），展示状态/账户状态/登录锁定信息，均为只读。
-+ 仅 ACTIVE 可冻结，仅 FROZEN 可解冻，操作需二次确认。
-+ API 由 `user-center` 模块提供，MVP 阶段提供框架和只读展示，端点待后端扩展后对接。
-+ 用户敏感信息脱敏展示，不展示完整登录密码或支付密码。
++ 查询用户列表（cursor 分页），展示状态/登录锁定/冻结审计信息，均为只读。
++ 仅 ACTIVE 可冻结，仅 DISABLED 可解冻，操作需二次确认；冻结必须填写理由。
++ 用户状态为 `PROVISIONING/ACTIVE/DISABLED`，DISABLED 即管理冻结；账户状态归属账户中心，不在本页展示。
++ API 由 `user-center` 模块提供；登录名仅展示服务端脱敏值 `loginNameMasked`，不展示完整登录名、手机号或密码类字段。
 
 **前端逻辑 — 列表展示字段**
 
 | 字段名称 | 说明 | 交互 |
 | --- | --- | --- |
-| 登录名 | 登录名 | 只读展示 |
+| 用户编号 | userId | 只读展示，点击查看详情 |
+| 登录名 | loginNameMasked | 只读展示（服务端脱敏） |
 | 昵称 | nickname | 只读展示 |
 | 用户状态 | status | 只读展示 |
-| 账户状态 | accountStatus | 只读展示 |
 | 登录锁定信息 | loginLockedUntil | 只读展示 |
 | 创建时间 | createdAt | 只读展示 |
 
@@ -1825,17 +1827,17 @@ sequenceDiagram
 
 | 字段名称 | 交互 | 是否有二次确认 | 显示、禁用控制 |
 | --- | --- | --- | --- |
-| 冻结账户 | 冻结用户账户 | Y | 仅 ACTIVE 状态可冻结 |
-| 解冻账户 | 解冻用户账户 | Y | 仅 FROZEN 状态可解冻 |
+| 冻结 | 管理冻结用户 | Y | 仅 ACTIVE 状态可冻结，须填写冻结理由 |
+| 解冻 | 管理解冻用户 | Y | 仅 DISABLED 状态可解冻 |
 
 
 **所需 API**
 
 | 方法 | 路径 | 说明 |
 | --- | --- | --- |
-| GET | `/api/v1/admin/users` | ⚠️ 查询用户列表，后端 12.7 未定义，待 user-center 扩展（P1，端点落地前隐藏入口） |
-| POST | `/api/v1/admin/users/{id}/freeze` | ⚠️ 冻结用户账户，后端 12.7 未定义，待 user-center 扩展（P1） |
-| POST | `/api/v1/admin/users/{id}/unfreeze` | ⚠️ 解冻用户账户，后端 12.7 未定义，待 user-center 扩展（P1） |
+| GET | `/api/v1/admin/users` | 查询用户列表（状态过滤 + cursor 分页），仅系统管理员 |
+| POST | `/api/v1/admin/users/{userId}/freeze` | 冻结用户（version CAS + reason），仅系统管理员 |
+| POST | `/api/v1/admin/users/{userId}/unfreeze` | 解冻用户（version CAS），仅系统管理员 |
 
 
 #### 2.3.27 交易查询与回执（B 端 Web）
@@ -2172,12 +2174,12 @@ gantt
 | 前端工程 | 允许生成和调用的 API | 身份与数据范围 |
 | --- | --- | --- |
 | `frontend-h5`（C 端） | `auth`、`payment-password`、`users`、`contacts`、`accounts/me`、`recharges`、`transfer-drafts`、`confirmations`、`transfers`（不含 `trace`）、`qr-pay`、`p2p-collections`、`credit`、`agent` 及本人资源 SSE | 当前普通用户本人、本人账户、本人创建或参与的订单和绑定 H5 会话 |
-| `frontend-admin`（B 端） | `manual-cases`、`ops/realtime-metrics`、`ops/daily-reports`、`ops/alerts`、`ops/data-quality`、`ops/metric-definitions`、`ops/credit/*-runs`、授权的脱敏 Trace | 运营、观察者或演示管理员按角色访问全局脱敏数据；写操作必须有审计 |
+| `frontend-admin`（B 端） | `manual-cases`、`ops/realtime-metrics`、`ops/daily-reports`、`ops/alerts`、`ops/data-quality`、`ops/metric-definitions`、`ops/credit/*-runs`、`admin/users`（仅系统管理员）、授权的脱敏 Trace | 运营、观察者或演示管理员按角色访问全局脱敏数据；写操作必须有审计，用户冻结/解冻记录操作者与理由 |
 | B/C 共用 | `auth/login`、`auth/logout`、统一错误响应、Trace 和请求编号 | 登录结果由服务端返回角色；前端不能提交或提升角色 |
 
 C 端不得调用 `/api/v1/ops/**`、`/api/v1/manual-cases/**` 或脱敏 Trace 运营接口；B 端不得调用 `/api/v1/accounts/me/**`、本人转账、扫码付款、个人收款和信用还款接口模拟用户操作。即使用户手工构造请求，网关和后端仍必须拒绝越权，不能把前端菜单隐藏当作安全控制。
 
-B 端的用户管理、全局交易列表与详情、全局电子回执查询目前只有页面需求，后端和 OpenAPI 尚未给出可编码契约。对应页面在契约完成前只能保留路由和明确的“功能未接入”状态，禁止自行猜测 `/api/v1/ops/users`、`/api/v1/ops/transactions` 等路径，也禁止复用 C 端 `/me` 或本人交易接口拼接全局数据。
+B 端的全局交易列表与详情、全局电子回执查询目前只有页面需求，后端和 OpenAPI 尚未给出可编码契约。对应页面在契约完成前只能保留路由和明确的“功能未接入”状态，禁止自行猜测 `/api/v1/ops/users`、`/api/v1/ops/transactions` 等路径，也禁止复用 C 端 `/me` 或本人交易接口拼接全局数据。用户管理已按 `/api/v1/admin/users/**` 落地（列表/冻结/解冻，系统管理员专属，登录名脱敏）。
 
 #### 2.6.2 统一响应格式
 所有 REST 接口遵循统一响应结构，前端 `src/services` 层统一归一化处理：
@@ -2680,7 +2682,7 @@ stateDiagram-v2
 ### 5.1 风险评估
 | 风险项 | 级别 | 影响 | 应对措施 |
 | --- | --- | --- | --- |
-| 后端用户管理 API 未定义 | 中 | 用户管理页（P1）无法实现完整功能 | 页面提供框架和只读展示，API 待后端确认后补充 |
+| 全局交易与回执 API 未定义 | 中 | 交易查询与回执页（P1）无法实现完整功能 | 页面提供框架和只读展示，API 待后端确认后补充；用户管理已按 `/api/v1/admin/users/**` 落地 |
 | SSE 在演示网络环境不稳定 | 中 | 跨端状态同步延迟 | 降级为 2 秒轮询，确保状态最终一致 |
 | AI Talk 与表单草稿并发冲突 | 中 | 草稿版本不一致导致提交失败 | 前端拦截旧版本提交，提示用户刷新 |
 | 双 Umi 工程构建配置复杂 | 低 | 开发效率下降 | 使用 Monorepo 共享 contracts 类型，统一 lint 规范 |

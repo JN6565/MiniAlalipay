@@ -58,6 +58,7 @@ const menuItems: NonNullable<MenuProps['items']> = [
       { key: '/admin/trace', icon: <BugOutlined />, label: '链路追溯' },
       { key: '/admin/alert-rules', icon: <AlertOutlined />, label: '告警规则配置' },
       { key: '/admin/demo-tasks', icon: <SafetyCertificateOutlined />, label: '演示任务触发' },
+      { key: '/admin/users', icon: <SafetyCertificateOutlined />, label: '用户管理' },
     ],
   },
 ];
@@ -77,7 +78,7 @@ const routeMeta: Record<string, { title: string; meta: string }> = {
   '/admin/trace': { title: '链路追溯', meta: 'Agent · 网关 · 风控 · 事务 · 账本' },
   '/admin/alert-rules': { title: '告警规则配置', meta: '阈值 CAS 调整 · 记录操作者' },
   '/admin/demo-tasks': { title: '演示任务触发', meta: '受审计触发 · 不修改金额' },
-  '/admin/users': { title: '用户管理', meta: '只读用户状态 · P1' },
+  '/admin/users': { title: '用户管理', meta: '用户只读列表 · 冻结/解冻二次确认' },
 };
 
 /**

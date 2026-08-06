@@ -1512,6 +1512,85 @@ paths:
         '404': { $ref: '#/components/responses/NotFound' }
         '409': { $ref: '#/components/responses/Conflict' }
         '422': { $ref: '#/components/responses/UnprocessableEntity' }
+  /api/v1/admin/users:
+    get:
+      summary: 分页查询 B 端用户只读列表（系统管理员）
+      description: 按状态过滤 + 稳定 ID 游标分页，登录名脱敏展示；不返回手机号或任何密码。
+      operationId: listAdminUsers
+      x-client-scope: B
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: '#/components/parameters/RequestIdHeader'
+        - name: status
+          in: query
+          required: false
+          description: 用户状态过滤，PROVISIONING/ACTIVE/DISABLED，为空表示不限定。
+          schema: { type: string, enum: [PROVISIONING, ACTIVE, DISABLED] }
+        - name: cursor
+          in: query
+          required: false
+          description: 上一页最后一条 userId 游标，为空表示第一页。
+          schema: { type: string, maxLength: 26 }
+        - name: limit
+          in: query
+          required: false
+          description: 每页最大条数，1~100。
+          schema: { type: integer, minimum: 1, maximum: 100, default: 50 }
+      responses:
+        '200': { description: 返回脱敏用户分页, content: { application/json: { schema: { $ref: '#/components/schemas/AdminUserPageResponse' } } } }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+  /api/v1/admin/users/{userId}/freeze:
+    post:
+      summary: 管理冻结用户（系统管理员）
+      description: 仅 ACTIVE 可冻结；CAS 版本保护并发，记录操作者与冻结理由，冻结后禁止登录。
+      operationId: freezeAdminUser
+      x-client-scope: B
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: '#/components/parameters/RequestIdHeader'
+        - name: userId
+          in: path
+          required: true
+          description: 目标用户 ID（ULID）。
+          schema: { type: string, minLength: 26, maxLength: 26 }
+      requestBody:
+        required: true
+        content: { application/json: { schema: { $ref: '#/components/schemas/FreezeUserRequest' } } }
+      responses:
+        '200': { description: 返回冻结后的用户视图（含最新版本）, content: { application/json: { schema: { $ref: '#/components/schemas/AdminUserResponse' } } } }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409': { $ref: '#/components/responses/Conflict' }
+  /api/v1/admin/users/{userId}/unfreeze:
+    post:
+      summary: 管理解冻用户（系统管理员）
+      description: 仅 DISABLED 可解冻；CAS 版本保护并发，解冻后恢复登录并清空冻结审计字段。
+      operationId: unfreezeAdminUser
+      x-client-scope: B
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: '#/components/parameters/RequestIdHeader'
+        - name: userId
+          in: path
+          required: true
+          description: 目标用户 ID（ULID）。
+          schema: { type: string, minLength: 26, maxLength: 26 }
+      requestBody:
+        required: true
+        content: { application/json: { schema: { $ref: '#/components/schemas/UnfreezeUserRequest' } } }
+      responses:
+        '200': { description: 返回解冻后的用户视图（含最新版本）, content: { application/json: { schema: { $ref: '#/components/schemas/AdminUserResponse' } } } }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409': { $ref: '#/components/responses/Conflict' }
   /api/v1/ops/daily-reports:
     get:
       summary: 查询通过质量门禁的 T+1 报表
@@ -2647,6 +2726,47 @@ components:
         version: { type: integer, format: int64, minimum: 0, description: 工单版本 CAS，避免并发覆盖。 }
         reason: { type: string, maxLength: 500, description: 处置理由，解决、重开与关闭必须填写。 }
         evidence: { type: string, maxLength: 2000, description: 处置证据，解决与关闭必须填写。 }
+    AdminUserResponse:
+      type: object
+      additionalProperties: false
+      required: [userId, loginNameMasked, nickname, status, version, createdAt, updatedAt]
+      properties:
+        userId: { type: string, minLength: 26, maxLength: 26, description: 用户 ID（ULID）。 }
+        loginNameMasked: { type: string, maxLength: 64, description: 脱敏登录名，中间位以 * 掩蔽，不返回明文。 }
+        nickname: { type: string, maxLength: 64, description: 用户昵称。 }
+        status: { type: string, enum: [PROVISIONING, ACTIVE, DISABLED], description: 用户状态，DISABLED 即管理冻结。 }
+        loginLockedUntil: { type: [string, 'null'], format: date-time, description: 登录锁定截止时间，无锁定时为空。 }
+        disabledBy: { type: [string, 'null'], maxLength: 26, description: 管理冻结操作者用户 ID。 }
+        disabledReason: { type: [string, 'null'], maxLength: 200, description: 管理冻结理由。 }
+        version: { type: integer, format: int64, minimum: 0, description: 用户行版本 CAS。 }
+        createdAt: { type: string, format: date-time }
+        updatedAt: { type: string, format: date-time }
+    AdminUserPageResponse:
+      allOf:
+        - $ref: '#/components/schemas/ApiResponse'
+        - type: object
+          required: [data]
+          properties:
+            data:
+              type: object
+              additionalProperties: false
+              required: [items, nextCursor]
+              properties:
+                items: { type: array, items: { $ref: '#/components/schemas/AdminUserResponse' } }
+                nextCursor: { type: [string, 'null'], description: 下一页游标，无更多数据时为空。 }
+    FreezeUserRequest:
+      type: object
+      additionalProperties: false
+      required: [version, reason]
+      properties:
+        version: { type: integer, format: int64, minimum: 0, description: 用户行版本 CAS，避免并发覆盖。 }
+        reason: { type: string, maxLength: 200, description: 管理冻结理由。 }
+    UnfreezeUserRequest:
+      type: object
+      additionalProperties: false
+      required: [version]
+      properties:
+        version: { type: integer, format: int64, minimum: 0, description: 用户行版本 CAS，避免并发覆盖。 }
   responses:
     BadRequest:
       description: 请求格式或字段不合法

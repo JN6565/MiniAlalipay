@@ -56,6 +56,18 @@ class GatewayRouteConfigurationTest {
     }
 
     @Test
+    void routesAdminUserManagementToUserCenter() {
+        RouteDefinition route = gatewayProperties.getRoutes().stream()
+                .filter(candidate -> "user-center-admin-users".equals(candidate.getId()))
+                .findFirst()
+                .orElseThrow(() -> new AssertionError("缺少用户中心 B 端用户管理路由"));
+        assertThat(route.getUri().toString()).containsAnyOf("user-center", "8081");
+        assertThat(route.getPredicates())
+                .anySatisfy(predicate -> assertThat(predicate.getArgs().values())
+                        .contains("/api/v1/admin/**"));
+    }
+
+    @Test
     void doesNotRouteInternalServiceOperations() {
         assertThat(gatewayProperties.getRoutes())
                 .flatExtracting(RouteDefinition::getPredicates)

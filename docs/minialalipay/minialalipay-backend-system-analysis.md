@@ -423,8 +423,9 @@ B 端和 C 端共用 `gateway` 和统一响应外壳，但不能因后端服务�
 | 数据质量与指标口径 | `/api/v1/ops/data-quality`、`ops/metric-definitions` | 运营、观察者 | 不允许通过监控接口直接修改业务库或资金事实 |
 | 信用演示任务 | `/api/v1/ops/credit/statement-runs`、`ops/credit/due-check-runs` | 演示管理员 | 只触发受审计任务，不允许直接修改额度、应收和账单金额 |
 | 链路追溯 | `/api/v1/transfers/{id}/trace` | 运营、观察者 | 返回脱敏 Span；普通 C 端用户无权访问 |
+| 用户管理 | `/api/v1/admin/users/**` | 系统管理员 | 列表只读且登录名脱敏；冻结/解冻携带 `version` CAS 并记录操作者与理由 |
 
-B 端页面中以下能力已由 PRD 和前端系分提出，但当前总体端点目录和 OpenAPI 尚未形成可编码契约：用户管理、全局交易列表与详情、全局电子回执查询。实现前必须明确 path、角色矩阵、查询条件、分页、脱敏字段、响应 DTO 和错误码；在契约完成前禁止前端自行假设 `/api/v1/ops/users` 或 `/api/v1/ops/transactions` 等路径。
+B 端页面中以下能力已由 PRD 和前端系分提出，但当前总体端点目录和 OpenAPI 尚未形成可编码契约：全局交易列表与详情、全局电子回执查询。实现前必须明确 path、角色矩阵、查询条件、分页、脱敏字段、响应 DTO 和错误码；在契约完成前禁止前端自行假设 `/api/v1/ops/users` 或 `/api/v1/ops/transactions` 等路径。用户管理已按 `/api/v1/admin/users/**` 落地（OpenAPI 与对象级授权测试同步补齐）。
 
 #### 8.2.4 AI/MCP 与内部服务接口
 

@@ -3,6 +3,7 @@ package com.minialalipay.user.infrastructure.persistence;
 import com.minialalipay.common.error.BusinessException;
 import com.minialalipay.user.domain.auth.UserErrorCode;
 import com.minialalipay.user.domain.user.User;
+import com.minialalipay.user.domain.user.UserAdminView;
 import com.minialalipay.user.domain.user.UserRepository;
 import com.minialalipay.user.domain.user.UserStatus;
 import com.minialalipay.user.infrastructure.persistence.mapper.UserMapper;
@@ -210,7 +211,9 @@ public class UserRepositoryImpl implements UserRepository {
                 user.getStatus().name(),
                 user.getVersion(),
                 user.getCreatedAt(),
-                user.getUpdatedAt()
+                user.getUpdatedAt(),
+                user.getDisabledBy(),
+                user.getDisabledReason()
         );
     }
 
@@ -235,7 +238,25 @@ public class UserRepositoryImpl implements UserRepository {
                 UserStatus.valueOf(userPO.getStatus()),
                 userPO.getVersion(),
                 userPO.getCreatedAt(),
-                userPO.getUpdatedAt()
+                userPO.getUpdatedAt(),
+                userPO.getDisabledBy(),
+                userPO.getDisabledReason()
         );
+    }
+
+    /**
+     * B 端管理分页查询用户（只读投影）。
+     *
+     * @param status 用户状态过滤，null 表示不限定
+     * @param cursor 上一页最后一条 {@code user_id}，null 表示第一页
+     * @param limit  每页最大返回条数
+     * @return 用户只读投影列表
+     */
+    @Override
+    public List<UserAdminView> findAdminPage(UserStatus status, String cursor, int limit) {
+        String statusName = status == null ? null : status.name();
+        return userMapper.selectAdminPage(statusName, cursor, limit).stream()
+                .map(po -> new UserAdminView(toDomain(po), po.getLoginLockedUntil()))
+                .collect(Collectors.toList());
     }
 }

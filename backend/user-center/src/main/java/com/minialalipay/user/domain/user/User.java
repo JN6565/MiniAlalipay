@@ -88,6 +88,12 @@ public class User {
      */
     private long version;
 
+    /** 管理冻结操作者用户 ID（仅 DISABLED 状态有值），用于 B 端审计展示。 */
+    private String disabledBy;
+
+    /** 管理冻结理由（仅 DISABLED 状态有值），用于 B 端审计展示。 */
+    private String disabledReason;
+
     /**
      * 用户注册时间（UTC，毫秒精度）。
      * <p>注册时设置，之后不可修改。</p>
@@ -178,7 +184,9 @@ public class User {
             UserStatus status,
             long version,
             Instant createdAt,
-            Instant updatedAt
+            Instant updatedAt,
+            String disabledBy,
+            String disabledReason
     ) {
         this.userId = userId;
         this.registrationId = registrationId;
@@ -192,6 +200,8 @@ public class User {
         this.version = version;
         this.createdAt = createdAt;
         this.updatedAt = updatedAt;
+        this.disabledBy = disabledBy;
+        this.disabledReason = disabledReason;
     }
 
     /**
@@ -240,6 +250,50 @@ public class User {
             throw new IllegalStateException("只有 PROVISIONING 状态的用户可以激活，当前状态: " + this.status);
         }
         this.status = UserStatus.ACTIVE;
+        this.updatedAt = Instant.now();
+    }
+
+    /**
+     * B 端管理冻结用户。
+     *
+     * <p>仅 {@link UserStatus#ACTIVE} 状态的用户可被冻结；冻结后状态变为 {@link UserStatus#DISABLED}，
+     * 禁止登录和发起新的业务。记录操作者与理由供审计展示。</p>
+     *
+     * @param operatorId 操作者用户 ID（来自网关注入的可信 {@code X-User-Id}）
+     * @param reason     冻结理由，用于审计；不能为空白
+     * @throws IllegalStateException 如果用户不在 ACTIVE 状态
+     */
+    public void freeze(String operatorId, String reason) {
+        if (this.status != UserStatus.ACTIVE) {
+            throw new IllegalStateException("只有 ACTIVE 状态的用户可以冻结，当前状态: " + this.status);
+        }
+        if (operatorId == null || operatorId.isBlank()) {
+            throw new IllegalArgumentException("冻结操作者不能为空");
+        }
+        if (reason == null || reason.isBlank()) {
+            throw new IllegalArgumentException("冻结理由不能为空");
+        }
+        this.status = UserStatus.DISABLED;
+        this.disabledBy = operatorId;
+        this.disabledReason = reason.trim();
+        this.updatedAt = Instant.now();
+    }
+
+    /**
+     * B 端管理解冻用户。
+     *
+     * <p>仅 {@link UserStatus#DISABLED} 状态的用户可解冻；解冻后状态恢复为 {@link UserStatus#ACTIVE}
+     * 并清空冻结操作者与理由。临时登录锁定不受影响，解冻不清除 {@code credential.login_lock_until}。</p>
+     *
+     * @throws IllegalStateException 如果用户不在 DISABLED 状态
+     */
+    public void unfreeze() {
+        if (this.status != UserStatus.DISABLED) {
+            throw new IllegalStateException("只有 DISABLED 状态的用户可以解冻，当前状态: " + this.status);
+        }
+        this.status = UserStatus.ACTIVE;
+        this.disabledBy = null;
+        this.disabledReason = null;
         this.updatedAt = Instant.now();
     }
 
@@ -343,5 +397,23 @@ public class User {
      */
     public Instant getUpdatedAt() {
         return updatedAt;
+    }
+
+    /**
+     * 获取管理冻结操作者用户 ID。
+     *
+     * @return 操作者用户 ID；仅 DISABLED 状态有值，否则为 null
+     */
+    public String getDisabledBy() {
+        return disabledBy;
+    }
+
+    /**
+     * 获取管理冻结理由。
+     *
+     * @return 冻结理由；仅 DISABLED 状态有值，否则为 null
+     */
+    public String getDisabledReason() {
+        return disabledReason;
     }
 }

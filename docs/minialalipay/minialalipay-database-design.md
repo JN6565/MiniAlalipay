@@ -633,13 +633,15 @@ erDiagram
 | `phone_tail` | `CHAR(4)` | 可空 | 手机号尾号，仅用于辅助检索和脱敏展示 |
 | `identity_status` | `VARCHAR(16)` | 必填 | 演示身份状态，不代表真实 KYC |
 | `status` | `VARCHAR(16)` | `PROVISIONING` | 用户状态：`PROVISIONING/ACTIVE/DISABLED` |
+| `disabled_by` | `CHAR(26)` | 可空 | 管理冻结操作者用户 ID，解冻后清空 |
+| `disabled_reason` | `VARCHAR(200)` | 可空 | 管理冻结理由，解冻后清空 |
 | `version` | `BIGINT UNSIGNED` | `0` | 用户资料和状态的 CAS 版本 |
 | `created_at` | `DATETIME(3)` | 必填 | 用户注册时间 |
 | `updated_at` | `DATETIME(3)` | 必填 | 最近资料或状态变更时间 |
 
 **键与索引**：UK `(registration_id)`、UK `(account_number)`、UK `(phone_number)`；索引 `(real_name,status)`、`(nickname,status)`、`(status,created_at)`。手机号唯一索引是并发重复注册的最终一致性防线。
 
-**写入规则**：注册事务以 `PROVISIONING` 创建用户并触发开户，但不得写初始资金；账户中心以 `registration_id` 作为开户幂等键，用户中心核验余额账户和适用的信用账户后才能 CAS 更新为 `ACTIVE`。恢复期间禁止登录，超过自动恢复阈值后仍保持 `PROVISIONING` 并创建人工工单。临时登录锁定只更新 `credential.login_fail_count/login_lock_until`，不修改用户状态；管理停用使用 `DISABLED`。RBAC 角色只写 `role_assignment`，不得在本表重复保存 `user_type`。
+**写入规则**：注册事务以 `PROVISIONING` 创建用户并触发开户，但不得写初始资金；账户中心以 `registration_id` 作为开户幂等键，用户中心核验余额账户和适用的信用账户后才能 CAS 更新为 `ACTIVE`。恢复期间禁止登录，超过自动恢复阈值后仍保持 `PROVISIONING` 并创建人工工单。临时登录锁定只更新 `credential.login_fail_count/login_lock_until`，不修改用户状态；管理停用使用 `DISABLED`，冻结时记录 `disabled_by/disabled_reason`，解冻时清空，二者与状态同事务变更。RBAC 角色只写 `role_assignment`，不得在本表重复保存 `user_type`。
 
 ### 5.2 `credential`
 
