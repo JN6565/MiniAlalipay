@@ -115,12 +115,20 @@ public class ManualCaseController {
     public record DecideManualCaseRequest(@NotNull ManualCaseApplicationService.Decision decision,
                                           @Min(0) long version, @Size(max = 500) String reason,
                                           @Size(max = 2000) String evidence) { }
-    /** 运营侧脱敏工单 DTO。 */
+    /**
+     * 运营侧脱敏工单 DTO。
+     *
+     * <p>除工单标识与状态外，暴露处置审计事实：触发原因码（规则命中）、操作者、处置理由、证据引用与处置时间，
+     * 供运营在人工确认台核对 PRD 要求的规则命中、操作者和处置上下文，不暴露任何资金或敏感原值。</p>
+     */
     public record ManualCaseResponse(String caseId, String caseType, String subjectType, String subjectId,
-                                     String status, long version, Instant createdAt) {
+                                     String status, String reasonCode, String operatorId, String lastReason,
+                                     String evidenceReference, long version, Instant createdAt, Instant updatedAt) {
         static ManualCaseResponse from(ManualCase value) {
             return new ManualCaseResponse(value.getCaseId(), value.getType().name(), value.getSubjectType(),
-                    value.getSubjectId(), value.getStatus().name(), value.getVersion(), value.getCreatedAt());
+                    value.getSubjectId(), value.getStatus().name(), value.getReasonCode(), value.getOperatorId(),
+                    value.getLastReason(), value.getEvidenceReference(), value.getVersion(), value.getCreatedAt(),
+                    value.getUpdatedAt());
         }
     }
     /** 基于稳定 ID 游标的工单分页响应。 */

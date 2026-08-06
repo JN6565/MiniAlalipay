@@ -1,6 +1,6 @@
 import { useAccess } from '@umijs/max';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { App, Button, Empty, Form, Input, Modal, Select, Space, Table } from 'antd';
+import { App, Button, Descriptions, Drawer, Empty, Form, Input, Modal, Select, Space, Table } from 'antd';
 import type { ColumnsType } from 'antd/es/table';
 import { useState } from 'react';
 import PageHeader from '@/components/PageHeader';
@@ -36,6 +36,7 @@ export default function ManualCases() {
   const queryClient = useQueryClient();
   const [status, setStatus] = useState<string>();
   const [action, setAction] = useState<{ case: ManualCaseItem; decision: CaseDecision }>();
+  const [detail, setDetail] = useState<ManualCaseItem>();
   const [form] = Form.useForm();
   // 服务端仅提供正向游标，使用游标栈回退上一页；空字符串表示第一页。
   const [cursor, setCursor] = useState<string>();
@@ -99,12 +100,26 @@ export default function ManualCases() {
     return undefined;
   }
 
+  /** 处置证据或理由为空时的占位符。 */
+  function placeholder(value: string | null | undefined): string {
+    return value ? value : '—';
+  }
+
   const columns: ColumnsType<ManualCaseItem> = [
-    { title: '工单号', dataIndex: 'caseId' },
+    {
+      title: '工单号',
+      dataIndex: 'caseId',
+      render: (value: string, record) => (
+        <Button type="link" size="small" onClick={() => setDetail(record)}>
+          {value}
+        </Button>
+      ),
+    },
     { title: '类型', dataIndex: 'caseType', render: (value: string) => TYPE_LABEL[value] ?? value },
-    { title: '主体类型', dataIndex: 'subjectType' },
-    { title: '主体', dataIndex: 'subjectId' },
+    { title: '规则命中', dataIndex: 'reasonCode', render: (value: string) => value ?? '—' },
     { title: '状态', dataIndex: 'status', render: (value: string) => STATUS_LABEL[value] ?? value },
+    { title: '操作者', dataIndex: 'operatorId', render: (value: string | null) => placeholder(value) },
+    { title: '处置时间', dataIndex: 'updatedAt' },
     { title: '创建时间', dataIndex: 'createdAt' },
     {
       title: '操作',
@@ -196,6 +211,29 @@ export default function ManualCases() {
           )}
         </Form>
       </Modal>
+      <Drawer
+        title={detail ? `工单详情（${TYPE_LABEL[detail.caseType] ?? detail.caseType}）` : ''}
+        open={!!detail}
+        width={560}
+        onClose={() => setDetail(undefined)}
+      >
+        {detail && (
+          <Descriptions column={1} bordered size="small">
+            <Descriptions.Item label="工单号">{detail.caseId}</Descriptions.Item>
+            <Descriptions.Item label="工单类型">{TYPE_LABEL[detail.caseType] ?? detail.caseType}</Descriptions.Item>
+            <Descriptions.Item label="主体类型">{detail.subjectType}</Descriptions.Item>
+            <Descriptions.Item label="主体">{detail.subjectId}</Descriptions.Item>
+            <Descriptions.Item label="状态">{STATUS_LABEL[detail.status] ?? detail.status}</Descriptions.Item>
+            <Descriptions.Item label="规则命中">{detail.reasonCode}</Descriptions.Item>
+            <Descriptions.Item label="操作者">{placeholder(detail.operatorId)}</Descriptions.Item>
+            <Descriptions.Item label="处置理由">{placeholder(detail.lastReason)}</Descriptions.Item>
+            <Descriptions.Item label="处置证据">{placeholder(detail.evidenceReference)}</Descriptions.Item>
+            <Descriptions.Item label="版本">{detail.version}</Descriptions.Item>
+            <Descriptions.Item label="创建时间">{detail.createdAt}</Descriptions.Item>
+            <Descriptions.Item label="处置时间">{detail.updatedAt}</Descriptions.Item>
+          </Descriptions>
+        )}
+      </Drawer>
     </main>
   );
 }

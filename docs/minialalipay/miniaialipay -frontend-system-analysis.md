@@ -1574,27 +1574,27 @@ sequenceDiagram
     Web-->>O: 工单列表(20条/页, 默认创建时间倒序)
     O->>Web: 点击工单→展开抽屉详情
     Note over Web: 从列表响应项中读取详情（后端 12.7.2 详情内联，无单条端点）
-    Web-->>O: 抽屉展示{脱敏双方, 风控规则, TCC分支, 重试记录, 账本摘要, AgentTrace}
-    O->>Web: 选择批准/驳回/继续观察+填写原因
+    Web-->>O: 抽屉展示{规则命中, 操作者, 处置理由, 处置证据, 版本, 时间}
+    O->>Web: 选择领取/解决/重开/关闭+填写原因
     Web->>API: POST /api/v1/manual-cases/{id}/decisions {action, reason, version}
     API-->>Web: 更新后工单状态
 ```
 
 **前端逻辑**
 
-+ 查询工单列表（20 条/页，默认创建时间倒序），支持状态/类型/时间筛选，时间范围最长 90 天。
-+ 工单详情从列表响应项中获取，抽屉展示脱敏双方 + 风控规则 + TCC 分支 + 重试记录 + 账本摘要 + AgentTrace。
-+ 批准/驳回需填写原因 + version CAS，避免并发覆盖；继续观察保持工单开放。
-+ 仅 OPEN 状态可批准/驳回/继续观察，非 OPEN 状态禁用操作按钮。
-+ 交易号可点击跳转交易详情页，链路信息按角色裁剪展示。
++ 查询工单列表（20 条/页，默认创建时间倒序），支持状态/类型筛选；时间范围筛选待补充。
++ 工单详情从列表响应项中获取，抽屉展示规则命中、操作者、处置理由、处置证据、版本与处置时间。
++ 解决/重开/关闭需填写原因 + version CAS，避免并发覆盖；领取可暂不填理由。
++ 状态机动作依次为领取→解决→关闭，解决后可按新证据重开；非当前状态的操作按钮禁用。
++ 主体脱敏上下文（脱敏双方、风控规则明细、TCC 分支、重试记录、账本摘要、AgentTrace）为后续增强，当前工单响应不内联。
 
 **前端逻辑 — 列表筛选字段**
 
 | 字段名称 | 说明 | 输入方式 | 是否必填 | 输入限制 | 数据源 |
 | --- | --- | --- | --- | --- | --- |
-| 状态筛选 | 工单状态 | 下拉选择 | N | OPEN/ACKNOWLEDGED/RESOLVED/CLOSED | 前端 |
+| 状态筛选 | 工单状态 | 下拉选择 | N | OPEN/CLAIMED/RESOLVED/CLOSED | 前端 |
 | 类型筛选 | 工单类型 | 下拉选择 | N | RISK_PRECHECK/TRANSACTION_RECOVERY | 前端 |
-| 时间筛选 | 创建时间范围 | 日期选择 | N | 最长 90 天 | 前端 |
+| 时间筛选 | 创建时间范围 | 日期选择 | N | 最长 90 天 | 前端（待补充，后端暂无该筛选参数） |
 
 
 **列表展示字段**
@@ -1602,29 +1602,35 @@ sequenceDiagram
 | 字段名称 | 说明 | 交互 |
 | --- | --- | --- |
 | 工单号 | caseId | 点击展开抽屉详情 |
-| 交易号 | transactionId | 点击跳转交易详情 |
-| 创建时间 | createdAt | — |
-| 金额 | 充值金额 | 分转元展示 |
-| 风险/故障原因 | reason | — |
+| 工单类型 | caseType | — |
+| 规则命中 | reasonCode | 触发原因码 |
 | 当前状态 | status | — |
-| 负责人 | operatorId | — |
+| 操作者 | operatorId | 领取/处置人，未领取为空 |
+| 处置时间 | updatedAt | — |
+| 创建时间 | createdAt | — |
+| 处置理由 | lastReason | 抽屉展示 |
+| 处置证据 | evidenceReference | 抽屉展示 |
+| 版本 | version | CAS 并发控制 |
 
 
 **操作按钮**
 
 | 字段名称 | 交互 | 是否有二次确认 | 显示、禁用控制 |
 | --- | --- | --- | --- |
-| 批准 | 批准工单 | Y（需填写原因） | 仅 OPEN 状态可批准 |
-| 驳回 | 驳回工单 | Y（需填写原因） | 仅 OPEN 状态可驳回 |
-| 继续观察 | 保持工单开放 | N | 仅 OPEN 状态可用 |
+| 领取 | 领取开放工单 | N | 仅 OPEN 状态可领取 |
+| 解决 | 解决已领取工单（RISK_PRECHECK 触发恢复待确认，即批准） | Y（需填写理由与证据） | 仅 CLAIMED 状态可解决 |
+| 重开 | 新证据出现时重开 | Y（需填写理由） | 仅 RESOLVED 状态可重开 |
+| 关闭 | 以最终证据关闭（含驳回语义） | Y（需填写理由与证据） | CLAIMED/RESOLVED 状态可关闭 |
+
+> 操作语义与 PRD FR-RC-003 对齐：批准 ≈ 解决（RISK_PRECHECK 触发来源恢复待确认）、驳回 ≈ 关闭（记录驳回理由与证据）、继续观察 = 保持工单开放不做动作。来源订单 REJECTED 的独立驳回状态机尚未落地。
 
 
 **所需 API**
 
 | 方法 | 路径 | 说明 |
 | --- | --- | --- |
-| GET | `/api/v1/manual-cases` | 查询工单列表，status+type+time 筛选，工单详情从列表响应项中获取 |
-| POST | `/api/v1/manual-cases/{id}/decisions` | 批准/驳回/继续观察，需原因+version CAS |
+| GET | `/api/v1/manual-cases` | 查询工单列表，status+type 筛选，工单详情从列表响应项中获取 |
+| POST | `/api/v1/manual-cases/{id}/decisions` | 领取/解决/重开/关闭，需原因+version CAS |
 
 
 #### 2.3.22 可信运行看板（B 端 Web）
@@ -2367,7 +2373,7 @@ interface Contact {
 }
 
 /** B 端运营 */
-interface ManualCase { caseId: string; transactionId?: string; status: 'OPEN' | 'ACKNOWLEDGED' | 'RESOLVED' | 'CLOSED'; type: string; reason: string; version: number; }
+interface ManualCase { caseId: string; caseType: string; subjectType: string; subjectId: string; status: 'OPEN' | 'CLAIMED' | 'RESOLVED' | 'CLOSED'; reasonCode: string; operatorId: string | null; lastReason: string | null; evidenceReference: string | null; version: number; createdAt: string; updatedAt: string; }
 interface Alert { alertId: string; level: 'P0' | 'P1' | 'P2'; status: 'OPEN' | 'ACKNOWLEDGED' | 'RESOLVED' | 'CLOSED'; title: string; occurredAt: string; }
 
 /** 统一分页响应 */

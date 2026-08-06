@@ -66,15 +66,20 @@ export interface RealtimeMetricItem {
   qualityStatus: string;
 }
 
-/** 人工工单行，与 OpenAPI ManualCase 对齐。 */
+/** 人工工单行，与 OpenAPI ManualCase 对齐；处置后暴露操作者、理由与证据引用等审计事实。 */
 export interface ManualCaseItem {
   caseId: string;
   caseType: string;
   subjectType: string;
   subjectId: string;
   status: 'OPEN' | 'CLAIMED' | 'RESOLVED' | 'CLOSED';
+  reasonCode: string;
+  operatorId: string | null;
+  lastReason: string | null;
+  evidenceReference: string | null;
   version: number;
   createdAt: string;
+  updatedAt: string;
 }
 
 /** 人工工单分页，与 OpenAPI ManualCasePage 对齐。 */
