@@ -1,13 +1,11 @@
 import request from './request';
 
-/** AI 消息请求参数 */
 interface SendMessageParams {
   clientMessageId: string;
   sessionId?: string;
   content: string;
 }
 
-/** AI 消息响应 */
 interface SendMessageResult {
   sessionId: string;
   messageId: string;
@@ -18,10 +16,24 @@ interface SendMessageResult {
 }
 
 /**
- * 发送消息给 AI
- * @param params 消息参数
- * @returns AI 回复
+ * 发送消息给 AI（同步，兼容保留）
  */
 export async function sendMessage(params: SendMessageParams): Promise<SendMessageResult> {
   return request.post('/api/v1/agent/messages', params);
+}
+
+/**
+ * 确认提交（高风险操作：转账/还款）
+ */
+export async function confirmSubmission(
+  draftId: string,
+  password: string,
+  idempotencyKey: string,
+): Promise<any> {
+  return request.post('/api/v1/confirmations', {
+    draftId,
+    paymentPassword: password,
+  }, {
+    headers: { 'Idempotency-Key': idempotencyKey },
+  });
 }

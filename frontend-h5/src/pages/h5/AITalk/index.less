@@ -89,6 +89,64 @@
   border-radius: 50%;
 }
 
+/* ---- 流式文字光标 ---- */
+.ai-cursor {
+  animation: blink 1s step-end infinite;
+  color: #1677ff;
+}
+@keyframes blink {
+  50% { opacity: 0; }
+}
+
+/* ---- 澄清气泡 ---- */
+.ai-clarification {
+  .ai-clarification-question {
+    margin-bottom: 12px;
+    font-weight: 500;
+  }
+  .ai-clarification-options {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+  }
+  .ai-clarification-option {
+    flex: none;
+  }
+}
+
+/* ---- 确认卡片 ---- */
+.ai-confirmation-card {
+  min-width: 260px;
+  .ai-confirmation-title {
+    font-weight: 600;
+    font-size: 16px;
+    margin-bottom: 12px;
+    color: #e67e22;
+  }
+  .ai-confirmation-summary {
+    margin-bottom: 8px;
+    font-size: 14px;
+  }
+  .ai-confirmation-amount {
+    font-size: 18px;
+    font-weight: 600;
+    color: #333;
+    margin-bottom: 12px;
+  }
+  .ai-confirmation-actions {
+    display: flex;
+    gap: 8px;
+    margin-top: 12px;
+  }
+  .ai-confirmation-done {
+    color: #52c41a;
+    font-weight: 500;
+  }
+  .ai-password-input {
+    margin-top: 12px;
+  }
+}
+
 .tabbar {
   position: fixed;
   bottom: 0;
