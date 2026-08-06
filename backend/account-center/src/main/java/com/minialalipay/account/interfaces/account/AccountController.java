@@ -4,6 +4,8 @@ import com.minialalipay.account.application.account.AccountApplicationService;
 import com.minialalipay.account.application.account.dto.AccountSummaryDTO;
 import com.minialalipay.account.application.ledger.LedgerApplicationService;
 import com.minialalipay.account.application.ledger.dto.LedgerEntryPageDTO;
+import com.minialalipay.account.application.analytics.AccountAnalyticsApplicationService;
+import com.minialalipay.account.application.analytics.AccountAnalyticsDTO;
 import com.minialalipay.common.api.ApiResponse;
 import com.minialalipay.common.trace.RequestIdGenerator;
 import jakarta.servlet.http.HttpServletRequest;
@@ -33,13 +35,26 @@ public class AccountController {
     private final AccountApplicationService accountApplicationService;
     private final LedgerApplicationService ledgerApplicationService;
     private final RequestIdGenerator requestIdGenerator;
+    private final AccountAnalyticsApplicationService analyticsApplicationService;
 
     public AccountController(AccountApplicationService accountApplicationService,
                              LedgerApplicationService ledgerApplicationService,
-                             RequestIdGenerator requestIdGenerator) {
+                             RequestIdGenerator requestIdGenerator,
+                             AccountAnalyticsApplicationService analyticsApplicationService) {
         this.accountApplicationService = accountApplicationService;
         this.ledgerApplicationService = ledgerApplicationService;
         this.requestIdGenerator = requestIdGenerator;
+        this.analyticsApplicationService = analyticsApplicationService;
+    }
+
+    /** 查询本人指定范围的已过账收支分析，权限来自网关会话用户 ID。 */
+    @GetMapping("/analytics")
+    public ResponseEntity<ApiResponse<AccountAnalyticsDTO>> analytics(
+            @RequestHeader("X-User-Id") String userId,
+            @RequestParam(defaultValue = "7d") String range,
+            HttpServletRequest request) {
+        AccountAnalyticsDTO data = analyticsApplicationService.get(userId, range);
+        return ResponseEntity.ok(ApiResponse.success(data, requestId(request), request.getHeader("X-Trace-Id")));
     }
 
     /**

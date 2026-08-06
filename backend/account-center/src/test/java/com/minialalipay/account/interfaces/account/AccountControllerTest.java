@@ -7,6 +7,8 @@ import com.minialalipay.account.domain.ledger.LedgerDirection;
 import com.minialalipay.account.domain.ledger.LedgerEntry;
 import com.minialalipay.account.application.ledger.dto.LedgerEntryDTO;
 import com.minialalipay.account.application.ledger.dto.LedgerEntryPageDTO;
+import com.minialalipay.account.application.analytics.AccountAnalyticsApplicationService;
+import com.minialalipay.account.application.analytics.AccountAnalyticsDTO;
 import com.minialalipay.common.trace.RequestIdGenerator;
 import com.minialalipay.common.error.CommonExceptionMapper;
 import org.junit.jupiter.api.Test;
@@ -31,6 +33,7 @@ class AccountControllerTest {
     @MockBean private LedgerApplicationService ledgerApplicationService;
     @MockBean private RequestIdGenerator requestIdGenerator;
     @MockBean private CommonExceptionMapper commonExceptionMapper;
+    @MockBean private AccountAnalyticsApplicationService analyticsApplicationService;
 
     @Test
     void getsAuthenticatedUsersRealBalance() throws Exception {
@@ -64,5 +67,17 @@ class AccountControllerTest {
                 .andExpect(jsonPath("$.data.items[0].entryId").value(9))
                 .andExpect(jsonPath("$.data.items[0].amountFen").value(500))
                 .andExpect(jsonPath("$.data.nextCursor").value("opaque-cursor"));
+    }
+
+    @Test
+    void getsMyAnalytics() throws Exception {
+        when(requestIdGenerator.resolve("request-1")).thenReturn("request-1");
+        when(analyticsApplicationService.get("user-1", "7d")).thenReturn(
+                new AccountAnalyticsDTO("7d", "ledger-posted-v1", 800L, 300L, List.of(), List.of(), 500L, 0L));
+        mockMvc.perform(get("/api/v1/accounts/me/analytics?range=7d")
+                        .header("X-User-Id", "user-1").header("X-Request-Id", "request-1"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.incomeFen").value(800))
+                .andExpect(jsonPath("$.data.expenseFen").value(300));
     }
 }

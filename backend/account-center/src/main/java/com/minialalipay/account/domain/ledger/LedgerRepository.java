@@ -42,6 +42,11 @@ public interface LedgerRepository {
      */
     List<LedgerEntry> findEntriesByUserId(String userId, Instant cursorCreatedAt, long cursorEntryId, int limit);
 
+    /** 查询指定时间范围内已过账的本人分录，分析接口不得统计处理中或已取消凭证。 */
+    default List<LedgerEntry> findPostedEntriesByUserId(String userId, Instant since, Instant until) {
+        return findEntriesByUserId(userId, null, 0L, 10000);
+    }
+
     /** 数据库实际分录的借贷汇总。 */
     record LedgerTotals(long debitFen, long creditFen) {
     }

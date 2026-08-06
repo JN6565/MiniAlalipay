@@ -108,6 +108,16 @@ public class LedgerRepositoryImpl implements LedgerRepository {
                 this::mapEntry, userId, cursorCreatedAt, cursorCreatedAt, cursorCreatedAt, cursorEntryId, limit);
     }
 
+    @Override
+    public List<LedgerEntry> findPostedEntriesByUserId(String userId, Instant since, Instant until) {
+        return jdbcTemplate.query("SELECT e.* FROM ledger_db.ledger_entry e "
+                        + "JOIN ledger_db.ledger_account a ON a.ledger_account_id=e.ledger_account_id "
+                        + "JOIN ledger_db.ledger_voucher v ON v.voucher_id=e.voucher_id "
+                        + "WHERE a.owner_type='USER' AND a.owner_id=? AND v.status='POSTED' "
+                        + "AND e.created_at>=? AND e.created_at<=? ORDER BY e.created_at",
+                this::mapEntry, userId, since, until);
+    }
+
     private LedgerVoucher mapVoucher(ResultSet rs) throws SQLException {
         String voucherId = rs.getString("voucher_id");
         List<LedgerEntry> entries = jdbcTemplate.query("SELECT * FROM ledger_db.ledger_entry "

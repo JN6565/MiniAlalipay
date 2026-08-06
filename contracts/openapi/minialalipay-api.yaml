@@ -113,6 +113,26 @@ paths:
           $ref: '#/components/responses/NotFound'
         '500':
           $ref: '#/components/responses/InternalError'
+  /api/v1/accounts/me/analytics:
+    get:
+      summary: 查询本人资产收支分析
+      operationId: getMyAnalytics
+      x-client-scope: C
+      parameters:
+        - $ref: '#/components/parameters/RequestIdHeader'
+        - name: range
+          in: query
+          required: false
+          schema: { type: string, enum: [7d, 30d, month], default: 7d }
+      responses:
+        '200':
+          description: 返回已过账账本统计结果
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/AccountAnalyticsResponse' }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '500': { $ref: '#/components/responses/InternalError' }
   /api/v1/transfer-drafts:
     post:
       summary: 创建主动转账草稿
@@ -2225,6 +2245,40 @@ components:
           properties:
             data:
               $ref: '#/components/schemas/AccountSummary'
+    AccountAnalyticsResponse:
+      allOf:
+        - $ref: '#/components/schemas/ApiResponse'
+        - type: object
+          required: [data]
+          properties:
+            data:
+              type: object
+              required: [range, definitionVersion, incomeFen, expenseFen, trend, topPayees]
+              properties:
+                range: { type: string, enum: [7d, 30d, month] }
+                definitionVersion: { type: string }
+                incomeFen: { type: integer, format: int64 }
+                expenseFen: { type: integer, format: int64 }
+                balanceFlowFen: { type: integer, format: int64 }
+                creditFlowFen: { type: integer, format: int64 }
+                trend:
+                  type: array
+                  items:
+                    type: object
+                    required: [date, incomeFen, expenseFen]
+                    properties:
+                      date: { type: string, format: date }
+                      incomeFen: { type: integer, format: int64 }
+                      expenseFen: { type: integer, format: int64 }
+                topPayees:
+                  type: array
+                  items:
+                    type: object
+                    required: [userId, nickname, totalFen]
+                    properties:
+                      userId: { type: string }
+                      nickname: { type: string }
+                      totalFen: { type: integer, format: int64 }
     LedgerEntry:
       type: object
       additionalProperties: false
