@@ -2,7 +2,6 @@ import request from './request';
 
 /**
  * 设置支付密码（注册后首次设置）。
- *
  * @param paymentPassword 支付密码（6 位数字）
  * @returns 成功响应
  */
@@ -12,9 +11,8 @@ export const setupPaymentPassword = (paymentPassword: string) => {
 
 /**
  * 修改支付密码。
- *
  * @param params.currentPassword 当前支付密码
- * @param params.newPassword     新支付密码（6 位数字）
+ * @param params.newPassword 新支付密码（6 位数字）
  * @returns 成功响应
  */
 export const changePaymentPassword = (params: {
@@ -25,11 +23,14 @@ export const changePaymentPassword = (params: {
 };
 
 /**
- * 验证支付密码。
- *
- * @param paymentPassword 支付密码（6 位数字）
- * @returns 成功响应
+ * 验证支付密码并获取支付凭证。
+ * @param params 支付密码和关联信息
+ * @returns 支付凭证
  */
-export const verifyPaymentPassword = (paymentPassword: string) => {
-  return request.post('/api/v1/payment-password/verify', { paymentPassword });
+export const verifyPaymentPassword = (params: {
+  paymentPassword: string;
+  subjectType: string;
+  subjectId: string;
+}): Promise<{ paymentProof: string; expiresAt: string }> => {
+  return request.post('/api/v1/payment-password/verify', params) as unknown as Promise<{ paymentProof: string; expiresAt: string }>;
 };

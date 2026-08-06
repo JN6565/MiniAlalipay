@@ -142,7 +142,8 @@ public class AccountCenterExceptionHandler {
                 "账户中心发生未处理异常，请求编号：{}，链路编号：{}，异常类型：{}",
                 requestId,
                 MDC.get("traceId"),
-                exception.getClass().getName()
+                exception.getClass().getName(),
+                exception
         );
         return toResponse(exception, request);
     }

@@ -19,10 +19,10 @@ const CreditPage: React.FC = () => {
     try {
       const [creditData, billsData] = await Promise.all([
         creditService.getCreditSummary(),
-        creditService.getBills({ pageSize: 3 }),
+        creditService.getBills(),
       ]);
       setCredit(creditData);
-      setBills(billsData.items || []);
+      setBills(billsData.slice(0, 3));
     } catch (error) {
       Toast.show({ content: '加载失败', icon: 'fail' });
     } finally {

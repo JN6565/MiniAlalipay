@@ -45,16 +45,13 @@ export const getCreditSummary = () => {
 };
 
 // 查询账单列表
-export const getBills = (params?: { page?: number; pageSize?: number }) => {
-  return request.get<{ items: CreditBill[]; total: number }>(
-    '/api/v1/credit/bills',
-    { params },
-  );
+export const getBills = (): Promise<CreditBill[]> => {
+  return request.get<CreditBill[]>('/api/v1/credit/bills') as unknown as Promise<CreditBill[]>;
 };
 
 // 查询账单详情
 export const getBillDetail = (billId: string) => {
-  return request.get<BillDetail>(`/v1/credit/bills/${billId}`);
+  return request.get<BillDetail>(`/api/v1/credit/bills/${billId}`);
 };
 
 // 创建还款草稿
@@ -91,5 +88,5 @@ export const getRepaymentStatus = (repaymentId: string) => {
     amountFen: number;
     status: string;
     restoredLimitFen: number;
-  }>(`/v1/credit/repayments/${repaymentId}`);
+  }>(`/api/v1/credit/repayments/${repaymentId}`);
 };

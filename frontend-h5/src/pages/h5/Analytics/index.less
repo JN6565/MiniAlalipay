@@ -52,13 +52,47 @@
   margin-bottom: 16px;
 }
 
-.chart-placeholder {
-  height: 200px;
+.trend-chart {
+  width: 100%;
+  min-height: 220px;
+}
+
+.trend-chart canvas {
+  display: block;
+  width: 100%;
+  height: 220px;
+}
+
+.chart-empty {
+  height: 220px;
   display: flex;
   justify-content: center;
   align-items: center;
   color: #999;
 }
+
+.trend-legend {
+  display: flex;
+  justify-content: center;
+  gap: 20px;
+  color: #666;
+  font-size: 12px;
+}
+
+.trend-legend span {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+}
+
+.legend-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+}
+
+.income-dot { background: #22a06b; }
+.expense-dot { background: #e5484d; }
 
 .payees-card {
   margin: 16px;
