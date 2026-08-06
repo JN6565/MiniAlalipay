@@ -16,6 +16,8 @@ import com.minialalipay.account.application.credit.dto.CreditJobRunDTO;
 import com.minialalipay.account.application.credit.dto.CreditSummaryDTO;
 import com.minialalipay.account.application.credit.dto.RepaymentDTO;
 import com.minialalipay.account.application.credit.dto.RepaymentDraftDTO;
+import com.minialalipay.account.interfaces.error.AccountCenterExceptionHandler;
+import com.minialalipay.common.error.CommonExceptionMapper;
 import com.minialalipay.common.idempotency.IdempotencyKeyValidator;
 import com.minialalipay.common.trace.RequestIdGenerator;
 import java.time.Instant;
@@ -49,7 +51,10 @@ class CreditControllerTest {
                 queryService, repaymentService, keyValidator, requestIdGenerator);
         CreditOpsController opsController = new CreditOpsController(
                 jobService, keyValidator, requestIdGenerator);
-        mockMvc = MockMvcBuilders.standaloneSetup(creditController, opsController).build();
+        mockMvc = MockMvcBuilders.standaloneSetup(creditController, opsController)
+                .setControllerAdvice(new AccountCenterExceptionHandler(
+                        new CommonExceptionMapper(), requestIdGenerator))
+                .build();
     }
 
     @Test
@@ -108,21 +113,34 @@ class CreditControllerTest {
     void shouldExposeCreditOperationsJobs() throws Exception {
         Instant now = Instant.now();
         LocalDate businessDate = LocalDate.of(2026, 8, 1);
-        when(jobService.runStatement("operator-1", businessDate)).thenReturn(new CreditJobRunDTO(
+        when(jobService.runStatement("admin-1", businessDate)).thenReturn(new CreditJobRunDTO(
                 "run-1", "STATEMENT", businessDate, "SUCCESS", now, now, null));
-        when(jobService.runDueCheck("operator-1", businessDate)).thenReturn(new CreditJobRunDTO(
+        when(jobService.runDueCheck("admin-1", businessDate)).thenReturn(new CreditJobRunDTO(
                 "run-2", "DUE_CHECK", businessDate, "SUCCESS", now, now, null));
 
         String body = "{\"businessDate\":\"2026-08-01\"}";
         mockMvc.perform(post("/api/v1/ops/credit/statement-runs")
-                        .header("X-User-Id", "operator-1")
+                        .header("X-User-Id", "admin-1")
+                        .header("X-User-Roles", "ADMIN")
                         .header("Idempotency-Key", "statement-key")
                         .contentType(MediaType.APPLICATION_JSON).content(body))
                 .andExpect(status().isOk());
         mockMvc.perform(post("/api/v1/ops/credit/due-check-runs")
-                        .header("X-User-Id", "operator-1")
+                        .header("X-User-Id", "admin-1")
+                        .header("X-User-Roles", "ADMIN")
                         .header("Idempotency-Key", "due-key")
                         .contentType(MediaType.APPLICATION_JSON).content(body))
                 .andExpect(status().isOk());
+    }
+
+    @Test
+    void shouldRejectNonAdminCreditOps() throws Exception {
+        String body = "{\"businessDate\":\"2026-08-01\"}";
+        mockMvc.perform(post("/api/v1/ops/credit/statement-runs")
+                        .header("X-User-Id", "ops-1")
+                        .header("X-User-Roles", "OPERATOR")
+                        .header("Idempotency-Key", "statement-key")
+                        .contentType(MediaType.APPLICATION_JSON).content(body))
+                .andExpect(status().isForbidden());
     }
 }

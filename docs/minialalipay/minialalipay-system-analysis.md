@@ -3501,7 +3501,11 @@ B 端管理员可通过 `business-center` 的 `/api/v1/ops/alert-rules` 系列�
 
 ### 16.8 B 端身份与用户管理边界
 
-B 端登录、当前身份、用户管理和角色管理依赖 `user-center`（负责人闫泽华）的身份与用户接口；`business-center` 与 `frontend-admin` 不持有用户身份与角色事实，只消费网关注入的可信 `X-User-Id`/`X-User-Roles`。当前网关 dev Stub 已提供可控身份用于本地演示；真实 B 端身份契约（运营登录、当前身份、用户列表）由用户中心合入 OpenAPI 后，B 端登录、用户管理和角色管理页面方可接通。在此之前这些页面保持诚实占位、不发起请求，`frontend-admin` 的 `getInitialState` 以开发身份兜底，B 端权限模型（OPERATOR/OBSERVER/ADMIN）已就绪，待身份契约合入后由当前身份接口填充。
+B 端登录、当前身份、用户管理和角色管理依赖 `user-center`（负责人闫泽华）的身份与用户接口；`business-center` 与 `frontend-admin` 不持有用户身份与角色事实，只消费网关注入的可信 `X-User-Id`/`X-User-Roles`。
+
+B 端身份闭环已落地：`frontend-admin` 通过网关调用 `POST /api/v1/auth/login` 登录并持久化访问令牌，请求层统一注入 `Authorization: Bearer <token>`；`GET /api/v1/auth/me` 以网关注入的可信 `X-User-Id` 换取展示名与角色集合，填充前端权限模型；网关 `AuthenticationGlobalFilter` 一律用认证主体覆盖客户端身份头，普通用户角色（`USER`）无 B 端准入权限。
+
+本地演示支持网关 dev Stub（`GATEWAY_AUTH_STUB_ENABLED=true` 时激活，令牌默认 `dev-admin-token`，角色默认 `ADMIN`）：开发环境未登录时 `frontend-admin` 注入 Stub 令牌并以开发身份兜底，使演示直接打通；生产构建不注入任何演示令牌，未登录一律引导到登录页。用户列表/冻结/解冻接口仍待用户中心合入后接通，在此之前用户管理页保持诚实占位、不发起请求。
 
 ## 17. 安全与合规分析
 

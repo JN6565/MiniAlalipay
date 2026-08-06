@@ -4,6 +4,8 @@ import com.minialalipay.account.application.credit.CreditJobService;
 import com.minialalipay.account.application.credit.dto.CreditJobRunDTO;
 import com.minialalipay.account.interfaces.credit.dto.RunCreditJobRequest;
 import com.minialalipay.common.api.ApiResponse;
+import com.minialalipay.common.error.BusinessException;
+import com.minialalipay.common.error.CommonErrorCode;
 import com.minialalipay.common.idempotency.IdempotencyKeyValidator;
 import com.minialalipay.common.trace.RequestIdGenerator;
 import jakarta.servlet.http.HttpServletRequest;
@@ -14,6 +16,8 @@ import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestHeader;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
+
+import java.util.Arrays;
 
 /**
  * B 端信用运维接口 Controller。
@@ -64,10 +68,12 @@ public class CreditOpsController {
     @PostMapping("/statement-runs")
     public ResponseEntity<ApiResponse<CreditJobRunDTO>> runCreditStatement(
             @RequestHeader("X-User-Id") String operatorUserId,
+            @RequestHeader("X-User-Roles") String trustedRolesHeader,
             @Valid @RequestBody RunCreditJobRequest request,
             @RequestHeader("Idempotency-Key") String idempotencyKey,
             HttpServletRequest httpRequest
     ) {
+        requireAdmin(trustedRolesHeader);
         validateIdempotencyKey(idempotencyKey);
         String requestId = requestIdGenerator.resolve(httpRequest.getHeader("X-Request-Id"));
         String traceId = httpRequest.getHeader("X-Trace-Id");
@@ -90,10 +96,12 @@ public class CreditOpsController {
     @PostMapping("/due-check-runs")
     public ResponseEntity<ApiResponse<CreditJobRunDTO>> runCreditDueCheck(
             @RequestHeader("X-User-Id") String operatorUserId,
+            @RequestHeader("X-User-Roles") String trustedRolesHeader,
             @Valid @RequestBody RunCreditJobRequest request,
             @RequestHeader("Idempotency-Key") String idempotencyKey,
             HttpServletRequest httpRequest
     ) {
+        requireAdmin(trustedRolesHeader);
         validateIdempotencyKey(idempotencyKey);
         String requestId = requestIdGenerator.resolve(httpRequest.getHeader("X-Request-Id"));
         String traceId = httpRequest.getHeader("X-Trace-Id");
@@ -102,12 +110,25 @@ public class CreditOpsController {
     }
 
     /**
+     * 校验管理员权限：信用运维任务（出账/到期检查）只允许系统管理员触发（系统分析 16.7）。
+     * 角色只读取网关清洗并注入的 {@code X-User-Roles}，不接受请求体或查询参数中的角色。
+     */
+    private void requireAdmin(String trustedRolesHeader) {
+        boolean isAdmin = trustedRolesHeader != null
+                && Arrays.stream(trustedRolesHeader.split(","))
+                        .map(String::trim)
+                        .anyMatch(role -> "ADMIN".equals(role));
+        if (!isAdmin) {
+            throw new BusinessException(CommonErrorCode.FORBIDDEN);
+        }
+    }
+
+    /**
      * 校验幂等键格式。
      */
     private void validateIdempotencyKey(String key) {
         if (!idempotencyKeyValidator.isValid(key)) {
-            throw new com.minialalipay.common.error.BusinessException(
-                    com.minialalipay.common.error.CommonErrorCode.INVALID_REQUEST);
+            throw new BusinessException(CommonErrorCode.INVALID_REQUEST);
         }
     }
 }

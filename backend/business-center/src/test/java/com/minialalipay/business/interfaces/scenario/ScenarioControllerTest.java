@@ -7,6 +7,7 @@ import com.minialalipay.business.application.port.RechargeStore;
 import com.minialalipay.business.application.port.SecurityMaterialPort;
 import com.minialalipay.business.application.recharge.RechargeApplicationService;
 import com.minialalipay.business.domain.manualcase.ManualCase;
+import com.minialalipay.business.domain.manualcase.ManualCaseStatus;
 import com.minialalipay.business.domain.manualcase.ManualCaseType;
 import com.minialalipay.business.domain.recharge.RechargeDailyUsage;
 import com.minialalipay.business.domain.recharge.RechargeOrder;
@@ -73,14 +74,18 @@ class ScenarioControllerTest {
     }
 
     @Test
-    void 工单查询允许观察者而处置拒绝观察者() throws Exception {
-        mvc.perform(get("/api/v1/manual-cases").header("X-User-Roles", "OBSERVER"))
+    void 工单查询允许运营人员而普通用户查询与处置均被拒绝() throws Exception {
+        mvc.perform(get("/api/v1/manual-cases").header("X-User-Roles", "OPERATOR"))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.data.items[0].caseId").value("case-1"));
 
+        mvc.perform(get("/api/v1/manual-cases").header("X-User-Roles", "USER"))
+                .andExpect(status().isForbidden())
+                .andExpect(jsonPath("$.code").value("OPS_PERMISSION_REQUIRED"));
+
         mvc.perform(post("/api/v1/manual-cases/case-1/decisions")
                         .header("X-User-Id", "operator-1")
-                        .header("X-User-Roles", "OBSERVER")
+                        .header("X-User-Roles", "USER")
                         .header("Idempotency-Key", "123e4567-e89b-12d3-a456-426614174000")
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("{\"decision\":\"CLAIM\",\"version\":0}"))
@@ -125,7 +130,9 @@ class ScenarioControllerTest {
         private final Map<String, DecisionIdempotencyRecord> idempotency = new HashMap<>();
         private ManualCase value = ManualCase.open("case-1", ManualCaseType.RISK_PRECHECK,
                 "QR_PAY_ORDER", "order-1", "RISK_MANUAL_REVIEW", Instant.parse("2026-08-05T08:00:00Z"));
-        @Override public List<ManualCase> list(String cursor, int limit) { return List.of(value); }
+        @Override public List<ManualCase> list(String cursor, ManualCaseStatus status, ManualCaseType type, int limit) {
+            return List.of(value);
+        }
         @Override public Optional<ManualCase> find(String caseId) { return Optional.ofNullable(value); }
         @Override public boolean create(ManualCase manualCase) { value = manualCase; return true; }
         @Override public boolean update(ManualCase manualCase, long expectedVersion) { value = manualCase; return true; }

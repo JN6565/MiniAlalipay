@@ -66,6 +66,16 @@ paths:
         '200': { description: 修改成功，该用户全部旧令牌失效，客户端必须重新登录 }
         '401': { $ref: '#/components/responses/Unauthorized' }
         '422': { $ref: '#/components/responses/UnprocessableEntity' }
+  /api/v1/auth/me:
+    get:
+      summary: 查询当前身份（展示名与真实角色）
+      description: 使用网关注入的可信用户身份查询当前展示名与角色集合，供 B 端权限模型填充。普通用户无角色授权时返回默认 USER。
+      operationId: getCurrentIdentity
+      x-client-scope: B
+      responses:
+        '200': { description: 返回当前身份, content: { application/json: { schema: { $ref: '#/components/schemas/CurrentIdentityResponse' } } } }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '404': { $ref: '#/components/responses/NotFound' }
   /actuator/health:
     get:
       summary: 网关健康检查
@@ -1217,7 +1227,7 @@ paths:
           required: false
           schema: { type: integer, minimum: 1, maximum: 100, default: 50 }
       responses:
-        '200': { description: 返回脱敏告警分页；观察者只有读取权限, content: { application/json: { schema: { $ref: '#/components/schemas/AlertPageResponse' } } } }
+        '200': { description: 返回脱敏告警分页；管理员与运营人员只读, content: { application/json: { schema: { $ref: '#/components/schemas/AlertPageResponse' } } } }
         '401': { $ref: '#/components/responses/Unauthorized' }
         '403': { $ref: '#/components/responses/Forbidden' }
   /api/v1/qr-pay/orders/{id}:
@@ -1577,7 +1587,7 @@ paths:
   /api/v1/ops/data-quality:
     get:
       summary: 查询数据质量结果
-      description: 数据质量为 FAILED 时不向观察者发布指标数值；WARNING 必须携带风险标记。
+      description: 数据质量为 FAILED 时不向运营展示指标数值；WARNING 必须携带风险标记。
       operationId: listDataQuality
       x-client-scope: B
       parameters:
@@ -1821,6 +1831,20 @@ components:
                 accountNumber: { type: string, pattern: '^62\d{14}$', description: 系统生成的账户号，可用于登录。 }
                 nickname: { type: string, minLength: 1, maxLength: 20 }
                 status: { type: string, enum: [ACTIVE, PROVISIONING] }
+    CurrentIdentityResponse:
+      allOf:
+        - $ref: '#/components/schemas/ApiResponse'
+        - type: object
+          required: [data]
+          properties:
+            data:
+              type: object
+              additionalProperties: false
+              required: [userId, displayName, roles]
+              properties:
+                userId: { type: string, minLength: 1, maxLength: 26 }
+                displayName: { type: string, minLength: 1, maxLength: 32, description: 展示名，真实姓名优先。 }
+                roles: { type: array, items: { type: string, enum: [USER, MERCHANT, OPERATOR, ADMIN] }, description: 用户实际角色集合，至少包含默认角色。 }
     CreditSummary:
       type: object
       additionalProperties: false
@@ -1986,6 +2010,25 @@ components:
         - type: object
           required: [data]
           properties: { data: { $ref: '#/components/schemas/CreditJobRun' } }
+    MetricDefinition:
+      type: object
+      additionalProperties: false
+      required: [metricCode, version, name, unit]
+      properties:
+        metricCode: { type: string, description: 指标代码，供报表与告警按编码展示名称。 }
+        version: { type: string, description: 指标口径版本。 }
+        name: { type: string, description: 指标中文名称。 }
+        unit: { type: string, description: 指标计量单位，例如“笔”“元”“次”。 }
+        formula: { type: string, description: 指标计算口径说明。 }
+    MetricDefinitionPageResponse:
+      allOf:
+        - $ref: '#/components/schemas/ApiResponse'
+        - type: object
+          required: [data]
+          properties:
+            data:
+              type: array
+              items: { $ref: '#/components/schemas/MetricDefinition' }
     ProvisionAccountRequest:
       type: object
       additionalProperties: false

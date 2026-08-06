@@ -8,7 +8,7 @@ import java.util.Optional;
  * B 端运营交易查询端口。
  *
  * <p>只读投影 {@code business_db} 中业务中心拥有的资金交易事实（统一交易、TCC 全局、Outbox 终态事件），
- * 供运营与观察者查看全平台脱敏交易与链路追溯；禁止通过本端口修改余额、账本或交易状态。</p>
+ * 供管理员与运营人员查看全平台脱敏交易与链路追溯；禁止通过本端口修改余额、账本或交易状态。</p>
  */
 public interface OpsTransactionQueryPort {
     /** 按游标分页查询脱敏交易摘要；status/businessType 为空表示不限，cursor 为空表示从最新开始。 */

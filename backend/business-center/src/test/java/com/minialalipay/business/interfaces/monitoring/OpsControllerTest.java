@@ -52,12 +52,12 @@ class OpsControllerTest {
     @Test
     void 运营只读查询返回脱敏投影并回显请求编号() throws Exception {
         mvc.perform(get("/api/v1/ops/realtime-metrics")
-                        .header("X-User-Roles", "OBSERVER").header("X-Request-Id", "req-ops-metrics"))
+                        .header("X-User-Roles", "OPERATOR").header("X-Request-Id", "req-ops-metrics"))
                 .andExpect(status().isOk()).andExpect(jsonPath("$.requestId").value("req-ops-metrics"))
                 .andExpect(jsonPath("$.data[0].metricCode").value("transaction.status.changed"))
                 .andExpect(jsonPath("$.data[0].qualityStatus").value("PASSED"));
 
-        mvc.perform(get("/api/v1/ops/alerts").header("X-User-Roles", "OBSERVER"))
+        mvc.perform(get("/api/v1/ops/alerts").header("X-User-Roles", "OPERATOR"))
                 .andExpect(status().isOk()).andExpect(jsonPath("$.data.items[0].alertId").value("alert-1"))
                 .andExpect(jsonPath("$.data.items[0].status").value("OPEN"))
                 .andExpect(jsonPath("$.data.items[0].lastReason").doesNotExist());
@@ -75,11 +75,11 @@ class OpsControllerTest {
     }
 
     @Test
-    void 非运营角色被拒绝且观察者不能处置() throws Exception {
+    void 非运营角色查询与处置均被拒绝() throws Exception {
         mvc.perform(get("/api/v1/ops/alerts").header("X-User-Roles", "USER"))
                 .andExpect(status().isForbidden()).andExpect(jsonPath("$.code").value("OPS_PERMISSION_REQUIRED"));
         mvc.perform(post("/api/v1/ops/alerts/alert-1/acknowledge")
-                        .header("X-User-Roles", "OBSERVER").header("X-User-Id", "ops-1")
+                        .header("X-User-Roles", "USER").header("X-User-Id", "ops-1")
                         .header("Idempotency-Key", "00000000-0000-0000-0000-000000000001")
                         .contentType(MediaType.APPLICATION_JSON).content("{\"version\":0,\"reason\":\"开始处置\"}"))
                 .andExpect(status().isForbidden()).andExpect(jsonPath("$.code").value("OPS_PERMISSION_REQUIRED"));
@@ -111,13 +111,13 @@ class OpsControllerTest {
                         .header("X-User-Roles", "ADMIN").header("X-User-Id", "ops-1")
                         .header("Idempotency-Key", "00000000-0000-0000-0000-000000000002")
                         .contentType(MediaType.APPLICATION_JSON)
-                        .content("{\"version\":1,\"reason\":\"观察完成\",\"evidence\":\"审计记录xxx\"}"))
+                        .content("{\"version\":1,\"reason\":\"处置完成\",\"evidence\":\"审计记录xxx\"}"))
                 .andExpect(status().isOk()).andExpect(jsonPath("$.data.status").value("CLOSED"));
     }
 
     @Test
     void 运营交易查询返回脱敏摘要与详情且拒绝非运营角色() throws Exception {
-        mvc.perform(get("/api/v1/ops/transactions").header("X-User-Roles", "OBSERVER"))
+        mvc.perform(get("/api/v1/ops/transactions").header("X-User-Roles", "OPERATOR"))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.data.items[0].transactionId").value("tx-1"))
                 .andExpect(jsonPath("$.data.items[0].amountFen").value(5200))
@@ -133,7 +133,7 @@ class OpsControllerTest {
                 .andExpect(jsonPath("$.data.tccStatus").value("SUCCESS"))
                 .andExpect(jsonPath("$.data.activeManualCaseId").value("case-1"));
 
-        mvc.perform(get("/api/v1/ops/transactions/tx-1/trace").header("X-User-Roles", "OBSERVER"))
+        mvc.perform(get("/api/v1/ops/transactions/tx-1/trace").header("X-User-Roles", "OPERATOR"))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.data[0].operation").value("统一交易受理"))
                 .andExpect(jsonPath("$.data[0].service").value("business-center"));
@@ -141,15 +141,15 @@ class OpsControllerTest {
 
     @Test
     void 运营查询不存在的交易按资源不存在返回() throws Exception {
-        mvc.perform(get("/api/v1/ops/transactions/missing").header("X-User-Roles", "OBSERVER"))
+        mvc.perform(get("/api/v1/ops/transactions/missing").header("X-User-Roles", "OPERATOR"))
                 .andExpect(status().isNotFound());
-        mvc.perform(get("/api/v1/ops/transactions/missing/trace").header("X-User-Roles", "OBSERVER"))
+        mvc.perform(get("/api/v1/ops/transactions/missing/trace").header("X-User-Roles", "OPERATOR"))
                 .andExpect(status().isNotFound());
     }
 
     @Test
     void 告警规则只读查询且仅管理员可调整阈值() throws Exception {
-        mvc.perform(get("/api/v1/ops/alert-rules").header("X-User-Roles", "OBSERVER"))
+        mvc.perform(get("/api/v1/ops/alert-rules").header("X-User-Roles", "OPERATOR"))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.data[0].ruleCode").value("DUPLICATE_CHARGE"))
                 .andExpect(jsonPath("$.data[0].thresholdValue").value(0));

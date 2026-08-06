@@ -15,8 +15,8 @@ import static org.assertj.core.api.Assertions.assertThat;
  */
 class JwtServiceTest {
 
-    /** 使用固定密钥确保测试可重复。 */
-    private final JwtService jwtService = new JwtService("test-secret-key-for-unit-test");
+    /** 使用固定密钥确保测试可重复；HS256 要求密钥至少 256 位（32 字节），此处取足长固定串。 */
+    private final JwtService jwtService = new JwtService("test-secret-key-for-unit-test-0123456789");
 
     @Test
     @DisplayName("签发并校验有效 JWT 返回正确的认证上下文")

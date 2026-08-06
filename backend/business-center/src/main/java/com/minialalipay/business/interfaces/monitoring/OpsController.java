@@ -180,7 +180,7 @@ public class OpsController {
         return ResponseEntity.ok(success(service.listMetricDefinitions(), request));
     }
 
-    /** 按游标分页查询全平台脱敏交易摘要；运营与观察者只读，金额为整数分。 */
+    /** 按游标分页查询全平台脱敏交易摘要；管理员与运营人员只读，金额为整数分。 */
     @GetMapping("/transactions")
     public ResponseEntity<ApiResponse<OpsTransactionPage>> transactions(
             @RequestHeader("X-User-Roles") String roles,
@@ -215,7 +215,7 @@ public class OpsController {
         return ResponseEntity.ok(success(spans, request));
     }
 
-    /** 查询全部告警规则及阈值配置；运营与观察者只读。 */
+    /** 查询全部告警规则及阈值配置；管理员与运营人员只读。 */
     @GetMapping("/alert-rules")
     public ResponseEntity<ApiResponse<List<AlertRuleResponse>>> alertRules(
             @RequestHeader("X-User-Roles") String roles, HttpServletRequest request) {

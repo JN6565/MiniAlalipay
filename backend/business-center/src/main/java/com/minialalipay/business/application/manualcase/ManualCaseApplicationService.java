@@ -51,11 +51,11 @@ public class ManualCaseApplicationService {
         this.clock = clock;
     }
 
-    /** 查询运营可见工单。 */
+    /** 查询运营可见工单；status/type 为空表示不按该维度过滤。 */
     @Transactional(readOnly = true)
-    public List<ManualCase> list(String cursor, int limit) {
+    public List<ManualCase> list(String cursor, ManualCaseStatus status, ManualCaseType type, int limit) {
         if (limit < 1 || limit > 100) throw new IllegalArgumentException("工单分页数量必须在 1 到 100 之间");
-        return store.list(cursor, limit);
+        return store.list(cursor, status, type, limit);
     }
 
     /**

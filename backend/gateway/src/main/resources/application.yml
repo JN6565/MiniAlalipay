@@ -101,31 +101,6 @@ spring:
                 redis-rate-limiter.replenishRate: 1
                 redis-rate-limiter.burstCapacity: 30
                 redis-rate-limiter.requestedTokens: 1
-        # ---- 以下路由已列入契约但对应 Controller 尚未实现，暂预留 ----
-        # transactions → 王钧平 阶段四已完成，Controller 待补充
-        - id: business-center-transactions
-          uri: ${BUSINESS_CENTER_URI:lb://business-center}
-          predicates:
-            - Path=/api/v1/transactions/**
-          filters:
-            - name: RequestRateLimiter
-              args:
-                key-resolver: "#{@userKeyResolver}"
-                redis-rate-limiter.replenishRate: 1
-                redis-rate-limiter.burstCapacity: 60
-                redis-rate-limiter.requestedTokens: 1
-        # monitoring → 实时指标、T+1 报表、告警处置，Controller 待补充
-        - id: business-center-monitoring
-          uri: ${BUSINESS_CENTER_URI:lb://business-center}
-          predicates:
-            - Path=/api/v1/monitoring/**
-          filters:
-            - name: RequestRateLimiter
-              args:
-                key-resolver: "#{@userKeyResolver}"
-                redis-rate-limiter.replenishRate: 1
-                redis-rate-limiter.burstCapacity: 30
-                redis-rate-limiter.requestedTokens: 1
         - id: business-center-recharges
           uri: ${BUSINESS_CENTER_URI:http://localhost:8082}
           predicates:
@@ -242,6 +217,12 @@ gateway:
   authentication:
     user-center-uri: ${USER_CENTER_URI:http://localhost:8081}
     service-token: ${INTERNAL_AUTH_SERVICE_TOKEN:local-internal-token}
+    # 本地演示鉴权桩：仅 GATEWAY_AUTH_STUB_ENABLED=true 时激活，用于无真实口令的本地 B 端演示；
+    # 生产环境必须保持关闭，关闭后回源 user-center 校验会话并解析真实角色。
+    stub-enabled: ${GATEWAY_AUTH_STUB_ENABLED:false}
+    stub-token: ${GATEWAY_AUTH_STUB_TOKEN:dev-admin-token}
+    stub-user: ${GATEWAY_AUTH_STUB_USER:dev-admin}
+    stub-roles: ${GATEWAY_AUTH_STUB_ROLES:ADMIN}
   cors:
     allowed-origins: ${GATEWAY_CORS_ORIGINS:http://localhost:8000,http://localhost:8001}
     max-age-seconds: ${GATEWAY_CORS_MAX_AGE:3600}

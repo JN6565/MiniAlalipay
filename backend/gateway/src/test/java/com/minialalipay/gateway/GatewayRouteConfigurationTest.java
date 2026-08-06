@@ -52,14 +52,7 @@ class GatewayRouteConfigurationTest {
         assertThat(route.getUri().toString()).containsAnyOf("business-center", "8082");
         assertThat(route.getPredicates())
                 .anySatisfy(predicate -> assertThat(predicate.getArgs().values())
-                        .anyMatch(v -> v.contains("/api/v1/p2p-collections/by-token")
-                                && v.contains("/api/v1/p2p-collections/token-exchanges")));
-    }
-
-    @Test
-    void routesTransactionsAndMonitoringToBusinessCenter() {
-        assertBusinessRoute("business-center-transactions", "/api/v1/transactions/**");
-        assertBusinessRoute("business-center-monitoring", "/api/v1/monitoring/**");
+                        .contains("/api/v1/p2p-collections/by-token", "/api/v1/p2p-collections/token-exchanges"));
     }
 
     @Test

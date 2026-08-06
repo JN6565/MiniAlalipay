@@ -129,8 +129,16 @@ public final class AuthenticationGlobalFilter implements GlobalFilter, Ordered {
             GatewayFilterChain chain,
             String path,
             GatewayAuthContext authContext) {
+        // 信用运维任务（出账/到期检查）仅系统管理员可触发；先于通用运维门禁判定，运营人员无权限。
+        if (path.startsWith("/api/v1/ops/credit/") && authContext.roles().stream()
+                .noneMatch(role -> "ADMIN".equals(role))) {
+            auditRejection(exchange, authContext.principalId(), AuditEvent.AUTHORIZATION_DENIED,
+                    "角色不足", "非管理员访问信用运维路径: " + path);
+            return writeForbiddenResponse(exchange);
+        }
+
         if (path.startsWith("/api/v1/ops/") && authContext.roles().stream()
-                .noneMatch(role -> "ADMIN".equals(role) || "OPERATOR".equals(role) || "OBSERVER".equals(role))) {
+                .noneMatch(role -> "ADMIN".equals(role) || "OPERATOR".equals(role))) {
             auditRejection(exchange, authContext.principalId(), AuditEvent.AUTHORIZATION_DENIED,
                     "角色不足", "普通用户访问运维路径: " + path);
             return writeForbiddenResponse(exchange);
@@ -140,11 +148,8 @@ public final class AuthenticationGlobalFilter implements GlobalFilter, Ordered {
                 authContext.principalId(), authContext.roles(), path);
         ServerWebExchange authenticatedExchange = exchange.mutate()
                 .request(request -> request.headers(headers -> {
-                    // 开发环境：优先使用客户端传的 X-User-Id，没有则使用认证上下文的 principalId
-                    String existingUserId = headers.getFirst(USER_ID_HEADER);
-                    if (existingUserId == null || existingUserId.isBlank()) {
-                        headers.set(USER_ID_HEADER, authContext.principalId());
-                    }
+                    // 安全约束：无论客户端是否传入 X-User-Id，一律用认证上下文主体覆盖，杜绝冒名。
+                    headers.set(USER_ID_HEADER, authContext.principalId());
                     headers.set(ROLES_HEADER, String.join(",", authContext.roles()));
                 }))
                 .build();

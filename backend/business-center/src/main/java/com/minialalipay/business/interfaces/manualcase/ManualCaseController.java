@@ -2,6 +2,8 @@ package com.minialalipay.business.interfaces.manualcase;
 
 import com.minialalipay.business.application.manualcase.ManualCaseApplicationService;
 import com.minialalipay.business.domain.manualcase.ManualCase;
+import com.minialalipay.business.domain.manualcase.ManualCaseStatus;
+import com.minialalipay.business.domain.manualcase.ManualCaseType;
 import com.minialalipay.business.interfaces.security.OpsAccessGuard;
 import com.minialalipay.common.api.ApiResponse;
 import com.minialalipay.common.error.BusinessException;
@@ -31,7 +33,7 @@ import java.util.List;
 /**
  * B 端人工工单查询与处置 API。
  *
- * <p>角色只从网关注入的 {@code X-User-Roles} 读取。观察者只能查询脱敏工单；处置操作需要管理员或运营人员，
+ * <p>角色只从网关注入的 {@code X-User-Roles} 读取。管理员与运营人员均可查询和处置工单，
  * 并记录操作者、理由、证据和请求编号。接口不直接修改交易或资金状态。</p>
  */
 @RestController
@@ -51,17 +53,40 @@ public class ManualCaseController {
         this.idempotencyKeyValidator = idempotencyKeyValidator;
     }
 
-    /** 查询运营可见工单；观察者拥有只读权限。 */
+    /** 查询运营可见工单；支持按状态、类型过滤，过滤条件为空表示不限定。 */
     @GetMapping
     public ResponseEntity<ApiResponse<ManualCasePage>> list(
             @RequestHeader("X-User-Roles") String roles,
+            @RequestParam(required = false) String status,
+            @RequestParam(required = false) String type,
             @RequestParam(required = false) String cursor,
             @RequestParam(defaultValue = "50") @Min(1) @Max(100) int limit,
             HttpServletRequest request) {
         access.requireRead(roles);
-        List<ManualCaseResponse> items = service.list(cursor, limit).stream().map(ManualCaseResponse::from).toList();
+        ManualCaseStatus statusEnum = parseStatus(status);
+        ManualCaseType typeEnum = parseType(type);
+        List<ManualCaseResponse> items = service.list(cursor, statusEnum, typeEnum, limit)
+                .stream().map(ManualCaseResponse::from).toList();
         String nextCursor = items.size() == limit ? items.getLast().caseId() : null;
         return ResponseEntity.ok(success(new ManualCasePage(items, nextCursor), request));
+    }
+
+    private ManualCaseStatus parseStatus(String raw) {
+        if (raw == null || raw.isBlank()) return null;
+        try {
+            return ManualCaseStatus.valueOf(raw.trim());
+        } catch (IllegalArgumentException e) {
+            throw new BusinessException(CommonErrorCode.INVALID_REQUEST);
+        }
+    }
+
+    private ManualCaseType parseType(String raw) {
+        if (raw == null || raw.isBlank()) return null;
+        try {
+            return ManualCaseType.valueOf(raw.trim());
+        } catch (IllegalArgumentException e) {
+            throw new BusinessException(CommonErrorCode.INVALID_REQUEST);
+        }
     }
 
     /** 按 CAS 版本处置工单；幂等由网关和审计存储的写请求边界保证。 */

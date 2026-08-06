@@ -1,6 +1,7 @@
 package com.minialalipay.user.interfaces.auth;
 
 import com.minialalipay.user.application.auth.AuthService;
+import com.minialalipay.user.application.auth.dto.SessionIdentity;
 import com.minialalipay.user.interfaces.dto.auth.SessionIntrospectionRequestDTO;
 import com.minialalipay.user.interfaces.dto.auth.SessionIntrospectionResponseDTO;
 import jakarta.validation.Valid;
@@ -13,6 +14,7 @@ import org.springframework.web.bind.annotation.RequestHeader;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 
+import java.util.Optional;
 import java.util.Set;
 
 /** 仅供网关直连的内部会话校验接口，不经过前端网关公开路由。 */
@@ -36,9 +38,10 @@ public class InternalSessionController {
         if (!serviceToken.equals(suppliedServiceToken)) {
             return ResponseEntity.status(HttpStatus.FORBIDDEN).build();
         }
-        String userId = authService.validateSession(request.accessToken());
-        return userId == null
-                ? ResponseEntity.ok(new SessionIntrospectionResponseDTO(false, null, Set.of()))
-                : ResponseEntity.ok(new SessionIntrospectionResponseDTO(true, userId, Set.of("USER")));
+        Optional<SessionIdentity> identity = authService.resolveSession(request.accessToken());
+        return identity
+                .map(session -> ResponseEntity.ok(
+                        new SessionIntrospectionResponseDTO(true, session.userId(), session.roles())))
+                .orElseGet(() -> ResponseEntity.ok(new SessionIntrospectionResponseDTO(false, null, Set.of())));
     }
 }

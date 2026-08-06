@@ -1,6 +1,8 @@
 package com.minialalipay.business.application.port;
 
 import com.minialalipay.business.domain.manualcase.ManualCase;
+import com.minialalipay.business.domain.manualcase.ManualCaseStatus;
+import com.minialalipay.business.domain.manualcase.ManualCaseType;
 
 import java.util.List;
 import java.util.Optional;
@@ -11,8 +13,8 @@ import java.util.Optional;
  * <p>实现仅持久化工单及其审计性处置，不得通过本端口修改资金交易、账户、冻结或账本事实。</p>
  */
 public interface ManualCaseStore {
-    /** 查询运营可见工单，游标由基础设施实现为稳定不透明值。 */
-    List<ManualCase> list(String cursor, int limit);
+    /** 查询运营可见工单；status/type 为空表示不按该维度过滤，游标由基础设施实现为稳定不透明值。 */
+    List<ManualCase> list(String cursor, ManualCaseStatus status, ManualCaseType type, int limit);
 
     /** 按 ID 查询工单。 */
     Optional<ManualCase> find(String caseId);
