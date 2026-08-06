@@ -2,9 +2,11 @@ package com.minialalipay.business.infrastructure.config;
 
 import com.minialalipay.business.application.monitoring.MonitoringEventConsumer;
 import com.minialalipay.business.application.monitoring.MonitoringEventStore;
+import com.minialalipay.common.context.UserContextFilter;
 import com.minialalipay.common.error.CommonExceptionMapper;
 import com.minialalipay.common.trace.RequestIdGenerator;
 import com.minialalipay.common.idempotency.IdempotencyKeyValidator;
+import org.springframework.boot.web.servlet.FilterRegistrationBean;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 
@@ -39,5 +41,18 @@ public class BusinessCenterCommonConfiguration {
     @Bean
     public MonitoringEventConsumer monitoringEventConsumer(MonitoringEventStore monitoringEventStore) {
         return new MonitoringEventConsumer("ops-projection", monitoringEventStore);
+    }
+
+    /**
+     * 注册用户上下文过滤器，从网关透传头提取用户身份写入 ThreadLocal。
+     */
+    @Bean
+    public FilterRegistrationBean<UserContextFilter> userContextFilter() {
+        FilterRegistrationBean<UserContextFilter> registration = new FilterRegistrationBean<>();
+        registration.setFilter(new UserContextFilter());
+        registration.addUrlPatterns("/*");
+        registration.setOrder(1);
+        registration.setName("userContextFilter");
+        return registration;
     }
 }

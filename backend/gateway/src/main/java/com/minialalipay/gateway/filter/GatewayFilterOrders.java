@@ -9,6 +9,7 @@ package com.minialalipay.gateway.filter;
  * <h3>执行顺序</h3>
  * <ol>
  *   <li>{@link #REQUEST_CONTEXT} — 请求编号生成与透传，必须在日志和异常记录之前</li>
+ *   <li>{@link #RESPONSE_NORMALIZER} — 下游错误响应标准化，在路由前包装响应装饰器</li>
  *   <li>{@link #SECURITY_HEADERS} — 安全响应头，在鉴权之前写入</li>
  *   <li>{@link #AUTHENTICATION} — 身份认证与 CSRF 校验</li>
  *   <li>{@link #RATE_LIMITER} — 限流，在鉴权之后、业务路由之前执行</li>
@@ -23,6 +24,9 @@ public final class GatewayFilterOrders {
 
     /** 请求编号：生成 X-Request-Id 并注入 Reactor Context。 */
     public static final int REQUEST_CONTEXT = 0;
+
+    /** 下游错误响应标准化：在路由前包装响应装饰器，拦截并改写非标准下游错误响应。 */
+    public static final int RESPONSE_NORMALIZER = 5;
 
     /** 安全响应头：为所有响应添加安全相关 HTTP 头。 */
     public static final int SECURITY_HEADERS = 10;
