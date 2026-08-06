@@ -16,8 +16,8 @@ import { adminTheme } from './theme';
  * 2. 配置 TanStack Query 的全局默认行为；
  * 3. 通过 rootContainer 包裹全局 Provider（主题、Antd App 上下文、QueryClient）。
  *
- * 身份来源：优先持久化登录令牌换取的真实身份；开发环境未登录时回退网关 dev Stub
- * 提供的受控身份（见系统分析 16.8），生产构建则引导到登录页。
+ * 身份来源：优先持久化登录令牌换取的真实身份；开发环境未登录时注入网关 dev Stub 令牌，
+ * 由网关启用 stub 后返回受控身份；身份必须由网关认证后下发，未认证时交由路由守卫引导登录。
  */
 
 /** B 端运行时初始状态。 */
@@ -34,8 +34,8 @@ const KNOWN_ROLES: readonly AdminRole[] = ['USER', 'OPERATOR', 'ADMIN'];
  *
  * 优先级：
  * 1. 持久化的真实登录令牌 → 调用 /api/v1/auth/me 换取服务端身份与角色；
- * 2. 开发环境未登录 → 注入网关 dev Stub 令牌并回退本地演示身份（与 stub-roles 对齐）；
- * 3. 生产未登录 → 返回空身份，由 AdminEntryGuard 引导到登录页。
+ * 2. 开发环境未登录 → 注入网关 dev Stub 令牌；网关启用 stub 时由 /api/v1/auth/me 下发受控身份；
+ * 3. 其余未认证场景 → 返回空身份，由 AdminEntryGuard 引导到登录页。
  */
 export async function getInitialState(): Promise<AdminInitialState> {
   // 1. 确定生效令牌：优先真实登录令牌；开发环境未登录时注入网关 dev Stub 令牌。
@@ -59,14 +59,12 @@ export async function getInitialState(): Promise<AdminInitialState> {
         },
       };
     } catch {
-      // 会话失效或 dev Stub 未启用：继续走下方回退逻辑。
+      // 会话失效或 dev Stub 未启用：身份必须由网关认证后下发，这里不得授予本地身份。
     }
   }
 
-  // 3. 开发环境回退本地演示身份（与网关 dev Stub 的受控角色一致）；生产未登录时交由路由守卫引导登录。
-  if (process.env.NODE_ENV === 'development') {
-    return { currentAdmin: { displayName: '开发运营', roles: ['ADMIN'] } };
-  }
+  // 3. 未认证时返回空身份：不允许客户端伪造身份，AdminEntryGuard 将引导到登录页。
+  //    dev Stub 只有在网关启用（GATEWAY_AUTH_STUB_ENABLED=true）时才通过上方 /auth/me 下发身份。
   return {};
 }
 
