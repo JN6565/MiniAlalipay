@@ -1,131 +1,249 @@
-import React, { useState, useRef, useEffect } from 'react';
+import React, { useState, useCallback, useRef } from 'react';
 import { history } from 'umi';
-import { Input, Button, Toast } from 'antd-mobile';
-import { SendOutline } from 'antd-mobile-icons';
-import { sendMessage } from '@/services/ai';
+import { Button, Toast } from 'antd-mobile';
+import { useSession } from './hooks/useSession';
+import { useSSEStream } from './hooks/useSSEStream';
+import { Message, UserMessage, AssistantTextMessage, ClarificationMessage, ConfirmationMessage } from './types';
+import MessageList from './components/MessageList';
+import InputBar from './components/InputBar';
+import StreamingBubble from './components/StreamingBubble';
+import ClarificationBubble from './components/ClarificationBubble';
+import ConfirmationCard from './components/ConfirmationCard';
 import './index.less';
 
-interface Message {
-  id: string;
-  role: 'user' | 'assistant';
-  content: string;
-  timestamp: Date;
+let idCounter = 0;
+function nextId(): string {
+  return `msg_${Date.now()}_${++idCounter}`;
 }
 
 const AITalkPage: React.FC = () => {
   const [messages, setMessages] = useState<Message[]>([]);
   const [inputValue, setInputValue] = useState('');
-  const [loading, setLoading] = useState(false);
-  const [sessionId, setSessionId] = useState<string | null>(null);
-  const messagesEndRef = useRef<HTMLDivElement>(null);
+  const { sessionId, saveSessionId } = useSession();
+  const { startStream, abort, streaming } = useSSEStream();
+  const currentAssistantIdRef = useRef<string | null>(null);
 
-  useEffect(() => {
-    scrollToBottom();
-  }, [messages]);
+  /** 发送消息的核心逻辑（通过 SSE 流） */
+  const sendViaStream = useCallback(
+    async (userContent: string) => {
+      const clientMessageId = `msg_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
 
-  const scrollToBottom = () => {
-    messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
-  };
+      // 创建待填充的 assistant text bubble
+      const assistantId = nextId();
+      currentAssistantIdRef.current = assistantId;
+      const assistantMsg: AssistantTextMessage = {
+        id: assistantId,
+        role: 'assistant',
+        kind: 'text',
+        content: '',
+        streaming: true,
+        timestamp: new Date(),
+      };
+      setMessages((prev) => [...prev, assistantMsg]);
 
-  const handleSend = async () => {
+      await startStream(
+        { clientMessageId, sessionId: sessionId || undefined, content: userContent },
+        {
+          'agent-status': (data) => {
+            console.debug('SSE status:', data.stage, data.message);
+          },
+
+          'agent-tool-call': (data) => {
+            if (data.status === 'rejected') {
+              Toast.show({ content: `操作被拒绝: ${data.tool}`, duration: 2000 });
+            }
+          },
+
+          'agent-tool-result': (data) => {
+            console.debug('SSE tool result:', data.tool, data.status, data.summary);
+          },
+
+          'agent-content': (data) => {
+            setMessages((prev) => {
+              const updated = [...prev];
+              const idx = updated.findIndex((m) => m.id === assistantId);
+              if (idx >= 0) {
+                const current = updated[idx] as AssistantTextMessage;
+                updated[idx] = { ...current, content: current.content + data.delta };
+              }
+              return updated;
+            });
+          },
+
+          'agent-confirmation': (data) => {
+            setMessages((prev) => [
+              ...prev,
+              {
+                id: nextId(),
+                role: 'assistant' as const,
+                kind: 'confirmation' as const,
+                cardType: data.cardType as 'transfer' | 'credit-repayment',
+                draftId: data.draftId,
+                summary: data.summary,
+                payeeNickname: data.payeeNickname,
+                amountFen: data.amountFen,
+                status: 'pending' as const,
+                timestamp: new Date(),
+              } as ConfirmationMessage,
+            ]);
+          },
+
+          'agent-clarification': (data) => {
+            setMessages((prev) => [
+              ...prev,
+              {
+                id: nextId(),
+                role: 'assistant' as const,
+                kind: 'clarification' as const,
+                question: data.question,
+                options: data.options || [],
+                timestamp: new Date(),
+              } as ClarificationMessage,
+            ]);
+          },
+
+          'agent-done': (data) => {
+            if (data.sessionId) saveSessionId(data.sessionId);
+            setMessages((prev) => {
+              const updated = [...prev];
+              const idx = updated.findIndex((m) => m.id === assistantId);
+              if (idx >= 0) {
+                updated[idx] = { ...updated[idx], streaming: false } as AssistantTextMessage;
+              }
+              return updated;
+            });
+          },
+
+          'agent-error': (data) => {
+            Toast.show({ content: data.message || 'AI 请求失败' });
+            setMessages((prev) => {
+              const updated = [...prev];
+              const idx = updated.findIndex((m) => m.id === assistantId);
+              if (idx >= 0) {
+                (updated[idx] as AssistantTextMessage).streaming = false;
+              }
+              return updated;
+            });
+          },
+        },
+      );
+    },
+    [sessionId, saveSessionId, startStream],
+  );
+
+  /** 输入栏发送 */
+  const handleSend = useCallback(async () => {
     if (!inputValue.trim()) return;
 
-    const userMessage: Message = {
-      id: Date.now().toString(),
+    const userMsg: UserMessage = {
+      id: nextId(),
       role: 'user',
       content: inputValue,
       timestamp: new Date(),
     };
-
-    setMessages((prev) => [...prev, userMessage]);
+    setMessages((prev) => [...prev, userMsg]);
     const currentInput = inputValue;
     setInputValue('');
-    setLoading(true);
 
-    try {
-      // 生成客户端消息ID（16-64位）
-      const clientMessageId = `msg_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+    await sendViaStream(currentInput);
+  }, [inputValue, sendViaStream]);
 
-      // 调用 AI 接口
-      const result = await sendMessage({
-        clientMessageId,
-        sessionId: sessionId || undefined,
-        content: currentInput,
-      });
+  /** 澄清选项点击 -- 将选项内容作为用户消息发送 */
+  const handleClarificationSelect = useCallback(
+    (optionId: string) => {
+      // 找到对应选项的 label
+      const lastClarification = [...messages]
+        .reverse()
+        .find((m): m is ClarificationMessage => m.role === 'assistant' && m.kind === 'clarification');
+      const option = lastClarification?.options.find((o) => o.id === optionId);
+      const displayText = option?.label || optionId;
 
-      // 更新 sessionId
-      if (result.sessionId) {
-        setSessionId(result.sessionId);
+      const userMsg: UserMessage = {
+        id: nextId(),
+        role: 'user',
+        content: displayText,
+        timestamp: new Date(),
+      };
+      setMessages((prev) => [...prev, userMsg]);
+      sendViaStream(optionId);
+    },
+    [messages, sendViaStream],
+  );
+
+  /** 确认卡片提交 */
+  const handleConfirm = useCallback(
+    async (draftId: string, password: string) => {
+      const confirmContent = `确认提交草稿 ${draftId}`;
+      const userMsg: UserMessage = {
+        id: nextId(),
+        role: 'user',
+        content: confirmContent,
+        timestamp: new Date(),
+      };
+      setMessages((prev) => [...prev, userMsg]);
+      await sendViaStream(confirmContent);
+    },
+    [sendViaStream],
+  );
+
+  /** 确认卡片取消 */
+  const handleCancel = useCallback((draftId: string) => {
+    setMessages((prev) =>
+      prev.map((m) => {
+        if (m.role === 'assistant' && m.kind === 'confirmation' && m.draftId === draftId) {
+          return { ...m, status: 'done', summary: m.summary + ' (已取消)' } as ConfirmationMessage;
+        }
+        return m;
+      }),
+    );
+  }, []);
+
+  /** 停止生成 */
+  const handleStopGeneration = useCallback(() => {
+    abort();
+  }, [abort]);
+
+  /** 消息渲染分发 */
+  const renderMessage = useCallback(
+    (msg: Message, _index: number) => {
+      if (msg.role === 'user') {
+        return (
+          <div className="ai-message ai-message-user">
+            <div className="ai-message-content">{msg.content}</div>
+          </div>
+        );
       }
-
-      // 构建 AI 回复消息
-      const aiMessage: Message = {
-        id: result.messageId || Date.now().toString(),
-        role: 'assistant',
-        content: result.content,
-        timestamp: new Date(),
-      };
-
-      setMessages((prev) => [...prev, aiMessage]);
-    } catch (error: any) {
-      console.error('AI 请求失败:', error);
-      Toast.show({
-        content: error?.message || 'AI 请求失败，请重试',
-        position: 'center',
-      });
-
-      // 添加错误提示消息
-      const errorMessage: Message = {
-        id: Date.now().toString(),
-        role: 'assistant',
-        content: '抱歉，我暂时无法回复。请稍后再试。',
-        timestamp: new Date(),
-      };
-      setMessages((prev) => [...prev, errorMessage]);
-    } finally {
-      setLoading(false);
-    }
-  };
+      if (msg.kind === 'text') {
+        return <StreamingBubble message={msg} />;
+      }
+      if (msg.kind === 'clarification') {
+        return <ClarificationBubble message={msg} onSelect={handleClarificationSelect} />;
+      }
+      if (msg.kind === 'confirmation') {
+        return <ConfirmationCard message={msg} onConfirm={handleConfirm} onCancel={handleCancel} />;
+      }
+      return null;
+    },
+    [handleClarificationSelect, handleConfirm, handleCancel],
+  );
 
   return (
     <div className="ai-talk-page">
-      <div className="ai-messages">
-        {messages.length === 0 && (
-          <div className="ai-welcome">
-            <div className="ai-welcome-desc">
-              我可以帮你转账、查余额、查账单等
-            </div>
-          </div>
-        )}
-        {messages.map((msg) => (
-          <div
-            key={msg.id}
-            className={`ai-message ai-message-${msg.role}`}
-          >
-            <div className="ai-message-content">{msg.content}</div>
-          </div>
-        ))}
-        <div ref={messagesEndRef} />
-      </div>
+      <MessageList messages={messages} renderMessage={renderMessage} />
 
-      <div className="ai-input-bar">
-        <Input
-          className="ai-input"
-          placeholder="输入消息..."
+      <div className="ai-input-area">
+        {streaming && (
+          <Button size="mini" color="danger" onClick={handleStopGeneration}>
+            停止
+          </Button>
+        )}
+        <InputBar
           value={inputValue}
           onChange={setInputValue}
-          onEnterPress={handleSend}
+          onSend={handleSend}
+          loading={streaming}
+          disabled={!inputValue.trim() || streaming}
         />
-        <Button
-          className="ai-send-btn"
-          color="primary"
-          fill="solid"
-          onClick={handleSend}
-          loading={loading}
-          disabled={!inputValue.trim()}
-        >
-          <SendOutline />
-        </Button>
       </div>
 
       {/* 底部导航栏 */}
