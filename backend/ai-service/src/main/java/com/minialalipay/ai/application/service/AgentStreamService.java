@@ -46,17 +46,10 @@ public class AgentStreamService {
             String rawContent,
             StreamCallback callback
     ) {
-        try {
-            log.debug("开始流式处理: userId={}, clientMessageId={}", userId, clientMessageId);
-            AgentMessageService.SendMessageResult result = messageService.processMessageWithStream(
-                    userId, clientMessageId, sessionId, rawContent, clock.instant(), callback);
-            log.debug("流式处理完成: sessionId={}, messageId={}",
-                    result.sessionId(), result.messageId());
-        } catch (Exception e) {
-            log.error("流式处理异常: {}", e.getMessage(), e);
-            callback.onError(new com.minialalipay.ai.application.port.SseEvent.ErrorPayload(
-                    "INTERNAL_ERROR",
-                    "处理请求时发生异常，请稍后重试: " + e.getMessage()));
-        }
+        log.debug("开始流式处理: userId={}, clientMessageId={}", userId, clientMessageId);
+        AgentMessageService.SendMessageResult result = messageService.processMessageWithStream(
+                userId, clientMessageId, sessionId, rawContent, clock.instant(), callback);
+        log.debug("流式处理完成: sessionId={}, messageId={}",
+                result.sessionId(), result.messageId());
     }
 }

@@ -95,9 +95,17 @@ public class ToolRouter {
             throw e;
         } catch (Exception e) {
             int duration = (int) (System.currentTimeMillis() - start);
-            log.warn("工具调用失败: tool={}, error={}", toolName, e.getMessage());
+            Throwable root = e;
+            // 展开 CompletableFuture 包装的 ExecutionException
+            while ((root instanceof java.util.concurrent.ExecutionException
+                    || root instanceof java.util.concurrent.CompletionException)
+                    && root.getCause() != null) {
+                root = root.getCause();
+            }
+            log.warn("工具调用失败: tool={}, exception={}, message={}",
+                    toolName, root.getClass().getSimpleName(), root.getMessage());
             return new ToolResult(RESULT_TOOL_UNAVAILABLE, Map.of(),
-                    "工具调用失败: " + e.getMessage(), duration);
+                    "工具调用失败: " + root.getMessage(), duration);
         }
     }
 

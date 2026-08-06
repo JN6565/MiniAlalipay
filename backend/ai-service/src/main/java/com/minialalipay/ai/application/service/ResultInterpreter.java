@@ -104,8 +104,8 @@ public class ResultInterpreter {
             };
         }
 
-        // 无 status 字段时的默认解释
-        return defaultSuccessInterpretation(toolName, data);
+        // 无 status 字段时按工具成功处理
+        return interpretFinalSuccess(toolName, data);
     }
 
     /**
@@ -152,6 +152,14 @@ public class ResultInterpreter {
                     "请核对以下信息后完成支付：\n"
                             + "收款人: " + data.getOrDefault("payeeNickname", "")
                             + "\n金额: " + formatFen(data.get("amountFen")) + " 元";
+            case "list_transactions" ->
+                    "以下是您最近的交易明细。";
+            case "list_credit_bills" ->
+                    "以下是您的花呗账单。";
+            case "get_transaction_status" -> {
+                Object s = data.get("status");
+                yield s != null ? "该笔交易当前状态: " + s : "未能获取交易状态。";
+            }
             default ->
                     "操作成功。";
         };
@@ -172,21 +180,6 @@ public class ResultInterpreter {
             }
         }
         return "操作未成功，请稍后重试。";
-    }
-
-    /**
-     * 无 status 字段时的默认解释（各工具通用）。
-     */
-    private String defaultSuccessInterpretation(String toolName, Map<String, Object> data) {
-        return switch (toolName) {
-            case "list_transactions" -> "以下是您最近的交易明细。";
-            case "list_credit_bills" -> "以下是您的花呗账单。";
-            case "get_transaction_status" -> {
-                Object s = data.get("status");
-                yield s != null ? "该笔交易当前状态: " + s : "未能获取交易状态。";
-            }
-            default -> "查询成功。";
-        };
     }
 
     /**

@@ -85,10 +85,10 @@ public class AgentStreamController {
             @Valid @RequestBody SendMessageRequest request,
             HttpServletRequest httpRequest
     ) {
+        // 提取 Bearer Token（仅作局部变量，不在 HTTP 线程设置 RequestContext，防止 ThreadLocal 泄露）
         String authHeader = httpRequest.getHeader("Authorization");
-        if (authHeader != null && authHeader.startsWith("Bearer ")) {
-            RequestContext.setBearerToken(authHeader.substring("Bearer ".length()));
-        }
+        final String bearerToken = (authHeader != null && authHeader.startsWith("Bearer "))
+                ? authHeader.substring("Bearer ".length()) : null;
 
         // 注入检测
         InjectionDetector.InjectionCheckResult check = injectionDetector.check(request.content());
@@ -104,14 +104,18 @@ public class AgentStreamController {
 
         streamExecutor.execute(() -> {
             try {
-                RequestContext.setBearerToken(
-                        authHeader != null && authHeader.startsWith("Bearer ")
-                                ? authHeader.substring("Bearer ".length()) : null);
+                // 仅在 worker 线程设置 RequestContext，finally 块会清理，不会泄露到 HTTP 线程
+                RequestContext.setBearerToken(bearerToken);
 
                 StreamCallback callback = new SseStreamCallback(emitter, objectMapper);
                 agentStreamService.processStream(
                         userId, request.clientMessageId(),
                         request.sessionId(), sanitizedContent, callback);
+                emitter.complete();
+            } catch (BusinessException e) {
+                // BusinessException 已在 processMessageWithStream 中通过 callback.onError 通知客户端，
+                // 此处只做优雅关闭，不重复发送 agent-error 事件
+                log.warn("SSE 业务异常: {}", e.getMessage());
                 emitter.complete();
             } catch (Exception e) {
                 log.error("SSE 流异常: {}", e.getMessage(), e);

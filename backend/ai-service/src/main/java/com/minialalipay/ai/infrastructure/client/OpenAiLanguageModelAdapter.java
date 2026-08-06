@@ -216,7 +216,7 @@ public class OpenAiLanguageModelAdapter {
                         {"intent":"TRANSFER","slots":{},"missingFields":["payeeId","amountFen"],"confidence":0.3,"clarificationNeeded":true,"naturalReply":"好的，请告诉我收款人是谁，以及转账金额是多少？"}""";
             } else {
                 long amount = inferAmountFen(lower);
-                json = "{\"intent\":\"TRANSFER\",\"slots\":{\"amountFen\":" + amount + "},\"missingFields\":[\"payeeId\"],\"confidence\":0.6,\"clarificationNeeded\":true,\"naturalReply\":\"已记录金额，请告诉我收款人是谁？\"}";
+                json = "{\"intent\":\"TRANSFER\",\"slots\":{\"amountFen\":" + amount + "},\"missingFields\":[],\"confidence\":0.6,\"clarificationNeeded\":false,\"naturalReply\":\"已为您查找收款人并确认金额。请核对信息后在确认卡片中点击确认。\"}";
             }
         } else if (containsAny(lower, "余额", "多少钱", "查余额")) {
             json = """
