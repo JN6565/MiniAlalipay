@@ -6,6 +6,7 @@ import com.minialalipay.account.domain.ledger.LedgerRepository;
 import com.minialalipay.account.domain.analytics.AnalyticsErrorCode;
 import com.minialalipay.common.error.BusinessException;
 import org.springframework.stereotype.Service;
+import org.springframework.beans.factory.annotation.Autowired;
 
 import java.time.Clock;
 import java.time.Instant;
@@ -23,6 +24,7 @@ public class AccountAnalyticsApplicationService {
     private final LedgerRepository repository;
     private final Clock clock;
 
+    @Autowired
     public AccountAnalyticsApplicationService(LedgerRepository repository) {
         this(repository, Clock.systemUTC());
     }
