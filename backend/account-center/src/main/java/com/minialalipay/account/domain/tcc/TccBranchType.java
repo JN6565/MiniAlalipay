@@ -4,8 +4,9 @@ package com.minialalipay.account.domain.tcc;
 public enum TccBranchType {
     /** 付款余额冻结、扣减或释放。 */ PAYER_BALANCE,
     /** 收款余额预占、入账或取消。 */ PAYEE_BALANCE,
-    /** 复式账本凭证准备、过账或取消。 */ LEDGER,
-    /** 信用支付专用账本凭证，借记信用应收资产并贷记收款用户余额负债。 */ CREDIT_PAY_LEDGER,
-    /** Mini 花呗支付额度冻结、确认应收或释放。 */ CREDIT_PAY,
-    /** Mini 花呗还款余额冻结、应收扣减或释放。 */ CREDIT_REPAY
+    /** 普通转账复式账本凭证。 */ LEDGER,
+    /** 信用支付专用账本凭证。 */ CREDIT_PAY_LEDGER,
+    /** Mini 花呗支付额度分支。 */ CREDIT_PAY,
+    /** Mini 花呗还款余额分支。 */ CREDIT_REPAY,
+    /** 充值入账分支。 */ RECHARGE
 }

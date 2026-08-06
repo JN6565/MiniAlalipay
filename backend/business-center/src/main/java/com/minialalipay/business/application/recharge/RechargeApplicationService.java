@@ -31,7 +31,7 @@ import java.util.Arrays;
  * 受控模拟充值订单应用服务。
  *
  * <p>在同一 business_db 事务中完成登录用户账户解析、限额快照、幂等、日额度预占和订单创建；
- * 当前仅返回待渠道状态，不创建 {@code fund_transaction}，不调用 TCC 或账户写接口。</p>
+ * 渠道成功后创建 {@code fund_transaction} 并启动充值专用 TCC，渠道拒绝只推进订单状态。</p>
  */
 @Service
 public class RechargeApplicationService {
@@ -47,7 +47,6 @@ public class RechargeApplicationService {
     private final Clock clock;
 
     /** 充值付款对手：账户中心虚拟资金发行权益科目，正常方向为贷方（仅演示虚拟资金）。 */
-    private static final String VIRTUAL_ISSUANCE_ACCOUNT = "SYS00000000000000000000001";
 
     /** 创建充值应用服务。 */
     @Autowired
@@ -113,6 +112,10 @@ public class RechargeApplicationService {
         if (!store.createOrderAndUpdateUsage(order, usage, expectedUsageVersion)) {
             throw new BusinessException(BusinessErrorCode.VERSION_CONFLICT);
         }
+        // 模拟充值没有真实支付渠道，创建成功即视为渠道成功；TCC 协调在本地事务提交后执行。
+        if (businessStore != null && coordinator != null) {
+            return onChannelResult(order.getRechargeOrderId(), true, null, secure.newTraceId());
+        }
         return order;
     }
 
@@ -129,7 +132,7 @@ public class RechargeApplicationService {
      * 记录受控模拟渠道结果。
      *
      * <p>渠道成功时在同一 business_db 事务中推进充值订单到 {@code PROCESSING} 并创建 {@code RECHARGE} 统一交易，
-     * 提交后启动 TCC；账户中心尚未提供充值 TCC 参与者与虚拟发行权益科目种子前，TCC 会安全失败并转入人工处置，
+     * 提交后启动充值专用 TCC；重复回调对已受理或已拒绝订单幂等，
      * 绝不伪造入账。重复回调对已受理或已拒绝订单幂等。</p>
      *
      * @param rechargeOrderId 充值订单号
@@ -168,8 +171,8 @@ public class RechargeApplicationService {
         }
         if (!store.updateOrder(order, expectedVersion)) throw new BusinessException(BusinessErrorCode.VERSION_CONFLICT);
         FundTransaction transaction = FundTransaction.accept(transactionId, TransactionType.RECHARGE, SourceType.RECHARGE_ORDER,
-                rechargeOrderId, order.getUserId(), VIRTUAL_ISSUANCE_ACCOUNT, order.getTargetAccountId(),
-                FundingSource.BALANCE, order.getAmountFen(), secure.stableId("RECHARGE:" + rechargeOrderId), "LOW",
+                rechargeOrderId, order.getUserId(), null, order.getTargetAccountId(),
+                FundingSource.SYSTEM_ISSUANCE, order.getAmountFen(), secure.stableId("RECHARGE:" + rechargeOrderId), "LOW",
                 validTraceId(traceId), now);
         businessStore.createTransaction(transaction, secure.digest(rechargeOrderId), secure.newId(), now);
         afterCommit(() -> coordinator.startOrResume(transaction));
