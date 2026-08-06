@@ -57,7 +57,8 @@ class OpsControllerTest {
                 .andExpect(jsonPath("$.data[0].metricCode").value("transaction.status.changed"))
                 .andExpect(jsonPath("$.data[0].qualityStatus").value("PASSED"));
 
-        mvc.perform(get("/api/v1/ops/alerts").header("X-User-Roles", "OPERATOR"))
+        mvc.perform(get("/api/v1/ops/alerts").header("X-User-Roles", "OPERATOR")
+                        .param("status", "OPEN").param("severity", "CRITICAL"))
                 .andExpect(status().isOk()).andExpect(jsonPath("$.data.items[0].alertId").value("alert-1"))
                 .andExpect(jsonPath("$.data.items[0].status").value("OPEN"))
                 .andExpect(jsonPath("$.data.items[0].lastReason").doesNotExist());
@@ -199,7 +200,7 @@ class OpsControllerTest {
             super(null, null);
         }
 
-        @Override public List<Alert> listAlerts(String status, String cursor, int limit) { return List.of(alert()); }
+        @Override public List<Alert> listAlerts(String status, String severity, String cursor, int limit) { return List.of(alert()); }
         @Override public Alert acknowledgeAlert(String operatorId, String alertId, long version, String reason, String idempotencyKey) {
             return new Alert(alertId, "TCC_TIMEOUT", "CRITICAL", AlertStatus.ACKNOWLEDGED, operatorId, reason, 1L, NOW, NOW.plusSeconds(1));
         }

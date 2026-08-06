@@ -83,16 +83,17 @@ public class OpsController {
         return ResponseEntity.ok(success(service.listRealtimeMetrics(metricCode, from, to), request));
     }
 
-    /** 查询脱敏告警分页。 */
+    /** 查询脱敏告警分页；支持按状态与级别（severity）筛选。 */
     @GetMapping("/alerts")
     public ResponseEntity<ApiResponse<AlertPage>> alerts(
             @RequestHeader("X-User-Roles") String roles,
             @RequestParam(required = false) String status,
+            @RequestParam(required = false) String severity,
             @RequestParam(required = false) String cursor,
             @RequestParam(defaultValue = "50") @Min(1) @Max(100) int limit,
             HttpServletRequest request) {
         access.requireRead(roles);
-        List<AlertResponse> items = service.listAlerts(status, cursor, limit)
+        List<AlertResponse> items = service.listAlerts(status, severity, cursor, limit)
                 .stream().map(AlertResponse::from).toList();
         String nextCursor = items.size() == limit ? items.getLast().alertId() : null;
         return ResponseEntity.ok(success(new AlertPage(items, nextCursor), request));

@@ -48,11 +48,11 @@ public class MonitoringApplicationService {
         this.clock = clock;
     }
 
-    /** 查询运营可见告警。 */
+    /** 查询运营可见告警；状态与级别均可选筛选项。 */
     @Transactional(readOnly = true)
-    public List<Alert> listAlerts(String status, String cursor, int limit) {
+    public List<Alert> listAlerts(String status, String severity, String cursor, int limit) {
         if (limit < 1 || limit > 100) throw new IllegalArgumentException("告警分页数量必须在 1 到 100 之间");
-        return store.listAlerts(status, cursor, limit);
+        return store.listAlerts(status, severity, cursor, limit);
     }
 
     /** 确认开放告警；同操作人同键重试保持幂等。 */

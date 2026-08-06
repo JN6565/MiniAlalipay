@@ -540,7 +540,7 @@ B 端页面中以下能力已由 PRD 和前端系分提出，但当前总体端�
 | `GET /api/v1/agent/sessions/{id}` | 会话 ID | `AgentSessionView(sessionId,status,messages[],toolTraces[])`，不返回内部推理 | `SESSION_NOT_FOUND` |
 | `DELETE /api/v1/agent/sessions/{id}/memory` | 会话 ID | `OperationResult(success=true)` | `SESSION_NOT_FOUND` |
 | `GET /api/v1/ops/daily-reports` | `businessDate,metricCode,cursor` | `DailyReportPage(items,definitionVersion,qualityStatus,nextCursor)` | `REPORT_NOT_PUBLISHED` |
-| `GET /api/v1/ops/data-quality` | `businessDate,jobType,status,cursor` | `QualityResultPage(items,nextCursor)` | `OPS_PERMISSION_REQUIRED` |
+| `GET /api/v1/ops/data-quality` | `dataDate`、`jobCode`、`ruleCode` | `DataQualityResult[]` | `OPS_PERMISSION_REQUIRED` |
 | `GET /api/v1/ops/metric-definitions` | `metricCode,version,cursor` | `MetricDefinitionPage(items,nextCursor)` | `OPS_PERMISSION_REQUIRED` |
 | `POST /api/v1/ops/alerts/{id}/close` | `CloseAlertRequest(version,comment)` | `AlertView(status=CLOSED)` | `ALERT_STATE_INVALID`、`VERSION_CONFLICT` |
 | `POST /api/v1/ops/credit/statement-runs` | `CreditJobRunRequest(businessDate)` | `CreditJobRunView(runId,jobType,businessDate,status)` | `JOB_ALREADY_RUNNING` |

@@ -50,16 +50,27 @@ public class JdbcMonitoringProjectionStore implements MonitoringProjectionStore 
     }
 
     @Override
-    public List<Alert> listAlerts(String status, String cursor, int limit) {
+    public List<Alert> listAlerts(String status, String severity, String cursor, int limit) {
         String afterId = cursor == null || cursor.isBlank() ? "" : cursor;
-        if (status == null || status.isBlank()) {
-            return jdbc.query("SELECT alert_id,rule_code,severity,status,assignee_id,last_reason,version,opened_at,updated_at "
-                    + "FROM metrics_db.monitor_alert WHERE alert_id>? ORDER BY alert_id ASC LIMIT ?",
-                    (rs, rowNum) -> mapAlert(rs), afterId, limit);
+        StringBuilder sql = new StringBuilder("SELECT alert_id,rule_code,severity,status,assignee_id,last_reason,version,"
+                + "opened_at,updated_at FROM metrics_db.monitor_alert WHERE ");
+        List<Object> args = new ArrayList<>();
+        boolean first = true;
+        if (status != null && !status.isBlank()) {
+            sql.append("status=?");
+            args.add(status);
+            first = false;
         }
-        return jdbc.query("SELECT alert_id,rule_code,severity,status,assignee_id,last_reason,version,opened_at,updated_at "
-                + "FROM metrics_db.monitor_alert WHERE status=? AND alert_id>? ORDER BY alert_id ASC LIMIT ?",
-                (rs, rowNum) -> mapAlert(rs), status, afterId, limit);
+        if (severity != null && !severity.isBlank()) {
+            if (!first) sql.append(" AND ");
+            sql.append("severity=?");
+            args.add(severity);
+            first = false;
+        }
+        sql.append(first ? "alert_id>?" : " AND alert_id>?").append(" ORDER BY alert_id ASC LIMIT ?");
+        args.add(afterId);
+        args.add(limit);
+        return jdbc.query(sql.toString(), (rs, rowNum) -> mapAlert(rs), args.toArray());
     }
 
     @Override

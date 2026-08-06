@@ -1218,6 +1218,10 @@ paths:
           in: query
           required: false
           schema: { type: string, enum: [OPEN, ACKNOWLEDGED, RESOLVED, CLOSED] }
+        - name: severity
+          in: query
+          required: false
+          schema: { type: string, enum: [INFO, WARNING, CRITICAL], description: 告警级别筛选，对应告警投影的级别字段。 }
         - name: cursor
           in: query
           required: false

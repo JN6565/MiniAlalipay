@@ -38,7 +38,9 @@ class JdbcMonitoringProjectionStoreIntegrationTest {
         jdbc.update("INSERT INTO metrics_db.monitor_alert (alert_id,rule_code,severity,status,version,opened_at,updated_at) "
                 + "VALUES ('alert-1','TCC_TIMEOUT','CRITICAL','OPEN',0,?,?)", Timestamp.from(NOW), Timestamp.from(NOW));
 
-        assertThat(store.listAlerts("OPEN", null, 50)).hasSize(1);
+        assertThat(store.listAlerts("OPEN", null, null, 50)).hasSize(1);
+        assertThat(store.listAlerts(null, "CRITICAL", null, 50)).hasSize(1);
+        assertThat(store.listAlerts(null, "INFO", null, 50)).isEmpty();
         Alert alert = store.findAlert("alert-1").orElseThrow();
         assertThat(alert.getStatus()).isEqualTo(AlertStatus.OPEN);
 

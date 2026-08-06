@@ -173,10 +173,16 @@ function writeAction<T>(url: string, data: Record<string, unknown>): Promise<Api
   });
 }
 
-/** 查询告警投影，支持状态筛选与稳定游标分页。 */
-export function listAlerts(status?: string, cursor?: string, limit = 50): Promise<ApiResponse<AlertPage>> {
+/** 查询告警投影，支持状态与级别（severity）筛选及稳定游标分页。 */
+export function listAlerts(
+  status?: string,
+  severity?: string,
+  cursor?: string,
+  limit = 50,
+): Promise<ApiResponse<AlertPage>> {
   const params = new URLSearchParams({ limit: String(limit) });
   if (status) params.set('status', status);
+  if (severity) params.set('severity', severity);
   if (cursor) params.set('cursor', cursor);
   return gatewayRequest<ApiResponse<AlertPage>>(`/api/v1/ops/alerts?${params.toString()}`);
 }
@@ -196,10 +202,12 @@ export function closeAlert(alertId: string, version: number, reason: string, evi
   return writeAction(`/api/v1/ops/alerts/${alertId}/close`, { version, reason, evidence });
 }
 
-/** 查询数据质量结果。 */
-export function listDataQuality(dataDate?: string): Promise<ApiResponse<DataQualityItem[]>> {
+/** 查询数据质量结果，支持按数据日期、任务编码与规则编码筛选。 */
+export function listDataQuality(dataDate?: string, jobCode?: string, ruleCode?: string): Promise<ApiResponse<DataQualityItem[]>> {
   const params = new URLSearchParams();
   if (dataDate) params.set('dataDate', dataDate);
+  if (jobCode) params.set('jobCode', jobCode);
+  if (ruleCode) params.set('ruleCode', ruleCode);
   return gatewayRequest<ApiResponse<DataQualityItem[]>>(`/api/v1/ops/data-quality?${params.toString()}`);
 }
 

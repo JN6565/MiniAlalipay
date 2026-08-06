@@ -1719,9 +1719,9 @@ sequenceDiagram
     participant Web as B端Web
     participant API as 后端API
     O->>Web: 进入 /admin/alerts
-    Web->>API: GET /api/v1/ops/alerts?cursor=&level=
+    Web->>API: GET /api/v1/ops/alerts?cursor=&status=&severity=
     API-->>Web: {alerts[], nextCursor}
-    Web-->>O: 告警列表(按级别+时间排序)
+    Web-->>O: 告警列表(按状态+级别筛选)
     alt 确认告警
         O->>Web: 填写确认说明→确认
         Web->>API: POST /api/v1/ops/alerts/{id}/acknowledge {explanation}
@@ -1739,7 +1739,7 @@ sequenceDiagram
 
 **前端逻辑**
 
-+ 查询告警列表，cursor 分页，按级别 + 时间排序。
++ 查询告警列表，cursor 分页，支持按状态（status）与级别（severity）筛选；级别可选值 INFO/WARNING/CRITICAL。
 + 确认告警需填写说明；解决告警需提交证据；关闭告警仅限 RESOLVED→CLOSED。
 + 告警级别和状态以服务端为准，前端不缓存终态。
 + 权限由后端 RBAC 控制：运营可处置告警，观察者只读查看，系统管理员可配置非资金告警阈值。
@@ -1748,7 +1748,7 @@ sequenceDiagram
 
 | 方法 | 路径 | 说明 |
 | --- | --- | --- |
-| GET | `/api/v1/ops/alerts` | 查询告警列表，cursor 分页 |
+| GET | `/api/v1/ops/alerts` | 查询告警列表，status+severity 筛选，cursor 分页 |
 | POST | `/api/v1/ops/alerts/{id}/acknowledge` | 确认告警，需说明 |
 | POST | `/api/v1/ops/alerts/{id}/resolve` | 解决告警，需证据 |
 | POST | `/api/v1/ops/alerts/{id}/close` | 关闭恢复告警，仅 RESOLVED→CLOSED |
@@ -1763,28 +1763,26 @@ sequenceDiagram
     participant Web as B端Web
     participant API as 后端API
     O->>Web: 进入 /admin/data-quality
-    Web->>API: GET /api/v1/ops/data-quality?date=&job=&rule=
-    API-->>Web: {qualityResults[], quarantinedEvents[], reportPublishStatus}
-    Web-->>O: 质量检查结果+隔离事件+报表发布状态
-    O->>Web: 筛选(任务/规则/日期)
-    Web->>API: GET /api/v1/ops/data-quality?job=&rule=&date=
+    Web->>API: GET /api/v1/ops/data-quality?dataDate=&jobCode=&ruleCode=
+    API-->>Web: {qualityResults[]}
+    Web-->>O: 质量检查结果
+    O->>Web: 筛选(数据日期/任务编码/规则编码)
+    Web->>API: GET /api/v1/ops/data-quality?dataDate=&jobCode=&ruleCode=
     API-->>Web: 筛选结果
-    O->>Web: 查看隔离数据摘要
-    Web-->>O: 隔离事件详情(reason, payloadDigest, quarantinedAt)
 ```
 
 **前端逻辑**
 
-+ 查询质量检查结果 + 隔离事件 + 报表发布状态，支持 date + job + rule 筛选。
-+ 隔离事件展示 reason、payloadDigest、quarantinedAt，不展示原始 payload 明文。
-+ 报表发布状态联动 T+1 报表页，质量 FAILED 时报表页展示"数据不可用"。
++ 查询质量检查结果，默认数据日期为最近一个数据日，支持按数据日期（dataDate）、任务编码（jobCode）与规则编码（ruleCode）筛选。
 + 筛选条件变化时重新查询，不前端聚合。
++ 质量 FAILED 联动 T+1 报表页"数据不可用"，报表发布状态以后端 12.7.6 为准。
++ 隔离数据摘要（quarantined_event）与重跑入口：V1.1 未提供查询与重跑端点（前端系统分析已移除 rerun 路由），前端不展示隔离明细、不提供重跑入口；隔离数据仅供后端运维侧排查。
 
 **所需 API**
 
 | 方法 | 路径 | 说明 |
 | --- | --- | --- |
-| GET | `/api/v1/ops/data-quality` | 查询质量检查，date+task+rule 筛选 |
+| GET | `/api/v1/ops/data-quality` | 查询质量检查，dataDate+jobCode+ruleCode 筛选 |
 
 
 #### 2.3.26 用户管理页（B 端 Web，P1）

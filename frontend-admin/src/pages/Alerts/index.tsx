@@ -18,6 +18,13 @@ const STATUS_LABEL: Record<string, string> = {
   CLOSED: '已关闭',
 };
 
+/** 告警级别中文标签。 */
+const SEVERITY_LABEL: Record<string, string> = {
+  INFO: '提示',
+  WARNING: '警告',
+  CRITICAL: '严重',
+};
+
 /**
  * 告警中心。
  *
@@ -29,6 +36,7 @@ export default function Alerts() {
   const access = useAccess();
   const queryClient = useQueryClient();
   const [status, setStatus] = useState<string>();
+  const [severity, setSeverity] = useState<string>();
   const [action, setAction] = useState<{ alert: AlertItem; type: AlertAction }>();
   const [form] = Form.useForm();
   // 服务端仅提供正向游标，使用游标栈回退上一页；空字符串表示第一页。
@@ -36,14 +44,20 @@ export default function Alerts() {
   const [cursorStack, setCursorStack] = useState<string[]>([]);
 
   const alertsQuery = useQuery({
-    queryKey: ['ops', 'alerts', status, cursor],
-    queryFn: () => listAlerts(status, cursor),
+    queryKey: ['ops', 'alerts', status, severity, cursor],
+    queryFn: () => listAlerts(status, severity, cursor),
   });
 
   const nextCursor = alertsQuery.data?.data.nextCursor ?? null;
 
   function changeStatus(value?: string) {
     setStatus(value);
+    setCursor(undefined);
+    setCursorStack([]);
+  }
+
+  function changeSeverity(value?: string) {
+    setSeverity(value);
     setCursor(undefined);
     setCursorStack([]);
   }
@@ -122,6 +136,14 @@ export default function Alerts() {
           options={Object.entries(STATUS_LABEL).map(([value, label]) => ({ value, label }))}
           onChange={changeStatus}
         />
+        <Select
+          aria-label="告警级别"
+          allowClear
+          placeholder="告警级别"
+          style={{ width: 160 }}
+          options={Object.entries(SEVERITY_LABEL).map(([value, label]) => ({ value, label }))}
+          onChange={changeSeverity}
+        />
         <Button type="primary" onClick={() => alertsQuery.refetch()}>
           查询
         </Button>
@@ -146,8 +168,8 @@ export default function Alerts() {
               <Empty
                 description={alertsQuery.isError
                   ? '加载失败，请确认网关已启动'
-                  : status
-                    ? '暂无该状态告警'
+                  : status || severity
+                    ? '暂无符合条件的告警'
                     : '暂无告警'}
               />
             ),
