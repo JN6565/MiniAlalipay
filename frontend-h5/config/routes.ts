@@ -149,7 +149,7 @@ export default [
         path: '/h5/collection/result/:id',
         component: '@/pages/h5/CollectionResult',
         exact: true,
-        title: '收款结果',
+        title: '转账结果',
         auth: true,
       },
       {

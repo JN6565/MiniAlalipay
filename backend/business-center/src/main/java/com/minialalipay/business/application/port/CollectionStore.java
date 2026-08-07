@@ -52,6 +52,9 @@ public interface CollectionStore {
     /** 按版本 CAS 更新 C2C 订单。 */
     boolean updateOrder(CollectionOrder order, long expectedVersion);
 
+    /** 清除终态订单的 H5 会话绑定，允许同一会话创建新订单。 */
+    void clearSessionBinding(String orderId);
+
     /**
      * 原子受理 C2C 订单，并为固定请求同步写入 PROCESSING 投影和可重放事件。
      *

@@ -1,35 +1,74 @@
-import React, { useEffect, useRef, useState } from 'react';
+import React, { useEffect, useRef, useState, useCallback } from 'react';
 import { history } from 'umi';
-import { Toast, SpinLoading, Dialog } from 'antd-mobile';
+import { Toast, Dialog } from 'antd-mobile';
 import { Html5Qrcode } from 'html5-qrcode';
 import './index.less';
 
 const ScanPage: React.FC = () => {
-  const [loading, setLoading] = useState(true);
+  const [initializing, setInitializing] = useState(true);
   const [scanning, setScanning] = useState(false);
   const html5QrCodeRef = useRef<Html5Qrcode | null>(null);
   const containerRef = useRef<HTMLDivElement>(null);
+  const mountedRef = useRef(true);
 
   useEffect(() => {
-    initScanner();
+    mountedRef.current = true;
+    // 等待DOM渲染完成后再初始化
+    const timer = setTimeout(() => {
+      if (mountedRef.current) {
+        initScanner();
+      }
+    }, 200);
+
     return () => {
-      stopScanner();
+      mountedRef.current = false;
+      clearTimeout(timer);
+      // 强制停止扫码器
+      if (html5QrCodeRef.current) {
+        try {
+          html5QrCodeRef.current.stop().catch(() => {});
+        } catch (e) {
+          // 忽略错误
+        }
+        html5QrCodeRef.current = null;
+      }
     };
   }, []);
 
   const initScanner = async () => {
+    if (!mountedRef.current) return;
+
     try {
+      // 检查DOM元素是否存在
+      const qrReaderElement = document.getElementById('qr-reader');
+      if (!qrReaderElement) {
+        console.error('qr-reader元素不存在，重试中...');
+        // 重试一次
+        setTimeout(() => {
+          if (mountedRef.current) initScanner();
+        }, 200);
+        return;
+      }
+
       const html5QrCode = new Html5Qrcode('qr-reader');
       html5QrCodeRef.current = html5QrCode;
-      setLoading(false);
+      if (mountedRef.current) {
+        setInitializing(false);
+      }
+
+      // 自动开始扫码
+      startScanner();
     } catch (error) {
       console.error('初始化扫码器失败:', error);
-      Toast.show({ content: '初始化扫码器失败', icon: 'fail' });
+      if (mountedRef.current) {
+        Toast.show({ content: '初始化扫码器失败', icon: 'fail' });
+        setInitializing(false);
+      }
     }
   };
 
   const startScanner = async () => {
-    if (!html5QrCodeRef.current || scanning) return;
+    if (!html5QrCodeRef.current || scanning || !mountedRef.current) return;
 
     setScanning(true);
     try {
@@ -43,25 +82,40 @@ const ScanPage: React.FC = () => {
         onScanSuccess,
         onScanFailure,
       );
-    } catch (error) {
+    } catch (error: any) {
       console.error('启动扫码失败:', error);
-      Toast.show({ content: '启动扫码失败，请检查摄像头权限', icon: 'fail' });
+      if (!mountedRef.current) return;
+      let errorMessage = '启动扫码失败';
+      if (error?.message?.includes('NotAllowedError') || error?.message?.includes('Permission')) {
+        errorMessage = '请允许摄像头权限后重试';
+      } else if (error?.message?.includes('NotFoundError')) {
+        errorMessage = '未找到摄像头设备';
+      } else if (error?.message?.includes('NotReadableError')) {
+        errorMessage = '摄像头被其他应用占用';
+      } else if (window.location.protocol !== 'https:' && window.location.hostname !== 'localhost') {
+        errorMessage = '需要HTTPS环境才能使用摄像头';
+      }
+      Toast.show({ content: errorMessage, icon: 'fail' });
       setScanning(false);
     }
   };
 
   const stopScanner = async () => {
-    if (html5QrCodeRef.current && scanning) {
+    if (html5QrCodeRef.current) {
       try {
         await html5QrCodeRef.current.stop();
       } catch (error) {
-        console.error('停止扫码失败:', error);
+        // 忽略停止错误
       }
     }
-    setScanning(false);
+    if (mountedRef.current) {
+      setScanning(false);
+    }
   };
 
   const onScanSuccess = async (decodedText: string) => {
+    if (!mountedRef.current) return;
+
     // 停止扫码
     await stopScanner();
 
@@ -70,19 +124,30 @@ const ScanPage: React.FC = () => {
   };
 
   const onScanFailure = (error: string) => {
-    // 扫码失败时不做处理，继续扫描
-    console.debug('扫码失败:', error);
+    // 扫码失败时不做处理，继续扫描（不输出日志避免刷屏）
   };
 
   const handleQrCodeContent = (content: string) => {
     try {
-      // 尝试解析为URL
-      const url = new URL(content);
+      let pathname = '';
+      let searchParams = new URLSearchParams();
+
+      // 尝试解析为完整URL
+      if (content.startsWith('http://') || content.startsWith('https://')) {
+        const url = new URL(content);
+        pathname = url.pathname;
+        searchParams = url.searchParams;
+      }
+      // 相对路径形式：/api/v1/p2p-collections/by-token?t=xxx
+      else if (content.startsWith('/')) {
+        const [path, query] = content.split('?');
+        pathname = path;
+        searchParams = new URLSearchParams(query || '');
+      }
 
       // 检查是否是收款码URL
-      if (url.pathname.includes('/p2p-collections/by-token')) {
-        // 个人收款码
-        const token = url.searchParams.get('t');
+      if (pathname.includes('/p2p-collections/by-token')) {
+        const token = searchParams.get('t');
         if (token) {
           history.push(`/h5/collection/pay/${token}`);
           return;
@@ -90,9 +155,8 @@ const ScanPage: React.FC = () => {
       }
 
       // 检查是否是扫码支付URL
-      if (url.pathname.includes('/qr-pay/orders/by-token')) {
-        // 动态扫码收款
-        const token = url.searchParams.get('t');
+      if (pathname.includes('/qr-pay/orders/by-token')) {
+        const token = searchParams.get('t');
         if (token) {
           history.push(`/h5/qr-pay/${token}`);
           return;
@@ -113,6 +177,16 @@ const ScanPage: React.FC = () => {
     }
   };
 
+  // 检查是否支持摄像头
+  const isCameraSupported = () => {
+    return !!(navigator.mediaDevices && navigator.mediaDevices.getUserMedia);
+  };
+
+  // 检查是否是HTTPS环境
+  const isSecureContext = () => {
+    return window.location.protocol === 'https:' || window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1';
+  };
+
   return (
     <div className="scan-page">
       <div className="scan-header">
@@ -122,15 +196,27 @@ const ScanPage: React.FC = () => {
       </div>
 
       <div className="scan-content">
-        {loading ? (
-          <div className="loading-container">
-            <SpinLoading />
-            <div className="loading-text">初始化扫码器...</div>
+        {!isCameraSupported() ? (
+          <div className="error-container">
+            <div className="error-icon">📷</div>
+            <div className="error-text">您的浏览器不支持摄像头功能</div>
+            <div className="error-hint">请使用现代浏览器访问</div>
+          </div>
+        ) : !isSecureContext() ? (
+          <div className="error-container">
+            <div className="error-icon">🔒</div>
+            <div className="error-text">需要HTTPS环境才能使用摄像头</div>
+            <div className="error-hint">请使用HTTPS访问或使用localhost</div>
           </div>
         ) : (
           <>
             <div className="qr-reader-container" ref={containerRef}>
               <div id="qr-reader" className="qr-reader"></div>
+              {initializing && (
+                <div className="loading-overlay">
+                  <div className="loading-text">初始化扫码器...</div>
+                </div>
+              )}
             </div>
 
             <div className="scan-tips">

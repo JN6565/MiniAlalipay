@@ -57,7 +57,9 @@ public final class AuthenticationGlobalFilter implements GlobalFilter, Ordered {
 
     /** 仅包含 GET 请求的白名单路径前缀（健康检查等）。 */
     private static final List<String> GET_WHITELIST_PATHS = List.of(
-            "/actuator/"
+            "/actuator/",
+            "/api/v1/p2p-collections/by-token",
+            "/api/v1/qr-pay/orders/by-token"
     );
 
     private static final String BEARER_PREFIX = "Bearer ";

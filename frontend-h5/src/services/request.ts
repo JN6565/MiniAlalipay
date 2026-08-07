@@ -40,6 +40,11 @@ request.interceptors.request.use((config: any) => {
 });
 
 request.interceptors.response.use((response: any) => {
+  // 处理 204 No Content 响应（如 bootstrap 接口）
+  if (response.status === 204) {
+    return undefined;
+  }
+
   const { code, message, requestId, data } = response.data;
   if (code === 'OK' || code === 200 || code === 202) return data;
   handleExpiredSession(String(code));
