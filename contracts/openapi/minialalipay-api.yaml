@@ -458,6 +458,31 @@ paths:
               schema: { $ref: '#/components/schemas/InternalCreditAccountReference' }
         '400': { $ref: '#/components/responses/BadRequest' }
         '404': { $ref: '#/components/responses/NotFound' }
+  /internal/v1/seata-tcc/transfer/try:
+    post:
+      summary: 在 Seata 全局事务内注册转账 TCC Try 分支
+      description: 仅允许业务中心服务调用。请求必须携带 Seata XID；Confirm/Cancel 由 Seata TC 回调参与者，不提供 HTTP 回调入口。
+      operationId: trySeataTransferTcc
+      x-client-scope: INTERNAL
+      x-service-auth: required
+      servers: [{ url: http://localhost:8083 }]
+      security: [{ internalServiceAuth: [] }]
+      parameters:
+        - name: TX_XID
+          in: header
+          required: true
+          schema: { type: string, minLength: 1, maxLength: 128 }
+          description: Seata 技术全局事务 XID，不得写入业务屏障或对外响应。
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/SeataTransferTccRequest' }
+      responses:
+        '200': { description: 三个 TCC Try 分支已注册 }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '409': { $ref: '#/components/responses/Conflict' }
+        '500': { $ref: '#/components/responses/InternalError' }
   /internal/v1/tcc/balance/{role}/{action}:
     post:
       summary: 执行付款方或收款方余额 TCC 分支
@@ -2195,6 +2220,23 @@ components:
         userId: { type: string, minLength: 26, maxLength: 26 }
         status: { type: string, enum: [ACTIVE, SUSPENDED, CLOSED] }
         version: { type: integer, format: int64, minimum: 0 }
+    SeataTransferTccRequest:
+      type: object
+      additionalProperties: false
+      required: [businessXid, transactionId, payerAccountId, payeeAccountId, amountFen, payerFreezeId, payeeReservationId, voucherId, debitEntryId, creditEntryId, ledgerEventId, traceId]
+      properties:
+        businessXid: { type: string, minLength: 1, maxLength: 128, description: 业务屏障键，与 Seata 技术 XID 解耦。 }
+        transactionId: { type: string, minLength: 26, maxLength: 26 }
+        payerAccountId: { type: string, minLength: 26, maxLength: 26 }
+        payeeAccountId: { type: string, minLength: 26, maxLength: 26 }
+        amountFen: { type: integer, format: int64, minimum: 1 }
+        payerFreezeId: { type: string, minLength: 26, maxLength: 26 }
+        payeeReservationId: { type: string, minLength: 26, maxLength: 26 }
+        voucherId: { type: string, minLength: 26, maxLength: 26 }
+        debitEntryId: { type: integer, format: int64, minimum: 1 }
+        creditEntryId: { type: integer, format: int64, minimum: 1 }
+        ledgerEventId: { type: string, minLength: 26, maxLength: 26 }
+        traceId: { type: string, pattern: '^[a-fA-F0-9]{32}$' }
     BalanceTccCommand:
       type: object
       additionalProperties: false

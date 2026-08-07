@@ -619,6 +619,19 @@ B 端页面中以下能力已由 PRD 和前端系分提出，但当前总体端�
 
 ### 10.1 TCC 分支职责
 
+#### 10.1.1 Seata 转账落地约束
+
+转账主链路已经接入 Seata 2 TCC：`business-center` 的
+`SeataGlobalTransactionExecutor.execute` 使用 `@GlobalTransactional` 创建全局事务，
+通过 `/internal/v1/seata-tcc/transfer/try` 仅注册三个 Try 分支；
+`account-center` 的 `SeataTransferTccParticipant` 和 `SeataLedgerTccParticipant`
+使用 `@LocalTCC` 与 `@TwoPhaseBusinessAction` 暴露 Confirm/Cancel 回调。
+
+HTTP 请求中的 `TX_XID` 是 Seata 技术标识，只在请求线程绑定，不能作为业务屏障键、幂等键或对外返回值。
+账户中心的 `tcc_branch` 仍使用由交易 ID 派生的 `businessXid`，负责幂等、空回滚、防悬挂和 CAS；
+因此 Seata TC 重试与现有恢复扫描不会产生第二套业务分支事实。充值等尚未迁移的交易类型继续走 HTTP 协调器，
+由 `minialalipay.tcc.coordinator=http` 显式回退。
+
 | 分支 | Try | Confirm | Cancel |
 |---|---|---|---|
 | 付款余额 | 建冻结记录并减少可用 | 冻结转已扣 | 释放冻结一次 |
