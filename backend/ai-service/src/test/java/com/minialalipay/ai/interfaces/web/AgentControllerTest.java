@@ -4,6 +4,8 @@ import com.minialalipay.ai.application.security.InjectionDetector;
 import com.minialalipay.ai.application.security.IOSanitizer;
 import com.minialalipay.ai.application.service.AgentMessageService;
 import com.minialalipay.ai.domain.agent.AgentErrorCode;
+import com.minialalipay.ai.domain.agent.AgentMessageRepository;
+import com.minialalipay.ai.domain.agent.AgentSessionRepository;
 import com.minialalipay.ai.domain.agent.IntentType;
 import com.minialalipay.common.error.BusinessException;
 import com.minialalipay.common.trace.RequestIdGenerator;
@@ -32,6 +34,8 @@ class AgentControllerTest {
     @MockBean private InjectionDetector injectionDetector;
     @MockBean private IOSanitizer sanitizer;
     @MockBean private RequestIdGenerator requestIdGenerator;
+    @MockBean private AgentSessionRepository sessionRepository;
+    @MockBean private AgentMessageRepository messageRepository;
 
     @Test
     void shouldReturn200ForValidRequest() throws Exception {

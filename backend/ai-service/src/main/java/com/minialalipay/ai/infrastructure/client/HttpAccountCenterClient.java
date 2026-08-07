@@ -8,9 +8,11 @@ import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.http.HttpStatusCode;
+import org.springframework.http.client.SimpleClientHttpRequestFactory;
 import org.springframework.stereotype.Component;
 import org.springframework.web.client.RestClient;
 
+import java.time.Duration;
 import java.util.Map;
 
 /**
@@ -31,8 +33,12 @@ public class HttpAccountCenterClient implements AccountCenterPort {
             @Value("${ai.client.account-center.base-url:http://localhost:8083}") String baseUrl,
             @Value("${ai.client.timeout-ms:3000}") int timeoutMs
     ) {
+        SimpleClientHttpRequestFactory factory = new SimpleClientHttpRequestFactory();
+        factory.setConnectTimeout(Duration.ofMillis(timeoutMs));
+        factory.setReadTimeout(Duration.ofMillis(timeoutMs));
         this.restClient = RestClient.builder()
                 .baseUrl(baseUrl)
+                .requestFactory(factory)
                 .defaultHeader("Content-Type", "application/json")
                 .build();
         log.info("账户中心客户端初始化: baseUrl={}, timeout={}ms", baseUrl, timeoutMs);
@@ -65,6 +71,28 @@ public class HttpAccountCenterClient implements AccountCenterPort {
 
     @Override
     @SuppressWarnings("unchecked")
+    public Map<String, Object> listTransactions(String userId, int limit,
+            String startTime, String endTime, String direction, String status) {
+        // 拼接筛选参数到查询字符串
+        StringBuilder query = new StringBuilder("/api/v1/accounts/me/entries?limit=").append(limit);
+        if (startTime != null && !startTime.isBlank()) {
+            query.append("&startTime=").append(java.net.URLEncoder.encode(startTime, java.nio.charset.StandardCharsets.UTF_8));
+        }
+        if (endTime != null && !endTime.isBlank()) {
+            query.append("&endTime=").append(java.net.URLEncoder.encode(endTime, java.nio.charset.StandardCharsets.UTF_8));
+        }
+        if (direction != null && !direction.isBlank()) {
+            query.append("&direction=").append(direction);
+        }
+        if (status != null && !status.isBlank()) {
+            query.append("&status=").append(status);
+        }
+        log.debug("查询交易明细（含筛选）: userId={}, query={}", userId, query);
+        return get(userId, query.toString());
+    }
+
+    @Override
+    @SuppressWarnings("unchecked")
     public Map<String, Object> getCreditSummary(String userId) {
         log.debug("查询花呗额度: userId={}", userId);
         return get(userId, "/api/v1/credit/me");
@@ -91,11 +119,17 @@ public class HttpAccountCenterClient implements AccountCenterPort {
     public Map<String, Object> submitCreditRepayment(
             String userId, String repaymentDraftId,
             String paymentProofToken, String idempotencyKey) {
+        // 防御性校验：避免 Map.of(null) 的 NPE
+        if (repaymentDraftId == null || repaymentDraftId.isBlank()) {
+            throw new BusinessException(AgentErrorCode.INTENT_LOW_CONFIDENCE);
+        }
+        if (paymentProofToken == null || paymentProofToken.isBlank()) {
+            throw new BusinessException(AgentErrorCode.TOOL_FORBIDDEN);
+        }
         log.debug("提交还款: userId={}, repaymentDraftId={}", userId, repaymentDraftId);
-        Map<String, Object> body = Map.of(
-                "repaymentDraftId", repaymentDraftId,
-                "paymentProofToken", paymentProofToken
-        );
+        java.util.Map<String, Object> body = new java.util.HashMap<>();
+        body.put("repaymentDraftId", repaymentDraftId);
+        body.put("paymentProofToken", paymentProofToken);
         return post(userId, "/api/v1/credit/repayments", body, idempotencyKey);
     }
 
@@ -107,7 +141,7 @@ public class HttpAccountCenterClient implements AccountCenterPort {
             var spec = restClient.get()
                     .uri(path)
                     .header("X-User-Id", userId);
-            return withAuth(spec)
+            Map<String, Object> response = withAuth(spec)
                     .retrieve()
                     .onStatus(HttpStatusCode::is4xxClientError, (req, res) -> {
                         log.warn("账户中心客户端错误: status={}, path={}", res.getStatusCode(), path);
@@ -118,6 +152,8 @@ public class HttpAccountCenterClient implements AccountCenterPort {
                         throw new BusinessException(AgentErrorCode.TOOL_UNAVAILABLE);
                     })
                     .body(Map.class);
+            // 下游 Controller 统一包装在 ApiResponse 信封中，需提取 data 字段
+            return unwrapEnvelope(response);
         } catch (BusinessException e) {
             throw e;
         } catch (Exception e) {
@@ -136,7 +172,7 @@ public class HttpAccountCenterClient implements AccountCenterPort {
                     .header("Idempotency-Key", idempotencyKey)
                     .header("Content-Type", "application/json")
                     .body(body);
-            return withAuth(spec)
+            Map<String, Object> response = withAuth(spec)
                     .retrieve()
                     .onStatus(HttpStatusCode::is4xxClientError, (req, res) -> {
                         log.warn("账户中心客户端错误: status={}, path={}", res.getStatusCode(), path);
@@ -147,6 +183,8 @@ public class HttpAccountCenterClient implements AccountCenterPort {
                         throw new BusinessException(AgentErrorCode.TOOL_UNAVAILABLE);
                     })
                     .body(Map.class);
+            // 下游 Controller 统一包装在 ApiResponse 信封中，需提取 data 字段
+            return unwrapEnvelope(response);
         } catch (BusinessException e) {
             throw e;
         } catch (Exception e) {
@@ -168,5 +206,30 @@ public class HttpAccountCenterClient implements AccountCenterPort {
             spec.header("Authorization", authHeader);
         }
         return spec;
+    }
+
+    /**
+     * 从 ApiResponse 信封中提取 data 字段。
+     *
+     * <p>下游 Controller 统一返回 {@code ApiResponse<T>} 格式：
+     * {@code {"success":true, "data":{...}, "requestId":"..."}}。
+     * 此方法提取内层 data 对象，使调用方直接获得业务数据。</p>
+     */
+    @SuppressWarnings("unchecked")
+    private Map<String, Object> unwrapEnvelope(Map<String, Object> response) {
+        if (response == null) {
+            return Map.of();
+        }
+        Object data = response.get("data");
+        if (data instanceof Map) {
+            return (Map<String, Object>) data;
+        }
+        // data 不是 Map（如 List 或 null），包装为含单键的 Map 以保持接口一致
+        if (data != null) {
+            java.util.Map<String, Object> wrapped = new java.util.HashMap<>();
+            wrapped.put("data", data);
+            return wrapped;
+        }
+        return response;
     }
 }

@@ -37,18 +37,20 @@ public class UserQueryService {
     }
 
     /**
-     * 模糊搜索用户。
+     * 搜索用户（支持手机号精确匹配、昵称/真实姓名前缀匹配）。
      *
      * <p>搜索规则：
      * <ul>
-     *   <li>按登录名或昵称模糊搜索</li>
+     *   <li>手机号精确相等匹配</li>
+     *   <li>昵称前缀模糊匹配</li>
+     *   <li>真实姓名前缀模糊匹配</li>
      *   <li>只返回 ACTIVE 状态的用户</li>
      *   <li>排除当前用户自己</li>
      *   <li>最多返回 20 条结果</li>
      * </ul>
      * </p>
      *
-     * @param keyword       搜索关键词（登录名或昵称）
+     * @param keyword       搜索关键词（手机号、昵称或姓名）
      * @param currentUserId 当前用户 ID（排除自己）
      * @return 用户搜索结果列表
      */
@@ -67,7 +69,8 @@ public class UserQueryService {
                         user.getUserId(),
                         user.getAccountNumber(),
                         user.getNickname(),
-                        user.getIdentityStatus()
+                        user.getIdentityStatus(),
+                        user.getPhoneTail()
                 ))
                 .collect(Collectors.toList());
     }

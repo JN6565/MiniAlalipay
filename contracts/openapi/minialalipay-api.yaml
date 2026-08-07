@@ -66,6 +66,26 @@ paths:
         '200': { description: 修改成功，该用户全部旧令牌失效，客户端必须重新登录 }
         '401': { $ref: '#/components/responses/Unauthorized' }
         '422': { $ref: '#/components/responses/UnprocessableEntity' }
+  /api/v1/auth/me:
+    get:
+      summary: 查询当前身份（展示名与真实角色）
+      description: 使用网关注入的可信用户身份查询当前展示名与角色集合，供 B 端权限模型填充。普通用户无角色授权时返回默认 USER。
+      operationId: getCurrentIdentity
+      x-client-scope: B
+      responses:
+        '200': { description: 返回当前身份, content: { application/json: { schema: { $ref: '#/components/schemas/CurrentIdentityResponse' } } } }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '404': { $ref: '#/components/responses/NotFound' }
+  /api/v1/auth/logout:
+    post:
+      summary: 用户退出登录并销毁会话令牌
+      operationId: logoutUser
+      x-client-scope: C
+      parameters:
+        - $ref: '#/components/parameters/RequestIdHeader'
+      responses:
+        '200': { description: 退出成功，令牌已失效 }
+        '401': { $ref: '#/components/responses/Unauthorized' }
   /actuator/health:
     get:
       summary: 网关健康检查
@@ -337,6 +357,78 @@ paths:
         '401': { $ref: '#/components/responses/Unauthorized' }
         '404': { $ref: '#/components/responses/NotFound' }
         '409': { $ref: '#/components/responses/Conflict' }
+  /api/v1/users/search:
+    get:
+      summary: 按手机号搜索用户（用于转账收款人查找）
+      operationId: searchUsers
+      x-client-scope: C
+      parameters:
+        - $ref: '#/components/parameters/RequestIdHeader'
+        - name: keyword
+          in: query
+          required: true
+          description: 搜索关键词，目支持 11 位手机号
+          schema: { type: string, minLength: 1, maxLength: 32 }
+        - name: limit
+          in: query
+          required: false
+          schema: { type: integer, minimum: 1, maximum: 20, default: 10 }
+      responses:
+        '200':
+          description: 返回匹配的用户列表
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/ApiResponse'
+                  - type: object
+                    properties:
+                      data:
+                        type: array
+                        items: { $ref: '#/components/schemas/UserSearchResult' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+  /api/v1/contacts:
+    get:
+      summary: 查询当前用户的常用联系人列表
+      operationId: listContacts
+      x-client-scope: C
+      parameters:
+        - $ref: '#/components/parameters/RequestIdHeader'
+        - name: limit
+          in: query
+          required: false
+          schema: { type: integer, minimum: 1, maximum: 20, default: 5 }
+      responses:
+        '200':
+          description: 返回常用联系人列表
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ContactListResponse' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+  /api/v1/contacts/{payeeUserId}:
+    patch:
+      summary: 更新联系人属性
+      operationId: updateContact
+      x-client-scope: C
+      parameters:
+        - $ref: '#/components/parameters/RequestIdHeader'
+        - name: payeeUserId
+          in: path
+          required: true
+          schema: { type: string, minLength: 1, maxLength: 64 }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/UpdateContactRequest' }
+      responses:
+        '200':
+          description: 更新成功
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ApiResponse' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '404': { $ref: '#/components/responses/NotFound' }
   /internal/v1/accounts/registrations/{registrationId}:
     put:
       summary: 按注册编号幂等创建账户体系
@@ -562,7 +654,7 @@ paths:
   /internal/v1/recharges/{rechargeOrderId}/channel-result:
     post:
       summary: 记录受控模拟渠道结果并推进充值资金受理
-      description: 渠道成功时推进充值订单到 PROCESSING 并创建 RECHARGE 统一交易；重复回调幂等。当前账户中心充值 TCC 参与者尚未交付，成功入账依赖后续资金内核实现。
+      description: 渠道成功时推进充值订单到 PROCESSING 并创建 RECHARGE 统一交易；账户中心充值 TCC 在 Confirm 阶段增加目标账户可用余额并完成 RECHARGE 复式记账；重复回调幂等。
       operationId: recordRechargeChannelResult
       x-client-scope: INTERNAL
       x-service-auth: required
@@ -935,7 +1027,7 @@ paths:
   /api/v1/recharges:
     post:
       summary: 创建受控模拟充值来源订单
-      description: 仅创建待渠道处理的来源订单；单笔不超过 5000000 分，单用户单日累计不超过 25000000 分且最多 5 次；未形成统一交易前不得视为余额入账成功。
+      description: 创建模拟充值并自动确认受控渠道；单笔不超过 5000000 分，单用户单日累计不超过 25000000 分且最多 5 次；返回处理中或成功状态，最终以账户和账本事实为准。
       operationId: createRecharge
       x-client-scope: C
       parameters:
@@ -1208,6 +1300,10 @@ paths:
           in: query
           required: false
           schema: { type: string, enum: [OPEN, ACKNOWLEDGED, RESOLVED, CLOSED] }
+        - name: severity
+          in: query
+          required: false
+          schema: { type: string, enum: [INFO, WARNING, CRITICAL], description: 告警级别筛选，对应告警投影的级别字段。 }
         - name: cursor
           in: query
           required: false
@@ -1217,7 +1313,7 @@ paths:
           required: false
           schema: { type: integer, minimum: 1, maximum: 100, default: 50 }
       responses:
-        '200': { description: 返回脱敏告警分页；观察者只有读取权限, content: { application/json: { schema: { $ref: '#/components/schemas/AlertPageResponse' } } } }
+        '200': { description: 返回脱敏告警分页；管理员与运营人员只读, content: { application/json: { schema: { $ref: '#/components/schemas/AlertPageResponse' } } } }
         '401': { $ref: '#/components/responses/Unauthorized' }
         '403': { $ref: '#/components/responses/Forbidden' }
   /api/v1/qr-pay/orders/{id}:
@@ -1502,6 +1598,85 @@ paths:
         '404': { $ref: '#/components/responses/NotFound' }
         '409': { $ref: '#/components/responses/Conflict' }
         '422': { $ref: '#/components/responses/UnprocessableEntity' }
+  /api/v1/admin/users:
+    get:
+      summary: 分页查询 B 端用户只读列表（系统管理员）
+      description: 按状态过滤 + 稳定 ID 游标分页，登录名脱敏展示；不返回手机号或任何密码。
+      operationId: listAdminUsers
+      x-client-scope: B
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: '#/components/parameters/RequestIdHeader'
+        - name: status
+          in: query
+          required: false
+          description: 用户状态过滤，PROVISIONING/ACTIVE/DISABLED，为空表示不限定。
+          schema: { type: string, enum: [PROVISIONING, ACTIVE, DISABLED] }
+        - name: cursor
+          in: query
+          required: false
+          description: 上一页最后一条 userId 游标，为空表示第一页。
+          schema: { type: string, maxLength: 26 }
+        - name: limit
+          in: query
+          required: false
+          description: 每页最大条数，1~100。
+          schema: { type: integer, minimum: 1, maximum: 100, default: 50 }
+      responses:
+        '200': { description: 返回脱敏用户分页, content: { application/json: { schema: { $ref: '#/components/schemas/AdminUserPageResponse' } } } }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+  /api/v1/admin/users/{userId}/freeze:
+    post:
+      summary: 管理冻结用户（系统管理员）
+      description: 仅 ACTIVE 可冻结；CAS 版本保护并发，记录操作者与冻结理由，冻结后禁止登录。
+      operationId: freezeAdminUser
+      x-client-scope: B
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: '#/components/parameters/RequestIdHeader'
+        - name: userId
+          in: path
+          required: true
+          description: 目标用户 ID（ULID）。
+          schema: { type: string, minLength: 26, maxLength: 26 }
+      requestBody:
+        required: true
+        content: { application/json: { schema: { $ref: '#/components/schemas/FreezeUserRequest' } } }
+      responses:
+        '200': { description: 返回冻结后的用户视图（含最新版本）, content: { application/json: { schema: { $ref: '#/components/schemas/AdminUserResponse' } } } }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409': { $ref: '#/components/responses/Conflict' }
+  /api/v1/admin/users/{userId}/unfreeze:
+    post:
+      summary: 管理解冻用户（系统管理员）
+      description: 仅 DISABLED 可解冻；CAS 版本保护并发，解冻后恢复登录并清空冻结审计字段。
+      operationId: unfreezeAdminUser
+      x-client-scope: B
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: '#/components/parameters/RequestIdHeader'
+        - name: userId
+          in: path
+          required: true
+          description: 目标用户 ID（ULID）。
+          schema: { type: string, minLength: 26, maxLength: 26 }
+      requestBody:
+        required: true
+        content: { application/json: { schema: { $ref: '#/components/schemas/UnfreezeUserRequest' } } }
+      responses:
+        '200': { description: 返回解冻后的用户视图（含最新版本）, content: { application/json: { schema: { $ref: '#/components/schemas/AdminUserResponse' } } } }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409': { $ref: '#/components/responses/Conflict' }
   /api/v1/ops/daily-reports:
     get:
       summary: 查询通过质量门禁的 T+1 报表
@@ -1577,7 +1752,7 @@ paths:
   /api/v1/ops/data-quality:
     get:
       summary: 查询数据质量结果
-      description: 数据质量为 FAILED 时不向观察者发布指标数值；WARNING 必须携带风险标记。
+      description: 数据质量为 FAILED 时不向运营展示指标数值；WARNING 必须携带风险标记。
       operationId: listDataQuality
       x-client-scope: B
       parameters:
@@ -1647,10 +1822,22 @@ paths:
         - { $ref: '#/components/parameters/RequestIdHeader' }
         - { $ref: '#/components/parameters/ResourceId' }
       responses:
-        '200': { description: 返回业务中心可核验的链路片段, content: { application/json: { schema: { $ref: '#/components/schemas/TraceSpanListResponse' } } } }
+        '200': { description: 按交易归属链路编号返回跨服务脱敏 Span（业务中心、账户账本、用户审计、AI）, content: { application/json: { schema: { $ref: '#/components/schemas/TraceSpanListResponse' } } } }
         '401': { $ref: '#/components/responses/Unauthorized' }
         '403': { $ref: '#/components/responses/Forbidden' }
         '404': { $ref: '#/components/responses/NotFound' }
+  /api/v1/ops/traces/{traceId}:
+    get:
+      summary: 按链路编号查询跨服务链路片段
+      operationId: getOpsTraceByTraceId
+      x-client-scope: B
+      parameters:
+        - { $ref: '#/components/parameters/RequestIdHeader' }
+        - { $ref: '#/components/parameters/ResourceId' }
+      responses:
+        '200': { description: 链路无已核验片段时返回空列表, content: { application/json: { schema: { $ref: '#/components/schemas/TraceSpanListResponse' } } } }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
   /api/v1/ops/alert-rules:
     get:
       summary: 查询全部告警规则及阈值配置
@@ -1666,9 +1853,10 @@ paths:
       summary: 按版本 CAS 更新告警规则阈值
       operationId: updateAlertRuleThreshold
       x-client-scope: B
+      description: |
+        阈值写入是幂等写操作（重复设置同一阈值无副作用），由规则版本 CAS 保证并发安全，无需幂等键。
       parameters:
         - { $ref: '#/components/parameters/RequestIdHeader' }
-        - { $ref: '#/components/parameters/IdempotencyKeyHeader' }
         - { name: ruleCode, in: path, required: true, schema: { type: string, maxLength: 64 } }
       requestBody:
         required: true
@@ -1709,12 +1897,12 @@ paths:
         '500': { $ref: '#/components/responses/InternalError' }
   /api/v1/agent/messages/stream:
     post:
-      summary: 发送消息并接收 SSE 流式回复
-      operationId: sendAgentMessageStream
+      summary: AI 流式对话入口（SSE）
+      operationId: streamAgentMessage
       x-client-scope: C
       description: |
-        与 POST /api/v1/agent/messages 相同的业务语义，但响应为 SSE (text/event-stream) 格式。
-        客户端使用 fetch + ReadableStream 消费事件流。
+        向 AI Talk 发送消息并通过 Server-Sent Events 接收流式响应。
+        事件类型包括 agent-status、agent-content、agent-tool-call、agent-tool-result、agent-clarification、agent-done、agent-error。
       parameters:
         - $ref: '#/components/parameters/RequestIdHeader'
       requestBody:
@@ -1724,21 +1912,61 @@ paths:
             schema: { $ref: '#/components/schemas/SendAgentMessageRequest' }
       responses:
         '200':
-          description: SSE 事件流
+          description: SSE 流式响应，Content-Type 为 text/event-stream
           content:
             text/event-stream:
-              schema:
-                type: string
-                description: >
-                  事件序列:
-                  agent-status → agent-tool-call* → agent-tool-result* →
-                  agent-content* → (agent-confirmation | agent-clarification)? →
-                  agent-done | agent-error
+              schema: { type: string, description: 'SSE 事件流，每个事件格式为 event: <type>\ndata: <json>\n\n' }
         '400': { $ref: '#/components/responses/BadRequest' }
         '401': { $ref: '#/components/responses/Unauthorized' }
         '409': { $ref: '#/components/responses/Conflict' }
-        '429': { $ref: '#/components/responses/TooManyRequests' }
-        '500': { $ref: '#/components/responses/InternalError' }
+        '503': { $ref: '#/components/responses/ServiceUnavailable' }
+  /api/v1/agent/sessions:
+    get:
+      summary: 查询当前用户的活跃 AI 会话列表
+      operationId: listAgentSessions
+      x-client-scope: C
+      parameters:
+        - $ref: '#/components/parameters/RequestIdHeader'
+      responses:
+        '200':
+          description: 返回会话列表
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/ApiResponse'
+                  - type: object
+                    properties:
+                      data:
+                        type: array
+                        items: { $ref: '#/components/schemas/AgentSessionSummary' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+  /api/v1/agent/sessions/{sessionId}/messages:
+    get:
+      summary: 查询指定会话的消息历史
+      operationId: getAgentSessionMessages
+      x-client-scope: C
+      parameters:
+        - $ref: '#/components/parameters/RequestIdHeader'
+        - name: sessionId
+          in: path
+          required: true
+          schema: { type: string, maxLength: 26 }
+      responses:
+        '200':
+          description: 返回会话消息列表
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/ApiResponse'
+                  - type: object
+                    properties:
+                      data:
+                        type: array
+                        items: { $ref: '#/components/schemas/AgentMessageSummary' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '404': { $ref: '#/components/responses/NotFound' }
 components:
   securitySchemes:
     bearerAuth:
@@ -1799,6 +2027,11 @@ components:
       schema:
         type: string
         maxLength: 128
+    ResourceId:
+      name: id
+      in: path
+      required: true
+      schema: { type: string, minLength: 1, maxLength: 26 }
   schemas:
     SessionIntrospectionRequest:
       type: object
@@ -1853,6 +2086,20 @@ components:
                 accountNumber: { type: string, pattern: '^62\d{14}$', description: 系统生成的账户号，可用于登录。 }
                 nickname: { type: string, minLength: 1, maxLength: 20 }
                 status: { type: string, enum: [ACTIVE, PROVISIONING] }
+    CurrentIdentityResponse:
+      allOf:
+        - $ref: '#/components/schemas/ApiResponse'
+        - type: object
+          required: [data]
+          properties:
+            data:
+              type: object
+              additionalProperties: false
+              required: [userId, displayName, roles]
+              properties:
+                userId: { type: string, minLength: 1, maxLength: 26 }
+                displayName: { type: string, minLength: 1, maxLength: 32, description: 展示名，真实姓名优先。 }
+                roles: { type: array, items: { type: string, enum: [USER, MERCHANT, OPERATOR, ADMIN] }, description: 用户实际角色集合，至少包含默认角色。 }
     CreditSummary:
       type: object
       additionalProperties: false
@@ -2018,6 +2265,25 @@ components:
         - type: object
           required: [data]
           properties: { data: { $ref: '#/components/schemas/CreditJobRun' } }
+    MetricDefinition:
+      type: object
+      additionalProperties: false
+      required: [metricCode, version, name, unit]
+      properties:
+        metricCode: { type: string, description: 指标代码，供报表与告警按编码展示名称。 }
+        version: { type: string, description: 指标口径版本。 }
+        name: { type: string, description: 指标中文名称。 }
+        unit: { type: string, description: 指标计量单位，例如“笔”“元”“次”。 }
+        formula: { type: string, description: 指标计算口径说明。 }
+    MetricDefinitionPageResponse:
+      allOf:
+        - $ref: '#/components/schemas/ApiResponse'
+        - type: object
+          required: [data]
+          properties:
+            data:
+              type: array
+              items: { $ref: '#/components/schemas/MetricDefinition' }
     ProvisionAccountRequest:
       type: object
       additionalProperties: false
@@ -2289,7 +2555,7 @@ components:
         sessionId: { type: string, minLength: 1, maxLength: 26, description: 当前会话 ID }
         messageId: { type: string, minLength: 1, maxLength: 26, description: 本条 AI 回复的消息 ID }
         content: { type: string, description: AI 的自然语言回复正文 }
-        intent: { type: string, enum: [TRANSFER, BALANCE_QUERY, TRANSACTION_LIST, TRANSACTION_STATUS, USER_SEARCH, CREDIT_SUMMARY, CREDIT_BILL, CREDIT_REPAYMENT], description: 识别出的意图类型 }
+        intent: { type: string, enum: [TRANSFER, BALANCE_QUERY, TRANSACTION_LIST, TRANSACTION_STATUS, USER_SEARCH, CREDIT_SUMMARY, CREDIT_BILL, CREDIT_REPAYMENT, UNKNOWN], description: 识别出的意图类型；UNKNOWN 表示无法识别意图 }
         slots: { type: object, description: 当前会话的结构化槽位，键为字段名，值为提取的原始值 }
         clarificationNeeded: { type: boolean, description: 是否需要用户进一步澄清 }
     SendAgentMessageResponse:
@@ -2300,6 +2566,31 @@ components:
           properties:
             data:
               $ref: '#/components/schemas/SendAgentMessageResponseData'
+    UserSearchResult:
+      type: object
+      additionalProperties: false
+      required: [userId, nickname]
+      properties:
+        userId: { type: string, description: 用户 ID }
+        nickname: { type: string, description: 用户昵称 }
+        phoneTail: { type: string, description: 手机号后四位，脱敏展示 }
+    AgentSessionSummary:
+      type: object
+      additionalProperties: false
+      required: [sessionId, createdAt, lastActiveAt]
+      properties:
+        sessionId: { type: string, description: 会话 ID（ULID） }
+        createdAt: { type: string, format: date-time, description: 会话创建时间 }
+        lastActiveAt: { type: string, format: date-time, description: 最后活跃时间 }
+    AgentMessageSummary:
+      type: object
+      additionalProperties: false
+      required: [messageId, role, content, createdAt]
+      properties:
+        messageId: { type: string, description: 消息 ID }
+        role: { type: string, enum: [USER, ASSISTANT, SYSTEM], description: 消息角色 }
+        content: { type: string, description: 消息内容 }
+        createdAt: { type: string, format: date-time, description: 消息创建时间 }
     HealthResponse:
       type: object
       additionalProperties: false
@@ -2590,6 +2881,31 @@ components:
                 status: { type: string, enum: [SUCCESS, REVERSED, CANCELLED] }
                 amountFen: { type: integer, format: int64, minimum: 1 }
                 completedAt: { type: string, format: date-time }
+    Contact:
+      type: object
+      additionalProperties: false
+      required: [payeeUserId, successCount, pinned]
+      properties:
+        payeeUserId: { type: string, minLength: 1, maxLength: 64 }
+        alias: { type: string, maxLength: 64, nullable: true }
+        successCount: { type: integer, format: int64, minimum: 0 }
+        lastSuccessAt: { type: string, format: date-time, nullable: true }
+        pinned: { type: boolean }
+    UpdateContactRequest:
+      type: object
+      additionalProperties: false
+      properties:
+        alias: { type: string, maxLength: 64, nullable: true }
+        pinned: { type: boolean, nullable: true }
+        hidden: { type: boolean, nullable: true }
+    ContactListResponse:
+      allOf:
+        - $ref: '#/components/schemas/ApiResponse'
+        - type: object
+          properties:
+            data:
+              type: array
+              items: { $ref: '#/components/schemas/Contact' }
   responses:
     BadRequest:
       description: 请求格式或字段不合法

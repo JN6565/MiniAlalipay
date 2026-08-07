@@ -3,10 +3,17 @@ package com.minialalipay.ai.interfaces.web;
 import com.minialalipay.ai.application.security.InjectionDetector;
 import com.minialalipay.ai.application.security.IOSanitizer;
 import com.minialalipay.ai.application.service.AgentMessageService;
-import com.minialalipay.ai.infrastructure.client.RequestContext;
 import com.minialalipay.ai.domain.agent.AgentErrorCode;
+import com.minialalipay.ai.domain.agent.AgentMessage;
+import com.minialalipay.ai.domain.agent.AgentMessageRepository;
+import com.minialalipay.ai.domain.agent.AgentSession;
+import com.minialalipay.ai.domain.agent.AgentSessionRepository;
+import com.minialalipay.ai.domain.agent.MessageRole;
+import com.minialalipay.ai.infrastructure.client.RequestContext;
+import com.minialalipay.ai.interfaces.web.dto.MessageSummaryResponse;
 import com.minialalipay.ai.interfaces.web.dto.SendMessageRequest;
 import com.minialalipay.ai.interfaces.web.dto.SendMessageResponse;
+import com.minialalipay.ai.interfaces.web.dto.SessionSummaryResponse;
 import com.minialalipay.common.api.ApiResponse;
 import com.minialalipay.common.error.BusinessException;
 import jakarta.servlet.http.HttpServletRequest;
@@ -18,6 +25,8 @@ import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 
 import java.time.Clock;
+import java.util.ArrayList;
+import java.util.List;
 
 /**
  * AI Agent 对话控制器。
@@ -43,17 +52,23 @@ public class AgentController {
     private final AgentMessageService agentMessageService;
     private final InjectionDetector injectionDetector;
     private final IOSanitizer sanitizer;
+    private final AgentSessionRepository sessionRepository;
+    private final AgentMessageRepository messageRepository;
     private final java.time.Clock clock;
 
     public AgentController(
             AgentMessageService agentMessageService,
             InjectionDetector injectionDetector,
             IOSanitizer sanitizer,
+            AgentSessionRepository sessionRepository,
+            AgentMessageRepository messageRepository,
             java.time.Clock clock
     ) {
         this.agentMessageService = agentMessageService;
         this.injectionDetector = injectionDetector;
         this.sanitizer = sanitizer;
+        this.sessionRepository = sessionRepository;
+        this.messageRepository = messageRepository;
         this.clock = clock;
     }
 
@@ -117,6 +132,84 @@ public class AgentController {
         } finally {
             RequestContext.clear();
         }
+    }
+
+    /**
+     * 查询当前用户的活跃会话列表。
+     *
+     * <p>按最后活跃时间倒序返回，前端可用于渲染历史会话侧边栏。
+     * 每条会话附带首条用户消息作为标题。</p>
+     *
+     * @param userId 用户 ID（由网关从会话令牌解析后注入）
+     * @param httpRequest 原始 HTTP 请求（用于获取 Trace ID）
+     * @return 会话摘要列表
+     */
+    @GetMapping("/sessions")
+    public ResponseEntity<ApiResponse<List<SessionSummaryResponse>>> listSessions(
+            @RequestHeader("X-User-Id") String userId,
+            HttpServletRequest httpRequest
+    ) {
+        String requestId = resolveRequestId(httpRequest);
+        String traceId = MDC.get("traceId");
+
+        List<AgentSession> sessions = sessionRepository.findActiveByUserId(userId);
+        List<SessionSummaryResponse> result = new ArrayList<>(sessions.size());
+        for (AgentSession s : sessions) {
+            // 取该会话首条用户消息作为标题
+            List<AgentMessage> messages = messageRepository.findBySessionId(s.getSessionId(), 2);
+            String title = "新会话";
+            for (AgentMessage m : messages) {
+                if (m.getRole() == MessageRole.USER) {
+                    title = m.getContentRedacted();
+                    if (title.length() > 30) {
+                        title = title.substring(0, 30) + "…";
+                    }
+                    break;
+                }
+            }
+            // 统计消息条数
+            int messageCount = messages.size();
+            result.add(new SessionSummaryResponse(
+                    s.getSessionId(), title, s.getLastActiveAt(),
+                    messageCount, s.getStatus().name()));
+        }
+        return ResponseEntity.ok(ApiResponse.success(result, requestId, traceId));
+    }
+
+    /**
+     * 查询指定会话的消息历史。
+     *
+     * <p>按创建时间正序返回全部消息，供前端恢复历史对话视图。
+     * 会话归属校验：仅会话所有者可以查看。</p>
+     *
+     * @param userId 用户 ID（由网关从会话令牌解析后注入）
+     * @param sessionId 会话 ID
+     * @param httpRequest 原始 HTTP 请求（用于获取 Trace ID）
+     * @return 消息列表
+     */
+    @GetMapping("/sessions/{sessionId}/messages")
+    public ResponseEntity<ApiResponse<List<MessageSummaryResponse>>> getSessionMessages(
+            @RequestHeader("X-User-Id") String userId,
+            @PathVariable String sessionId,
+            HttpServletRequest httpRequest
+    ) {
+        String requestId = resolveRequestId(httpRequest);
+        String traceId = MDC.get("traceId");
+
+        AgentSession session = sessionRepository.findById(sessionId)
+                .orElseThrow(() -> new BusinessException(AgentErrorCode.SESSION_NOT_FOUND));
+        if (!session.getUserId().equals(userId)) {
+            throw new BusinessException(AgentErrorCode.SESSION_NOT_FOUND);
+        }
+
+        List<AgentMessage> messages = messageRepository.findBySessionId(sessionId, 200);
+        List<MessageSummaryResponse> result = new ArrayList<>(messages.size());
+        for (AgentMessage m : messages) {
+            result.add(new MessageSummaryResponse(
+                    m.getMessageId(), m.getRole().name(),
+                    m.getContentRedacted(), m.getCreatedAt()));
+        }
+        return ResponseEntity.ok(ApiResponse.success(result, requestId, traceId));
     }
 
     private String resolveRequestId(HttpServletRequest request) {

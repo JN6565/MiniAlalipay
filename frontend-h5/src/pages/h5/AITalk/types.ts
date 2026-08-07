@@ -1,5 +1,6 @@
 // types.ts — AI Talk 页面消息类型
 
+/** 用户消息 */
 export interface UserMessage {
   id: string;
   role: 'user';
@@ -7,15 +8,25 @@ export interface UserMessage {
   timestamp: Date;
 }
 
+/** 助手纯文本 / Markdown 回复 */
 export interface AssistantTextMessage {
   id: string;
   role: 'assistant';
   kind: 'text';
   content: string;
   streaming: boolean;
+  /** 思考过程文本（DeepSeek 风格的"已思考（用时 X 秒）"展开内容），可为空 */
+  thinking?: string;
+  /** 思考耗时（秒），用于折叠行展示 */
+  thinkingSeconds?: number;
+  /** 用户对本次回复的反馈：like / dislike / null */
+  feedback?: 'like' | 'dislike' | null;
+  /** 是否展示操作按钮行（false 时隐藏操作行；欢迎页/历史回放等场景可关闭） */
+  showActions?: boolean;
   timestamp: Date;
 }
 
+/** 助手澄清引导消息：options 由后端槽位推导，可为空（允许自由输入） */
 export interface ClarificationMessage {
   id: string;
   role: 'assistant';
@@ -25,16 +36,50 @@ export interface ClarificationMessage {
   timestamp: Date;
 }
 
+/** 工具结果卡片消息（SSE agent-tool-result 事件产生） */
+export interface ToolResultMessage {
+  id: string;
+  role: 'assistant';
+  kind: 'tool-result';
+  /** 调用的工具名（如 get_balance、get_credit_summary 等） */
+  tool: string;
+  /** 执行状态：success | failed */
+  status: string;
+  /** 自然语言摘要 */
+  summary: string;
+  /** 后端返回的结构化数据，供卡片渲染 */
+  data: Record<string, any>;
+  /** 是否正在加载中（tool-call 事件创建时设为 true，tool-result 到达后置为 false） */
+  loading: boolean;
+  timestamp: Date;
+}
+
+/** 助手错误消息：请求失败时留在消息流中，支持一键重试 */
+export interface AssistantErrorMessage {
+  id: string;
+  role: 'assistant';
+  kind: 'error';
+  content: string;
+  retryContent: string;
+  timestamp: Date;
+}
+
+/**
+ * 高风险操作的二次确认消息（转账/还款）。
+ *
+ * <p>当前 AI 对话流中尚未接入 ConfirmationCard 的渲染（页面层未注册该类型分支），
+ * 本接口仅为 ConfirmationCard 组件提供类型契约，便于后续接入时不破坏类型一致性。</p>
+ */
 export interface ConfirmationMessage {
   id: string;
   role: 'assistant';
   kind: 'confirmation';
-  cardType: 'transfer' | 'credit-repayment';
+  cardType: 'transfer' | 'repay';
   draftId: string;
-  summary: string;
-  payeeNickname?: string;
+  payeeOptions?: { id: string; label: string }[];
   amountFen?: number;
-  status: 'pending' | 'done';
+  note?: string;
+  status: 'pending' | 'done' | 'cancelled';
   timestamp: Date;
 }
 
@@ -42,22 +87,23 @@ export type Message =
   | UserMessage
   | AssistantTextMessage
   | ClarificationMessage
+  | ToolResultMessage
+  | AssistantErrorMessage
   | ConfirmationMessage;
 
-// SSE 事件载荷
-export interface StreamHandlers {
-  'agent-status': (data: { stage: string; message: string }) => void;
-  'agent-tool-call': (data: { tool: string; status: string }) => void;
-  'agent-tool-result': (data: { tool: string; status: string; summary: string }) => void;
-  'agent-content': (data: { delta: string }) => void;
-  'agent-confirmation': (data: {
-    cardType: string; draftId: string;
-    payeeNickname: string; amountFen: number;
-    payeePhoneTail: string; summary: string;
-  }) => void;
-  'agent-clarification': (data: {
-    question: string; options: { id: string; label: string }[];
-  }) => void;
-  'agent-done': (data: { messageId: string; sessionId: string; intent: string }) => void;
-  'agent-error': (data: { code: string; message: string }) => void;
+/** 会话摘要（会话列表项） */
+export interface SessionInfo {
+  sessionId: string;
+  title: string;
+  lastActiveAt: string;
+  messageCount: number;
+  status: string;
+}
+
+/** 历史消息（用于从后端恢复消息列表） */
+export interface HistoryMessage {
+  messageId: string;
+  role: string;
+  content: string;
+  createdAt: string;
 }

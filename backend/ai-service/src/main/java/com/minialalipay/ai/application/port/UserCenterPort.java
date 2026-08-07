@@ -19,12 +19,12 @@ import java.util.Map;
 public interface UserCenterPort {
 
     /**
-     * 模糊搜索候选收款人。
+     * 搜索候选收款人（支持手机号精确匹配、昵称/真实姓名前缀匹配）。
      *
      * @param userId 当前用户 ID（由服务端派生）
-     * @param query 搜索关键词（昵称或手机号尾号），1-64 字符
+     * @param query 搜索关键词（手机号、昵称或姓名），1-64 字符
      * @param limit 返回上限，默认 10，最大 20
-     * @return 搜索结果，含脱敏后的用户列表
+     * @return 搜索结果，含脱敏后的用户列表（userId、accountNumber、nickname、phoneTail、identityStatus）
      */
     List<Map<String, Object>> searchPayees(String userId, String query, int limit);
 }

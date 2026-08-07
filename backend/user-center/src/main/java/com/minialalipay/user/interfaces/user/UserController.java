@@ -24,7 +24,7 @@ import java.util.stream.Collectors;
  *
  * <p>接口清单：
  * <ul>
- *   <li>GET /api/v1/users/search - 模糊搜索用户</li>
+ *   <li>GET /api/v1/users/search - 按手机号搜索用户</li>
  * </ul>
  * </p>
  *
@@ -60,7 +60,7 @@ public class UserController {
     }
 
     /**
-     * 模糊搜索用户。
+     * 按手机号搜索用户。
      *
      * <p>搜索流程：
      * <ol>
@@ -72,14 +72,14 @@ public class UserController {
      *
      * <p>业务规则：
      * <ul>
-     *   <li>按登录名或昵称模糊搜索</li>
+     *   <li>按手机号精确匹配搜索</li>
      *   <li>只返回 ACTIVE 状态的用户</li>
      *   <li>排除当前用户自己</li>
      *   <li>最多返回 20 条结果</li>
      * </ul>
      * </p>
      *
-     * @param keyword     搜索关键词（登录名或昵称）
+     * @param keyword     搜索手机号
      * @param userId      当前用户 ID（由网关从会话令牌解析后透传）
      * @param httpRequest HTTP 请求（用于提取 X-Request-Id 和 X-Trace-Id）
      * @return 用户搜索结果列表
@@ -103,7 +103,8 @@ public class UserController {
                         r.userId(),
                         r.accountNumber(),
                         r.nickname(),
-                        r.identityStatus()
+                        r.identityStatus(),
+                        r.phoneTail()
                 ))
                 .collect(Collectors.toList());
 

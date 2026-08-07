@@ -38,7 +38,6 @@ class AiServiceArchitectureTest {
                 .check(classes);
         noClasses().that().resideInAPackage("..interfaces..")
                 .and().haveSimpleNameNotEndingWith("Test")
-                .and().haveSimpleNameNotContaining("AgentStreamController")
                 .and().haveSimpleNameNotContaining("AgentController")
                 .should().dependOnClassesThat().resideInAPackage("..infrastructure..")
                 .check(classes);
