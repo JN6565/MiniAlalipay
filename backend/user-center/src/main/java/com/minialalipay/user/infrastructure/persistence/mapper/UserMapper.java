@@ -49,7 +49,7 @@ public interface UserMapper {
     /**
      * 根据用户 ID 查询用户。
      *
-     * @param userId 用户 ID（ULID 格式，26 位字符）
+     * @param userId 用户 ID（26 位字符，USR 前缀）
      * @return 用户持久化对象，如果不存在则返回 null
      */
     UserPO selectByUserId(@Param("userId") String userId);
@@ -73,7 +73,7 @@ public interface UserMapper {
      * <p>用于开户恢复场景：账户中心以 {@code registration_id}
      * 作为开户幂等键，查询用户是否存在。</p>
      *
-     * @param registrationId 注册幂等键（ULID 格式，26 位字符）
+     * @param registrationId 注册幂等键（26 位字符，REG 前缀）
      * @return 用户持久化对象，如果不存在则返回 null
      */
     UserPO selectByRegistrationId(@Param("registrationId") String registrationId);

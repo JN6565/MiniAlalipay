@@ -33,7 +33,7 @@ public interface CredentialRepository {
     /**
      * 根据用户 ID 查询凭证。
      *
-     * @param userId 用户 ID（ULID 格式，26 位字符）
+     * @param userId 用户 ID（26 位字符，USR 前缀）
      * @return 凭证对象，如果不存在则返回 empty
      */
     Optional<Credential> findByUserId(String userId);

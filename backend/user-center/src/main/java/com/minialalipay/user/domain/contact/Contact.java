@@ -22,10 +22,10 @@ import java.time.Instant;
  */
 public class Contact {
 
-    /** 联系人列表所有者用户 ID（ULID 格式，26 位字符）。 */
+    /** 联系人列表所有者用户 ID（26 位字符，USR 前缀）。 */
     private final String ownerUserId;
 
-    /** 成功收款的用户 ID（ULID 格式，26 位字符）。 */
+    /** 成功收款的用户 ID（26 位字符，USR 前缀）。 */
     private final String payeeUserId;
 
     /** 付款人给收款人设置的备注别名（最大 64 字符，可空）。 */

@@ -10,7 +10,7 @@ class UserFreezeTest {
 
     /** 构造一个处于 ACTIVE 状态的用户。 */
     private User activeUser() {
-        return new User("USER12345678901234567890", "REG123456789012345678901",
+        return new User("USRTESTUSER0120260801000001", "REGTESTUSER0120260801000001",
                 "6200000000000001", "13800138000", "张三", "小张");
     }
 
@@ -45,7 +45,7 @@ class UserFreezeTest {
     @Test
     void freezeRejectsNonActiveUser() {
         // 未开户（PROVISIONING）用户不可冻结。
-        User provisioning = new User("USER12345678901234567890", "REG123456789012345678901",
+        User provisioning = new User("USRTESTUSER0120260801000001", "REGTESTUSER0120260801000001",
                 "6200000000000001", "13800138000", "张三", "小张");
         assertThatThrownBy(() -> provisioning.freeze("adm-001", "理由"))
                 .isInstanceOf(IllegalStateException.class);

@@ -31,15 +31,17 @@ import java.time.Instant;
 public class User {
 
     /**
-     * 用户 ID（ULID 格式，26 位字符）。
-     * <p>跨模块引用用户的稳定标识，在整个系统生命周期内不变。</p>
+     * 用户 ID（26 位字符，格式：{@code USR} + 9 位随机大写字母 + {@code YYYYMMDD} + 6 位日序列号）。
+     * <p>跨模块引用用户的稳定标识，在整个系统生命周期内不变。注册时由
+     * {@link com.minialalipay.user.infrastructure.id.UserIdGenerator} 与 {@code registrationId} 成对生成。</p>
      */
     private final String userId;
 
     /**
-     * 注册幂等键（ULID 格式，26 位字符）。
+     * 注册幂等键（26 位字符，格式：{@code REG} + 9 位随机大写字母 + {@code YYYYMMDD} + 6 位日序列号）。
      * <p>用户中心生成的注册幂等键，用于开户恢复和既有资源查询。
-     * 账户中心以 {@code registration_id} 作为开户幂等键，保证注册和开户的原子性。</p>
+     * 账户中心以 {@code registration_id} 作为开户幂等键，保证注册和开户的原子性。
+     * 注册时与 {@code userId} 成对生成，两者共享同一日期序列号但前缀和随机段不同。</p>
      */
     private final String registrationId;
 
@@ -118,8 +120,8 @@ public class User {
      * </ul>
      * </p>
      *
-     * @param userId         用户 ID（ULID 格式，26 位字符）
-     * @param registrationId 注册幂等键（ULID 格式，26 位字符）
+     * @param userId         用户 ID（26 位字符，USR 前缀）
+     * @param registrationId 注册幂等键（26 位字符，REG 前缀）
      * @param loginName      登录名（已规范化，最大 64 字符）
      * @param nickname       昵称（最大 64 字符）
      * @throws IllegalArgumentException 如果任何必填参数为空
@@ -302,7 +304,7 @@ public class User {
     /**
      * 获取用户 ID。
      *
-     * @return 用户 ID（ULID 格式，26 位字符）
+     * @return 用户 ID（26 位字符，USR 前缀）
      */
     public String getUserId() {
         return userId;
@@ -311,7 +313,7 @@ public class User {
     /**
      * 获取注册幂等键。
      *
-     * @return 注册幂等键（ULID 格式，26 位字符）
+     * @return 注册幂等键（26 位字符，REG 前缀）
      */
     public String getRegistrationId() {
         return registrationId;

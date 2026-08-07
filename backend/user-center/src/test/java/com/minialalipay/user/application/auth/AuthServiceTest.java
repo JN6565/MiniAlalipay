@@ -12,6 +12,7 @@ import com.minialalipay.user.domain.user.RoleAssignmentRepository;
 import com.minialalipay.user.domain.user.SessionManagerPort;
 import com.minialalipay.user.domain.user.User;
 import com.minialalipay.user.domain.user.UserRepository;
+import com.minialalipay.user.infrastructure.id.UserIdGenerator;
 import org.junit.jupiter.api.Test;
 import org.mockito.ArgumentCaptor;
 
@@ -36,8 +37,9 @@ class AuthServiceTest {
     private final SessionManagerPort sessionManager = mock(SessionManagerPort.class);
     private final AccountProvisioningPort accountProvisioningPort = mock(AccountProvisioningPort.class);
     private final RoleAssignmentRepository roleAssignmentRepository = mock(RoleAssignmentRepository.class);
+    private final UserIdGenerator userIdGenerator = mock(UserIdGenerator.class);
     private final AuthService service = new AuthService(userRepository, credentialRepository,
-            passwordHasher, sessionManager, accountProvisioningPort, roleAssignmentRepository);
+            passwordHasher, sessionManager, accountProvisioningPort, roleAssignmentRepository, userIdGenerator);
 
     /** 验证注册会生成账户号、保存两套独立密码哈希并完成零余额账户开户调用。 */
     @Test
@@ -45,6 +47,8 @@ class AuthServiceTest {
         when(userRepository.existsByPhoneNumber("13800138000")).thenReturn(false);
         when(passwordHasher.hashPassword("Login123")).thenReturn("login-hash");
         when(passwordHasher.hashPassword("123456")).thenReturn("payment-hash");
+        when(userIdGenerator.generatePair()).thenReturn(
+                new UserIdGenerator.IdPair("USRABCDEFGHI20260807000001", "REGABCDEFGHI20260807000001"));
         when(accountProvisioningPort.openAccount(anyString(), anyString())).thenReturn("account-id");
         when(sessionManager.createSession(anyString())).thenReturn("session-token");
 
@@ -94,7 +98,7 @@ class AuthServiceTest {
     /** 验证历史 PROVISIONING 用户登录时会先幂等补开户，成功后再创建会话。 */
     @Test
     void shouldRecoverProvisioningUserOnLogin() {
-        User user = new User("USER12345678901234567890", "REG123456789012345678901",
+        User user = new User("USRTESTUSER0120260807000001", "REGTESTUSER0120260807000001",
                 "6200000000000001", "13800138000", "张三", "小张");
         Credential credential = new Credential(user.getUserId(), "login-hash");
 

@@ -13,7 +13,7 @@ public interface RoleAssignmentRepository {
     /**
      * 查询用户在角色授权表中拥有的角色代码集合。
      *
-     * @param userId 用户 ID（ULID 格式，26 位字符）
+     * @param userId 用户 ID（26 位字符，USR 前缀）
      * @return 角色代码集合；无授权时返回空集合（由调用方决定默认角色）
      */
     Set<String> findRolesByUserId(String userId);

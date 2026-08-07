@@ -15,6 +15,7 @@ import com.minialalipay.user.domain.user.RoleAssignmentRepository;
 import com.minialalipay.user.domain.user.SessionManagerPort;
 import com.minialalipay.user.domain.user.User;
 import com.minialalipay.user.domain.user.UserRepository;
+import com.minialalipay.user.infrastructure.id.UserIdGenerator;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Service;
@@ -46,6 +47,7 @@ public class AuthService {
     private final SessionManagerPort sessionManager;
     private final AccountProvisioningPort accountProvisioningPort;
     private final RoleAssignmentRepository roleAssignmentRepository;
+    private final UserIdGenerator userIdGenerator;
 
     /**
      * 构造认证服务所需依赖。
@@ -56,6 +58,7 @@ public class AuthService {
      * @param sessionManager 会话管理端口
      * @param accountProvisioningPort 账户中心开户注册端口
      * @param roleAssignmentRepository 角色授权仓储端口
+     * @param userIdGenerator 用户 ID 与注册幂等键成对生成器
      */
     public AuthService(
             UserRepository userRepository,
@@ -63,7 +66,8 @@ public class AuthService {
             PasswordHasherPort passwordHasher,
             SessionManagerPort sessionManager,
             AccountProvisioningPort accountProvisioningPort,
-            RoleAssignmentRepository roleAssignmentRepository
+            RoleAssignmentRepository roleAssignmentRepository,
+            UserIdGenerator userIdGenerator
     ) {
         this.userRepository = userRepository;
         this.credentialRepository = credentialRepository;
@@ -71,6 +75,7 @@ public class AuthService {
         this.sessionManager = sessionManager;
         this.accountProvisioningPort = accountProvisioningPort;
         this.roleAssignmentRepository = roleAssignmentRepository;
+        this.userIdGenerator = userIdGenerator;
     }
 
     /**
@@ -95,8 +100,9 @@ public class AuthService {
         validatePassword(request.loginPassword());
         validatePaymentPassword(request.paymentPassword());
 
-        String userId = generateId();
-        String registrationId = generateId();
+        UserIdGenerator.IdPair ids = userIdGenerator.generatePair();
+        String userId = ids.userId();
+        String registrationId = ids.registrationId();
         String accountNumber = generateAccountNumber();
 
         User user = new User(userId, registrationId, accountNumber, phoneNumber,
@@ -330,12 +336,4 @@ public class AuthService {
         }
     }
 
-    /**
-     * 生成 26 位业务 ID。
-     *
-     * <p>当前沿用项目既有 UUID 截断策略；后续如统一 ULID，应通过独立 ID 组件替换。</p>
-     */
-    private String generateId() {
-        return UUID.randomUUID().toString().replace("-", "").substring(0, 26).toUpperCase();
-    }
 }

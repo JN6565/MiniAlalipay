@@ -36,7 +36,7 @@ public class InternalCreditAccountDirectoryController {
     @GetMapping("/by-user/{userId}")
     public ResponseEntity<CreditAccountReference> findByUser(
             @PathVariable @Size(min = 26, max = 26)
-            @Pattern(regexp = "^[0-9A-HJKMNP-TV-Z]{26}$") String userId) {
+            @Pattern(regexp = "^(USR[A-Z]{9}\\d{14}|[0-9A-HJKMNP-TV-Z]{26})$") String userId) {
         var account = creditAccounts.findByUserId(userId)
                 .orElseThrow(() -> new BusinessException(CommonErrorCode.NOT_FOUND));
         return ResponseEntity.ok(new CreditAccountReference(account.getCreditAccountId(), account.getUserId(),
