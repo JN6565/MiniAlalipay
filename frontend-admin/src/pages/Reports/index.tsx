@@ -4,6 +4,7 @@ import type { ColumnsType } from 'antd/es/table';
 import dayjs from 'dayjs';
 import { useState } from 'react';
 import PageHeader from '@/components/PageHeader';
+import { GatewayRequestError } from '@/services/request';
 import { listDailyReports, listMetricDefinitions, type DailyMetricItem } from '@/services/ops';
 import pageStyles from '../page.less';
 
@@ -79,7 +80,15 @@ export default function Reports() {
           pagination={false}
           locale={{
             emptyText: (
-              <Empty description={reportsQuery.isError ? '加载失败，请确认网关已启动' : '该日期报表尚未发布'} />
+              <Empty
+                description={
+                  (reportsQuery.error as GatewayRequestError | undefined)?.code === 'REPORT_NOT_PUBLISHED'
+                    ? '该日期报表尚未发布'
+                    : reportsQuery.isError
+                      ? '加载失败，请确认网关已启动'
+                      : '该日期报表尚未发布'
+                }
+              />
             ),
           }}
           scroll={{ x: 800 }}
