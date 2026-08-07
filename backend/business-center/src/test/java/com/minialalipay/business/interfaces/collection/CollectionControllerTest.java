@@ -133,9 +133,15 @@ class CollectionControllerTest {
         @Override public boolean createPersonalOrder(CollectionOrder order, String sessionId) {
             return orderBySession.putIfAbsent(sessionId, order) == null;
         }
-        @Override public boolean reserveRequestAndCreateOrder(CollectionRequest request, long expectedVersion, CollectionOrder order, String sessionId) { return false; }
+        @Override public boolean createFixedOrder(CollectionOrder order, String sessionId) {
+            return orderBySession.putIfAbsent(sessionId, order) == null;
+        }
+        @Override public java.util.List<CollectionOrder> findOrdersByRequestId(String requestId) { return java.util.List.of(); }
         @Override public boolean updateOrder(CollectionOrder order, long expectedVersion) { return true; }
-        @Override public void clearSessionBinding(String orderId) { }
+        @Override public void clearSessionBinding(String orderId) {
+            // 令牌交换永不复用订单：旧订单一律解绑，保持一会话至多一个绑定订单
+            orderBySession.values().removeIf(order -> order.getOrderId().equals(orderId));
+        }
         @Override public boolean createRequest(CollectionRequest request, byte[] tokenDigest, String recordId, String userId, String idempotencyKey, byte[] requestDigest) { return false; }
         @Override public boolean updateRequest(CollectionRequest request, long expectedVersion) { return false; }
         @Override public Optional<IdempotencyRecord> findIdempotency(String principal, String operation, String key) { return Optional.empty(); }

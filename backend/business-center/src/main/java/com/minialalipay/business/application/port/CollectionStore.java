@@ -45,12 +45,14 @@ public interface CollectionStore {
     /** 创建个人码付款订单并绑定 H5 会话。 */
     boolean createPersonalOrder(CollectionOrder order, String bootstrapSessionId);
 
-    /** 在同一事务中 CAS 占用固定请求并创建绑定 H5 会话的订单。 */
-    boolean reserveRequestAndCreateOrder(CollectionRequest request, long requestExpectedVersion,
-                                         CollectionOrder order, String bootstrapSessionId);
+    /** 创建固定请求付款订单并绑定 H5 会话；固定请求扫码阶段不占用，多人可各自建单。 */
+    boolean createFixedOrder(CollectionOrder order, String bootstrapSessionId);
 
     /** 按版本 CAS 更新 C2C 订单。 */
     boolean updateOrder(CollectionOrder order, long expectedVersion);
+
+    /** 查询固定请求的全部来源订单，按创建时间倒序，供收款方展示多笔收款记录。 */
+    java.util.List<CollectionOrder> findOrdersByRequestId(String requestId);
 
     /** 清除终态订单的 H5 会话绑定，允许同一会话创建新订单。 */
     void clearSessionBinding(String orderId);

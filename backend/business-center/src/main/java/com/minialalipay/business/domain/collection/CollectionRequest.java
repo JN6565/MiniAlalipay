@@ -7,8 +7,8 @@ import java.util.Objects;
 /**
  * 固定金额 C2C 收款请求聚合。
  *
- * <p>金额和主题自创建起不可变。多个 H5 会话可以生成尝试订单，但仓储必须以版本 CAS 调用
- * {@link #reserveForOrder(String, long, Instant)}，仅首笔订单可以获得受理资格。</p>
+ * <p>金额和主题自创建起不可变。一码多收：有效期内多个 H5 会话、多个付款人可各自新建订单，
+ * 支付受理时只校验请求仍可收款（未过期、未取消），多笔订单独立受理，不做单笔占用。</p>
  */
 public final class CollectionRequest {
     /** 固定收款请求的有效期。 */
@@ -53,29 +53,11 @@ public final class CollectionRequest {
     }
 
     /**
-     * 为首笔待确认订单原子预占请求。
+     * 收款方主动关闭尚未有支付受理的请求。
      *
-     * <p>同一订单的重试返回既有占用，其他订单必须被拒绝，防止并发付款被重复受理。</p>
+     * <p>一码多收模型下只有 {@link CollectionRequestStatus#OPEN} 表示还没有任何一笔进入资金受理，
+     * 一旦有订单受理（PROCESSING）请求必须保留至全部订单终态，禁止关闭。</p>
      */
-    public void reserveForOrder(String orderId, long expectedVersion, Instant now) {
-        checkVersion(expectedVersion);
-        if (expireIfNecessary(now) || status == CollectionRequestStatus.EXPIRED) {
-            throw new IllegalStateException("固定收款请求已过期");
-        }
-        String validOrderId = required(orderId, "C2C 订单 ID");
-        if (status == CollectionRequestStatus.RESERVED && validOrderId.equals(activeOrderId)) {
-            return;
-        }
-        if (status != CollectionRequestStatus.OPEN) {
-            throw new IllegalStateException("固定收款请求当前不可受理付款");
-        }
-        activeOrderId = validOrderId;
-        status = CollectionRequestStatus.RESERVED;
-        version++;
-        updatedAt = now;
-    }
-
-    /** 收款方主动关闭仍未占用的请求。 */
     public void close(long expectedVersion, Instant now) {
         checkVersion(expectedVersion);
         if (expireIfNecessary(now) || status == CollectionRequestStatus.EXPIRED) {

@@ -86,7 +86,7 @@ function getPageTitle(pathname: string): string {
     '/h5/scan': '扫一扫',
     '/h5/collection': '收款',
     '/h5/collection/pay': '付款',
-    '/h5/collection/result': '转账结果',
+    '/h5/collection/result': '支付结果',
     '/h5/credit': 'Mini花呗',
     '/h5/credit/bills': '账单',
     '/h5/credit/repay': '还款',
