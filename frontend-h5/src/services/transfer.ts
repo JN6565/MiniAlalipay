@@ -23,10 +23,15 @@ export interface TransferResult {
 
 /** 风控预检结果 */
 export interface RiskCheckResult {
-  riskAction: 'PASS' | 'REJECT' | 'MANUAL';
-  riskMessage?: string;
+  result: 'PASS';
   riskLevel: string;
+  version: number;
 }
+
+const generateUUID = (): string => 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, (char) => {
+  const random = (Math.random() * 16) | 0;
+  return (char === 'x' ? random : (random & 0x3) | 0x8).toString(16);
+});
 
 /**
  * 创建转账草稿
@@ -38,8 +43,8 @@ export const createDraft = (params: {
   amountFen: number;
   remark?: string;
 }): Promise<TransferDraft> => {
-  return request.post('/api/v1/transfer-drafts', {
-    data: params,
+  return request.post('/api/v1/transfer-drafts', params, {
+    headers: { 'Idempotency-Key': generateUUID() },
   }) as unknown as Promise<TransferDraft>;
 };
 
@@ -66,9 +71,7 @@ export const updateDraft = (
     version: number;
   },
 ): Promise<TransferDraft> => {
-  return request.patch(`/api/v1/transfer-drafts/${draftId}`, {
-    data: params,
-  }) as unknown as Promise<TransferDraft>;
+  return request.patch(`/api/v1/transfer-drafts/${draftId}`, params) as unknown as Promise<TransferDraft>;
 };
 
 /**
@@ -76,8 +79,8 @@ export const updateDraft = (
  * @param draftId 草稿ID
  * @returns 风控结果
  */
-export const validateDraft = (draftId: string): Promise<RiskCheckResult> => {
-  return request.post(`/api/v1/transfer-drafts/${draftId}/validate`) as unknown as Promise<RiskCheckResult>;
+export const validateDraft = (draftId: string, version: number): Promise<RiskCheckResult> => {
+  return request.post(`/api/v1/transfer-drafts/${draftId}/validate`, { version }) as unknown as Promise<RiskCheckResult>;
 };
 
 /**
@@ -88,11 +91,10 @@ export const validateDraft = (draftId: string): Promise<RiskCheckResult> => {
 export const createConfirmation = (params: {
   subjectType: string;
   subjectId: string;
+  subjectVersion: number;
   paymentProof: string;
 }): Promise<{ confirmationToken: string; expiresAt: string }> => {
-  return request.post('/api/v1/confirmations', {
-    data: params,
-  }) as unknown as Promise<{ confirmationToken: string; expiresAt: string }>;
+  return request.post('/api/v1/confirmations', params) as unknown as Promise<{ confirmationToken: string; expiresAt: string }>;
 };
 
 /**
@@ -104,8 +106,8 @@ export const submitTransfer = (params: {
   draftId: string;
   confirmationToken: string;
 }): Promise<TransferResult> => {
-  return request.post('/api/v1/transfers', {
-    data: params,
+  return request.post('/api/v1/transfers', params, {
+    headers: { 'Idempotency-Key': generateUUID() },
   }) as unknown as Promise<TransferResult>;
 };
 

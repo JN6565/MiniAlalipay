@@ -14,7 +14,6 @@ const TransferConfirmPage: React.FC = () => {
   const [draftLoading, setDraftLoading] = useState(true);
   const [draft, setDraft] = useState<transferService.TransferDraft | null>(null);
   const [password, setPassword] = useState('');
-  const [riskWarning, setRiskWarning] = useState<string | null>(null);
 
   useEffect(() => {
     if (draftId) {
@@ -26,18 +25,9 @@ const TransferConfirmPage: React.FC = () => {
     try {
       setDraftLoading(true);
       const draftData = await transferService.getDraft(draftId!);
-      setDraft(draftData);
-
       // 风控预检
-      const riskResult = await transferService.validateDraft(draftId!);
-      if (riskResult.riskAction === 'REJECT') {
-        Toast.show({ content: riskResult.riskMessage || '转账被拒绝', icon: 'fail' });
-        history.back();
-        return;
-      }
-      if (riskResult.riskMessage) {
-        setRiskWarning(riskResult.riskMessage);
-      }
+      const riskResult = await transferService.validateDraft(draftId!, draftData.version);
+      setDraft({ ...draftData, version: riskResult.version });
     } catch (error: any) {
       Toast.show({ content: error.message || '加载草稿失败', icon: 'fail' });
       history.back();
@@ -75,6 +65,7 @@ const TransferConfirmPage: React.FC = () => {
       const { confirmationToken } = await transferService.createConfirmation({
         subjectType: 'TRANSFER_DRAFT',
         subjectId: draftId!,
+        subjectVersion: draft!.version,
         paymentProof,
       });
 
@@ -141,13 +132,6 @@ const TransferConfirmPage: React.FC = () => {
           <span className="confirm-value">¥0.00</span>
         </div>
       </Card>
-
-      {riskWarning && (
-        <Card className="risk-warning-card">
-          <div className="risk-icon">⚠️</div>
-          <div className="risk-message">{riskWarning}</div>
-        </Card>
-      )}
 
       <Card className="password-card">
         <div className="password-title">请输入支付密码</div>
