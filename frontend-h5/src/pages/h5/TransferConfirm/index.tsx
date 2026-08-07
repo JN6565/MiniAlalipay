@@ -57,8 +57,7 @@ const TransferConfirmPage: React.FC = () => {
       // 1. 校验支付密码，获取支付凭证
       const { paymentProof } = await paymentPasswordService.verifyPaymentPassword({
         paymentPassword: password,
-        subjectType: 'TRANSFER_DRAFT',
-        subjectId: draftId!,
+        purpose: 'TRANSFER_CONFIRM',
       });
 
       // 2. 生成确认令牌

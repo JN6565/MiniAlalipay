@@ -1,5 +1,10 @@
 import request from './request';
 
+const generateUUID = (): string => 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, (char) => {
+  const random = (Math.random() * 16) | 0;
+  return (char === 'x' ? random : (random & 0x3) | 0x8).toString(16);
+});
+
 /**
  * 设置支付密码（注册后首次设置）。
  * @param paymentPassword 支付密码（6 位数字）
@@ -29,8 +34,12 @@ export const changePaymentPassword = (params: {
  */
 export const verifyPaymentPassword = (params: {
   paymentPassword: string;
-  subjectType: string;
-  subjectId: string;
+  purpose: string;
 }): Promise<{ paymentProof: string; expiresAt: string }> => {
-  return request.post('/api/v1/payment-password/verify', params) as unknown as Promise<{ paymentProof: string; expiresAt: string }>;
+  return request.post('/api/v1/payment-password/proof', params, {
+    headers: { 'Idempotency-Key': generateUUID() },
+  }).then((response) => ({
+    paymentProof: (response as unknown as { accessToken: string }).accessToken,
+    expiresAt: '',
+  }));
 };
