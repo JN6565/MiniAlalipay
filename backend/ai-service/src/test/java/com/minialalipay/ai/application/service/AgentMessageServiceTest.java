@@ -7,6 +7,7 @@ import com.minialalipay.ai.application.security.InjectionDetector;
 import com.minialalipay.ai.application.security.ToolAuditService;
 import com.minialalipay.ai.application.service.ResultInterpreter;
 import com.minialalipay.ai.application.service.ToolPolicyService;
+import com.minialalipay.ai.application.service.UserPreferenceService;
 import com.minialalipay.ai.domain.agent.*;
 import com.minialalipay.ai.domain.tool.ToolRiskLevel;
 import com.minialalipay.ai.infrastructure.client.ToolRouter;
@@ -43,6 +44,7 @@ class AgentMessageServiceTest {
     @Mock ToolPolicyService toolPolicy;
     @Mock ToolAuditService toolAudit;
     @Mock ResultInterpreter resultInterpreter;
+    @Mock UserPreferenceService userPreferenceService;
 
     private AgentMessageService service;
 
@@ -53,7 +55,8 @@ class AgentMessageServiceTest {
         service = new AgentMessageService(
                 sessionRepository, messageRepository, languageModelPort,
                 injectionDetector, toolRouter, toolPolicy, toolAudit,
-                resultInterpreter, "30m", true);
+                resultInterpreter, userPreferenceService, "30m", true,
+                "你是吱托芙，AI支付助手。");
     }
 
     @Test

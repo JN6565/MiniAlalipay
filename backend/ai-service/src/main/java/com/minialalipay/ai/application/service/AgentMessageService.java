@@ -1,5 +1,6 @@
 package com.minialalipay.ai.application.service;
 
+import com.minialalipay.ai.application.AiServiceUtils;
 import com.minialalipay.ai.application.port.ChatMessage;
 import com.minialalipay.ai.application.port.ChatResponse;
 import com.minialalipay.ai.application.port.LanguageModelPort;
@@ -31,7 +32,7 @@ import org.springframework.stereotype.Service;
  * <h3>安全约束</h3>
  * <ul>
  *   <li>同一会话串行处理，并发请求返回 AGENT_BUSY</li>
- *   <li>跨会话数据通过 principalId + sessionId 隔离</li>
+ *   <li>跨会话数据通过 userId + sessionId 隔离</li>
  *   <li>支付密码、确认令牌、访问令牌不进入摘要或槽位</li>
  *   <li>userId 由服务端会话派生，不信任请求体</li>
  * </ul>
@@ -41,18 +42,7 @@ public class AgentMessageService {
 
     private static final Logger log = LoggerFactory.getLogger(AgentMessageService.class);
 
-    /** 上下文窗口：保留最近 10 轮对话（20 条消息） */
-    private static final int CONTEXT_TURN_LIMIT = 10;
-    private static final int CONTEXT_MESSAGE_LIMIT = CONTEXT_TURN_LIMIT * 2;
 
-    /** 上下文压缩阈值：消息数超过此值触发压缩 */
-    private static final int COMPRESSION_THRESHOLD = CONTEXT_TURN_LIMIT * 2 + 4;
-
-    /** Token 估算：中文每字符约 0.5 token */
-    private static final int MAX_CONTEXT_TOKENS = 4096;
-
-    /** GAP-3：大额风险提示阈值（分），单笔转账 ≥ 此值时主动确认 */
-    private static final long LARGE_AMOUNT_THRESHOLD_FEN = 500_000L;
 
     /** 系统提示词，通过 ai.prompt.system 配置 */
     private final String systemPrompt;
@@ -106,7 +96,7 @@ public class AgentMessageService {
      * @param userId 用户 ID（由网关注入，不信任客户端）
      * @param clientMessageId 客户端消息幂等键
      * @param sessionId 会话 ID（可空，空则创建新会话）
-     * @param rawContent 用户输入原文（保存前需脱敏）
+     * @param rawContent 用户输入原文
      * @param now 当前时间（便于测试注入）
      * @return 处理结果，含会话状态、回复和意图信息
      */
@@ -156,10 +146,10 @@ public class AgentMessageService {
             }
 
             // 5. 保存用户消息（脱敏内容由调用方负责）
-            String messageId = generateUlid();
+            String messageId = AiServiceUtils.generateUlid();
             AgentMessage userMessage = new AgentMessage(
                     messageId, session.getSessionId(), clientMessageId,
-                    MessageRole.USER, rawContent, estimateTokens(rawContent), now);
+                    MessageRole.USER, rawContent, AiServiceUtils.estimateTokens(rawContent), now);
             messageRepository.insert(userMessage);
             session.touch(now);
 
@@ -180,7 +170,7 @@ public class AgentMessageService {
                     Object queryObj = llmResponse.slots().get("query");
                     if (queryObj == null || queryObj.toString().isBlank()) {
                         log.info("转账意图收款人缺失，引导用户补充: userId={}", userId);
-                        String assistId = generateUlid();
+                        String assistId = AiServiceUtils.generateUlid();
                         String clarifyMsg = "请问您要转账给谁？请提供收款人姓名或手机号。";
                         messageRepository.insert(new AgentMessage(
                                 assistId, session.getSessionId(), clientMessageId,
@@ -198,7 +188,7 @@ public class AgentMessageService {
                     }
                     if (amountFen <= 0) {
                         log.info("转账意图金额缺失或为 0，引导用户补充: userId={}", userId);
-                        String assistId = generateUlid();
+                        String assistId = AiServiceUtils.generateUlid();
                         String clarifyMsg = "请问您要转账多少金额？";
                         messageRepository.insert(new AgentMessage(
                                 assistId, session.getSessionId(), clientMessageId,
@@ -210,11 +200,11 @@ public class AgentMessageService {
                                 llmResponse.intent(), llmResponse.slots(), true, false);
                     }
                     // GAP-3：异常大额风险提示——单笔转账 ≥ 5000 元时主动确认
-                    if (amountFen >= LARGE_AMOUNT_THRESHOLD_FEN) {
+                    if (amountFen >= AiServiceUtils.LARGE_AMOUNT_THRESHOLD_FEN) {
                         log.info("大额转账风险提示: userId={}, amountFen={}", userId, amountFen);
-                        String assistId = generateUlid();
+                        String assistId = AiServiceUtils.generateUlid();
                         String riskMsg = "⚠️ 大额转账提醒：本次转账金额为 "
-                                + formatFenDisplay(amountFen) + " 元，请仔细核对收款人信息。";
+                                + AiServiceUtils.formatFenDisplay(amountFen) + " 元，请仔细核对收款人信息。";
                         messageRepository.insert(new AgentMessage(
                                 assistId, session.getSessionId(), clientMessageId,
                                 MessageRole.ASSISTANT, riskMsg, 0, now));
@@ -229,9 +219,9 @@ public class AgentMessageService {
                 if (llmResponse.intent() == IntentType.CREDIT_REPAYMENT) {
                     // 安全边界：检测用户原始消息是否包含"全部还清"关键词，强制拦截
                     String lowerRaw = rawContent.toLowerCase();
-                    if (containsAny(lowerRaw, "全部还清", "全额还", "还清全部", "一次还清")) {
+                    if (AiServiceUtils.containsAny(lowerRaw, "全部还清", "全额还", "还清全部", "一次还清")) {
                         log.info("拦截全部还清请求: userId={}, rawContent={}", userId, rawContent);
-                        String assistId = generateUlid();
+                        String assistId = AiServiceUtils.generateUlid();
                         String blockMsg = "抱歉，暂不支持全部还清功能。请告诉我您想还款的具体金额（如'还200元'）。";
                         messageRepository.insert(new AgentMessage(
                                 assistId, session.getSessionId(), clientMessageId,
@@ -250,7 +240,7 @@ public class AgentMessageService {
                     }
                     if (amountFen <= 0) {
                         log.info("还款意图金额缺失或为 0，引导用户补充: userId={}", userId);
-                        String assistId = generateUlid();
+                        String assistId = AiServiceUtils.generateUlid();
                         String clarifyMsg = "请问您要还款多少金额？";
                         messageRepository.insert(new AgentMessage(
                                 assistId, session.getSessionId(), clientMessageId,
@@ -263,7 +253,7 @@ public class AgentMessageService {
                     }
                 }
 
-                String traceId = generateUlid();
+                String traceId = AiServiceUtils.generateUlid();
                 List<ToolExecution> toolResults = executeTools(
                         llmResponse.intent(), llmResponse.slots(), userId, session, traceId);
 
@@ -287,7 +277,7 @@ public class AgentMessageService {
                             }
                         }
                         String clarifyMsg = sb.toString();
-                        String assistId = generateUlid();
+                        String assistId = AiServiceUtils.generateUlid();
                         messageRepository.insert(new AgentMessage(
                                 assistId, session.getSessionId(), clientMessageId,
                                 MessageRole.ASSISTANT, clarifyMsg, 0, now));
@@ -333,7 +323,7 @@ public class AgentMessageService {
             }
 
             // 8. 保存 AI 回复
-            String assistantMessageId = generateUlid();
+            String assistantMessageId = AiServiceUtils.generateUlid();
             AgentMessage assistantMessage = new AgentMessage(
                     assistantMessageId, session.getSessionId(), clientMessageId,
                     MessageRole.ASSISTANT, finalContent, llmResponse.tokenCount(), now);
@@ -346,7 +336,7 @@ public class AgentMessageService {
 
             // 10. 上下文压缩
             long totalTokens = estimateContextTokens(context, llmResponse.tokenCount());
-            if (totalTokens > MAX_CONTEXT_TOKENS) {
+            if (totalTokens > AiServiceUtils.MAX_CONTEXT_TOKENS) {
                 String summary = compressContext(session, context);
                 session.updateSummary(summary);
             }
@@ -391,7 +381,7 @@ public class AgentMessageService {
             return existing;
         }
         // 创建新会话
-        AgentSession newSession = new AgentSession(generateUlid(), userId, now);
+        AgentSession newSession = new AgentSession(AiServiceUtils.generateUlid(), userId, now);
         sessionRepository.save(newSession);
         return newSession;
     }
@@ -424,7 +414,7 @@ public class AgentMessageService {
                 "【重要】请仅针对用户最新消息回复，不要重复之前已经回答过的内容。"));
         // 获取最近 N 轮消息（先倒序取最近窗口，Repository 层负责反转回正序）
         List<AgentMessage> history = messageRepository.findRecentBySessionId(
-                session.getSessionId(), CONTEXT_MESSAGE_LIMIT);
+                session.getSessionId(), AiServiceUtils.CONTEXT_MESSAGE_LIMIT);
         for (AgentMessage msg : history) {
             // 跳过刚插入的当前消息（避免重复）
             if (msg.getContentRedacted().equals(currentMessage)
@@ -456,29 +446,9 @@ public class AgentMessageService {
     private long estimateContextTokens(List<ChatMessage> context, int responseTokens) {
         long total = responseTokens;
         for (ChatMessage msg : context) {
-            total += estimateTokens(msg.content());
+            total += AiServiceUtils.estimateTokens(msg.content());
         }
         return total;
-    }
-
-    static int estimateTokens(String text) {
-        if (text == null || text.isBlank()) return 0;
-        // 中文字符约 0.5 token/字，英文字符约 0.25 token/字
-        int chineseChars = 0;
-        int otherChars = 0;
-        for (char c : text.toCharArray()) {
-            if (Character.UnicodeBlock.of(c) == Character.UnicodeBlock.CJK_UNIFIED_IDEOGRAPHS
-                    || Character.UnicodeBlock.of(c) == Character.UnicodeBlock.CJK_COMPATIBILITY_IDEOGRAPHS) {
-                chineseChars++;
-            } else if (!Character.isWhitespace(c)) {
-                otherChars++;
-            }
-        }
-        return (int) (chineseChars * 0.5 + otherChars * 0.25);
-    }
-
-    private static String generateUlid() {
-        return java.util.UUID.randomUUID().toString().replace("-", "").substring(0, 26);
     }
 
     private void cleanUpLock(String sessionId) {
@@ -653,13 +623,6 @@ public class AgentMessageService {
     }
 
     /**
-     * 将分金额格式化为可读的元字符串，仅用于展示。
-     */
-    private static String formatFenDisplay(long fen) {
-        return String.format("%,.2f", fen / 100.0);
-    }
-
-    /**
      * GAP-5：检测 search_payees 返回结果中是否存在多个重名收款人。
      * 当多个用户昵称相同时返回重名用户列表，否则返回空列表。
      */
@@ -704,11 +667,4 @@ public class AgentMessageService {
     ) {
     }
 
-    /**
-     * 检查文本是否包含任一关键词。
-     */
-    private static boolean containsAny(String text, String... keywords) {
-        for (String kw : keywords) { if (text.contains(kw)) return true; }
-        return false;
-    }
 }

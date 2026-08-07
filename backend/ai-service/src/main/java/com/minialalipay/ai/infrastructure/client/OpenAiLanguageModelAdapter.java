@@ -1,5 +1,6 @@
 package com.minialalipay.ai.infrastructure.client;
 
+import com.minialalipay.ai.application.AiServiceUtils;
 import com.minialalipay.ai.application.port.ChatMessage;
 import com.minialalipay.ai.application.port.ChatResponse;
 import com.minialalipay.ai.application.service.StructuredOutputValidator;
@@ -148,10 +149,10 @@ public class OpenAiLanguageModelAdapter {
             log.warn("结构化输出校验失败，尝试提取 naturalReply: {}", e.getMessage());
             String naturalReply = extractNaturalReply(content);
             if (naturalReply != null) {
-                int estimatedTokens = estimateTokens(userMessage) + estimateTokens(naturalReply);
+                int estimatedTokens = AiServiceUtils.estimateTokens(userMessage) + AiServiceUtils.estimateTokens(naturalReply);
                 return parseLlmOutput(naturalReply, userMessage, estimatedTokens);
             }
-            int estimatedTokens = estimateTokens(userMessage) + estimateTokens(content);
+            int estimatedTokens = AiServiceUtils.estimateTokens(userMessage) + AiServiceUtils.estimateTokens(content);
             return parseLlmOutput(content, userMessage, estimatedTokens);
         }
     }
@@ -419,21 +420,6 @@ public class OpenAiLanguageModelAdapter {
             return fallback.group(1);
         }
         return null;
-    }
-
-    static int estimateTokens(String text) {
-        if (text == null || text.isBlank()) return 0;
-        int chineseChars = 0;
-        int otherChars = 0;
-        for (char c : text.toCharArray()) {
-            if (Character.UnicodeBlock.of(c) == Character.UnicodeBlock.CJK_UNIFIED_IDEOGRAPHS
-                    || Character.UnicodeBlock.of(c) == Character.UnicodeBlock.CJK_COMPATIBILITY_IDEOGRAPHS) {
-                chineseChars++;
-            } else if (!Character.isWhitespace(c)) {
-                otherChars++;
-            }
-        }
-        return (int) (chineseChars * 0.5 + otherChars * 0.25);
     }
 
     private static long parseDurationSeconds(String d) {

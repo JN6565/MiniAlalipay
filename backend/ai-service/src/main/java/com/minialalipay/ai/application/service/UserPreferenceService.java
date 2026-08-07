@@ -1,5 +1,6 @@
 package com.minialalipay.ai.application.service;
 
+import com.minialalipay.ai.application.AiServiceUtils;
 import com.minialalipay.ai.domain.agent.UserPreference;
 import com.minialalipay.ai.domain.agent.UserPreferenceRepository;
 import org.slf4j.Logger;
@@ -77,7 +78,7 @@ public class UserPreferenceService {
             );
             preferenceRepository.saveOrUpdate(updated);
         } else {
-            String id = generateUlid();
+            String id = AiServiceUtils.generateUlid();
             UserPreference newPref = new UserPreference(
                     id, userId, type, value,
                     UserPreference.STATUS_ACTIVE, now, now
@@ -102,7 +103,4 @@ public class UserPreferenceService {
         }
     }
 
-    private static String generateUlid() {
-        return java.util.UUID.randomUUID().toString().replace("-", "").substring(0, 26);
-    }
 }

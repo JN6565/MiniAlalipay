@@ -95,7 +95,7 @@ public class CollectionEventApplicationService {
         CollectionOrder order = request.getActiveOrderId() == null ? null : store.findOrder(request.getActiveOrderId()).orElse(null);
         String status = switch (request.getStatus()) {
             case RESERVED -> "PENDING_CONFIRMATION";
-            case CLOSED, CANCELLED -> "CANCELLED";
+            case CANCELLED -> "CANCELLED";
             default -> request.getStatus().name();
         };
         CollectionOrderEvent event = new CollectionOrderEvent(security.newId(), request.getRequestId(), request.getActiveOrderId(),

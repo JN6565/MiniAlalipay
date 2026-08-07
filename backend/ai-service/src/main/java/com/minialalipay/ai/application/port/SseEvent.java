@@ -19,7 +19,6 @@ public final class SseEvent {
         AGENT_TOOL_CALL,
         AGENT_TOOL_RESULT,
         AGENT_CONTENT,
-        AGENT_CONFIRMATION,
         AGENT_CLARIFICATION,
         AGENT_DONE,
         AGENT_ERROR
@@ -29,18 +28,9 @@ public final class SseEvent {
 
     public record ToolCallPayload(String tool, String status) {}
 
-    public record ToolResultPayload(String tool, String status, String summary) {}
+    public record ToolResultPayload(String tool, String status, String summary, java.util.Map<String, Object> data) {}
 
     public record ContentPayload(String delta) {}
-
-    public record ConfirmationPayload(
-            String cardType,       // "transfer" | "credit-repayment"
-            String draftId,
-            String payeeNickname,
-            long amountFen,
-            String payeePhoneTail,
-            String summary
-    ) {}
 
     public record ClarificationPayload(
             String question,

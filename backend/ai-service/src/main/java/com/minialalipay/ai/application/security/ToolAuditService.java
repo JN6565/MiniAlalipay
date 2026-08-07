@@ -1,5 +1,6 @@
 package com.minialalipay.ai.application.security;
 
+import com.minialalipay.ai.application.AiServiceUtils;
 import com.minialalipay.ai.domain.tool.ToolCallLog;
 import com.minialalipay.ai.domain.tool.ToolCallLogRepository;
 import org.slf4j.Logger;
@@ -48,7 +49,7 @@ public class ToolAuditService {
         byte[] digest = computeDigest(normalizeParams(params));
 
         ToolCallLog log = new ToolCallLog(
-                generateUlid(), sessionId, toolName,
+                AiServiceUtils.generateUlid(), sessionId, toolName,
                 digest, resultCode, durationMs, traceId, occurredAt);
         toolCallLogRepository.insert(log);
 
@@ -81,7 +82,4 @@ public class ToolAuditService {
         return sb.toString();
     }
 
-    private static String generateUlid() {
-        return UUID.randomUUID().toString().replace("-", "").substring(0, 26);
-    }
 }

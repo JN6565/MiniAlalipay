@@ -17,6 +17,8 @@ public enum CollectionOrderStatus {
     PROCESSING,
     /** 统一交易核验全部资金事实后发布的成功终态。 */
     SUCCESS,
+    /** 统一交易资金事实失败后的终态，由终态发布器回填。 */
+    FAILED,
     /** 统一交易已完整取消后的终态，不代表可以绕过仲裁重新受理。 */
     CANCELLED,
     /** 资金事实不一致时冻结在人工审核的终态。 */

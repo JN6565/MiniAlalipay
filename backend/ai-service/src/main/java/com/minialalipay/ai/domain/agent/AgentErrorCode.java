@@ -46,10 +46,10 @@ public enum AgentErrorCode implements ErrorCode {
     PROMPT_INJECTION_REJECTED("PROMPT_INJECTION_REJECTED", "请求违反安全策略", 422),
 
     /** 同一幂等键的请求摘要不一致。 */
-    IDEMPOTENCY_CONFLICT("IDEMPOTENCY_CONFLICT", "请求内容与前次不一致，请重新发起", 409),
+    IDEMPOTENCY_CONFLICT("IDEMPOTENCY_CONFLICT", "相同幂等键对应的请求参数不一致", 409),
 
-    /** 数据版本冲突，请刷新后重试。 */
-    VERSION_CONFLICT("VERSION_CONFLICT", "数据已被他人修改，请刷新后重试", 409),
+    /** 数据版本冲突。 */
+    VERSION_CONFLICT("VERSION_CONFLICT", "资源版本已经变化", 409),
 
     /** LLM 服务暂时不可用。 */
     LLM_UNAVAILABLE("LLM_UNAVAILABLE", "AI 服务暂时不可用，请稍后重试", 503);

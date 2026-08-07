@@ -227,17 +227,6 @@ public class ToolRouter {
         return new ToolResult(RESULT_SUCCESS, data, null, duration);
     }
 
-    // ---- 未使用的方法保留兼容 ----
-
-    /**
-     * @deprecated 使用 {@link #route(String, Map, String)} 替代
-     */
-    @Deprecated
-    public ToolResult route(String toolName, Map<String, Object> params,
-                            String userId, boolean retryIfReadOnly) {
-        return route(toolName, params, userId);
-    }
-
     private static long parseDurationMillis(String duration) {
         String trimmed = duration.trim().toLowerCase();
         if (trimmed.endsWith("ms")) return Long.parseLong(trimmed.replace("ms", ""));

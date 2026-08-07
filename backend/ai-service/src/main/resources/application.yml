@@ -82,7 +82,7 @@ ai:
     chunk-delay-ms: 120
     thinking-delay-ms: 800
   llm:
-    mock-mode: ${AI_LLM_MOCK_MODE:true}
+    mock-mode: ${AI_LLM_MOCK_MODE:false}
     connect-timeout: 2s
     read-timeout: 8s
     max-concurrent: 20
