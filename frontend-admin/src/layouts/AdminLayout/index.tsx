@@ -234,11 +234,6 @@ export default function AdminLayout() {
             <Outlet />
           </RouteErrorBoundary>
         </Content>
-        <Footer className={styles.footer}>
-          <Typography.Text type="secondary">
-            MiniAlalipay 运营中心 · 当前为本地骨架，生产数据待接入
-          </Typography.Text>
-        </Footer>
       </Layout>
     </Layout>
   );
