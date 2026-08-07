@@ -96,12 +96,13 @@ public class CollectionController {
         return ResponseEntity.ok(success(CodeResponse.from(service.disableCode(userId, body.version(), key), null), request));
     }
 
-    /** 创建固定金额收款请求。 */
+    /** 创建固定金额收款请求；收款令牌仅在创建响应中可见。 */
     @PostMapping("/requests")
     public ResponseEntity<ApiResponse<RequestResponse>> createRequest(@RequestHeader("X-User-Id") String userId,
             @RequestHeader("Idempotency-Key") String key, @Valid @RequestBody CreateRequest body, HttpServletRequest request) {
         CollectionApplicationService.CreatedRequest created = service.createRequest(userId, body.amountFen(), body.subject(), key);
-        return ResponseEntity.status(201).body(success(RequestResponse.from(created.request()), request));
+        String url = "/api/v1/p2p-collections/by-token?t=" + created.rawToken();
+        return ResponseEntity.status(201).body(success(RequestResponse.from(created.request(), url), request));
     }
 
     /** 查询本人创建的固定收款请求。 */
@@ -111,12 +112,28 @@ public class CollectionController {
         return ResponseEntity.ok(success(RequestResponse.from(service.getRequest(userId, id)), request));
     }
 
-    /** 取消未被占用的固定收款请求。 */
+    /** 取消尚未有支付受理的固定收款请求。 */
     @PostMapping("/requests/{id}/cancel")
     public ResponseEntity<ApiResponse<RequestResponse>> cancelRequest(@RequestHeader("X-User-Id") String userId,
             @RequestHeader("Idempotency-Key") String key, @PathVariable String id, @Valid @RequestBody VersionRequest body,
             HttpServletRequest request) {
         return ResponseEntity.ok(success(RequestResponse.from(service.cancelRequest(userId, id, body.version(), key)), request));
+    }
+
+    /**
+     * 查询固定收款请求的全部来源订单（创建时间倒序），仅请求创建者可读。
+     *
+     * <p>一码多收下收款方需要实时看到多笔订单及脱敏付款人信息；付款人姓名通过用户中心
+     * 查询后脱敏返回，不返回账户、令牌或会话标识。</p>
+     */
+    @GetMapping("/requests/{id}/orders")
+    public ResponseEntity<ApiResponse<java.util.List<RequestOrderResponse>>> getRequestOrders(
+            @RequestHeader("X-User-Id") String userId, @PathVariable String id, HttpServletRequest request) {
+        java.util.List<RequestOrderResponse> orders = service.getRequestOrders(userId, id).stream()
+                .map(order -> RequestOrderResponse.from(order, lookupMaskedName(order.getPayeeUserId()),
+                        lookupMaskedName(order.getPayerUserId())))
+                .toList();
+        return ResponseEntity.ok(success(orders, request));
     }
 
     /** 匿名扫码仅建立无业务数据的 H5 引导会话，令牌不消费。 */
@@ -286,11 +303,14 @@ public class CollectionController {
     public record CodeResponse(String codeId, String status, String collectionUrl, long version) {
         static CodeResponse from(PersonalCollectionCode code, String url) { return new CodeResponse(code.getCodeId(), code.getStatus().name(), url, code.getVersion()); }
     }
-    /** 固定收款请求响应。 */
+    /** 固定收款请求响应；collectionUrl 仅创建响应携带，令牌服务端只存摘要不可重读。 */
     public record RequestResponse(String requestId, long amountFen, String subject, String status, String activeOrderId,
-                                  String transactionId, Instant expiresAt, long version) {
-        static RequestResponse from(CollectionRequest request) { return new RequestResponse(request.getRequestId(), request.getAmountFen(), request.getSubject(),
-                request.getStatus().name(), request.getActiveOrderId(), null, request.getExpiresAt(), request.getVersion()); }
+                                  String transactionId, Instant expiresAt, long version, String collectionUrl) {
+        static RequestResponse from(CollectionRequest request) { return from(request, null); }
+        static RequestResponse from(CollectionRequest request, String collectionUrl) {
+            return new RequestResponse(request.getRequestId(), request.getAmountFen(), request.getSubject(),
+                    request.getStatus().name(), request.getActiveOrderId(), null, request.getExpiresAt(), request.getVersion(), collectionUrl);
+        }
     }
     /** C2C 订单响应，禁止返回双方账户、原始令牌和会话标识。 */
     public record OrderResponse(String collectionOrderId, String kind, Long amountFen, String subject, String status,
@@ -302,6 +322,20 @@ public class CollectionController {
             return new OrderResponse(order.getOrderId(), kind,
                     order.getAmountFen(), order.getSubject(), order.getStatus().name(), order.getTransactionId(),
                     order.getExpiresAt(), order.getVersion(), payeeName, payerName, editable);
+        }
+    }
+    /**
+     * 收款方订单列表条目：在订单响应基础上补充创建时间，供收款记录按时间展示；
+     * 付款人、收款人姓名均已脱敏，不返回账户、令牌或会话标识。
+     */
+    public record RequestOrderResponse(String collectionOrderId, String kind, Long amountFen, String subject, String status,
+                                       String transactionId, Instant expiresAt, long version,
+                                       String payeeName, String payerName, Instant createdAt) {
+        static RequestOrderResponse from(CollectionOrder order, String payeeName, String payerName) {
+            String kind = order.getPersonalCodeId() == null ? "FIXED_REQUEST" : "PERSONAL_QR";
+            return new RequestOrderResponse(order.getOrderId(), kind, order.getAmountFen(), order.getSubject(),
+                    order.getStatus().name(), order.getTransactionId(), order.getExpiresAt(), order.getVersion(),
+                    payeeName, payerName, order.getCreatedAt());
         }
     }
 }

@@ -282,7 +282,7 @@ erDiagram
     }
 ```
 
-说明：`fund_transaction(source_type,source_order_id)` 将不同来源对象映射为最多一笔统一资金交易。`confirmation`、`risk_decision` 和 `manual_case` 对来源对象使用多态逻辑引用；图中只展示其可选交易关联。`collection_request.active_order_id` 表示当前抢占者，和“一请求多尝试”关系共同保证同时最多一笔付款进入资金处理。`refund_order` 同时关联原支付交易和新建退款交易；失败或完整取消的退款尝试允许保留并重试。
+说明：`fund_transaction(source_type,source_order_id)` 将不同来源对象映射为最多一笔统一资金交易。`confirmation`、`risk_decision` 和 `manual_case` 对来源对象使用多态逻辑引用；图中只展示其可选交易关联。一码多收模型下 `collection_request` 与 `collection_order` 是一对多关系，每次扫码新建独立订单、多笔独立受理；`collection_request.active_order_id` 已弃用（新流程恒为 NULL，仅为兼容既有数据保留）。`refund_order` 同时关联原支付交易和新建退款交易；失败或完整取消的退款尝试允许保留并重试。
 
 ### 4.3 信用应收、账单、还款与账本
 
@@ -1405,8 +1405,8 @@ MVP 退款仅支持单笔全额受控虚拟退款，不接入真实支付通道�
 | `token_digest` | `BINARY(32)` | 必填 | 请求码令牌摘要 |
 | `amount_fen` | `BIGINT UNSIGNED` | 必填 | 固定金额 `1..5000000` |
 | `subject` | `VARCHAR(50)` | 可空 | 收款说明 |
-| `status` | `VARCHAR(32)` | `OPEN` | `OPEN/RESERVED/PROCESSING/SUCCESS/CANCELLED/EXPIRED/MANUAL_REVIEW`；`RESERVED` 仅为受理前仲裁状态 |
-| `active_order_id` | `CHAR(26)` | 可空 | 当前抢占付款尝试 |
+| `status` | `VARCHAR(32)` | `OPEN` | `OPEN/RESERVED/PROCESSING/SUCCESS/CANCELLED/EXPIRED/MANUAL_REVIEW`；`RESERVED` 已弃用（旧单笔占用模型的受理前仲裁状态，新流程不再产生，仅为兼容既有数据保留） |
+| `active_order_id` | `CHAR(26)` | 可空 | 已弃用：一码多收下不再单笔占用，新流程恒为 NULL |
 | `transaction_id` | `CHAR(26)` | 可空 | 最终成功交易 |
 | `cancel_requested_at` | `DATETIME(3)` | 可空 | 在途期间的取消意图时间 |
 | `version` | `BIGINT UNSIGNED` | `0` | 请求抢占 CAS 版本 |
@@ -1416,7 +1416,7 @@ MVP 退款仅支持单笔全额受控虚拟退款，不接入真实支付通道�
 
 **键与索引**：UK `(token_digest)`、UK `(transaction_id)`；索引 `(status,expires_at)`、`(active_order_id)`、`(requester_user_id,created_at)`。
 
-**写入规则**：使用 `OPEN + active_order_id IS NULL + version` CAS 抢占；抢占失败不得创建交易，未知结果不得清空活动订单。
+**写入规则**：一码多收：扫码阶段不占用请求，支付受理时以 `request_id + status IN ('OPEN','PROCESSING') + version` CAS 更新请求投影，多笔并发受理各自安全；单笔失败不得影响其他订单。
 
 ### 9.12 `collection_order`
 
@@ -1443,9 +1443,9 @@ MVP 退款仅支持单笔全额受控虚拟退款，不接入真实支付通道�
 | `created_at` | `DATETIME(3)` | 必填 | 创建时间 |
 | `updated_at` | `DATETIME(3)` | 必填 | 最近状态更新时间 |
 
-**键与索引**：UK `(h5_session_id)`、UK `(transaction_id)`；索引 `(request_id,status)`、`(code_id,status)`、`(payer_user_id,created_at)`、`(payee_user_id,created_at)`。
+**键与索引**：UK `(h5_session_id)`、UK `(transaction_id)`；索引 `(request_id,status)`、`(request_id,created_at)`、`(code_id,status)`、`(payer_user_id,created_at)`、`(payee_user_id,created_at)`。
 
-**写入规则**：两种来源字段必须二选一；固定请求只有被 `active_order_id` 选中的订单可进入处理。`status` 取值包括 `DRAFT`、`PENDING_CONFIRMATION`、`RISK_REVIEW`（命中前置风控转人工复核，受理前拦截）、`PROCESSING`、`SUCCESS`、`MANUAL_REVIEW`（统一交易终态发布器回填）、`CANCELLED`、`EXPIRED`；`RISK_REVIEW` 不创建资金交易或冻结，命中转人工规则时同步创建 `RISK_PRECHECK` 工单。`SUCCESS`、`MANUAL_REVIEW`、`FAILED` 是权威资金终态，只能由统一交易终态发布器在同一 `business_db` 事务内回填，Controller 不得自行写入；约束全集见 `V202608061000__restore_collection_order_terminal_states.sql`。
+**写入规则**：两种来源字段必须二选一；每次扫码新建独立订单，会话旧订单一律解绑不复用，固定请求多笔订单各自独立受理进入处理。`status` 取值包括 `DRAFT`、`PENDING_CONFIRMATION`、`RISK_REVIEW`（命中前置风控转人工复核，受理前拦截）、`PROCESSING`、`SUCCESS`、`MANUAL_REVIEW`（统一交易终态发布器回填）、`CANCELLED`、`EXPIRED`；`RISK_REVIEW` 不创建资金交易或冻结，命中转人工规则时同步创建 `RISK_PRECHECK` 工单。`SUCCESS`、`MANUAL_REVIEW`、`FAILED` 是权威资金终态，只能由统一交易终态发布器在同一 `business_db` 事务内回填，Controller 不得自行写入；约束全集见 `V202608061000__restore_collection_order_terminal_states.sql`。
 
 ### 9.13 `collection_order_event`
 
@@ -2063,7 +2063,7 @@ PROCESSING -> SUCCESS/OPEN/CANCELLED/EXPIRED/MANUAL_REVIEW
 MANUAL_REVIEW -> SUCCESS/OPEN/CANCELLED/EXPIRED
 ```
 
-`PROCESSING` 期间发生取消或到期时只记录 `cancel_requested_at` 或过期意图，不立即改变资金方向。只有确认完整 Cancel/补偿且请求仍有效时才能清空 `active_order_id` 并恢复为 `OPEN`；已取消或过期则分别进入 `CANCELLED`、`EXPIRED`。结果未知时必须进入 `MANUAL_REVIEW`，不得清空 `active_order_id`。
+`PROCESSING` 期间发生取消或到期时只记录 `cancel_requested_at` 或过期意图，不立即改变资金方向。一码多收下请求一旦受理即保持 `PROCESSING` 直至全部订单终态；单笔订单完整 Cancel/补偿只回滚该笔事实，不得据此重新开放请求。结果未知时必须进入 `MANUAL_REVIEW`。
 
 ### 13.4 单次个人收款订单
 
@@ -2074,7 +2074,7 @@ PROCESSING -> SUCCESS/FAILED/MANUAL_REVIEW
 MANUAL_REVIEW -> SUCCESS/FAILED
 ```
 
-这里的 `FAILED` 仅表示该来源订单已经确认完整 Cancel 或完整补偿，资金交易本身仍不使用 `FAILED` 状态。长期个人码订单彼此独立；固定请求只有被 `active_order_id` 选中的订单才能进入 `PROCESSING`。
+这里的 `FAILED` 仅表示该来源订单已经确认完整 Cancel 或完整补偿，资金交易本身仍不使用 `FAILED` 状态。长期个人码订单彼此独立；固定请求一码多收，每次扫码新建的订单各自独立受理进入 `PROCESSING`。
 
 ### 13.5 模拟充值订单
 
@@ -2104,7 +2104,7 @@ MANUAL_REVIEW -> SUCCESS/CANCELLED
 
 ### 14.2 固定金额请求
 
-`business_db` 本地事务：消费确认令牌 -> CAS 请求 `OPEN -> PROCESSING` 并绑定 `active_order_id` -> CAS 当前订单 -> 插入交易 -> 写业务 Outbox。抢占失败不得创建第二笔交易。
+`business_db` 本地事务：消费确认令牌 -> CAS 当前订单 -> CAS 请求投影 `status IN ('OPEN','PROCESSING') -> PROCESSING`（版本 +1）-> 插入交易 -> 写业务 Outbox。一码多收下多笔订单各自独立受理，单笔订单的来源唯一约束防止同一订单重复建交易。
 
 ### 14.3 余额支付
 
@@ -2185,7 +2185,7 @@ MANUAL_REVIEW -> SUCCESS/CANCELLED
 - 退款受理：UK `refund_order(active_original_key)`，其中 `active_original_key` 必须为生成列；索引 `(original_transaction_id,created_at)`、`(merchant_account_id,status,created_at)`。
 - 订单过期：`qr_pay_order(status,expires_at)`、`collection_request(status,expires_at)`。
 - 动态扫码收款订单：`qr_pay_order(merchant_account_id,status,created_at,qr_order_id)`；`merchant_account_id` 为已部署兼容字段名。
-- 固定请求：`collection_order(request_id,status)`、`collection_request(active_order_id)`。
+- 固定请求：`collection_order(request_id,status)`、`collection_order(request_id,created_at)`；`collection_request.active_order_id` 索引仅保留兼容既有数据。
 - 账户明细：`ledger_entry(ledger_account_id,created_at,entry_id)`，使用游标分页。
 - 信用出账：`credit_purchase(credit_account_id,billing_status,occurred_at)`。
 - 还款查询：`credit_repayment(credit_account_id,status,created_at)`。

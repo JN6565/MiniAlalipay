@@ -129,14 +129,18 @@ public class JdbcCollectionStore implements CollectionStore {
     }
 
     @Override
-    public boolean reserveRequestAndCreateOrder(CollectionRequest request, long requestExpectedVersion,
-                                                 CollectionOrder order, String bootstrapSessionId) {
-        int reserved = jdbc.update("UPDATE business_db.collection_request SET status=?,active_order_id=?,version=?,updated_at=? WHERE request_id=? AND version=?",
-                request.getStatus().name(), request.getActiveOrderId(), request.getVersion(), Timestamp.from(request.getUpdatedAt()),
-                request.getRequestId(), requestExpectedVersion);
-        if (reserved != 1) return false;
-        try { return insertOrder(order, bootstrapSessionId) == 1; }
-        catch (DuplicateKeyException duplicate) { return false; }
+    public boolean createFixedOrder(CollectionOrder order, String bootstrapSessionId) {
+        // 固定请求扫码阶段不占用：仅插入绑定会话的订单，多人扫码各自建单，
+        // 受理资格由支付阶段的请求状态校验与订单 CAS 保证
+        try {
+            return insertOrder(order, bootstrapSessionId) == 1;
+        } catch (DuplicateKeyException duplicate) { return false; }
+    }
+
+    @Override
+    public java.util.List<CollectionOrder> findOrdersByRequestId(String requestId) {
+        return jdbc.query("SELECT * FROM business_db.collection_order WHERE request_id=? ORDER BY created_at DESC, order_id DESC",
+                (rs, rowNum) -> mapOrder(rs), requestId);
     }
 
     @Override
@@ -155,9 +159,11 @@ public class JdbcCollectionStore implements CollectionStore {
     public boolean acceptOrderForPayment(CollectionOrder order, long expectedVersion, CollectionOrderEvent event) {
         if (!updateOrder(order, expectedVersion)) return false;
         if (order.getRequestId() != null) {
+            // 一码多收：请求只要仍可收款（OPEN/PROCESSING）就允许受理新的一笔，
+            // 版本 CAS 防止并发受理互相覆盖；不再校验单笔占用与 active_order_id
             int requestChanged = jdbc.update("UPDATE business_db.collection_request SET status='PROCESSING',transaction_id=?,version=version+1,updated_at=? "
-                            + "WHERE request_id=? AND active_order_id=? AND status='RESERVED'",
-                    order.getTransactionId(), Timestamp.from(order.getUpdatedAt()), order.getRequestId(), order.getOrderId());
+                            + "WHERE request_id=? AND status IN ('OPEN','PROCESSING')",
+                    order.getTransactionId(), Timestamp.from(order.getUpdatedAt()), order.getRequestId());
             if (requestChanged != 1) return false;
             appendRequestEvent(event);
         }

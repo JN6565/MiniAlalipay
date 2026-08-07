@@ -66,8 +66,10 @@ const CollectionPage: React.FC = () => {
         amountFen: Math.round(requestAmount * 100),
         subject: requestSubject,
       });
-      Toast.show({ icon: 'success', content: '创建成功' });
-      history.push(`/h5/collection/request/${data.requestId}`);
+      if (data.collectionUrl) {
+        sessionStorage.setItem(`collection-qr-${data.requestId}`, data.collectionUrl);
+      }
+      history.push(`/h5/collection/request/${data.requestId}`, { collectionUrl: data.collectionUrl });
     } catch (error: any) {
       Toast.show({ icon: 'fail', content: error.message || '创建失败' });
     } finally {
@@ -75,15 +77,10 @@ const CollectionPage: React.FC = () => {
     }
   };
 
-  // 生成收款码URL
+  // 二维码内容直接使用后端返回的相对路径：App 内扫码按路径与令牌参数识别跳转，
+  // 不拼接当前设备 origin，避免付款方设备地址不同导致二维码失效
   const getCollectionUrl = () => {
-    if (!personalCode?.collectionUrl) return '';
-    // 如果后端返回的是相对路径，拼接基础URL
-    if (personalCode.collectionUrl.startsWith('/')) {
-      const baseUrl = window.location.origin;
-      return `${baseUrl}${personalCode.collectionUrl}`;
-    }
-    return personalCode.collectionUrl;
+    return personalCode?.collectionUrl || '';
   };
 
   if (loading) {
@@ -98,7 +95,7 @@ const CollectionPage: React.FC = () => {
     <div className="collection-page">
       <Tabs activeKey={activeTab} onChange={setActiveTab}>
         <Tabs.Tab title="个人收款码" key="code" />
-        <Tabs.Tab title="固定收款请求" key="request" />
+        <Tabs.Tab title="设置金额" key="request" />
       </Tabs>
 
       {activeTab === 'code' ? (
@@ -112,7 +109,7 @@ const CollectionPage: React.FC = () => {
                 <div className="code-qr">
                   <QRCodeSVG
                     value={getCollectionUrl()}
-                    size={200}
+                    size={160}
                     level="H"
                     includeMargin={true}
                   />
@@ -139,9 +136,9 @@ const CollectionPage: React.FC = () => {
       ) : (
         <div className="request-section">
           <Card className="request-form">
-            <div className="form-title">创建固定收款请求</div>
+            <div className="form-title">设置金额</div>
             <AmountInput
-              value={requestAmount}
+              value={requestAmount || undefined}
               onChange={setRequestAmount}
               placeholder="请输入收款金额"
             />
@@ -158,7 +155,7 @@ const CollectionPage: React.FC = () => {
               onClick={handleCreateRequest}
               style={{ marginTop: 16 }}
             >
-              创建请求
+              生成固定金额收款码
             </Button>
           </Card>
         </div>

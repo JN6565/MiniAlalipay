@@ -329,7 +329,7 @@ flowchart TB
 | 动态扫码余额支付 | 收款用户 C 端 + 付款用户 H5 | `QrPayOrder`、令牌交换、订单 CAS、SSE | `QR_PAY` TCC 扣款和收款用户入账 | `qr_pay_order`、`qr_pay_token`、交易和账本 | 收款方 C 端实时结果、付款方回执 |
 | 动态扫码信用支付 | 付款用户 H5 | 同一扫码订单切换 `CREDIT_PAY`，重新确认 | 冻结/占用额度、增加信用应收、收款用户入账 | `credit_account`、`credit_purchase`、`credit_receivable` | 额度变化、账单明细、收款回执 |
 | 个人长期收款码 | C 端收款页 + H5 | 个人码生命周期、独立 `CollectionOrder`、余额 `TRANSFER` | 付款方余额减少、收款方余额增加、账本平衡 | `personal_collection_code`、`collection_order` | 收款明细、付款回执、可选 SSE |
-| 固定金额收款请求 | C 端收款页 + H5 | 请求不可变、30 分钟过期、`active_order_id` CAS 仲裁 | 仅抢占成功订单进入 TCC | `collection_request`、`collection_order`、交易和 Outbox | 请求状态、并发冲突和最终回执 |
+| 固定金额收款请求 | C 端收款页 + H5 | 请求不可变、30 分钟过期、一码多收每次扫码新建独立订单 | 各笔订单独立受理并各自进入 TCC | `collection_request`、`collection_order`、交易和 Outbox | 请求状态、多笔收款记录与最终回执 |
 | Mini 花呗出账/还款 | C 端信用页 | 账期任务、应还分配、还款确认和 `CREDIT_REPAY` | 额度、应收、余额和账本 TCC | `credit_bill`、`credit_bill_item`、`credit_repayment` | 账单、还款结果和额度恢复 |
 | AI 助理 | AI Talk | 意图、槽位、草稿和工具编排，不直接执行资金 | 所有写操作回到确认 UI 和统一交易核心 | `agent_session`、`tool_call_log`、业务草稿 | 结构化卡片、解释和 Trace |
 | 监控与对账 | B 端运营后台 | 消费 Outbox、聚合实时指标、生成工单 | 对比余额、额度、应收和账本事实 | `outbox_event`、`inbox`、`daily_metric`、`quality_result` | 看板、告警、T+1 报表 |
@@ -392,7 +392,7 @@ flowchart TB
 | AI 权限 | Agent 无资金权限 | 模型只理解/编排，策略网关和交易服务持有执行权 |
 | 确认 | 一次性确认令牌 | 绑定用户、双方、金额、订单哈希和有效期，防篡改/重放 |
 | 扫码 | C 端动态二维码 + 手机 H5 | 普通用户创建本人收款订单，无小程序资质依赖，复用现有安全与交易核心 |
-| C2C 收款 | 独立个人码/固定请求聚合 + `TRANSFER` | 与动态订单码隔离，长期码可复用，固定请求以 CAS 仲裁多尝试 |
+| C2C 收款 | 独立个人码/固定请求聚合 + `TRANSFER` | 与动态订单码隔离，长期码可复用，固定请求一码多收、多笔订单独立受理 |
 | Mini 花呗 | 账户中心信用子域 | 额度不是余额；支付生成应收，还款消减应收并恢复额度 |
 | 监控数据 | 事件驱动 | 实时/离线统一来源，禁止报表直连业务 DB |
 | MVP 拆分 | 有限部署单元 | 保持领域边界，同时控制两周集成成本 |
@@ -410,8 +410,8 @@ flowchart TB
 9. 资金事实与关键事件使用本地事务 Outbox 同步提交，监控消费者使用 Inbox 去重，禁止提交数据库后直接“尽力而为”发送事件。
 10. C2C 付款账户来自登录会话、收款账户来自个人码/请求服务端事实；客户端不得提交或覆盖任一账户。
 11. 长期个人码每用户最多一个 `ACTIVE`，换码原子撤销旧码；每次支付创建独立 `CollectionOrder`，允许并发多笔成功。
-12. 固定请求金额和备注创建后不可变且不绑定付款人；可有多个付款尝试，但 `active_order_id` 保证同时最多一笔处理中、最终最多一笔成功。
-13. 固定请求只有在 TCC 完整 Cancel 且终态发布器验证余额、冻结、账本全部恢复后才可回到 `OPEN`；未知结果必须保持 `PROCESSING`/`MANUAL_REVIEW`。
+12. 固定请求金额和备注创建后不可变且不绑定付款人；一码多收下每次扫码都新建独立订单，有效期内多人多次支付各自独立受理，令牌交换永不复用会话旧订单。
+13. 固定请求受理多笔后状态保持 `PROCESSING` 直至全部订单终态；单笔订单完整 Cancel 只回滚该笔事实，不得据此重新开放请求；未知结果必须保持 `PROCESSING`/`MANUAL_REVIEW`。
 14. Mini 花呗只允许支付另一普通用户创建的动态扫码订单，禁止自付、转账、C2C、提现或以信用偿还信用；额度不计入虚拟余额。
 15. 信用不变量为 `总额度 = 可用额度 + 已用额度 + 冻结额度`，且 `已用额度 = 信用应收余额 = 未出账剩余 + 账单剩余应还`。
 
@@ -887,7 +887,7 @@ erDiagram
 - `LedgerEntry` 创建后不可更新或删除；修复通过新冲正凭证完成。
 - `QrPayOrder` 负责扫码交互状态，进入 `PROCESSING` 后资金状态以 `Transaction` 为准。
 - `PersonalCollectionCode` 是可复用公开入口，不承载金额或交易终态；每次扫码付款都创建独立 `CollectionOrder`。
-- `CollectionRequest` 保存不可变金额/备注与请求级仲裁，`CollectionOrder` 保存单次付款尝试；不得把多个尝试合并为一笔交易。
+- `CollectionRequest` 保存不可变金额/备注与一码多收的请求级状态，`CollectionOrder` 保存单次付款尝试；每次扫码新建订单，不得复用或合并多个尝试为一笔交易。
 - `CreditAccount` 的额度字段只能由信用领域服务修改；账单汇总不得反向改写已确认的信用消费事实。
 - `Confirmation` 是短期授权凭证，不是支付结果，也不能重复消费。
 
@@ -1349,7 +1349,7 @@ sequenceDiagram
 
 个人码长期复用，每个付款会话对应独立订单，因此两名付款人可并发成功。付款账户由登录会话确定，收款账户由个人码确定；自付、`MINI_CREDIT`、客户端收款账户和非正金额均拒绝。
 
-#### 9.4.4 固定金额请求的多尝试仲裁
+#### 9.4.4 固定金额请求的一码多收
 
 ```mermaid
 sequenceDiagram
@@ -1360,28 +1360,22 @@ sequenceDiagram
     participant T as TRANSFER TCC
     participant F as 终态发布器
     R->>B: 创建金额/备注不可变、30分钟请求
-    par 多人打开
-      P1->>B: 创建订单 A 并完成可信确认
-      P2->>B: 创建订单 B 并完成可信确认
+    par 多人扫码
+      P1->>B: 扫码新建订单 A 并直达支付页
+      P2->>B: 扫码新建订单 B 并直达支付页
     end
     P1->>B: pay(orderA)
     P2->>B: pay(orderB)
-    B->>B: 本地事务 CAS OPEN→PROCESSING，绑定 active_order_id
-    alt A 抢占成功
-      B->>T: 仅为 A 创建 TRANSFER 并执行 TCC
-      B-->>P2: COLLECTION_REQUEST_PROCESSING
-      alt TCC 完成
-        T-->>F: GLOBAL_CONFIRMED
-        F->>B: 请求/订单/交易原子发布 SUCCESS
-      else 完整 Cancel
-        F->>B: 验证冻结为0且账本恢复，再按取消/过期意图决定 OPEN/CANCELLED/EXPIRED
-      else 结果未知
-        B->>B: 保持 PROCESSING 或 MANUAL_REVIEW，禁止重新开放
-      end
+    B->>B: 每笔各自本地事务：订单 CAS、请求 OPEN/PROCESSING→PROCESSING 版本 CAS
+    par 各笔独立受理
+      B->>T: 为 A 创建 TRANSFER 并执行 TCC
+      B->>T: 为 B 创建 TRANSFER 并执行 TCC
     end
+    T-->>F: 每笔各自的 GLOBAL 结果
+    F->>B: 验证四方事实后逐笔发布订单/交易终态；全部订单终态后请求进入终态
 ```
 
-余额不足发生在抢占前时不创建交易，请求保持 `OPEN`。抢占后的任何未知资金状态都不得释放 `active_order_id`；只有经验证的完整回滚才能允许下一次尝试。
+一码多收下扫码阶段不占用请求：每次扫码都新建独立订单，会话旧订单一律解绑不复用；支付受理只校验请求未过期且未取消，多笔并发受理由订单 CAS 与请求版本 CAS 保护。单笔余额不足或失败只影响该笔订单，不阻断其他付款人；收款方通过订单列表接口实时看到每笔脱敏付款人与状态。
 
 ### 9.5 功能实现落地流程
 

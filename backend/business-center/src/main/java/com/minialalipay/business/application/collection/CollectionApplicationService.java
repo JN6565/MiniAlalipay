@@ -125,7 +125,19 @@ public class CollectionApplicationService {
         return request;
     }
 
-    /** 取消尚未被付款订单占用的固定收款请求。 */
+    /**
+     * 查询固定收款请求的全部来源订单，按创建时间倒序。
+     *
+     * <p>一码多收下同一请求可能有多笔来自不同付款人的订单，仅请求创建者可读取，
+     * 用于在收款请求页实时展示多笔收款记录；非创建者一律返回请求不存在。</p>
+     */
+    @Transactional(readOnly = true)
+    public java.util.List<CollectionOrder> getRequestOrders(String userId, String requestId) {
+        ownedRequest(userId, requestId);
+        return store.findOrdersByRequestId(requestId);
+    }
+
+    /** 取消尚未有支付受理的固定收款请求。 */
     @Transactional
     public CollectionRequest cancelRequest(String userId, String requestId, long version, String idempotencyKey) {
         requireKey(idempotencyKey); byte[] digest = security.digest(requestId + "|" + version);
@@ -158,35 +170,32 @@ public class CollectionApplicationService {
     }
 
     /**
-     * 登录付款人在同一 bootstrap 会话中交换令牌并创建或恢复 C2C 订单。
+     * 登录付款人在 bootstrap 会话中交换令牌并创建新 C2C 订单。
      *
-     * <p>付款人账户只从账户中心解析，令牌摘要只用于服务端查找；固定请求先 CAS 占用后写订单，保证多付款会话最多一个进入确认。</p>
+     * <p>每次扫码都必须新建订单，绝不复用会话旧订单：旧订单无论处于何种状态一律解绑，
+     * 避免连扫不同收款码时串单、串金额，以及会话绑定不一致导致的订单不存在。
+     * 固定请求在扫码阶段不占用，有效期内可被多人多次支付，各笔订单独立受理；
+     * 付款人账户只从账户中心解析，令牌摘要只用于服务端查找。</p>
      */
     @Transactional
     public CollectionOrder exchange(String payerUserId, String bootstrapSessionId, String rawToken) {
         String sessionKey = security.stableId(bootstrapSessionId);
-        CollectionOrder existing = store.findOrderByBootstrapSessionId(sessionKey).orElse(null);
-        if (existing != null) {
-            if (!existing.getPayerUserId().equals(payerUserId)) throw new BusinessException(BusinessErrorCode.ORDER_NOT_FOUND);
-            // 如果旧订单是终态，清除会话绑定，允许创建新订单
-            if (isTerminalStatus(existing.getStatus())) {
-                store.clearSessionBinding(existing.getOrderId());
-            } else {
-                return existing;
-            }
-        }
+        // 会话旧订单一律解绑后新建，永不复用；终态订单同样解绑，保持一会话至多一个绑定订单的唯一约束
+        store.findOrderByBootstrapSessionId(sessionKey).ifPresent(existing -> store.clearSessionBinding(existing.getOrderId()));
         var payer = accounts.resolvePersonalAccount(payerUserId);
         if (!"ACTIVE".equals(payer.status())) throw new BusinessException(BusinessErrorCode.ACCOUNT_UNAVAILABLE);
         byte[] digest = security.digest(rawToken);
-        PersonalCollectionCode code = store.findActiveCodeByTokenDigest(digest).orElse(null);
         Instant now = clock.instant();
+        PersonalCollectionCode code = store.findActiveCodeByTokenDigest(digest).orElse(null);
         if (code != null) {
             if (code.getUserId().equals(payerUserId) || code.getAccountId().equals(payer.accountId())) {
                 throw new BusinessException(BusinessErrorCode.SELF_PAYMENT_FORBIDDEN);
             }
             CollectionOrder order = CollectionOrder.forPersonalCode(security.newId(), code.getCodeId(), code.getUserId(),
                     code.getAccountId(), payerUserId, payer.accountId(), now);
-            if (!store.createPersonalOrder(order, sessionKey)) return replaySessionOrder(sessionKey, payerUserId);
+            if (!store.createPersonalOrder(order, sessionKey)) {
+                throw new BusinessException(BusinessErrorCode.COLLECTION_REQUEST_PROCESSING);
+            }
             return order;
         }
         CollectionRequest request = store.findRequestByTokenDigest(digest)
@@ -197,14 +206,10 @@ public class CollectionApplicationService {
         if (request.getPayeeUserId().equals(payerUserId) || request.getPayeeAccountId().equals(payer.accountId())) {
             throw new BusinessException(BusinessErrorCode.SELF_PAYMENT_FORBIDDEN);
         }
-        long expectedVersion = request.getVersion();
+        // 固定请求不占用：金额与备注复制自请求，多人扫码各自新建订单，仅支付受理时校验请求可收
         CollectionOrder order = CollectionOrder.forFixedRequest(security.newId(), request.getRequestId(), request.getPayeeUserId(),
                 request.getPayeeAccountId(), payerUserId, payer.accountId(), request.getAmountFen(), request.getSubject(), now);
-        try { request.reserveForOrder(order.getOrderId(), expectedVersion, now); }
-        catch (IllegalStateException invalid) { throw requestStateError(request); }
-        if (!store.reserveRequestAndCreateOrder(request, expectedVersion, order, sessionKey)) {
-            CollectionOrder replay = store.findOrderByBootstrapSessionId(sessionKey).orElse(null);
-            if (replay != null && replay.getPayerUserId().equals(payerUserId)) return replay;
+        if (!store.createFixedOrder(order, sessionKey)) {
             throw new BusinessException(BusinessErrorCode.COLLECTION_REQUEST_PROCESSING);
         }
         store.appendRequestEvent(requestEvent(request, order.getOrderId(), null, "PENDING_CONFIRMATION", now));
@@ -246,12 +251,6 @@ public class CollectionApplicationService {
         CollectionRequest request = store.findRequest(requestId).orElseThrow(() -> new BusinessException(BusinessErrorCode.REQUEST_NOT_FOUND));
         if (!request.getPayeeUserId().equals(userId)) throw new BusinessException(BusinessErrorCode.REQUEST_NOT_FOUND);
         return request;
-    }
-    private CollectionOrder replaySessionOrder(String sessionKey, String payerUserId) {
-        CollectionOrder order = store.findOrderByBootstrapSessionId(sessionKey)
-                .orElseThrow(() -> new IllegalStateException("C2C 会话唯一冲突后未读取到既有订单"));
-        if (!order.getPayerUserId().equals(payerUserId)) throw new BusinessException(BusinessErrorCode.ORDER_NOT_FOUND);
-        return order;
     }
     private BusinessException requestStateError(CollectionRequest request) {
         return switch (request.getStatus().name()) {
