@@ -5,6 +5,7 @@ import com.minialalipay.business.application.port.BusinessStore;
 import com.minialalipay.business.application.port.ContactArchivePort;
 import com.minialalipay.business.application.port.PaymentProofPort;
 import com.minialalipay.business.application.port.TccCoordinatorPort;
+import com.minialalipay.business.application.port.UserInfoPort;
 import com.minialalipay.business.application.port.SecurityMaterialPort;
 import com.minialalipay.business.domain.confirmation.Confirmation;
 import com.minialalipay.business.domain.confirmation.ConfirmationStatus;
@@ -46,22 +47,25 @@ public class TransferApplicationService {
     private final SecurityMaterialPort secure;
     private final IdempotencyKeyValidator keyValidator;
     private final ContactArchivePort contactArchive;
+    private final UserInfoPort userInfo;
     private final Clock clock;
 
     @Autowired
     public TransferApplicationService(BusinessStore store, AccountDirectoryPort accounts,
                                       PaymentProofPort paymentProofs, TccCoordinatorPort coordinator,
                                       SecurityMaterialPort secure, IdempotencyKeyValidator keyValidator,
-                                      ContactArchivePort contactArchive) {
-        this(store, accounts, paymentProofs, coordinator, secure, keyValidator, contactArchive, Clock.systemUTC());
+                                      ContactArchivePort contactArchive, UserInfoPort userInfo) {
+        this(store, accounts, paymentProofs, coordinator, secure, keyValidator, contactArchive, userInfo,
+                Clock.systemUTC());
     }
     TransferApplicationService(BusinessStore store, AccountDirectoryPort accounts,
                                PaymentProofPort paymentProofs, TccCoordinatorPort coordinator,
                                SecurityMaterialPort secure, IdempotencyKeyValidator keyValidator,
-                               ContactArchivePort contactArchive, Clock clock) {
+                               ContactArchivePort contactArchive, UserInfoPort userInfo, Clock clock) {
         this.store = store; this.accounts = accounts; this.paymentProofs = paymentProofs;
         this.coordinator = coordinator; this.secure = secure; this.keyValidator = keyValidator;
         this.contactArchive = contactArchive; this.clock = clock;
+        this.userInfo = userInfo;
     }
 
     /** 创建服务端派生账户归属的转账草稿；同键同参返回原草稿。 */
@@ -203,14 +207,39 @@ public class TransferApplicationService {
         return transaction;
     }
 
-    /** 查询本人交易。 */
+    /**
+     * 查询本人参与的普通转账。
+     *
+     * <p>付款发起人可直接按主单身份访问；收款人必须通过账户中心解析本人权威账户后，
+     * 与交易收款账户匹配。无关用户统一返回不存在，避免泄露交易是否存在。</p>
+     */
     @Transactional(readOnly = true)
     public FundTransaction getTransaction(String userId, String transactionId) {
         FundTransaction value = store.findTransaction(transactionId)
                 .map(BusinessStore.FundTransactionRecord::transaction)
                 .orElseThrow(() -> new BusinessException(BusinessErrorCode.TRANSACTION_NOT_FOUND));
-        if (!value.getInitiatorUserId().equals(userId)) throw new BusinessException(BusinessErrorCode.TRANSACTION_NOT_FOUND);
+        if (!value.getInitiatorUserId().equals(userId)) {
+            String requesterAccountId = accounts.resolvePersonalAccount(userId).accountId();
+            if (!value.getPayerAccountId().equals(requesterAccountId)
+                    && !value.getPayeeAccountId().equals(requesterAccountId)) {
+                throw new BusinessException(BusinessErrorCode.TRANSACTION_NOT_FOUND);
+            }
+        }
         return value;
+    }
+
+    /**
+     * 查询普通转账完整展示详情；先完成参与者授权，再读取不可变来源草稿和最小用户信息。
+     */
+    @Transactional(readOnly = true)
+    public TransferDetail getTransactionDetail(String userId, String transactionId) {
+        FundTransaction transaction = getTransaction(userId, transactionId);
+        TransferDraft draft = store.findDraft(transaction.getSourceOrderId())
+                .orElseThrow(() -> new BusinessException(BusinessErrorCode.TRANSACTION_NOT_FOUND));
+        String payerDisplayName = userInfo.findUserInfo(draft.getPayerUserId()).displayName();
+        String payeeDisplayName = userInfo.findUserInfo(draft.getPayeeUserId()).displayName();
+        return new TransferDetail(transaction, draft.getPayerUserId(), payerDisplayName,
+                draft.getPayeeUserId(), payeeDisplayName, draft.getRemark());
     }
 
     /** 仅确定终态返回回执；在途和人工复核不得伪造成功。 */
@@ -254,4 +283,7 @@ public class TransferApplicationService {
     public record IssuedConfirmation(String confirmationToken, String subjectHash, Instant expiresAt) { }
     /** 确定终态转账回执。 */
     public record TransferReceipt(String transactionId, String status, long amountFen, Instant completedAt) { }
+    /** 普通转账参与者与展示详情，交易状态仍以 transaction 为唯一事实。 */
+    public record TransferDetail(FundTransaction transaction, String payerUserId, String payerDisplayName,
+                                 String payeeUserId, String payeeDisplayName, String remark) { }
 }

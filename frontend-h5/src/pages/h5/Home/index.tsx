@@ -161,7 +161,7 @@ const HomePage: React.FC = () => {
                 {tx.direction === 'IN' ? '📥' : '📤'}
               </div>
               <div className="tx-mid">
-                <div className="tx-name">{tx.counterparty || '未知'}</div>
+                <div className="tx-name">{accountService.getLedgerEntryTitle(tx)}</div>
                 <div className="tx-time">{formatRelativeTime(tx.createdAt)}</div>
               </div>
               <div className={`tx-amt ${tx.direction === 'IN' ? 'in' : 'out'}`}>
