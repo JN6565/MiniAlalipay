@@ -4,7 +4,7 @@
   "private": true,
   "description": "MiniAlalipay C端H5前端",
   "scripts": {
-    "dev": "max dev",
+    "dev": "set \"UMI_DEV_SERVER_COMPRESS=none\" && max dev",
     "build": "max build",
     "lint": "max lint",
     "lint:fix": "max lint --fix",
@@ -26,6 +26,8 @@
     "qrcode.react": "^3.2.0",
     "react": "^18.2.0",
     "react-dom": "^18.2.0",
+    "react-markdown": "^10.1.0",
+    "remark-gfm": "^4.0.1",
     "zustand": "^4.5.0"
   },
   "devDependencies": {

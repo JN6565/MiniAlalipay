@@ -87,17 +87,34 @@ public class ToolRouter {
             String userId, ToolCatalog.ToolDefinition def
     ) throws TimeoutException {
         long start = System.currentTimeMillis();
+        // 在提交异步任务前捕获当前线程的 Bearer Token，
+        // 因为 CompletableFuture.supplyAsync 在另一线程执行，ThreadLocal 无法自动传递
+        final String bearerToken = RequestContext.getBearerToken();
         try {
-            CompletableFuture<ToolResult> future = CompletableFuture.supplyAsync(() ->
-                    dispatch(toolName, params, userId));
+            CompletableFuture<ToolResult> future = CompletableFuture.supplyAsync(() -> {
+                RequestContext.setBearerToken(bearerToken);
+                return dispatch(toolName, params, userId);
+            });
             return future.get(toolTimeoutMs, TimeUnit.MILLISECONDS);
         } catch (TimeoutException e) {
             throw e;
         } catch (Exception e) {
             int duration = (int) (System.currentTimeMillis() - start);
-            log.warn("工具调用失败: tool={}, error={}", toolName, e.getMessage());
+            Throwable root = e;
+            // 展开 CompletableFuture 包装的 ExecutionException
+            while ((root instanceof java.util.concurrent.ExecutionException
+                    || root instanceof java.util.concurrent.CompletionException)
+                    && root.getCause() != null) {
+                root = root.getCause();
+            }
+            log.warn("工具调用失败: tool={}, exception={}, message={}",
+                    toolName, root.getClass().getSimpleName(), root.getMessage());
+            String errorMsg = root.getMessage();
+            if (errorMsg == null || errorMsg.isBlank()) {
+                errorMsg = root.getClass().getSimpleName() + "（无详细描述）";
+            }
             return new ToolResult(RESULT_TOOL_UNAVAILABLE, Map.of(),
-                    "工具调用失败: " + e.getMessage(), duration);
+                    "工具调用失败: " + errorMsg, duration);
         }
     }
 
@@ -114,7 +131,17 @@ public class ToolRouter {
                 String query = (String) params.getOrDefault("query", "");
                 int limit = ((Number) params.getOrDefault("limit", 10)).intValue();
                 List<Map<String, Object>> users = userCenterPort.searchPayees(userId, query, limit);
-                yield Map.of("users", users);
+                // 同时返回 users 列表和第一个用户的 payeeId，供后续工具链使用
+                java.util.Map<String, Object> result = new java.util.HashMap<>();
+                result.put("users", users);
+                if (users != null && !users.isEmpty()) {
+                    Map<String, Object> firstUser = users.get(0);
+                    Object userIdValue = firstUser.get("userId");
+                    if (userIdValue != null) {
+                        result.put("payeeId", userIdValue.toString());
+                    }
+                }
+                yield result;
             }
 
             // ---- 账户中心 ----
@@ -122,7 +149,19 @@ public class ToolRouter {
             case "get_balance" -> accountCenterPort.getBalance(userId);
             case "list_transactions" -> {
                 int limit = ((Number) params.getOrDefault("limit", 10)).intValue();
-                yield accountCenterPort.listTransactions(userId, limit);
+                String startTime = (String) params.get("startTime");
+                String endTime = (String) params.get("endTime");
+                String direction = (String) params.get("direction");
+                String status = (String) params.get("status");
+                Map<String, Object> result = accountCenterPort.listTransactions(
+                        userId, limit, startTime, endTime, direction, status);
+                // 将筛选参数注入返回数据，供 ResultInterpreter 生成精确文案
+                if (direction != null && !direction.isBlank()) {
+                    java.util.Map<String, Object> enriched = new java.util.HashMap<>(result);
+                    enriched.put("direction", direction);
+                    yield enriched;
+                }
+                yield result;
             }
             case "get_credit_summary" -> accountCenterPort.getCreditSummary(userId);
             case "list_credit_bills" -> {
@@ -146,9 +185,11 @@ public class ToolRouter {
             }
             case "validate_transfer_draft" -> {
                 String draftId = (String) params.get("draftId");
+                // 版本号由 create_transfer_draft 返回，经 cumulativeParams 传递
+                long version = ((Number) params.getOrDefault("version", 0L)).longValue();
                 String idempotencyKey = (String) params.getOrDefault("idempotencyKey",
                         userId + "-validate-" + System.currentTimeMillis());
-                yield businessCenterPort.validateTransferDraft(userId, draftId, idempotencyKey);
+                yield businessCenterPort.validateTransferDraft(userId, draftId, version, idempotencyKey);
             }
             case "prepare_confirmation_card" -> {
                 String draftId = (String) params.get("draftId");
@@ -184,17 +225,6 @@ public class ToolRouter {
         };
         int duration = (int) (System.currentTimeMillis() - start);
         return new ToolResult(RESULT_SUCCESS, data, null, duration);
-    }
-
-    // ---- 未使用的方法保留兼容 ----
-
-    /**
-     * @deprecated 使用 {@link #route(String, Map, String)} 替代
-     */
-    @Deprecated
-    public ToolResult route(String toolName, Map<String, Object> params,
-                            String userId, boolean retryIfReadOnly) {
-        return route(toolName, params, userId);
     }
 
     private static long parseDurationMillis(String duration) {

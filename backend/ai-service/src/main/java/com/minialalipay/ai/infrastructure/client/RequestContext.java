@@ -21,7 +21,7 @@ package com.minialalipay.ai.infrastructure.client;
  */
 public final class RequestContext {
 
-    private static final ThreadLocal<String> BEARER_TOKEN = new ThreadLocal<>();
+    private static final InheritableThreadLocal<String> BEARER_TOKEN = new InheritableThreadLocal<>();
 
     private RequestContext() {
         throw new UnsupportedOperationException("工具类不可实例化");

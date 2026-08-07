@@ -14,7 +14,7 @@ const spanStatusColor = (status: string): string => {
   return 'orange';
 };
 
-/** 服务来源标签着色，按归属服务区分跨服务链路；仅在「查看技术证据」时展示。 */
+/** 服务来源标签着色，按归属服务区分跨服务链路。 */
 const serviceColor = (service: string): string => {
   switch (service) {
     case 'business-center':
@@ -93,16 +93,14 @@ const isTraceId = (value: string): boolean => /^[a-fA-F0-9]{32}$/.test(value);
 /**
  * 链路追溯页面。
  *
- * 支持按交易号或链路编号（32 位 hex）查询跨服务脱敏链路片段（业务中心、账户账本、用户审计、AI）。
- * 时间线默认按业务步骤展示（支付受理、资金处理、账本记账、终态发布、用户核验、AI 辅助等）；
- * 只有交易或资金状态为人工审核（MANUAL_REVIEW）时才展示「待人工处理」，
- * 事件投递状态与来源、操作名、详情、链路编号等技术字段默认折叠，通过「查看技术证据」开关展开。
+ * 支持按交易号或链路编号（32 位 hex）查询跨服务脱敏链路片段（业务中心、账户账本、用户审计、AI），
+ * 以 service 标签区分来源、transactionId 标注片段归属。完整 OTel 跨服务 Trace 归阶段七集成。
  */
 export default function Trace() {
   const { message } = App.useApp();
   const [input, setInput] = useState('');
   const [query, setQuery] = useState<{ id: string; mode: 'transaction' | 'trace' }>();
-  // 默认业务视图；展开技术证据后展示 service、operation、detail 与 traceId 等技术字段。
+  // 技术证据开关：默认关闭，打开后展示服务职责、事件与状态等跨服务链路明细。
   const [showTech, setShowTech] = useState(false);
 
   const { data, isFetching, isError, error, refetch } = useQuery({
@@ -171,10 +169,10 @@ export default function Trace() {
   };
 
   const emptyText = !query
-    ? '输入交易号或链路编号后，按时间展示交易经历的业务步骤'
+    ? '输入交易号或链路编号后按时间展示各服务 Span'
     : query.mode === 'trace'
-      ? '未查询到该链路编号的跨服务记录'
-      : '未查询到该交易的链路记录';
+      ? '未查询到该链路编号的跨服务片段'
+      : '未查询到该交易的链路片段';
 
   return (
     <main className={pageStyles.page}>
@@ -193,10 +191,12 @@ export default function Trace() {
           查询链路
         </Button>
       </section>
-      <section className={pageStyles.panel} aria-label="交易处理时间线">
-        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 }}>
+      <section className={pageStyles.panel} aria-label="链路时间线">
+        <div
+          style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 }}
+        >
           <Typography.Title level={4} className={pageStyles.panelTitle}>
-            交易处理时间线
+            脱敏跨服务 Span 时间线
           </Typography.Title>
           <Space size="small">
             <Switch size="small" checked={showTech} onChange={setShowTech} aria-label="查看技术证据" />

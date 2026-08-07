@@ -68,13 +68,23 @@ public class ToolCatalog {
             )),
             Map.entry("list_transactions", new ToolDefinition(
                     "list_transactions", ToolRiskLevel.READ_ONLY,
-                    "查询交易明细", "account-center",
+                    "查询交易明细，支持时间范围、收支方向和状态筛选", "account-center",
                     "v1", true, 3,
                     Map.of("type", "object", "properties", Map.of(
-                            "limit", Map.of("type", "integer", "default", 10, "maximum", 50)
+                            "limit", Map.of("type", "integer", "default", 10, "maximum", 50,
+                                    "description", "返回条数上限"),
+                            "startTime", Map.of("type", "string", "format", "date-time",
+                                    "description", "查询起始时间（ISO 8601），如 2026-01-01T00:00:00Z"),
+                            "endTime", Map.of("type", "string", "format", "date-time",
+                                    "description", "查询截止时间（ISO 8601）"),
+                            "direction", Map.of("type", "string", "enum", List.of("IN", "OUT"),
+                                    "description", "收支方向筛选：IN=收入，OUT=支出"),
+                            "status", Map.of("type", "string", "enum", List.of("SUCCESS", "PROCESSING", "FAILED"),
+                                    "description", "交易状态筛选")
                     ), "additionalProperties", false),
                     Map.of("type", "object", "properties", Map.of(
-                            "transactions", Map.of("type", "array")
+                            "items", Map.of("type", "array"),
+                            "nextCursor", Map.of("type", "string")
                     ))
             )),
             Map.entry("get_transaction_status", new ToolDefinition(

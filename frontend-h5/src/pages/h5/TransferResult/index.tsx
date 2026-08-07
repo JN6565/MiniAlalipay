@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { history, useSearchParams, useParams, useLocation } from 'umi';
+import { history, useParams, useLocation } from 'umi';
 import { Card, Button, Result, SpinLoading } from 'antd-mobile';
 import { CheckCircleFill, CloseCircleFill } from 'antd-mobile-icons';
 import * as transferService from '@/services/transfer';
@@ -10,7 +10,7 @@ import './index.less';
 const TransferResultPage: React.FC = () => {
   const { id } = useParams();
   const location = useLocation();
-  // 后端交易状态接口不返回收款人昵称，由确认页跳转时通过路由 state 携带展示
+  // 路由 state 仅兼容提交后首次跳转；刷新和从明细进入时以后端详情为准。
   const navState = (location.state || {}) as { payeeNickname?: string };
   const [loading, setLoading] = useState(true);
   const [result, setResult] = useState<transferService.TransferResult | null>(null);
@@ -74,8 +74,14 @@ const TransferResultPage: React.FC = () => {
           <span className="result-value">{result?.transactionId || '-'}</span>
         </div>
         <div className="result-row">
+          <span className="result-label">付款人</span>
+          <span className="result-value">{result?.payerDisplayName || result?.payerUserId || '-'}</span>
+        </div>
+        <div className="result-row">
           <span className="result-label">收款人</span>
-          <span className="result-value">{navState.payeeNickname || '-'}</span>
+          <span className="result-value">
+            {result?.payeeDisplayName || navState.payeeNickname || result?.payeeUserId || '-'}
+          </span>
         </div>
         <div className="result-row">
           <span className="result-label">金额</span>
@@ -84,9 +90,13 @@ const TransferResultPage: React.FC = () => {
           </span>
         </div>
         <div className="result-row">
+          <span className="result-label">备注</span>
+          <span className="result-value">{result?.remark || '-'}</span>
+        </div>
+        <div className="result-row">
           <span className="result-label">时间</span>
           <span className="result-value">
-            {result?.updatedAt ? formatTime(result.updatedAt) : '-'}
+            {result?.createdAt ? formatTime(result.createdAt) : '-'}
           </span>
         </div>
       </Card>

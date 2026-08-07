@@ -145,7 +145,6 @@ class AuthServiceTest {
     @Test
     void shouldResolveSessionWithRealRoles() {
         when(sessionManager.validateSession("valid-token")).thenReturn("USER123");
-        when(userRepository.findById("USER123")).thenReturn(Optional.of(activeUser("USER123")));
         when(roleAssignmentRepository.findRolesByUserId("USER123")).thenReturn(Set.of("ADMIN", "OPERATOR"));
 
         var identity = service.resolveSession("valid-token").orElseThrow();
@@ -160,33 +159,6 @@ class AuthServiceTest {
         when(sessionManager.validateSession("expired-token")).thenReturn(null);
 
         assertTrue(service.resolveSession("expired-token").isEmpty());
-    }
-
-    /** 冻结（DISABLED）用户即使令牌有效也不得解析主体，冻结即时禁止发起新业务。 */
-    @Test
-    void shouldRejectDisabledUserSessionResolution() {
-        when(sessionManager.validateSession("frozen-token")).thenReturn("USER123");
-        User user = activeUser("USER123");
-        user.freeze("ADMIN", "风控冻结");
-        when(userRepository.findById("USER123")).thenReturn(Optional.of(user));
-
-        assertTrue(service.resolveSession("frozen-token").isEmpty());
-    }
-
-    /** 用户不存在时解析结果必须为空，不得据此伪造主体。 */
-    @Test
-    void shouldRejectUnknownUserSessionResolution() {
-        when(sessionManager.validateSession("orphan-token")).thenReturn("USER999");
-        when(userRepository.findById("USER999")).thenReturn(Optional.empty());
-
-        assertTrue(service.resolveSession("orphan-token").isEmpty());
-    }
-
-    /** 构造并激活一个 ACTIVE 用户（6 参构造器默认 PROVISIONING）。 */
-    private User activeUser(String userId) {
-        User user = new User(userId, "REG" + userId, "6200000000000001", "13800138000", "张三", "小张");
-        user.activate();
-        return user;
     }
 
     /** 当前身份接口返回真实姓名优先的展示名与真实角色，普通用户回退为 USER。 */

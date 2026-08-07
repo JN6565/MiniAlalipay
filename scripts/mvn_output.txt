@@ -1,0 +1,99 @@
+[INFO] Scanning for projects...
+[INFO] ------------------------------------------------------------------------
+[INFO] Reactor Build Order:
+[INFO] 
+[INFO] minialalipay-backend                                               [pom]
+[INFO] platform-common                                                    [jar]
+[INFO] gateway                                                            [jar]
+[INFO] user-center                                                        [jar]
+[INFO] business-center                                                    [jar]
+[INFO] account-center                                                     [jar]
+[INFO] ai-service                                                         [jar]
+[INFO] 
+[INFO] ---------------< com.minialalipay:minialalipay-backend >----------------
+[INFO] Building minialalipay-backend 0.1.0-SNAPSHOT                       [1/7]
+[INFO]   from pom.xml
+[INFO] --------------------------------[ pom ]---------------------------------
+[INFO] 
+[INFO] ------------------< com.minialalipay:platform-common >------------------
+[INFO] Building platform-common 0.1.0-SNAPSHOT                            [2/7]
+[INFO]   from platform-common\pom.xml
+[INFO] --------------------------------[ jar ]---------------------------------
+[INFO] 
+[INFO] --- resources:3.4.0:resources (default-resources) @ platform-common ---
+[INFO] skip non existing resourceDirectory C:\Users\18839\IdeaProjects\MiniAIalipay\backend\platform-common\src\main\resources
+[INFO] 
+[INFO] --- compiler:3.13.0:compile (default-compile) @ platform-common ---
+[INFO] Nothing to compile - all classes are up to date.
+[INFO] 
+[INFO] ----------------------< com.minialalipay:gateway >----------------------
+[INFO] Building gateway 0.1.0-SNAPSHOT                                    [3/7]
+[INFO]   from gateway\pom.xml
+[INFO] --------------------------------[ jar ]---------------------------------
+[INFO] 
+[INFO] --- resources:3.4.0:resources (default-resources) @ gateway ---
+[INFO] Copying 2 resources from src\main\resources to target\classes
+[INFO] 
+[INFO] --- compiler:3.13.0:compile (default-compile) @ gateway ---
+[INFO] Nothing to compile - all classes are up to date.
+[INFO] 
+[INFO] --------------------< com.minialalipay:user-center >--------------------
+[INFO] Building user-center 0.1.0-SNAPSHOT                                [4/7]
+[INFO]   from user-center\pom.xml
+[INFO] --------------------------------[ jar ]---------------------------------
+[INFO] 
+[INFO] --- resources:3.4.0:resources (default-resources) @ user-center ---
+[INFO] Copying 22 resources from src\main\resources to target\classes
+[INFO] 
+[INFO] --- compiler:3.13.0:compile (default-compile) @ user-center ---
+[INFO] Nothing to compile - all classes are up to date.
+[INFO] 
+[INFO] ------------------< com.minialalipay:business-center >------------------
+[INFO] Building business-center 0.1.0-SNAPSHOT                            [5/7]
+[INFO]   from business-center\pom.xml
+[INFO] --------------------------------[ jar ]---------------------------------
+[INFO] 
+[INFO] --- resources:3.4.0:resources (default-resources) @ business-center ---
+[INFO] Copying 15 resources from src\main\resources to target\classes
+[INFO] 
+[INFO] --- compiler:3.13.0:compile (default-compile) @ business-center ---
+[INFO] Nothing to compile - all classes are up to date.
+[INFO] 
+[INFO] ------------------< com.minialalipay:account-center >-------------------
+[INFO] Building account-center 0.1.0-SNAPSHOT                             [6/7]
+[INFO]   from account-center\pom.xml
+[INFO] --------------------------------[ jar ]---------------------------------
+[INFO] 
+[INFO] --- resources:3.4.0:resources (default-resources) @ account-center ---
+[INFO] Copying 10 resources from src\main\resources to target\classes
+[INFO] 
+[INFO] --- compiler:3.13.0:compile (default-compile) @ account-center ---
+[INFO] Nothing to compile - all classes are up to date.
+[INFO] 
+[INFO] --------------------< com.minialalipay:ai-service >---------------------
+[INFO] Building ai-service 0.1.0-SNAPSHOT                                 [7/7]
+[INFO]   from ai-service\pom.xml
+[INFO] --------------------------------[ jar ]---------------------------------
+[INFO] 
+[INFO] --- resources:3.4.0:resources (default-resources) @ ai-service ---
+[INFO] Copying 4 resources from src\main\resources to target\classes
+[INFO] 
+[INFO] --- compiler:3.13.0:compile (default-compile) @ ai-service ---
+[INFO] Recompiling the module because of changed source code.
+[INFO] Compiling 84 source files with javac [debug parameters release 21] to target\classes
+[INFO] ------------------------------------------------------------------------
+[INFO] Reactor Summary for minialalipay-backend 0.1.0-SNAPSHOT:
+[INFO] 
+[INFO] minialalipay-backend ............................... SUCCESS [  0.008 s]
+[INFO] platform-common .................................... SUCCESS [  0.820 s]
+[INFO] gateway ............................................ SUCCESS [  0.881 s]
+[INFO] user-center ........................................ SUCCESS [  0.334 s]
+[INFO] business-center .................................... SUCCESS [  0.176 s]
+[INFO] account-center ..................................... SUCCESS [  0.179 s]
+[INFO] ai-service ......................................... SUCCESS [  2.879 s]
+[INFO] ------------------------------------------------------------------------
+[INFO] BUILD SUCCESS
+[INFO] ------------------------------------------------------------------------
+[INFO] Total time:  5.806 s
+[INFO] Finished at: 2026-08-07T15:42:30+08:00
+[INFO] ------------------------------------------------------------------------

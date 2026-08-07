@@ -86,14 +86,15 @@ public class TransferController {
             HttpServletRequest request) {
         FundTransaction value = service.submit(userId, body.draftId(), body.confirmationToken(), key,
                 request.getHeader("X-Trace-Id"));
-        return ResponseEntity.accepted().body(success(TransactionResponse.from(value), request));
+        return ResponseEntity.accepted().body(success(
+                TransactionResponse.from(service.getTransactionDetail(userId, value.getTransactionId())), request));
     }
 
-    /** 查询本人转账权威状态。 */
+    /** 查询付款人或收款人本人参与的转账权威状态，无关用户按不存在处理。 */
     @GetMapping("/transfers/{id}")
     public ResponseEntity<ApiResponse<TransactionResponse>> getTransaction(@RequestHeader("X-User-Id") String userId,
             @PathVariable String id, HttpServletRequest request) {
-        return ok(TransactionResponse.from(service.getTransaction(userId, id)), request);
+        return ok(TransactionResponse.from(service.getTransactionDetail(userId, id)), request);
     }
 
     /** 查询确定终态回执；在途或人工复核返回 RECEIPT_NOT_READY。 */
@@ -133,12 +134,17 @@ public class TransferController {
                     d.getStatus().name(), d.getVersion(), d.getExpiresAt());
         }
     }
-    /** 统一转账状态 DTO。 */
+    /** 普通转账详情 DTO，包含付款人、收款人和来源草稿中的不可变展示信息。 */
     public record TransactionResponse(String transactionId, String businessType, String status,
-                                      long amountFen, String statusUrl, Instant updatedAt) {
-        static TransactionResponse from(FundTransaction t) {
+                                      long amountFen, String payerUserId, String payerDisplayName,
+                                      String payeeUserId, String payeeDisplayName, String remark,
+                                      String statusUrl, Instant createdAt, Instant updatedAt) {
+        static TransactionResponse from(TransferApplicationService.TransferDetail detail) {
+            FundTransaction t = detail.transaction();
             return new TransactionResponse(t.getTransactionId(), t.getBusinessType().name(), t.getStatus().name(),
-                    t.getAmountFen(), "/api/v1/transfers/" + t.getTransactionId(), t.getUpdatedAt());
+                    t.getAmountFen(), detail.payerUserId(), detail.payerDisplayName(), detail.payeeUserId(),
+                    detail.payeeDisplayName(), detail.remark(), "/api/v1/transfers/" + t.getTransactionId(),
+                    t.getCreatedAt(), t.getUpdatedAt());
         }
     }
 }

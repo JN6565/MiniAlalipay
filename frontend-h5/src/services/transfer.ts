@@ -18,7 +18,13 @@ export interface TransferResult {
   businessType: string;
   status: string;
   amountFen: number;
+  payerUserId: string;
+  payerDisplayName?: string | null;
+  payeeUserId: string;
+  payeeDisplayName?: string | null;
+  remark?: string | null;
   statusUrl: string;
+  createdAt: string;
   updatedAt: string;
 }
 

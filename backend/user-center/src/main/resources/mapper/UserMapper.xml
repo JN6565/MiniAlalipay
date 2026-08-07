@@ -241,16 +241,18 @@
     </select>
 
     <!--
-      按手机号搜索用户。
+      搜索用户（支持手机号精确匹配、昵称/真实姓名前缀匹配）。
 
       搜索规则：
-      - 按手机号精确匹配搜索
+      - 手机号精确相等匹配
+      - 昵称前缀模糊匹配（可利用 idx_app_user_nickname_status 索引）
+      - 真实姓名前缀模糊匹配（可利用 idx_app_user_real_name_status 索引）
       - 只返回 ACTIVE 状态的用户
       - 排除指定的用户 ID（通常是当前用户）
       - 最多返回指定数量的结果
 
       参数：
-      - keyword: 搜索手机号
+      - keyword: 搜索关键词（手机号、昵称或姓名）
       - excludeId: 排除的用户 ID（可为 null）
       - limit: 最大返回数量
 
@@ -273,11 +275,17 @@
             updated_at
         FROM app_user
         WHERE status = 'ACTIVE'
-          AND phone_number = #{keyword}
+          AND (
+              phone_number = #{keyword}
+              OR nickname LIKE CONCAT(#{keyword}, '%')
+              OR real_name LIKE CONCAT(#{keyword}, '%')
+          )
           <if test="excludeId != null">
             AND user_id != #{excludeId}
           </if>
-        ORDER BY account_number ASC
+        ORDER BY
+            CASE WHEN phone_number = #{keyword} THEN 0 ELSE 1 END,
+            account_number ASC
         LIMIT #{limit}
     </select>
 

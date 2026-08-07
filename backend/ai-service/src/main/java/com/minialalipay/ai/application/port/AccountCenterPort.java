@@ -43,6 +43,23 @@ public interface AccountCenterPort {
     Map<String, Object> listTransactions(String userId, int limit);
 
     /**
+     * 查询本人交易明细，支持筛选条件。
+     *
+     * @param userId 当前用户 ID
+     * @param limit 返回条数上限
+     * @param startTime 查询起始时间（ISO 8601），可为 null
+     * @param endTime 查询截止时间（ISO 8601），可为 null
+     * @param direction 收支方向筛选（IN/OUT），可为 null
+     * @param status 交易状态筛选（SUCCESS/PROCESSING/FAILED），可为 null
+     * @return 交易列表（含 items 和 nextCursor）
+     */
+    default Map<String, Object> listTransactions(String userId, int limit,
+            String startTime, String endTime, String direction, String status) {
+        // 默认实现忽略筛选参数，委托给无筛选版本
+        return listTransactions(userId, limit);
+    }
+
+    /**
      * 查询本人 Mini 花呗额度摘要。
      *
      * @param userId 当前用户 ID

@@ -35,13 +35,17 @@ public interface BusinessCenterPort {
     /**
      * 执行账户、限额和风控预检。
      *
+     * <p>下游 {@code TransferController.validateDraft()} 要求传入草稿版本号（CAS），
+     * 版本号由 {@link #createTransferDraft} 返回，必须与前驱工具结果中的 {@code version} 一致。</p>
+     *
      * @param userId 当前用户 ID
      * @param draftId 草稿 ID
+     * @param version 草稿当前版本号（CAS），由创建草稿时返回
      * @param idempotencyKey 幂等键
      * @return 校验结果，含 valid 标志和各检查项结果
      */
     Map<String, Object> validateTransferDraft(
-            String userId, String draftId, String idempotencyKey);
+            String userId, String draftId, long version, String idempotencyKey);
 
     /**
      * 查询单笔草稿。

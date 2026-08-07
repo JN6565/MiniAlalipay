@@ -9,9 +9,11 @@ import org.springframework.beans.factory.annotation.Value;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.http.HttpStatusCode;
 import org.springframework.http.MediaType;
+import org.springframework.http.client.SimpleClientHttpRequestFactory;
 import org.springframework.stereotype.Component;
 import org.springframework.web.client.RestClient;
 
+import java.time.Duration;
 import java.util.Map;
 
 /**
@@ -34,8 +36,12 @@ public class HttpBusinessCenterClient implements BusinessCenterPort {
             @Value("${ai.client.timeout-ms:3000}") int timeoutMs
     ) {
         this.timeoutMs = timeoutMs;
+        SimpleClientHttpRequestFactory factory = new SimpleClientHttpRequestFactory();
+        factory.setConnectTimeout(Duration.ofMillis(timeoutMs));
+        factory.setReadTimeout(Duration.ofMillis(timeoutMs));
         this.restClient = RestClient.builder()
                 .baseUrl(baseUrl)
+                .requestFactory(factory)
                 .defaultHeader("Content-Type", "application/json")
                 .build();
         log.info("业务中心客户端初始化: baseUrl={}, timeout={}ms", baseUrl, timeoutMs);
@@ -46,22 +52,29 @@ public class HttpBusinessCenterClient implements BusinessCenterPort {
     public Map<String, Object> createTransferDraft(
             String userId, String payeeId, long amountFen,
             String remark, String idempotencyKey) {
+        // 防御性校验：payeeId 必须非空，否则 LLM 未正确解析收款人
+        if (payeeId == null || payeeId.isBlank()) {
+            throw new BusinessException(AgentErrorCode.INTENT_LOW_CONFIDENCE);
+        }
         log.debug("创建转账草稿: userId={}, payeeId={}, amountFen={}", userId, payeeId, amountFen);
-        Map<String, Object> body = Map.of(
-                "payeeId", payeeId,
-                "amountFen", amountFen,
-                "remark", remark != null ? remark : ""
-        );
+        // 使用 HashMap 而非 Map.of()，因为 JDK 的 Map.of() 不允许 null value
+        java.util.Map<String, Object> body = new java.util.HashMap<>();
+        body.put("payeeUserId", payeeId);
+        body.put("amountFen", amountFen);
+        body.put("remark", remark != null ? remark : "");
         return postWithIdempotency(userId, "/api/v1/transfer-drafts", idempotencyKey, body);
     }
 
     @Override
     @SuppressWarnings("unchecked")
     public Map<String, Object> validateTransferDraft(
-            String userId, String draftId, String idempotencyKey) {
-        log.debug("校验转账草稿: userId={}, draftId={}", userId, draftId);
+            String userId, String draftId, long version, String idempotencyKey) {
+        log.debug("校验转账草稿: userId={}, draftId={}, version={}", userId, draftId, version);
+        // 下游 TransferController.validateDraft() 要求请求体包含 version（CAS 版本号）
+        java.util.Map<String, Object> body = new java.util.HashMap<>();
+        body.put("version", version);
         return postWithIdempotency(userId,
-                "/api/v1/transfer-drafts/" + draftId + "/validate", idempotencyKey, Map.of());
+                "/api/v1/transfer-drafts/" + draftId + "/validate", idempotencyKey, body);
     }
 
     @Override
@@ -82,11 +95,17 @@ public class HttpBusinessCenterClient implements BusinessCenterPort {
     @SuppressWarnings("unchecked")
     public Map<String, Object> submitConfirmedTransfer(
             String userId, String draftId, String confirmationHandle, String idempotencyKey) {
+        // 防御性校验：避免 Map.of(null) 的 NPE
+        if (draftId == null || draftId.isBlank()) {
+            throw new BusinessException(AgentErrorCode.INTENT_LOW_CONFIDENCE);
+        }
+        if (confirmationHandle == null || confirmationHandle.isBlank()) {
+            throw new BusinessException(AgentErrorCode.TOOL_FORBIDDEN);
+        }
         log.debug("提交已确认转账: userId={}, draftId={}", userId, draftId);
-        Map<String, Object> body = Map.of(
-                "draftId", draftId,
-                "confirmationHandle", confirmationHandle
-        );
+        java.util.Map<String, Object> body = new java.util.HashMap<>();
+        body.put("draftId", draftId);
+        body.put("confirmationToken", confirmationHandle);
         return postWithIdempotency(userId, "/api/v1/transfers", idempotencyKey, body);
     }
 
@@ -94,15 +113,19 @@ public class HttpBusinessCenterClient implements BusinessCenterPort {
     @SuppressWarnings("unchecked")
     public Map<String, Object> prepareConfirmationCard(String userId, String draftId) {
         log.debug("准备确认卡片: userId={}, draftId={}", userId, draftId);
-        // 确认卡片通过草稿查询 + 校验结果生成
+        // 确认卡片通过草稿查询生成；business-center 暂未提供专用卡片 API，
+        // 此处从草稿数据中提取可用字段，前端根据 payeeId 补充收款人展示信息
         Map<String, Object> draft = getTransferDraft(userId, draftId);
-        return Map.of(
-                "cardType", "TRANSFER_CONFIRMATION",
-                "payeeId", draft.getOrDefault("payeeId", ""),
-                "amountFen", draft.getOrDefault("amountFen", 0L),
-                "remark", draft.getOrDefault("remark", ""),
-                "fundingSource", "BALANCE"
-        );
+        java.util.Map<String, Object> card = new java.util.HashMap<>();
+        card.put("cardType", "TRANSFER_CONFIRMATION");
+        card.put("draftId", draftId);
+        // 下游 DraftResponse 返回 payeeUserId，需对齐字段名
+        card.put("payeeId", draft.getOrDefault("payeeUserId", ""));
+        card.put("amountFen", draft.getOrDefault("amountFen", 0L));
+        card.put("remark", draft.getOrDefault("remark", ""));
+        // 资金来源默认 BALANCE，待 business-center 提供专用 API 后替换
+        card.put("fundingSource", draft.getOrDefault("fundingSource", "BALANCE"));
+        return card;
     }
 
     // ---- 内部方法 ----
@@ -113,7 +136,7 @@ public class HttpBusinessCenterClient implements BusinessCenterPort {
             var spec = restClient.get()
                     .uri(path)
                     .header("X-User-Id", userId);
-            return withAuth(spec).retrieve()
+            Map<String, Object> response = withAuth(spec).retrieve()
                     .onStatus(HttpStatusCode::is4xxClientError, (req, res) -> {
                         int status = res.getStatusCode().value();
                         if (status == 404) {
@@ -127,6 +150,8 @@ public class HttpBusinessCenterClient implements BusinessCenterPort {
                     .onStatus(HttpStatusCode::is5xxServerError, (req, res) ->
                             { throw new BusinessException(AgentErrorCode.TOOL_UNAVAILABLE); })
                     .body(Map.class);
+            // 下游 Controller 统一包装在 ApiResponse 信封中，需提取 data 字段
+            return unwrapEnvelope(response);
         } catch (BusinessException e) {
             throw e;
         } catch (Exception e) {
@@ -145,7 +170,7 @@ public class HttpBusinessCenterClient implements BusinessCenterPort {
                     .header("Idempotency-Key", idempotencyKey)
                     .contentType(MediaType.APPLICATION_JSON)
                     .body(body);
-            return withAuth(spec).retrieve()
+            Map<String, Object> response = withAuth(spec).retrieve()
                     .onStatus(HttpStatusCode::is4xxClientError, (req, res) -> {
                         int status = res.getStatusCode().value();
                         if (status == 409) {
@@ -156,6 +181,8 @@ public class HttpBusinessCenterClient implements BusinessCenterPort {
                     .onStatus(HttpStatusCode::is5xxServerError, (req, res) ->
                             { throw new BusinessException(AgentErrorCode.TOOL_UNAVAILABLE); })
                     .body(Map.class);
+            // 下游 Controller 统一包装在 ApiResponse 信封中，需提取 data 字段
+            return unwrapEnvelope(response);
         } catch (BusinessException e) {
             throw e;
         } catch (Exception e) {
@@ -174,5 +201,30 @@ public class HttpBusinessCenterClient implements BusinessCenterPort {
             spec.header("Authorization", authHeader);
         }
         return spec;
+    }
+
+    /**
+     * 从 ApiResponse 信封中提取 data 字段。
+     *
+     * <p>下游 Controller 统一返回 {@code ApiResponse<T>} 格式：
+     * {@code {"success":true, "data":{...}, "requestId":"..."}}。
+     * 此方法提取内层 data 对象，使调用方直接获得业务数据。</p>
+     */
+    @SuppressWarnings("unchecked")
+    private Map<String, Object> unwrapEnvelope(Map<String, Object> response) {
+        if (response == null) {
+            return Map.of();
+        }
+        Object data = response.get("data");
+        if (data instanceof Map) {
+            return (Map<String, Object>) data;
+        }
+        // data 不是 Map（如 List 或 null），包装为含单键的 Map 以保持接口一致
+        if (data != null) {
+            java.util.Map<String, Object> wrapped = new java.util.HashMap<>();
+            wrapped.put("data", data);
+            return wrapped;
+        }
+        return response;
     }
 }

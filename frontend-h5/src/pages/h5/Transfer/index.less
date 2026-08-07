@@ -43,10 +43,8 @@
 .section-header {
   display: flex;
   align-items: center;
-  justify-content: space-between;
+  gap: 8px;
   padding: 12px 0;
-  cursor: pointer;
-  user-select: none;
 }
 
 .section-title {
@@ -55,16 +53,9 @@
   color: #1a1a1a;
 }
 
-.section-arrow {
-  font-size: 12px;
+.section-subtitle {
+  font-size: 13px;
   color: #999;
-  transition: transform 0.2s;
-  display: inline-flex;
-  align-items: center;
-
-  &.expanded {
-    transform: rotate(180deg);
-  }
 }
 
 .contacts-list,
@@ -114,6 +105,18 @@
   align-items: center;
   gap: 8px;
   padding: 12px 0;
+}
+
+.currency-symbol {
+  font-size: 24px;
+  font-weight: 600;
+  color: #1a1a1a;
+}
+
+.large-amount-input {
+  font-size: 32px !important;
+  font-weight: 600;
+  flex: 1;
 }
 
 .amount-warning {

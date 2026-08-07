@@ -14,13 +14,13 @@ import java.util.Map;
  * @param intent 识别出的意图类型，低置信度时为 UNKNOWN
  * @param slots 从用户输入中提取的结构化槽位（如 payeeId、amountFen）
  * @param tokenCount 模型生成消耗的 Token 估算数
- * @param lowConfidence 意图置信度不足，需展示支持范围引导用户澄清
+ * @param clarificationNeeded 需要向用户澄清缺失信息，不执行工具
  */
 public record ChatResponse(
         String content,
         IntentType intent,
         Map<String, Object> slots,
         int tokenCount,
-        boolean lowConfidence
+        boolean clarificationNeeded
 ) {
 }

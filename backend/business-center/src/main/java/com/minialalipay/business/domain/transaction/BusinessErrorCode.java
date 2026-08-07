@@ -20,6 +20,8 @@ public enum BusinessErrorCode implements ErrorCode {
     /** 草稿字段或密码版本已变化。 */ CONFIRMATION_STALE("CONFIRMATION_STALE", "业务对象已变化，请重新确认", 409),
     /** 同一幂等键用于不同请求。 */ IDEMPOTENCY_CONFLICT("IDEMPOTENCY_CONFLICT", "相同幂等键对应的请求参数不一致", 409),
     /** 交易不存在或不属于当前用户。 */ TRANSACTION_NOT_FOUND("TRANSACTION_NOT_FOUND", "交易不存在", 404),
+    /** 交易正在处理中，客户端应轮询终态。 */ TRANSACTION_PROCESSING("TRANSACTION_PROCESSING", "交易正在处理中", 202),
+    /** 交易结果待确认，尚未形成确定终态。 */ TRANSACTION_PENDING("TRANSACTION_PENDING", "交易结果待确认", 202),
     /** 回执尚未达到确定终态。 */ RECEIPT_NOT_READY("RECEIPT_NOT_READY", "交易尚未形成确定回执", 409),
     /** 订单不存在或当前主体无权感知其存在。 */ ORDER_NOT_FOUND("ORDER_NOT_FOUND", "订单不存在", 404),
     /** 订单已超过业务有效期。 */ ORDER_EXPIRED("ORDER_EXPIRED", "订单已过期", 410),
@@ -50,7 +52,8 @@ public enum BusinessErrorCode implements ErrorCode {
     /** SSE 事件游标已过期，客户端必须回源查询。 */ EVENT_CURSOR_EXPIRED("EVENT_CURSOR_EXPIRED", "事件游标已过期，请回源查询", 410),
     /** 指定的统计范围不被支持。 */ RANGE_NOT_SUPPORTED("RANGE_NOT_SUPPORTED", "不支持该统计范围", 400),
     /** 原交易不支持受控退款。 */ REFUND_NOT_ALLOWED("REFUND_NOT_ALLOWED", "当前交易不支持受控退款", 422),
-    /** 原交易已存在退款订单。 */ REFUND_ALREADY_EXISTS("REFUND_ALREADY_EXISTS", "该交易已经存在退款订单", 409);
+    /** 原交易已存在退款订单。 */ REFUND_ALREADY_EXISTS("REFUND_ALREADY_EXISTS", "该交易已经存在退款订单", 409),
+    /** 分页游标无效或已过期。 */ INVALID_CURSOR("INVALID_CURSOR", "分页游标无效", 400);
 
     private final String code; private final String message; private final int httpStatus;
     BusinessErrorCode(String code, String message, int httpStatus) {

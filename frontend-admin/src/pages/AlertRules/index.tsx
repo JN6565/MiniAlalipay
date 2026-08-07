@@ -66,14 +66,14 @@ export default function AlertRules() {
     mutation.mutate({ ruleCode: editing.ruleCode, thresholdValue: values.thresholdValue, version: editing.version });
   };
 
-  // 列不设固定宽度，由表格按容器剩余空间自适应分配，避免小屏下产生横向滚动条。
   const columns: TableProps<AlertRuleItem>['columns'] = [
-    { title: '规则代码', dataIndex: 'ruleCode' },
-    { title: '规则名称', dataIndex: 'ruleName' },
-    { title: '指标代码', dataIndex: 'metricCode' },
+    { title: '规则代码', dataIndex: 'ruleCode', width: 200, ellipsis: true },
+    { title: '规则名称', dataIndex: 'ruleName', width: 180 },
+    { title: '指标代码', dataIndex: 'metricCode', width: 220, ellipsis: true },
     {
       title: '严重级别',
       dataIndex: 'severity',
+      width: 100,
       render: (value: string) => {
         const label = severityLabels[value] ?? { text: value, color: 'default' };
         return <Tag color={label.color}>{label.text}</Tag>;
@@ -82,19 +82,22 @@ export default function AlertRules() {
     {
       title: '触发条件',
       key: 'condition',
+      width: 140,
       render: (_, record) => `${operatorLabels[record.operator] ?? record.operator} ${record.thresholdValue}`,
     },
     {
       title: '启用',
       dataIndex: 'enabled',
+      width: 80,
       render: (value: boolean) => (value ? <Tag color="green">启用</Tag> : <Tag>停用</Tag>),
     },
-    { title: '最近更新', dataIndex: 'updatedAt', render: (value: string) => new Date(value).toLocaleString() },
-    { title: '操作者', dataIndex: 'updatedBy' },
+    { title: '最近更新', dataIndex: 'updatedAt', width: 180, render: (value: string) => new Date(value).toLocaleString() },
+    { title: '操作者', dataIndex: 'updatedBy', width: 140 },
     ...(access.canConfigureAlertThresholds
       ? [{
           title: '操作' as const,
           key: 'action' as const,
+          width: 120,
           render: (_: unknown, record: AlertRuleItem) => (
             <Button type="link" size="small" onClick={() => openEdit(record)}>
               调整阈值

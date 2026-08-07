@@ -292,7 +292,8 @@ public class CollectionApplicationService {
         return normalized;
     }
     private static boolean isTerminalStatus(CollectionOrderStatus status) {
-        return status == CollectionOrderStatus.SUCCESS || status == CollectionOrderStatus.CANCELLED
+        return status == CollectionOrderStatus.SUCCESS || status == CollectionOrderStatus.FAILED
+                || status == CollectionOrderStatus.CANCELLED
                 || status == CollectionOrderStatus.MANUAL_REVIEW || status == CollectionOrderStatus.EXPIRED;
     }
 

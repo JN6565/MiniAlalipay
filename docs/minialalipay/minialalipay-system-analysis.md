@@ -781,6 +781,7 @@ ai-service/domain/
 ├── memory/               # 可授权的跨会话记忆
 ├── tool/                 # 工具 Schema、调用记录和结果摘要
 ├── mcp/                  # MCP 工具目录与协议适配
+├── stream/               # SSE 流式事件类型与回调契约（新增）
 └── policy/               # 高风险工具确认、脱敏和注入防护
 ```
 
@@ -2546,7 +2547,7 @@ erDiagram
 | POST | `/api/v1/transfer-drafts/{id}/validate` | 草稿所有者 | 校验并执行前置风控 | 无资金副作用 |
 | POST | `/api/v1/confirmations` | 登录用户/可信 UI | 为草稿生成一次性确认令牌 | 活动槽位锁 + 2 分钟过期 |
 | POST | `/api/v1/transfers` | 可信确认流程 | 创建并执行 `TRANSFER` | 强制幂等键与来源唯一键 |
-| GET | `/api/v1/transfers/{id}` | 付款人/收款人 | 查询交易唯一事实状态 | 状态回源业务中心 |
+| GET | `/api/v1/transfers/{id}` | 付款人/收款人 | 查询普通转账详情与唯一事实状态，返回双方用户 ID、展示名、备注、金额和时间 | 先按发起用户或双方权威账户做对象级鉴权；无关用户按不存在处理；状态回源业务中心，展示名查询失败不影响交易事实返回 |
 | GET | `/api/v1/transfers/{id}/receipt` | 付款人/收款人 | 查询脱敏电子回执 | 仅确定终态生成 |
 | GET | `/api/v1/transfers/{id}/trace` | 运营/观察者 | 查询脱敏全链路 | 按角色裁剪 Span |
 | GET | `/api/v1/manual-cases` | 运营 | 查询工单 | 状态、类型、时间游标分页 |
@@ -2618,6 +2619,7 @@ C2C 创建请求与个人码订单金额锁定共用以下 OpenAPI 字段约束�
 | 方法 | 路径 | 权限 | 用途 | 幂等/并发要求 |
 |---|---|---|---|---|
 | POST | `/api/v1/agent/messages` | 登录用户 | 发送消息并获得 Agent 回复 | `sessionId` 隔离；同会话串行 |
+| POST | `/api/v1/agent/messages/stream` | 登录用户 | SSE 流式 AI 对话 | `clientMessageId` 幂等 |
 | GET | `/api/v1/agent/sessions/{id}` | 会话所有者 | 查询脱敏对话与工具轨迹 | 不返回内部推理和确认句柄 |
 | DELETE | `/api/v1/agent/sessions/{id}/memory` | 会话所有者 | 清除可删除记忆 | 不删除资金审计日志 |
 | GET | `/api/v1/ops/realtime-metrics` | 运营/观察者 | 查询分钟级指标 | `metricCode` + 时间范围限制 |

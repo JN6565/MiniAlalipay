@@ -63,14 +63,19 @@ const TransactionsPage: React.FC = () => {
                   size="small"
                 />
               }
-              onClick={() => history.push(`/h5/transfer/result/${tx.transactionId}`)}
-              clickable
+              onClick={() => {
+                // 只有普通转账已有业务详情接口，充值等账本事实暂不伪装成转账查询。
+                if (tx.memo?.includes('转账')) {
+                  history.push(`/h5/transfer/result/${tx.transactionId}`);
+                }
+              }}
+              clickable={tx.memo?.includes('转账')}
             >
               <div className="tx-info">
                 <div className="tx-counterparty">
-                  {tx.counterparty || '未知'}
+                  {accountService.getLedgerEntryTitle(tx)}
                 </div>
-                <div className="tx-type">{tx.businessType}</div>
+                <div className="tx-type">{tx.memo?.includes('充值') ? '充值' : '资金变动'}</div>
               </div>
             </List.Item>
           ))}

@@ -3,14 +3,11 @@ package com.minialalipay.user.application.contact;
 import com.minialalipay.user.application.contact.dto.ContactDTO;
 import com.minialalipay.user.domain.contact.Contact;
 import com.minialalipay.user.domain.contact.ContactRepository;
-import com.minialalipay.user.domain.user.User;
-import com.minialalipay.user.domain.user.UserRepository;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.time.Instant;
 import java.util.List;
-import java.util.Optional;
 import java.util.stream.Collectors;
 
 /**
@@ -26,11 +23,9 @@ public class ContactApplicationService {
     private static final int DEFAULT_CONTACT_LIMIT = 5;
 
     private final ContactRepository contactRepository;
-    private final UserRepository userRepository;
 
-    public ContactApplicationService(ContactRepository contactRepository, UserRepository userRepository) {
+    public ContactApplicationService(ContactRepository contactRepository) {
         this.contactRepository = contactRepository;
-        this.userRepository = userRepository;
     }
 
     /**
@@ -48,19 +43,13 @@ public class ContactApplicationService {
         int effectiveLimit = limit != null && limit > 0 ? Math.min(limit, 20) : DEFAULT_CONTACT_LIMIT;
         List<Contact> contacts = contactRepository.listByOwner(ownerUserId, effectiveLimit);
         return contacts.stream()
-                .map(c -> {
-                    String payeeName = lookupMaskedName(c.getPayeeUserId());
-                    String accountNumber = lookupAccountNumber(c.getPayeeUserId());
-                    return new ContactDTO(
-                            c.getPayeeUserId(),
-                            payeeName,
-                            accountNumber,
-                            c.getAlias(),
-                            c.getSuccessCount(),
-                            c.getLastSuccessAt(),
-                            c.isPinned()
-                    );
-                })
+                .map(c -> new ContactDTO(
+                        c.getPayeeUserId(),
+                        c.getAlias(),
+                        c.getSuccessCount(),
+                        c.getLastSuccessAt(),
+                        c.isPinned()
+                ))
                 .collect(Collectors.toList());
     }
 
@@ -111,29 +100,5 @@ public class ContactApplicationService {
                     }
                     contactRepository.update(contact);
                 });
-    }
-
-    private String lookupMaskedName(String userId) {
-        if (userId == null) return "***";
-        Optional<User> user = userRepository.findById(userId);
-        if (user.isEmpty()) return "***";
-        String realName = user.get().getRealName();
-        if (realName == null || realName.isBlank()) {
-            String nickname = user.get().getNickname();
-            return (nickname == null || nickname.isBlank()) ? "***" : maskName(nickname);
-        }
-        return maskName(realName);
-    }
-
-    private String lookupAccountNumber(String userId) {
-        if (userId == null) return "";
-        Optional<User> user = userRepository.findById(userId);
-        return user.map(User::getAccountNumber).orElse("");
-    }
-
-    private static String maskName(String name) {
-        if (name == null || name.isEmpty()) return "***";
-        if (name.length() == 1) return name + "**";
-        return name.charAt(0) + "*".repeat(name.length() - 1);
     }
 }
