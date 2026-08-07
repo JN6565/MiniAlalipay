@@ -4,7 +4,7 @@ import { Card, Button, Result, SpinLoading } from 'antd-mobile';
 import { CheckCircleFill, CloseCircleFill } from 'antd-mobile-icons';
 import * as transferService from '@/services/transfer';
 import { AmountDisplay } from '@/components/h5/AmountDisplay';
-import { formatTime } from '@/utils/format';
+import { formatTime, maskName } from '@/utils/format';
 import './index.less';
 
 const TransferResultPage: React.FC = () => {
@@ -16,21 +16,35 @@ const TransferResultPage: React.FC = () => {
   const [result, setResult] = useState<transferService.TransferResult | null>(null);
 
   useEffect(() => {
-    if (id) {
-      loadResult(id);
-    }
-  }, [id]);
+    if (!id) return;
+    // TCC 协调异步执行，初次状态通常为 PROCESSING；每 2 秒轮询一次，
+    // 最多 15 次直到终态，避免用户手动刷新；超时后按当前状态展示。
+    let cancelled = false;
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    let attempts = 0;
 
-  const loadResult = async (transactionId: string) => {
-    try {
-      const data = await transferService.getTransferStatus(transactionId);
-      setResult(data);
-    } catch (error) {
-      console.error('加载失败', error);
-    } finally {
-      setLoading(false);
-    }
-  };
+    const load = async () => {
+      try {
+        const data = await transferService.getTransferStatus(id);
+        if (cancelled) return;
+        setResult(data);
+        if ((data.status === 'PROCESSING' || data.status === 'COMPENSATING') && attempts < 15) {
+          attempts += 1;
+          timer = setTimeout(load, 2000);
+          return;
+        }
+      } catch (error) {
+        console.error('加载失败', error);
+      }
+      if (!cancelled) setLoading(false);
+    };
+
+    load();
+    return () => {
+      cancelled = true;
+      if (timer) clearTimeout(timer);
+    };
+  }, [id]);
 
   if (loading) {
     return (
@@ -75,12 +89,16 @@ const TransferResultPage: React.FC = () => {
         </div>
         <div className="result-row">
           <span className="result-label">付款人</span>
-          <span className="result-value">{result?.payerDisplayName || result?.payerUserId || '-'}</span>
+          <span className="result-value">
+            {result?.payerDisplayName || result?.payerUserId || '-'}
+            {result?.payerMaskedAccountNumber && ` (${result.payerMaskedAccountNumber})`}
+          </span>
         </div>
         <div className="result-row">
           <span className="result-label">收款人</span>
           <span className="result-value">
-            {result?.payeeDisplayName || navState.payeeNickname || result?.payeeUserId || '-'}
+            {result?.payeeDisplayName || maskName(navState.payeeNickname) || result?.payeeUserId || '-'}
+            {result?.payeeMaskedAccountNumber && ` (${result.payeeMaskedAccountNumber})`}
           </span>
         </div>
         <div className="result-row">

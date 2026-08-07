@@ -3,13 +3,8 @@ import { useParams, history } from 'umi';
 import { Button, Result, Card, SpinLoading } from 'antd-mobile';
 import { CheckCircleFill } from 'antd-mobile-icons';
 import * as collectionService from '@/services/collection';
+import { maskName } from '@/utils/format';
 import './index.less';
-
-const maskName = (name?: string) => {
-  if (!name) return '***';
-  if (name.length <= 1) return name + '**';
-  return name[0] + '*'.repeat(name.length - 1);
-};
 
 const CollectionResultPage: React.FC = () => {
   const { id } = useParams();

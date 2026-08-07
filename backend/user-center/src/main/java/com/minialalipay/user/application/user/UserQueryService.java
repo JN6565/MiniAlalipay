@@ -1,9 +1,13 @@
 package com.minialalipay.user.application.user;
 
+import com.minialalipay.common.error.BusinessException;
+import com.minialalipay.common.error.CommonErrorCode;
 import com.minialalipay.user.application.user.dto.UserSearchResult;
+import com.minialalipay.user.domain.user.User;
 import com.minialalipay.user.domain.user.UserRepository;
 import org.springframework.stereotype.Service;
 
+import java.time.Instant;
 import java.util.List;
 import java.util.stream.Collectors;
 
@@ -75,4 +79,24 @@ public class UserQueryService {
                 ))
                 .collect(Collectors.toList());
     }
+
+    /**
+     * 查询本人最小资料投影。
+     *
+     * <p>用于转账确认页付款方展示等场景；真实姓名在服务边界即脱敏，
+     * 完整手机号等敏感字段一律不下发。</p>
+     *
+     * @param userId 当前用户 ID（网关解析会话后透传）
+     * @return 本人最小资料投影；用户不存在时抛 NOT_FOUND
+     */
+    public MyProfile getMyProfile(String userId) {
+        User user = userRepository.findById(userId)
+                .orElseThrow(() -> new BusinessException(CommonErrorCode.NOT_FOUND));
+        return new MyProfile(user.getUserId(), user.getAccountNumber(), user.getNickname(),
+                NameMasker.mask(user.getRealName()), user.getCreatedAt());
+    }
+
+    /** 当前用户最小资料投影，真实姓名已脱敏，不含手机号等敏感字段。 */
+    public record MyProfile(String userId, String accountNumber, String nickname,
+                            String maskedRealName, Instant createdAt) { }
 }

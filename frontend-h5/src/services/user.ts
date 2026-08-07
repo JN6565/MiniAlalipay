@@ -5,8 +5,9 @@ export interface UserInfo {
   accountNumber: string;
   nickname: string;
   avatar?: string;
-  userType: string;
+  userType?: string; // 后端资料投影未返回时缺省
   createdAt: string;
+  maskedRealName?: string; // 脱敏真实姓名（如 吕*），由用户中心在服务边界脱敏后返回
 }
 
 export interface PayeeInfo {

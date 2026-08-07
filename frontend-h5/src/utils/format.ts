@@ -79,6 +79,27 @@ export const maskAccountNumber = (name: string): string => {
 };
 
 /**
+ * 姓名脱敏：保留首字符，其余以 * 遮蔽（如 吕布 → 吕*）；
+ * 与后端展示边界脱敏规则一致，空值统一展示 ***
+ */
+export const maskName = (name?: string | null): string => {
+  if (!name) return '***';
+  const trimmed = name.trim();
+  if (trimmed.length <= 1) return trimmed + '**';
+  return trimmed[0] + '*'.repeat(trimmed.length - 1);
+};
+
+/**
+ * 账号脱敏：保留前 4 位和后 4 位，中间以 **** 遮蔽（如 6296****3228）；
+ * 短账号直接展示，与后端展示边界脱敏规则一致
+ */
+export const maskAccount = (account?: string | null): string => {
+  if (!account) return '';
+  if (account.length <= 8) return account;
+  return `${account.slice(0, 4)}****${account.slice(-4)}`;
+};
+
+/**
  * 生成UUID
  */
 export const generateUUID = (): string => {

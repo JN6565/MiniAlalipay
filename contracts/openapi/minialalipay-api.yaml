@@ -2821,6 +2821,8 @@ components:
         status: { type: string, enum: [DRAFT, VALIDATED, PENDING_CONFIRMATION, SUBMITTED, EXPIRED] }
         version: { type: integer, format: int64, minimum: 0 }
         expiresAt: { type: string, format: date-time }
+        payeeMaskedName: { type: [string, 'null'], maxLength: 64, description: 收款人脱敏展示名（保留首字符，其余星号）；仅查询草稿详情时返回，用户中心不可用时为空。 }
+        payeeMaskedAccountNumber: { type: [string, 'null'], maxLength: 32, description: 收款人脱敏系统账户号（前 4 后 4，中间星号）；仅查询草稿详情时返回。 }
     TransferTransaction:
       type: object
       additionalProperties: false
@@ -2831,9 +2833,11 @@ components:
         status: { type: string, enum: [PROCESSING, COMPENSATING, MANUAL_REVIEW, SUCCESS, REVERSED, CANCELLED] }
         amountFen: { type: integer, format: int64, minimum: 1, maximum: 5000000 }
         payerUserId: { type: string, minLength: 1, maxLength: 26, description: 付款用户 ID。 }
-        payerDisplayName: { type: [string, 'null'], maxLength: 64, description: 付款人展示名；用户中心暂不可用时为空。 }
+        payerDisplayName: { type: [string, 'null'], maxLength: 64, description: 付款人脱敏展示名（保留首字符，其余星号）；用户中心暂不可用时为空。 }
+        payerMaskedAccountNumber: { type: [string, 'null'], maxLength: 32, description: 付款人脱敏系统账户号（前 4 后 4，中间星号）；用户中心暂不可用时为空。 }
         payeeUserId: { type: string, minLength: 1, maxLength: 26, description: 收款用户 ID。 }
-        payeeDisplayName: { type: [string, 'null'], maxLength: 64, description: 收款人展示名；用户中心暂不可用时为空。 }
+        payeeDisplayName: { type: [string, 'null'], maxLength: 64, description: 收款人脱敏展示名（保留首字符，其余星号）；用户中心暂不可用时为空。 }
+        payeeMaskedAccountNumber: { type: [string, 'null'], maxLength: 32, description: 收款人脱敏系统账户号（前 4 后 4，中间星号）；用户中心暂不可用时为空。 }
         remark: { type: [string, 'null'], maxLength: 128, description: 转账受理时来源草稿中的备注。 }
         statusUrl: { type: string, pattern: '^/api/v1/transfers/' }
         createdAt: { type: string, format: date-time, description: 交易受理时间。 }

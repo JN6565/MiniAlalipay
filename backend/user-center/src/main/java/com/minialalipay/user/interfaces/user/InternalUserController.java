@@ -36,7 +36,7 @@ public class InternalUserController {
      *
      * @param userId         用户 ID
      * @param serviceToken   服务间认证令牌
-     * @return 用户基本信息（realName, nickname）
+     * @return 用户基本信息（realName, nickname, accountNumber）
      */
     @GetMapping("/{userId}")
     public ResponseEntity<Map<String, String>> getUserInfo(
@@ -52,10 +52,12 @@ public class InternalUserController {
         }
 
         User u = user.get();
+        // accountNumber 供转账展示页脱敏后展示，与 realName 属同级内部展示字段
         return ResponseEntity.ok(Map.of(
                 "userId", u.getUserId(),
                 "realName", u.getRealName() != null ? u.getRealName() : "",
-                "nickname", u.getNickname() != null ? u.getNickname() : ""
+                "nickname", u.getNickname() != null ? u.getNickname() : "",
+                "accountNumber", u.getAccountNumber() != null ? u.getAccountNumber() : ""
         ));
     }
 }

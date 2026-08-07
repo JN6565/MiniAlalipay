@@ -1,7 +1,7 @@
 import request from './request';
 import { generateIdempotencyKey } from './utils';
 
-/** 转账草稿（与后端 DraftResponse 字段一致；收款人昵称和账号不在草稿响应中） */
+/** 转账草稿（与后端 DraftResponse 字段一致；查询详情时附带收款方脱敏展示信息） */
 export interface TransferDraft {
   draftId: string;
   payeeUserId: string;
@@ -10,9 +10,11 @@ export interface TransferDraft {
   status: string;
   version: number;
   expiresAt: string;
+  payeeMaskedName?: string | null; // 收款人脱敏展示名（仅查询详情时返回）
+  payeeMaskedAccountNumber?: string | null; // 收款人脱敏账户号（同上）
 }
 
-/** 转账结果 */
+/** 转账结果（展示名与账号均由后端脱敏后返回） */
 export interface TransferResult {
   transactionId: string;
   businessType: string;
@@ -20,8 +22,10 @@ export interface TransferResult {
   amountFen: number;
   payerUserId: string;
   payerDisplayName?: string | null;
+  payerMaskedAccountNumber?: string | null;
   payeeUserId: string;
   payeeDisplayName?: string | null;
+  payeeMaskedAccountNumber?: string | null;
   remark?: string | null;
   statusUrl: string;
   createdAt: string;

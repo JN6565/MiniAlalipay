@@ -48,7 +48,7 @@ public class TransferController {
         return ok(DraftResponse.from(service.createDraft(userId, body.payeeUserId(), body.amountFen(), body.remark(), key)), request);
     }
 
-    /** 查询本人草稿，非本人按不存在处理。 */
+    /** 查询本人草稿，非本人按不存在处理；附带收款方脱敏展示信息。 */
     @GetMapping("/transfer-drafts/{id}")
     public ResponseEntity<ApiResponse<DraftResponse>> getDraft(@RequestHeader("X-User-Id") String userId,
             @PathVariable String id, HttpServletRequest request) {
@@ -126,24 +126,35 @@ public class TransferController {
     /** 提交转账请求，确认令牌不得进入 URL 或日志。 */
     public record SubmitTransferRequest(@NotBlank String draftId, @NotBlank String confirmationToken) { }
 
-    /** 转账草稿 API DTO，不暴露内部持久化对象。 */
+    /** 转账草稿 API DTO，不暴露内部持久化对象；收款方展示字段已脱敏且可空。 */
     public record DraftResponse(String draftId, String payeeUserId, long amountFen, String remark,
-                                String status, long version, Instant expiresAt) {
+                                String status, long version, Instant expiresAt,
+                                String payeeMaskedName, String payeeMaskedAccountNumber) {
         static DraftResponse from(TransferDraft d) {
             return new DraftResponse(d.getDraftId(), d.getPayeeUserId(), d.getAmountFen(), d.getRemark(),
-                    d.getStatus().name(), d.getVersion(), d.getExpiresAt());
+                    d.getStatus().name(), d.getVersion(), d.getExpiresAt(), null, null);
+        }
+        static DraftResponse from(TransferApplicationService.DraftView view) {
+            TransferDraft d = view.draft();
+            return new DraftResponse(d.getDraftId(), d.getPayeeUserId(), d.getAmountFen(), d.getRemark(),
+                    d.getStatus().name(), d.getVersion(), d.getExpiresAt(),
+                    view.payeeMaskedName(), view.payeeMaskedAccountNumber());
         }
     }
-    /** 普通转账详情 DTO，包含付款人、收款人和来源草稿中的不可变展示信息。 */
+    /** 普通转账详情 DTO，包含付款人、收款人和来源草稿中的不可变展示信息；展示名与账号均已脱敏。 */
     public record TransactionResponse(String transactionId, String businessType, String status,
                                       long amountFen, String payerUserId, String payerDisplayName,
-                                      String payeeUserId, String payeeDisplayName, String remark,
+                                      String payerMaskedAccountNumber,
+                                      String payeeUserId, String payeeDisplayName,
+                                      String payeeMaskedAccountNumber, String remark,
                                       String statusUrl, Instant createdAt, Instant updatedAt) {
         static TransactionResponse from(TransferApplicationService.TransferDetail detail) {
             FundTransaction t = detail.transaction();
             return new TransactionResponse(t.getTransactionId(), t.getBusinessType().name(), t.getStatus().name(),
-                    t.getAmountFen(), detail.payerUserId(), detail.payerDisplayName(), detail.payeeUserId(),
-                    detail.payeeDisplayName(), detail.remark(), "/api/v1/transfers/" + t.getTransactionId(),
+                    t.getAmountFen(), detail.payerUserId(), detail.payerDisplayName(),
+                    detail.payerMaskedAccountNumber(), detail.payeeUserId(),
+                    detail.payeeDisplayName(), detail.payeeMaskedAccountNumber(), detail.remark(),
+                    "/api/v1/transfers/" + t.getTransactionId(),
                     t.getCreatedAt(), t.getUpdatedAt());
         }
     }
