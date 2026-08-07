@@ -29,6 +29,12 @@ class TransferOpenApiContractTest {
             Map<String, Object> submitSchema = (Map<String, Object>) schemas.get("SubmitTransferRequest");
             assertThat(submitSchema)
                     .containsEntry("additionalProperties", false);
+            @SuppressWarnings("unchecked")
+            Map<String, Object> transactionSchema = (Map<String, Object>) schemas.get("TransferTransaction");
+            @SuppressWarnings("unchecked")
+            java.util.List<String> required = (java.util.List<String>) transactionSchema.get("required");
+            assertThat(required).contains("payerUserId", "payerDisplayName", "payeeUserId",
+                    "payeeDisplayName", "remark", "createdAt");
         }
     }
 

@@ -2546,7 +2546,7 @@ erDiagram
 | POST | `/api/v1/transfer-drafts/{id}/validate` | 草稿所有者 | 校验并执行前置风控 | 无资金副作用 |
 | POST | `/api/v1/confirmations` | 登录用户/可信 UI | 为草稿生成一次性确认令牌 | 活动槽位锁 + 2 分钟过期 |
 | POST | `/api/v1/transfers` | 可信确认流程 | 创建并执行 `TRANSFER` | 强制幂等键与来源唯一键 |
-| GET | `/api/v1/transfers/{id}` | 付款人/收款人 | 查询交易唯一事实状态 | 状态回源业务中心 |
+| GET | `/api/v1/transfers/{id}` | 付款人/收款人 | 查询普通转账详情与唯一事实状态，返回双方用户 ID、展示名、备注、金额和时间 | 先按发起用户或双方权威账户做对象级鉴权；无关用户按不存在处理；状态回源业务中心，展示名查询失败不影响交易事实返回 |
 | GET | `/api/v1/transfers/{id}/receipt` | 付款人/收款人 | 查询脱敏电子回执 | 仅确定终态生成 |
 | GET | `/api/v1/transfers/{id}/trace` | 运营/观察者 | 查询脱敏全链路 | 按角色裁剪 Span |
 | GET | `/api/v1/manual-cases` | 运营 | 查询工单 | 状态、类型、时间游标分页 |

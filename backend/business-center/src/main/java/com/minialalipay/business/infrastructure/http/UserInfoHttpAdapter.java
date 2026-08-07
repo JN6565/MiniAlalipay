@@ -1,5 +1,6 @@
 package com.minialalipay.business.infrastructure.http;
 
+import com.minialalipay.business.application.port.UserInfoPort;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Value;
@@ -7,15 +8,13 @@ import org.springframework.stereotype.Component;
 import org.springframework.web.client.RestClient;
 import org.springframework.web.client.RestClientResponseException;
 
-import java.util.Map;
-
 /**
  * 用户信息 HTTP 适配器。
  *
  * <p>调用用户中心内部接口获取用户基本信息（如真实姓名）。</p>
  */
 @Component
-public class UserInfoHttpAdapter {
+public class UserInfoHttpAdapter implements UserInfoPort {
 
     private static final Logger LOGGER = LoggerFactory.getLogger(UserInfoHttpAdapter.class);
 
@@ -38,19 +37,29 @@ public class UserInfoHttpAdapter {
      * @return 真实姓名，如果查询失败则返回 null
      */
     public String getRealName(String userId) {
+        return findUserInfo(userId).realName();
+    }
+
+    /** 调用用户中心获取最小展示投影，查询失败时降级为空名称。 */
+    @Override
+    public UserInfo findUserInfo(String userId) {
         try {
-            Map<String, String> result = client.get()
+            UserInfoPayload result = client.get()
                     .uri("/internal/v1/users/{userId}", userId)
                     .header("X-Internal-Service-Token", serviceToken)
                     .retrieve()
-                    .body(Map.class);
-            return result != null ? result.get("realName") : null;
+                    .body(UserInfoPayload.class);
+            if (result == null) return new UserInfo(userId, null, null);
+            return new UserInfo(userId, result.realName(), result.nickname());
         } catch (RestClientResponseException exception) {
             LOGGER.warn("获取用户信息失败：userId={}, status={}", userId, exception.getStatusCode());
-            return null;
+            return new UserInfo(userId, null, null);
         } catch (RuntimeException exception) {
             LOGGER.warn("获取用户信息异常：userId={}, cause={}", userId, exception.getMessage());
-            return null;
+            return new UserInfo(userId, null, null);
         }
     }
+
+    /** 用户中心内部接口的最小响应结构。 */
+    private record UserInfoPayload(String userId, String realName, String nickname) { }
 }
