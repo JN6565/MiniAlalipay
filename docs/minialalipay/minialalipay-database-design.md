@@ -643,7 +643,18 @@ erDiagram
 
 **写入规则**：注册事务以 `PROVISIONING` 创建用户并触发开户，但不得写初始资金；账户中心以 `registration_id` 作为开户幂等键，用户中心核验余额账户和适用的信用账户后才能 CAS 更新为 `ACTIVE`。恢复期间禁止登录，超过自动恢复阈值后仍保持 `PROVISIONING` 并创建人工工单。临时登录锁定只更新 `credential.login_fail_count/login_lock_until`，不修改用户状态；管理停用使用 `DISABLED`，冻结时记录 `disabled_by/disabled_reason`，解冻时清空，二者与状态同事务变更。RBAC 角色只写 `role_assignment`，不得在本表重复保存 `user_type`。
 
-### 5.2 `credential`
+### 5.2 `user_id_sequence`
+
+**功能与归属**：保存用户编号按日期分配的当前序列值，由 `user-center` 独占写入。生成新用户编号时对当天记录执行原子递增，避免并发注册得到重复序号；该表不保存用户身份信息。
+
+| 字段 | 类型 | 必填/默认 | 功能 |
+| --- | --- | --- | --- |
+| `seq_date` | `DATE` | PK，必填 | 序列所属日期，按业务时区取值 |
+| `current_value` | `INT UNSIGNED` | `0` | 当天已分配的最后序号，必须通过条件更新或行锁递增 |
+
+**键与约束**：主键为 `seq_date`。序号递增与用户创建处于同一数据库事务内；事务回滚时序号允许出现间隙，但禁止重复分配。
+
+### 5.3 `credential`
 
 **功能与归属**：保存登录密码、支付密码的强哈希以及两套独立的失败锁定状态。
 
@@ -664,7 +675,7 @@ erDiagram
 
 **写入规则**：首次设置只允许 `payment_password_hash IS NULL` 并把版本置为 1。修改前验证登录密码，并在同一 `user_db` 事务中更新哈希、递增版本、撤销该用户全部活动支付证明、写审计与 `PAYMENT_PASSWORD_CHANGED` Outbox。
 
-### 5.3 `payment_proof`
+### 5.4 `payment_proof`
 
 **功能与归属**：保存支付密码验证成功后签发的短期一次性证明，业务库只保存其逻辑引用。
 
@@ -684,7 +695,7 @@ erDiagram
 
 **写入规则**：只保存摘要；签发和消费均校验当前支付密码版本。一次确认最多消费一次证明；改密时活动证明原子转为 `REVOKED`。
 
-### 5.4 `contact`
+### 5.5 `contact`
 
 **功能与归属**：保存由成功转账自动形成的单向常用收款人投影，不表示好友或通讯录关系。
 
@@ -705,7 +716,7 @@ erDiagram
 
 **写入规则**：搜索不得写表。成功 `TRANSFER` 事件在 Inbox 去重事务内创建或累计 `success_count/last_success_at`，重复 `event_id` 不得再次累计，且不得覆盖 `alias/pinned/hidden`；所有者只能通过版本 CAS 修改后三项，不能新增或删除联系人。查询默认过滤 `hidden=0`，按 `pinned DESC,last_success_at DESC,success_count DESC` 排序。
 
-### 5.5 `role_assignment`
+### 5.6 `role_assignment`
 
 **功能与归属**：保存 RBAC 角色分配，是系统角色授权的唯一事实来源。
 
