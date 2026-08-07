@@ -4,6 +4,7 @@ import com.minialalipay.business.application.port.ManualCaseStore;
 import com.minialalipay.business.application.port.RiskReviewResumePort;
 import com.minialalipay.business.application.port.SecurityMaterialPort;
 import com.minialalipay.business.domain.manualcase.ManualCase;
+import com.minialalipay.business.domain.manualcase.ManualCaseStatus;
 import com.minialalipay.business.domain.manualcase.ManualCaseType;
 import com.minialalipay.common.error.BusinessException;
 import org.junit.jupiter.api.Test;
@@ -114,7 +115,9 @@ class ManualCaseApplicationServiceTest {
         private final Map<String, DecisionIdempotencyRecord> idempotency = new HashMap<>();
         private int updateCalls;
         private MemoryStore(ManualCase value) { this.value = value; }
-        @Override public List<ManualCase> list(String cursor, int limit) { return List.of(value); }
+        @Override public List<ManualCase> list(String cursor, ManualCaseStatus status, ManualCaseType type, int limit) {
+            return List.of(value);
+        }
         @Override public Optional<ManualCase> find(String caseId) { return Optional.ofNullable(value); }
         @Override public boolean create(ManualCase manualCase) { value = manualCase; return true; }
         @Override public boolean update(ManualCase manualCase, long expectedVersion) { updateCalls++; value = manualCase; return true; }

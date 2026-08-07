@@ -24,7 +24,7 @@ public final class RiskDecision {
     public static RiskDecision pass(String decisionId, String subjectType, String subjectId,
                                     String ruleVersion, String riskLevel, Instant now) {
         return new RiskDecision(decisionId, subjectType, subjectId, null, ruleVersion, riskLevel,
-                RiskDecisionStatus.PASS, null, now);
+                RiskDecisionStatus.PASS, "PASS", now);
     }
 
     /** 创建拒绝资金受理的决策。 */

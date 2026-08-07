@@ -19,8 +19,8 @@ import java.util.Optional;
  * 不得通过本端口修改交易、账户、冻结或账本事实。</p>
  */
 public interface MonitoringProjectionStore {
-    /** 按状态和稳定游标查询运营可见告警。 */
-    List<Alert> listAlerts(String status, String cursor, int limit);
+    /** 按状态、级别和稳定游标查询运营可见告警；状态与级别均可选。 */
+    List<Alert> listAlerts(String status, String severity, String cursor, int limit);
 
     /** 按 ID 查询告警。 */
     Optional<Alert> findAlert(String alertId);

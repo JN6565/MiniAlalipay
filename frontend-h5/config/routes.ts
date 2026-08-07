@@ -125,6 +125,13 @@ export default [
         auth: true,
       },
       {
+        path: '/h5/friend-requests',
+        component: '@/pages/h5/FriendRequests',
+        exact: true,
+        title: '新朋友',
+        auth: true,
+      },
+      {
         path: '/h5/profile',
         component: '@/pages/h5/Profile',
         exact: true,
@@ -149,7 +156,7 @@ export default [
         path: '/h5/collection/result/:id',
         component: '@/pages/h5/CollectionResult',
         exact: true,
-        title: '收款结果',
+        title: '转账结果',
         auth: true,
       },
       {

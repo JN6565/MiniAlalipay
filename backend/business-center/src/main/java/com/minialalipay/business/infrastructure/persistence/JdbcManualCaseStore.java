@@ -22,11 +22,23 @@ public class JdbcManualCaseStore implements ManualCaseStore {
     }
 
     @Override
-    public List<ManualCase> list(String cursor, int limit) {
+    public List<ManualCase> list(String cursor, ManualCaseStatus status, ManualCaseType type, int limit) {
         String afterId = cursor == null || cursor.isBlank() ? "" : cursor;
-        return jdbc.query("SELECT case_id,case_type,subject_type,subject_id,reason_code,status,operator_id,last_reason,evidence_reference,version,created_at,updated_at "
-                        + "FROM business_db.manual_case WHERE case_id>? ORDER BY case_id ASC LIMIT ?",
-                (rs, rowNum) -> map(rs), afterId, limit);
+        StringBuilder sql = new StringBuilder("SELECT case_id,case_type,subject_type,subject_id,reason_code,status,operator_id,last_reason,evidence_reference,version,created_at,updated_at "
+                + "FROM business_db.manual_case WHERE case_id>?");
+        List<Object> args = new java.util.ArrayList<>();
+        args.add(afterId);
+        if (status != null) {
+            sql.append(" AND status=?");
+            args.add(status.name());
+        }
+        if (type != null) {
+            sql.append(" AND case_type=?");
+            args.add(type.name());
+        }
+        sql.append(" ORDER BY case_id ASC LIMIT ?");
+        args.add(limit);
+        return jdbc.query(sql.toString(), (rs, rowNum) -> map(rs), args.toArray());
     }
 
     @Override

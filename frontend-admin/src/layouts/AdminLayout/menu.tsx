@@ -40,6 +40,7 @@ type AdminMenuPermission = keyof Pick<
   | 'canViewTrace'
   | 'canConfigureAlertThresholds'
   | 'canRunDemoTasks'
+  | 'canManageUsers'
 >;
 
 interface AdminMenuDefinition extends AdminMenuItem {
@@ -102,12 +103,18 @@ const adminMenuDefinitions: readonly AdminMenuDefinition[] = [
     label: '演示任务触发',
     permission: 'canRunDemoTasks',
   },
+  {
+    key: '/admin/users',
+    icon: <SafetyCertificateOutlined />,
+    label: '用户管理',
+    permission: 'canManageUsers',
+  },
 ];
 
 /**
  * 根据统一权限模型构建 B 端菜单。
  *
- * 用户管理接口尚未进入正式 OpenAPI，因此无论当前身份权限如何都不生成用户管理菜单。
+ * 菜单可见性只反映界面权限；用户管理仅系统管理员可见，服务端角色门禁仍是最终授权方。
  */
 export function buildAdminMenuItems(access: AdminAccess): AdminMenuItem[] {
   return adminMenuDefinitions

@@ -10,3 +10,6 @@ spring:
         password: ${NACOS_PASSWORD:nacos}
         namespace: ${NACOS_NAMESPACE:}
         group: DEFAULT_GROUP
+        # 本机多网卡（虚拟网卡）会被 Nacos 自动探测成不可达 IP，导致网关 lb:// 路由 503。
+        # 本地联调全部进程同机运行，显式注册回环地址保证网关可达；多机部署时用 NACOS_DISCOVERY_IP 覆盖。
+        ip: ${NACOS_DISCOVERY_IP:127.0.0.1}

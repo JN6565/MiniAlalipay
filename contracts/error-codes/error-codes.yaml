@@ -39,6 +39,7 @@ codes:
   DRAFT_NOT_FOUND: {httpStatus: 404, message: 交易草稿不存在}
   DRAFT_NOT_EDITABLE: {httpStatus: 409, message: 交易草稿当前不可编辑}
   VERSION_CONFLICT: {httpStatus: 409, message: 资源版本已经变化}
+  USER_STATE_INVALID: {httpStatus: 409, message: 用户状态不允许该操作}
   RISK_REJECTED: {httpStatus: 422, message: 风险检查拒绝本次操作}
   RISK_MANUAL_REVIEW: {httpStatus: 202, message: 操作已进入人工审核}
   CONFIRMATION_EXPIRED: {httpStatus: 409, message: 确认令牌已过期}

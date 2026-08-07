@@ -32,7 +32,8 @@ internal:
     service-token: ${INTERNAL_AUTH_SERVICE_TOKEN:local-internal-token}
 minialalipay:
   internal:
-    service-token: ${INTERNAL_SERVICE_TOKEN:}
+    # 内部接口服务令牌，必须与 business-center/account-center 的同名配置一致
+    service-token: ${INTERNAL_SERVICE_TOKEN:local-internal-token}
 management:
   endpoints:
     web:

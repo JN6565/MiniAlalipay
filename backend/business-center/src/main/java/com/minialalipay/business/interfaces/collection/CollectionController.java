@@ -8,6 +8,7 @@ import com.minialalipay.business.domain.collection.CollectionOrder;
 import com.minialalipay.business.domain.collection.PersonalCollectionCode;
 import com.minialalipay.business.domain.transaction.FundTransaction;
 import com.minialalipay.business.domain.transaction.FundingSource;
+import com.minialalipay.business.infrastructure.http.UserInfoHttpAdapter;
 import com.minialalipay.common.api.ApiResponse;
 import com.minialalipay.common.error.BusinessException;
 import com.minialalipay.common.error.CommonErrorCode;
@@ -47,26 +48,29 @@ public class CollectionController {
     private final CollectionPaymentApplicationService paymentService;
     private final CollectionEventApplicationService eventService;
     private final RequestIdGenerator requestIds;
+    private final UserInfoHttpAdapter userInfoAdapter;
 
     /** 创建个人收款接口。 */
     public CollectionController(CollectionApplicationService service, RequestIdGenerator requestIds) {
-        this(service, null, null, requestIds);
+        this(service, null, null, requestIds, null);
     }
 
     /** 创建 C2C Controller，付款能力只通过统一资金交易服务受理。 */
     public CollectionController(CollectionApplicationService service, CollectionPaymentApplicationService paymentService,
                                 RequestIdGenerator requestIds) {
-        this(service, paymentService, null, requestIds);
+        this(service, paymentService, null, requestIds, null);
     }
 
     /** 创建 C2C Controller，状态流仅消费持久化事件，不直接决定任何资金终态。 */
     @Autowired
     public CollectionController(CollectionApplicationService service, CollectionPaymentApplicationService paymentService,
-                                CollectionEventApplicationService eventService, RequestIdGenerator requestIds) {
+                                CollectionEventApplicationService eventService, RequestIdGenerator requestIds,
+                                UserInfoHttpAdapter userInfoAdapter) {
         this.service = service;
         this.paymentService = paymentService;
         this.eventService = eventService;
         this.requestIds = requestIds;
+        this.userInfoAdapter = userInfoAdapter;
     }
 
     /** 查询本人当前有效个人码；尚未生成时 data 为 null。 */
@@ -127,15 +131,19 @@ public class CollectionController {
     @PostMapping("/token-exchanges")
     public ResponseEntity<ApiResponse<OrderResponse>> exchange(@RequestHeader(value = "X-User-Id", required = false) String userId,
             @Valid @RequestBody TokenExchangeRequest body, HttpServletRequest request) {
-        return ResponseEntity.ok(success(OrderResponse.from(service.exchange(authenticatedUser(userId), sessionId(request), body.token())), request));
+        CollectionOrder order = service.exchange(authenticatedUser(userId), sessionId(request), body.token());
+        return ResponseEntity.ok(success(OrderResponse.from(order, lookupMaskedName(order.getPayeeUserId()),
+                lookupMaskedName(order.getPayerUserId())), request));
     }
 
     /** 仅个人码订单允许付款人锁定金额和备注。 */
     @PatchMapping("/orders/{id}")
     public ResponseEntity<ApiResponse<OrderResponse>> lockOrder(@RequestHeader(value = "X-User-Id", required = false) String userId,
             @PathVariable String id, @Valid @RequestBody LockOrderRequest body, HttpServletRequest request) {
-        return ResponseEntity.ok(success(OrderResponse.from(service.lockPersonalOrder(authenticatedUser(userId), sessionId(request), id,
-                body.version(), body.amountFen(), body.subject())), request));
+        CollectionOrder order = service.lockPersonalOrder(authenticatedUser(userId), sessionId(request), id,
+                body.version(), body.amountFen(), body.subject());
+        return ResponseEntity.ok(success(OrderResponse.from(order, lookupMaskedName(order.getPayeeUserId()),
+                lookupMaskedName(order.getPayerUserId())), request));
     }
 
     /** 查询订单；付款人、收款人或绑定 H5 会话可读取脱敏结果。 */
@@ -143,7 +151,24 @@ public class CollectionController {
     public ResponseEntity<ApiResponse<OrderResponse>> getOrder(@RequestHeader(value = "X-User-Id", required = false) String userId,
                                                                  @PathVariable String id, HttpServletRequest request) {
         String sessionId = request.getSession(false) == null ? null : request.getSession(false).getId();
-        return ResponseEntity.ok(success(OrderResponse.from(service.getOrderForAuthorizedUser(authenticatedUser(userId), sessionId, id)), request));
+        CollectionOrder order = service.getOrderForAuthorizedUser(authenticatedUser(userId), sessionId, id);
+        return ResponseEntity.ok(success(OrderResponse.from(order, lookupMaskedName(order.getPayeeUserId()),
+                lookupMaskedName(order.getPayerUserId())), request));
+    }
+
+    /** 查询用户真实姓名并加密显示：只显示第一个字，后面用星号代替。 */
+    private String lookupMaskedName(String userId) {
+        if (userId == null || userInfoAdapter == null) return "收款人";
+        String realName = userInfoAdapter.getRealName(userId);
+        if (realName == null || realName.isBlank()) return "收款人";
+        return maskName(realName);
+    }
+
+    /** 姓名加密：保留第一个字，其余替换为星号。 */
+    private static String maskName(String name) {
+        if (name == null || name.isEmpty()) return "收款人";
+        if (name.length() == 1) return name + "**";
+        return name.charAt(0) + "*".repeat(name.length() - 1);
     }
 
     /** 为绑定 H5 会话的付款人签发仅限余额支付的 C2C 确认令牌。 */
@@ -269,10 +294,14 @@ public class CollectionController {
     }
     /** C2C 订单响应，禁止返回双方账户、原始令牌和会话标识。 */
     public record OrderResponse(String collectionOrderId, String kind, Long amountFen, String subject, String status,
-                                String transactionId, Instant expiresAt, long version) {
-        static OrderResponse from(CollectionOrder order) {
-            return new OrderResponse(order.getOrderId(), order.getPersonalCodeId() == null ? "FIXED_REQUEST" : "PERSONAL_QR",
-                    order.getAmountFen(), order.getSubject(), order.getStatus().name(), order.getTransactionId(), order.getExpiresAt(), order.getVersion());
+                                String transactionId, Instant expiresAt, long version,
+                                String payeeName, String payerName, boolean editable) {
+        static OrderResponse from(CollectionOrder order, String payeeName, String payerName) {
+            String kind = order.getPersonalCodeId() == null ? "FIXED_REQUEST" : "PERSONAL_QR";
+            boolean editable = "PERSONAL_QR".equals(kind) && "DRAFT".equals(order.getStatus().name());
+            return new OrderResponse(order.getOrderId(), kind,
+                    order.getAmountFen(), order.getSubject(), order.getStatus().name(), order.getTransactionId(),
+                    order.getExpiresAt(), order.getVersion(), payeeName, payerName, editable);
         }
     }
 }

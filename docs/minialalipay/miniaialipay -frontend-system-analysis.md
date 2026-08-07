@@ -671,8 +671,8 @@ sequenceDiagram
 
 **前端逻辑**
 
-+ 收款人先查询后选择：支持登录名精确、昵称模糊、手机号尾号辅助查询。
-+ 搜索结果只返回脱敏数据，重名联系人返回多个候选，最多 10 条。
++ 收款人先查询后选择：仅支持手机号精确查询。
++ 搜索结果只返回脱敏数据，最多 10 条。
 + 金额只接受人民币元，精确到分，范围 0.01 ~ 50000.00，失焦与提交双重校验。
 + 备注不超过 50 字符，过滤脚本和控制字符。
 + 禁止向本人同一账户转账，由后端风控预检拦截并返回 `SELF_PAYMENT_FORBIDDEN`。
@@ -683,7 +683,7 @@ sequenceDiagram
 
 | 字段名称 | 说明 | 输入方式 | 是否必填 | 默认值 | 最大输入长度 | 输入限制 | 字段类型 | 提示文案 | 数据源 |
 | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
-| 收款人搜索 | 按姓名/手机号搜索收款人 | 文本输入 | Y | N | 50 | 仅中英文、数字、空格 | string | "请输入收款人姓名或手机号" | GET /users/search?q= |
+| 收款人搜索 | 按手机号精确搜索收款人 | 文本输入 | Y | N | 11 | 仅数字，11 位手机号 | string | "请输入收款人手机号" | GET /users/search?keyword= |
 | 收款人选择 | 从搜索结果或常用联系人中选择 | 列表选择 | Y | — | — | 仅可选择列表中用户 | object | "请选择收款人" | 搜索结果/GET /contacts |
 | 常用收款人列表 | 成功转账历史自动生成，按置顶+次数+最近成功时间排序，隐藏项不展示，展示置顶标记 | 列表点击 | N | — | — | ≤10 条，脱敏展示 | array | "常用收款人" | GET /contacts |
 | 转账金额 | 转账金额（元） | 数字输入 | Y | N | 9 | 0.01-50000.00 元，仅两位小数 | decimal | "请输入转账金额（0.01-50000.00 元）" | 用户输入 |
@@ -697,7 +697,7 @@ sequenceDiagram
 
 | 字段名称 | 交互 | 是否有二次确认 | 显示、禁用控制 |
 | --- | --- | --- | --- |
-| 搜索收款人 | 输入关键词触发搜索（防抖） | N | 关键词为空时禁用 |
+| 搜索收款人 | 点击查询按钮触发搜索（非实时搜索） | N | 手机号格式非法时禁用 |
 | 常用收款人操作 | 长按/右键菜单：置顶/取消置顶、隐藏、编辑备注 | Y | 仅常用收款人列表项可用；PATCH 携带 version CAS |
 | 下一步 | 校验全部字段后创建草稿并校验 | Y（金额失焦+提交双重校验） | 收款人未选或金额非法时禁用；提交中 disabled+loading |
 
@@ -706,7 +706,7 @@ sequenceDiagram
 
 | 方法 | 路径 | 说明 |
 | --- | --- | --- |
-| GET | `/api/v1/users/search?q=` | 模糊搜索用户，最多返回 10 条脱敏结果 |
+| GET | `/api/v1/users/search?keyword=` | 按手机号精确搜索用户，最多返回 10 条脱敏结果 |
 | GET | `/api/v1/contacts` | 查询成功转账历史生成的常用收款人，按次数/最近成功时间/置顶排序 |
 | PATCH | `/api/v1/contacts/{payeeUserId}` | 设置置顶/隐藏/备注，携带 version CAS |
 | POST | `/api/v1/transfer-drafts` | 创建转账草稿，携带 Idempotency-Key |
@@ -1574,27 +1574,27 @@ sequenceDiagram
     Web-->>O: 工单列表(20条/页, 默认创建时间倒序)
     O->>Web: 点击工单→展开抽屉详情
     Note over Web: 从列表响应项中读取详情（后端 12.7.2 详情内联，无单条端点）
-    Web-->>O: 抽屉展示{脱敏双方, 风控规则, TCC分支, 重试记录, 账本摘要, AgentTrace}
-    O->>Web: 选择批准/驳回/继续观察+填写原因
+    Web-->>O: 抽屉展示{规则命中, 操作者, 处置理由, 处置证据, 版本, 时间}
+    O->>Web: 选择领取/解决/重开/关闭+填写原因
     Web->>API: POST /api/v1/manual-cases/{id}/decisions {action, reason, version}
     API-->>Web: 更新后工单状态
 ```
 
 **前端逻辑**
 
-+ 查询工单列表（20 条/页，默认创建时间倒序），支持状态/类型/时间筛选，时间范围最长 90 天。
-+ 工单详情从列表响应项中获取，抽屉展示脱敏双方 + 风控规则 + TCC 分支 + 重试记录 + 账本摘要 + AgentTrace。
-+ 批准/驳回需填写原因 + version CAS，避免并发覆盖；继续观察保持工单开放。
-+ 仅 OPEN 状态可批准/驳回/继续观察，非 OPEN 状态禁用操作按钮。
-+ 交易号可点击跳转交易详情页，链路信息按角色裁剪展示。
++ 查询工单列表（20 条/页，默认创建时间倒序），支持状态/类型筛选；时间范围筛选待补充。
++ 工单详情从列表响应项中获取，抽屉展示规则命中、操作者、处置理由、处置证据、版本与处置时间。
++ 解决/重开/关闭需填写原因 + version CAS，避免并发覆盖；领取可暂不填理由。
++ 状态机动作依次为领取→解决→关闭，解决后可按新证据重开；非当前状态的操作按钮禁用。
++ 主体脱敏上下文（脱敏双方、风控规则明细、TCC 分支、重试记录、账本摘要、AgentTrace）为后续增强，当前工单响应不内联。
 
 **前端逻辑 — 列表筛选字段**
 
 | 字段名称 | 说明 | 输入方式 | 是否必填 | 输入限制 | 数据源 |
 | --- | --- | --- | --- | --- | --- |
-| 状态筛选 | 工单状态 | 下拉选择 | N | OPEN/ACKNOWLEDGED/RESOLVED/CLOSED | 前端 |
+| 状态筛选 | 工单状态 | 下拉选择 | N | OPEN/CLAIMED/RESOLVED/CLOSED | 前端 |
 | 类型筛选 | 工单类型 | 下拉选择 | N | RISK_PRECHECK/TRANSACTION_RECOVERY | 前端 |
-| 时间筛选 | 创建时间范围 | 日期选择 | N | 最长 90 天 | 前端 |
+| 时间筛选 | 创建时间范围 | 日期选择 | N | 最长 90 天 | 前端（待补充，后端暂无该筛选参数） |
 
 
 **列表展示字段**
@@ -1602,29 +1602,35 @@ sequenceDiagram
 | 字段名称 | 说明 | 交互 |
 | --- | --- | --- |
 | 工单号 | caseId | 点击展开抽屉详情 |
-| 交易号 | transactionId | 点击跳转交易详情 |
-| 创建时间 | createdAt | — |
-| 金额 | 充值金额 | 分转元展示 |
-| 风险/故障原因 | reason | — |
+| 工单类型 | caseType | — |
+| 规则命中 | reasonCode | 触发原因码 |
 | 当前状态 | status | — |
-| 负责人 | operatorId | — |
+| 操作者 | operatorId | 领取/处置人，未领取为空 |
+| 处置时间 | updatedAt | — |
+| 创建时间 | createdAt | — |
+| 处置理由 | lastReason | 抽屉展示 |
+| 处置证据 | evidenceReference | 抽屉展示 |
+| 版本 | version | CAS 并发控制 |
 
 
 **操作按钮**
 
 | 字段名称 | 交互 | 是否有二次确认 | 显示、禁用控制 |
 | --- | --- | --- | --- |
-| 批准 | 批准工单 | Y（需填写原因） | 仅 OPEN 状态可批准 |
-| 驳回 | 驳回工单 | Y（需填写原因） | 仅 OPEN 状态可驳回 |
-| 继续观察 | 保持工单开放 | N | 仅 OPEN 状态可用 |
+| 领取 | 领取开放工单 | N | 仅 OPEN 状态可领取 |
+| 解决 | 解决已领取工单（RISK_PRECHECK 触发恢复待确认，即批准） | Y（需填写理由与证据） | 仅 CLAIMED 状态可解决 |
+| 重开 | 新证据出现时重开 | Y（需填写理由） | 仅 RESOLVED 状态可重开 |
+| 关闭 | 以最终证据关闭（含驳回语义） | Y（需填写理由与证据） | CLAIMED/RESOLVED 状态可关闭 |
+
+> 操作语义与 PRD FR-RC-003 对齐：批准 ≈ 解决（RISK_PRECHECK 触发来源恢复待确认）、驳回 ≈ 关闭（记录驳回理由与证据）、继续观察 = 保持工单开放不做动作。来源订单 REJECTED 的独立驳回状态机尚未落地。
 
 
 **所需 API**
 
 | 方法 | 路径 | 说明 |
 | --- | --- | --- |
-| GET | `/api/v1/manual-cases` | 查询工单列表，status+type+time 筛选，工单详情从列表响应项中获取 |
-| POST | `/api/v1/manual-cases/{id}/decisions` | 批准/驳回/继续观察，需原因+version CAS |
+| GET | `/api/v1/manual-cases` | 查询工单列表，status+type 筛选，工单详情从列表响应项中获取 |
+| POST | `/api/v1/manual-cases/{id}/decisions` | 领取/解决/重开/关闭，需原因+version CAS |
 
 
 #### 2.3.22 可信运行看板（B 端 Web）
@@ -1652,11 +1658,13 @@ sequenceDiagram
 
 **前端逻辑**
 
-+ 查询分钟级实时指标，每分钟刷新，Tab 切换：事务健康/Agent 健康/扫码/花呗/C2C/链路检索/离线报表。
++ 实时概览默认回看最近 60 分钟，每分钟刷新；请求携带 `from/to` 时间范围，未指定时由服务端回看默认窗口。
++ 指标按维度（`metricCode`）分组展示事件量，不把各维度加总成一个数字；维度排序按事件量降序。
++ Tab 切换：事务健康/Agent 健康/扫码/花呗/C2C/链路检索/离线报表。
 + 链路检索输入 Trace ID 或 Transaction ID 查询脱敏链路详情，按角色裁剪 Span。
 + AntV 图表展示指标趋势，指标口径版本通过 `metric-definitions` 查询对齐。
 + 观察者只读查看脱敏大盘，运营可处置告警，权限由后端 RBAC 控制。
-+ 指标数据通过 TanStack Query 管理，不前端聚合或缓存终态。
++ 指标数据通过 TanStack Query 管理，不前端缓存终态。
 
 **所需 API**
 
@@ -1711,9 +1719,9 @@ sequenceDiagram
     participant Web as B端Web
     participant API as 后端API
     O->>Web: 进入 /admin/alerts
-    Web->>API: GET /api/v1/ops/alerts?cursor=&level=
+    Web->>API: GET /api/v1/ops/alerts?cursor=&status=&severity=
     API-->>Web: {alerts[], nextCursor}
-    Web-->>O: 告警列表(按级别+时间排序)
+    Web-->>O: 告警列表(按状态+级别筛选)
     alt 确认告警
         O->>Web: 填写确认说明→确认
         Web->>API: POST /api/v1/ops/alerts/{id}/acknowledge {explanation}
@@ -1731,7 +1739,7 @@ sequenceDiagram
 
 **前端逻辑**
 
-+ 查询告警列表，cursor 分页，按级别 + 时间排序。
++ 查询告警列表，cursor 分页，支持按状态（status）与级别（severity）筛选；级别可选值 INFO/WARNING/CRITICAL。
 + 确认告警需填写说明；解决告警需提交证据；关闭告警仅限 RESOLVED→CLOSED。
 + 告警级别和状态以服务端为准，前端不缓存终态。
 + 权限由后端 RBAC 控制：运营可处置告警，观察者只读查看，系统管理员可配置非资金告警阈值。
@@ -1740,7 +1748,7 @@ sequenceDiagram
 
 | 方法 | 路径 | 说明 |
 | --- | --- | --- |
-| GET | `/api/v1/ops/alerts` | 查询告警列表，cursor 分页 |
+| GET | `/api/v1/ops/alerts` | 查询告警列表，status+severity 筛选，cursor 分页 |
 | POST | `/api/v1/ops/alerts/{id}/acknowledge` | 确认告警，需说明 |
 | POST | `/api/v1/ops/alerts/{id}/resolve` | 解决告警，需证据 |
 | POST | `/api/v1/ops/alerts/{id}/close` | 关闭恢复告警，仅 RESOLVED→CLOSED |
@@ -1755,62 +1763,62 @@ sequenceDiagram
     participant Web as B端Web
     participant API as 后端API
     O->>Web: 进入 /admin/data-quality
-    Web->>API: GET /api/v1/ops/data-quality?date=&job=&rule=
-    API-->>Web: {qualityResults[], quarantinedEvents[], reportPublishStatus}
-    Web-->>O: 质量检查结果+隔离事件+报表发布状态
-    O->>Web: 筛选(任务/规则/日期)
-    Web->>API: GET /api/v1/ops/data-quality?job=&rule=&date=
+    Web->>API: GET /api/v1/ops/data-quality?dataDate=&jobCode=&ruleCode=
+    API-->>Web: {qualityResults[]}
+    Web-->>O: 质量检查结果
+    O->>Web: 筛选(数据日期/任务编码/规则编码)
+    Web->>API: GET /api/v1/ops/data-quality?dataDate=&jobCode=&ruleCode=
     API-->>Web: 筛选结果
-    O->>Web: 查看隔离数据摘要
-    Web-->>O: 隔离事件详情(reason, payloadDigest, quarantinedAt)
 ```
 
 **前端逻辑**
 
-+ 查询质量检查结果 + 隔离事件 + 报表发布状态，支持 date + job + rule 筛选。
-+ 隔离事件展示 reason、payloadDigest、quarantinedAt，不展示原始 payload 明文。
-+ 报表发布状态联动 T+1 报表页，质量 FAILED 时报表页展示"数据不可用"。
++ 查询质量检查结果，默认数据日期为最近一个数据日，支持按数据日期（dataDate）、任务编码（jobCode）与规则编码（ruleCode）筛选。
 + 筛选条件变化时重新查询，不前端聚合。
++ 质量 FAILED 联动 T+1 报表页"数据不可用"，报表发布状态以后端 12.7.6 为准。
++ 隔离数据摘要（quarantined_event）与重跑入口：V1.1 未提供查询与重跑端点（前端系统分析已移除 rerun 路由），前端不展示隔离明细、不提供重跑入口；隔离数据仅供后端运维侧排查。
 
 **所需 API**
 
 | 方法 | 路径 | 说明 |
 | --- | --- | --- |
-| GET | `/api/v1/ops/data-quality` | 查询质量检查，date+task+rule 筛选 |
+| GET | `/api/v1/ops/data-quality` | 查询质量检查，dataDate+jobCode+ruleCode 筛选 |
 
 
 #### 2.3.26 用户管理页（B 端 Web，P1）
-> **说明：** 此页面为 P1 优先级。后端 `user-center` 模块负责用户、身份、登录密码、支付密码、联系人等领域（后端 7.6.2），用户管理功能通过 `user-center` 内部领域接口提供服务，未在 12.7 端点目录中定义独立 REST 路由。前端 MVP 阶段提供基础框架和只读展示，API 端点待 `user-center` 模块扩展后对接。
->
+> **说明：** 此页面为 P1 优先级。后端 `user-center` 模块负责用户、身份、登录密码、支付密码、联系人等领域，用户管理通过 `/api/v1/admin/users/**` 提供（仅系统管理员，见后端 8.2.3 与 OpenAPI）。列表为只读脱敏投影，冻结/解冻携带 `version` CAS 并记录操作者与理由。
 
 **UI&交互**
 
 ```mermaid
 sequenceDiagram
-    participant O as 运营人员
+    participant O as 系统管理员
     participant Web as B端Web
     participant API as 后端API
     O->>Web: 进入 /admin/users
     Web->>API: GET /api/v1/admin/users?cursor=&status=
-    API-->>Web: {users[], nextCursor}
-    Web-->>O: 用户列表(状态/账户状态/登录锁定)
+    API-->>Web: {items[], nextCursor}
+    Web-->>O: 用户列表(状态/登录锁定/冻结审计)
+    O->>Web: 冻结/解冻（二次确认）
+    Web->>API: POST /api/v1/admin/users/{id}/freeze|unfreeze
+    API-->>Web: 用户最新视图(含版本)
 ```
 
 **前端逻辑**
 
-+ 查询用户列表（cursor 分页），展示状态/账户状态/登录锁定信息，均为只读。
-+ 仅 ACTIVE 可冻结，仅 FROZEN 可解冻，操作需二次确认。
-+ API 由 `user-center` 模块提供，MVP 阶段提供框架和只读展示，端点待后端扩展后对接。
-+ 用户敏感信息脱敏展示，不展示完整登录密码或支付密码。
++ 查询用户列表（cursor 分页），展示状态/登录锁定/冻结审计信息，均为只读。
++ 仅 ACTIVE 可冻结，仅 DISABLED 可解冻，操作需二次确认；冻结必须填写理由。
++ 用户状态为 `PROVISIONING/ACTIVE/DISABLED`，DISABLED 即管理冻结；账户状态归属账户中心，不在本页展示。
++ API 由 `user-center` 模块提供；登录名仅展示服务端脱敏值 `loginNameMasked`，不展示完整登录名、手机号或密码类字段。
 
 **前端逻辑 — 列表展示字段**
 
 | 字段名称 | 说明 | 交互 |
 | --- | --- | --- |
-| 登录名 | 登录名 | 只读展示 |
+| 用户编号 | userId | 只读展示，点击查看详情 |
+| 登录名 | loginNameMasked | 只读展示（服务端脱敏） |
 | 昵称 | nickname | 只读展示 |
 | 用户状态 | status | 只读展示 |
-| 账户状态 | accountStatus | 只读展示 |
 | 登录锁定信息 | loginLockedUntil | 只读展示 |
 | 创建时间 | createdAt | 只读展示 |
 
@@ -1819,17 +1827,17 @@ sequenceDiagram
 
 | 字段名称 | 交互 | 是否有二次确认 | 显示、禁用控制 |
 | --- | --- | --- | --- |
-| 冻结账户 | 冻结用户账户 | Y | 仅 ACTIVE 状态可冻结 |
-| 解冻账户 | 解冻用户账户 | Y | 仅 FROZEN 状态可解冻 |
+| 冻结 | 管理冻结用户 | Y | 仅 ACTIVE 状态可冻结，须填写冻结理由 |
+| 解冻 | 管理解冻用户 | Y | 仅 DISABLED 状态可解冻 |
 
 
 **所需 API**
 
 | 方法 | 路径 | 说明 |
 | --- | --- | --- |
-| GET | `/api/v1/admin/users` | ⚠️ 查询用户列表，后端 12.7 未定义，待 user-center 扩展（P1，端点落地前隐藏入口） |
-| POST | `/api/v1/admin/users/{id}/freeze` | ⚠️ 冻结用户账户，后端 12.7 未定义，待 user-center 扩展（P1） |
-| POST | `/api/v1/admin/users/{id}/unfreeze` | ⚠️ 解冻用户账户，后端 12.7 未定义，待 user-center 扩展（P1） |
+| GET | `/api/v1/admin/users` | 查询用户列表（状态过滤 + cursor 分页），仅系统管理员 |
+| POST | `/api/v1/admin/users/{userId}/freeze` | 冻结用户（version CAS + reason），仅系统管理员 |
+| POST | `/api/v1/admin/users/{userId}/unfreeze` | 解冻用户（version CAS），仅系统管理员 |
 
 
 #### 2.3.27 交易查询与回执（B 端 Web）
@@ -1897,40 +1905,44 @@ sequenceDiagram
     participant Web as B端Web
     participant API as 后端API
     O->>Web: 进入 /admin/trace
-    O->>Web: 输入交易号或链路编号
-    Web->>API: GET /api/v1/transfers/{id}/trace
-    API-->>Web: 脱敏全链路 Span 列表（按角色裁剪）
+    O->>Web: 输入交易号或链路编号（32 位 hex）
+    alt 32 位 hex 链路编号
+        Web->>API: GET /api/v1/ops/traces/{traceId}
+    else 交易号
+        Web->>API: GET /api/v1/ops/transactions/{id}/trace
+    end
+    API-->>Web: 脱敏跨服务 Span 列表（业务中心/账户账本/用户审计/AI）
     Web-->>O: 链路时间线视图
-    Note over Web: 展示 Agent→网关→风控→事务→账本<br/>各阶段 Span 耗时与状态
+    Note over Web: 以 service 标签区分服务来源<br/>各阶段 Span 状态与耗时
 ```
 
 **前端逻辑**
 
-+ 输入交易号或链路编号查询脱敏全链路，后端按角色裁剪 Span。
-+ 链路时间线展示 Agent→网关→风控→事务→账本各阶段 Span 的名称、状态、开始时间、耗时和服务来源。
++ 输入交易号或链路编号查询脱敏全链路：32 位 hex 自动按链路编号查询，其余按交易号查询。
++ 链路时间线展示跨服务 Span 的名称、状态、开始时间、耗时和服务来源（service 标签着色区分来源）。
 + `transactionId` 可点击跳转交易查询页，双向导航。
 + Span 详情已由后端脱敏，前端不二次处理敏感属性。
-+ 观察者与运营看到的 Span 范围不同，权限由后端对象级授权控制。
++ 观察者与运营看到的 Span 范围相同，权限由后端对象级授权控制。
 
 **前端逻辑 — 链路展示字段**
 
 | 字段名称 | 说明 | 交互 |
 | --- | --- | --- |
 | 链路编号 | traceId | 只读展示 |
-| 交易编号 | transactionId | 只读展示，可跳转交易查询页 |
-| Span 名称 | spanName | 只读展示，如 Agent/网关/风控/事务/账本 |
-| Span 状态 | spanStatus | 只读展示，OK/ERROR |
-| 开始时间 | startedAt | 只读展示 |
-| 耗时 | durationMs | 只读展示 |
-| 服务来源 | service | 只读展示，如 ai-service/gateway/business-center |
-| 脱敏详情 | sanitizedAttributes | 只读展示，后端已脱敏 |
+| 片段归属交易号 | transactionId | 只读展示，可跳转交易查询页；非交易归属的服务片段为空 |
+| 片段名称 | operation | 只读展示，如统一交易受理/TCC 全局事务/账本过账事件/AI 工具调用 |
+| 片段状态 | status | 只读展示，SUCCESS/ERROR/PROCESSING 等 |
+| 发生时间 | occurredAt | 只读展示 |
+| 片段详情 | detail | 只读展示，后端已脱敏 |
+| 服务来源 | service | 只读展示，如 ai-service/account-center/user-center/business-center |
 
 
 **所需 API**
 
 | 方法 | 路径 | 说明 |
 | --- | --- | --- |
-| GET | `/api/v1/transfers/{id}/trace` | 查询脱敏全链路，按角色裁剪 Span（后端 12.7.2） |
+| GET | `/api/v1/ops/transactions/{id}/trace` | 按交易号查询脱敏跨服务链路（后端 12.7.2） |
+| GET | `/api/v1/ops/traces/{traceId}` | 按链路编号（32 位 hex）查询脱敏跨服务链路 |
 
 
 #### 2.3.29 本人扫码收款统计（C 端 H5）
@@ -2166,12 +2178,12 @@ gantt
 | 前端工程 | 允许生成和调用的 API | 身份与数据范围 |
 | --- | --- | --- |
 | `frontend-h5`（C 端） | `auth`、`payment-password`、`users`、`contacts`、`accounts/me`、`recharges`、`transfer-drafts`、`confirmations`、`transfers`（不含 `trace`）、`qr-pay`、`p2p-collections`、`credit`、`agent` 及本人资源 SSE | 当前普通用户本人、本人账户、本人创建或参与的订单和绑定 H5 会话 |
-| `frontend-admin`（B 端） | `manual-cases`、`ops/realtime-metrics`、`ops/daily-reports`、`ops/alerts`、`ops/data-quality`、`ops/metric-definitions`、`ops/credit/*-runs`、授权的脱敏 Trace | 运营、观察者或演示管理员按角色访问全局脱敏数据；写操作必须有审计 |
+| `frontend-admin`（B 端） | `manual-cases`、`ops/realtime-metrics`、`ops/daily-reports`、`ops/alerts`、`ops/data-quality`、`ops/metric-definitions`、`ops/credit/*-runs`、`admin/users`（仅系统管理员）、授权的脱敏 Trace | 运营、观察者或演示管理员按角色访问全局脱敏数据；写操作必须有审计，用户冻结/解冻记录操作者与理由 |
 | B/C 共用 | `auth/login`、`auth/logout`、统一错误响应、Trace 和请求编号 | 登录结果由服务端返回角色；前端不能提交或提升角色 |
 
 C 端不得调用 `/api/v1/ops/**`、`/api/v1/manual-cases/**` 或脱敏 Trace 运营接口；B 端不得调用 `/api/v1/accounts/me/**`、本人转账、扫码付款、个人收款和信用还款接口模拟用户操作。即使用户手工构造请求，网关和后端仍必须拒绝越权，不能把前端菜单隐藏当作安全控制。
 
-B 端的用户管理、全局交易列表与详情、全局电子回执查询目前只有页面需求，后端和 OpenAPI 尚未给出可编码契约。对应页面在契约完成前只能保留路由和明确的“功能未接入”状态，禁止自行猜测 `/api/v1/ops/users`、`/api/v1/ops/transactions` 等路径，也禁止复用 C 端 `/me` 或本人交易接口拼接全局数据。
+B 端的全局交易列表与详情、全局电子回执查询目前只有页面需求，后端和 OpenAPI 尚未给出可编码契约。对应页面在契约完成前只能保留路由和明确的“功能未接入”状态，禁止自行猜测 `/api/v1/ops/users`、`/api/v1/ops/transactions` 等路径，也禁止复用 C 端 `/me` 或本人交易接口拼接全局数据。用户管理已按 `/api/v1/admin/users/**` 落地（列表/冻结/解冻，系统管理员专属，登录名脱敏）。
 
 #### 2.6.2 统一响应格式
 所有 REST 接口遵循统一响应结构，前端 `src/services` 层统一归一化处理：
@@ -2367,7 +2379,7 @@ interface Contact {
 }
 
 /** B 端运营 */
-interface ManualCase { caseId: string; transactionId?: string; status: 'OPEN' | 'ACKNOWLEDGED' | 'RESOLVED' | 'CLOSED'; type: string; reason: string; version: number; }
+interface ManualCase { caseId: string; caseType: string; subjectType: string; subjectId: string; status: 'OPEN' | 'CLAIMED' | 'RESOLVED' | 'CLOSED'; reasonCode: string; operatorId: string | null; lastReason: string | null; evidenceReference: string | null; version: number; createdAt: string; updatedAt: string; }
 interface Alert { alertId: string; level: 'P0' | 'P1' | 'P2'; status: 'OPEN' | 'ACKNOWLEDGED' | 'RESOLVED' | 'CLOSED'; title: string; occurredAt: string; }
 
 /** 统一分页响应 */
@@ -2674,7 +2686,7 @@ stateDiagram-v2
 ### 5.1 风险评估
 | 风险项 | 级别 | 影响 | 应对措施 |
 | --- | --- | --- | --- |
-| 后端用户管理 API 未定义 | 中 | 用户管理页（P1）无法实现完整功能 | 页面提供框架和只读展示，API 待后端确认后补充 |
+| 全局交易与回执 API 未定义 | 中 | 交易查询与回执页（P1）无法实现完整功能 | 页面提供框架和只读展示，API 待后端确认后补充；用户管理已按 `/api/v1/admin/users/**` 落地 |
 | SSE 在演示网络环境不稳定 | 中 | 跨端状态同步延迟 | 降级为 2 秒轮询，确保状态最终一致 |
 | AI Talk 与表单草稿并发冲突 | 中 | 草稿版本不一致导致提交失败 | 前端拦截旧版本提交，提示用户刷新 |
 | 双 Umi 工程构建配置复杂 | 低 | 开发效率下降 | 使用 Monorepo 共享 contracts 类型，统一 lint 规范 |

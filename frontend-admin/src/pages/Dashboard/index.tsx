@@ -8,17 +8,33 @@ import {
 } from '@ant-design/icons';
 import { useQuery } from '@tanstack/react-query';
 import dayjs from 'dayjs';
-import { Alert, Button, Card, Col, Row, Skeleton, Space, Statistic, Tag, Typography } from 'antd';
+import { Alert, Button, Card, Col, Empty, Row, Skeleton, Space, Statistic, Table, Tag, Typography } from 'antd';
+import type { ColumnsType } from 'antd/es/table';
+import { useMemo } from 'react';
 import { getGatewayHealth } from '@/services/health';
 import { listAlerts, listDataQuality, listRealtimeMetrics } from '@/services/ops';
 import pageStyles from '../page.less';
 import styles from './index.less';
 
+/** PRD 实时概览默认回看窗口：最近 60 分钟。 */
+const REALTIME_WINDOW_SECONDS = 60 * 60;
+
+/** 看板分维度展示行：聚合 60 分钟窗口内同一指标维度的事件量。 */
+interface DimensionRow {
+  /** 指标维度代码（analytics_event.event_type）。 */
+  metricCode: string;
+  /** 窗口内事件量。 */
+  count: number;
+  /** 最近一个时间桶。 */
+  latestBucketAt: string;
+}
+
 /**
  * 可信运行看板（Dashboard）。
  *
  * 网关健康、实时业务指标、开放告警数与最近数据质量均来自真实监控投影接口；
- * 数据由服务端决定，前端不伪造。网关状态每 60 秒轮询一次。
+ * 数据由服务端决定，前端不伪造。实时概览默认最近 60 分钟、每分钟刷新，
+ * 指标按维度（metricCode）分组展示，不把各维度简单加总成一个数字。
  */
 export default function Dashboard() {
   // 网关健康轮询：60 秒刷新，失败自动重试 1 次，保证运营台能感知网关可用性变化。
@@ -29,11 +45,15 @@ export default function Dashboard() {
     refetchInterval: 60_000,
   });
 
-  // 分钟级实时业务指标：汇总最近窗口内各指标事件量，作为业务活跃度展示。
+  // 分钟级实时业务指标：回看最近 60 分钟窗口，每分钟刷新；窗口随每次请求滑动到当前时刻。
   const metricsQuery = useQuery({
-    queryKey: ['ops', 'realtime-metrics'],
-    queryFn: () => listRealtimeMetrics(),
-    refetchInterval: 30_000,
+    queryKey: ['ops', 'realtime-metrics', '60m'],
+    queryFn: () => {
+      const to = new Date().toISOString();
+      const from = dayjs().subtract(REALTIME_WINDOW_SECONDS, 'second').toISOString();
+      return listRealtimeMetrics(undefined, from, to);
+    },
+    refetchInterval: 60_000,
   });
 
   // 开放告警数：仅统计待确认告警，供运营快速感知一致性风险。
@@ -50,8 +70,21 @@ export default function Dashboard() {
     refetchInterval: 60_000,
   });
 
-  const totalMetrics =
-    metricsQuery.data?.data.reduce((sum, item) => sum + item.value, 0) ?? undefined;
+  /** 按维度分组并聚合 60 分钟窗口内的事件量，按事件量降序展示。 */
+  const dimensionRows: DimensionRow[] = useMemo(() => {
+    const items = metricsQuery.data?.data ?? [];
+    const byDimension = new Map<string, { count: number; latest: string }>();
+    for (const item of items) {
+      const entry = byDimension.get(item.metricCode) ?? { count: 0, latest: item.bucketAt };
+      entry.count += item.value;
+      if (item.bucketAt > entry.latest) entry.latest = item.bucketAt;
+      byDimension.set(item.metricCode, entry);
+    }
+    return Array.from(byDimension.entries())
+      .map(([metricCode, entry]) => ({ metricCode, count: entry.count, latestBucketAt: entry.latest }))
+      .sort((left, right) => right.count - left.count);
+  }, [metricsQuery.data]);
+
   const openAlertCount = alertsQuery.data?.data.items.length ?? undefined;
   const qualityResultCount = qualityQuery.data?.data.length ?? undefined;
 
@@ -61,12 +94,23 @@ export default function Dashboard() {
   // 轮询失败时保留上次健康结果，但明确标注为过期状态，避免误报“运行中”。
   const gatewayCheckStale = hasHealthData && healthQuery.isRefetchError;
 
+  const dimensionColumns: ColumnsType<DimensionRow> = [
+    { title: '业务维度', dataIndex: 'metricCode', key: 'metricCode', render: (value: string) => <code>{value}</code> },
+    { title: '最近 60 分钟事件量', dataIndex: 'count', key: 'count', align: 'right' },
+    {
+      title: '最近时间桶',
+      dataIndex: 'latestBucketAt',
+      key: 'latestBucketAt',
+      render: (value: string) => dayjs(value).format('HH:mm'),
+    },
+  ];
+
   return (
     <div className={pageStyles.page}>
       <div className={styles.heading}>
         <div>
           <Typography.Text type="secondary">
-            当前仅展示已由正式契约定义的网关健康状态。
+            实时概览默认最近 60 分钟，指标按维度分组展示。
           </Typography.Text>
         </div>
         {/* 状态标签：优先呈现“过期”语义，其次按最新一次检查结果区分正常/未知/检查中。 */}
@@ -91,8 +135,7 @@ export default function Dashboard() {
         </Tag>
       </div>
 
-      {/* 指标卡片区：第一张为真实网关健康状态（首次加载显示骨架屏），其余三张为待接入占位。
-          值着色遵循状态语义：正常青绿、异常珊瑚、过期琥珀，颜色值见 theme.ts。 */}
+      {/* 指标卡片区：网关状态为真实健康检查，其余为真实监控投影；值着色遵循状态语义。 */}
       <Row gutter={[16, 16]}>
         <Col xs={24} md={12} xl={6}>
           <Card className={styles.metricCard}>
@@ -123,7 +166,12 @@ export default function Dashboard() {
                 <div className={`${styles.metricIcon} ${styles.metricIconTeal}`}>
                   <RiseOutlined />
                 </div>
-                <Statistic title="业务指标" value={totalMetrics ?? 0} prefix={<ClockCircleOutlined />} />
+                <Statistic
+                  title="实时业务维度"
+                  value={dimensionRows.length}
+                  suffix="个"
+                  prefix={<ClockCircleOutlined />}
+                />
               </div>
             )}
           </Card>
@@ -157,6 +205,28 @@ export default function Dashboard() {
           </Card>
         </Col>
       </Row>
+
+      {/* 分维度实时指标：不把各指标加总成一个数字，按维度展示最近 60 分钟事件量。 */}
+      <section className={pageStyles.panel} aria-label="分维度实时指标">
+        <Typography.Title level={5}>最近 60 分钟 · 分维度实时指标</Typography.Title>
+        <Table<DimensionRow>
+          rowKey="metricCode"
+          columns={dimensionColumns}
+          dataSource={dimensionRows}
+          loading={metricsQuery.isLoading}
+          pagination={false}
+          size="small"
+          locale={{
+            emptyText: (
+              <Empty
+                description={metricsQuery.isError
+                  ? '加载失败，请确认网关已启动'
+                  : '最近 60 分钟暂无实时指标数据'}
+              />
+            ),
+          }}
+        />
+      </section>
 
       {/* 网关不可达提示：区分“从未成功”与“历史成功但最近轮询失败”两种文案，并支持手动重新检查。 */}
       {(healthQuery.isError || gatewayCheckStale) && (

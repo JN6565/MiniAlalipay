@@ -1,9 +1,9 @@
 import { SearchOutlined } from '@ant-design/icons';
 import { useQuery } from '@tanstack/react-query';
-import { Alert, Button, Empty, Input, Space, Tag, Timeline, Typography, App } from 'antd';
+import { Alert, Button, Empty, Input, Space, Switch, Tag, Timeline, Typography, App } from 'antd';
 import { useState } from 'react';
 import PageHeader from '@/components/PageHeader';
-import { getOpsTransactionTrace, type TraceSpanItem } from '@/services/ops';
+import { getOpsTraceByTraceId, getOpsTransactionTrace, type TraceSpanItem } from '@/services/ops';
 import pageStyles from '../page.less';
 
 /** 链路阶段状态标签；仅按业务中心可核验的资金事实着色，未知阶段不使用成功色。 */
@@ -14,60 +14,138 @@ const spanStatusColor = (status: string): string => {
   return 'orange';
 };
 
-/** 将链路编号输入限制为交易或链路编号格式，避免把敏感内容带进查询。 */
-const isLikelyId = (value: string): boolean => /^[A-Za-z0-9-]{1,64}$/.test(value);
+/** 服务来源标签着色，按归属服务区分跨服务链路；仅在「查看技术证据」时展示。 */
+const serviceColor = (service: string): string => {
+  switch (service) {
+    case 'business-center':
+      return 'blue';
+    case 'account-center':
+      return 'green';
+    case 'user-center':
+      return 'purple';
+    case 'ai-service':
+      return 'orange';
+    default:
+      return 'default';
+  }
+};
+
+/** 服务端 Span 操作名到业务步骤的默认翻译；未知操作原样保留服务端中文操作名。 */
+const stepNameByOperation: Record<string, string> = {
+  统一交易受理: '支付受理',
+  'TCC 全局事务': '资金处理',
+  终态事件发布: '终态发布',
+  账本过账事件: '账本记账',
+  用户中心审计: '用户核验',
+  'AI 工具调用': 'AI 辅助',
+  'AI 审计': 'AI 审计',
+};
+
+/** 状态反映业务结果的 Span 操作名；仅这些节点的状态标签在默认业务视图展示。 */
+const businessStateOperations = new Set(['统一交易受理', 'TCC 全局事务']);
+
+/** 链路片段状态标签；PENDING 表示 Outbox 事件待投递，属技术状态，默认业务视图不展示。 */
+const spanStatusLabels: Record<string, string> = {
+  SUCCESS: '成功',
+  PROCESSING: '处理中',
+  PENDING: '待发布',
+  MANUAL_REVIEW: '待人工处理',
+  ERROR: '失败',
+};
+
+/** 把服务端 Span 翻译为业务步骤名；交易成败与是否待人工由交易/资金状态节点体现，事件投递状态归技术证据。 */
+function businessStep(span: TraceSpanItem): string {
+  return stepNameByOperation[span.operation] ?? span.operation;
+}
+
+/** 链路编号为 32 位十六进制；其余输入按交易号查询。 */
+const isTraceId = (value: string): boolean => /^[a-fA-F0-9]{32}$/.test(value);
 
 /**
  * 链路追溯页面。
  *
- * 按交易编号查询业务中心可核验的资金事实阶段（统一交易受理、TCC 全局事务、终态事件发布），
- * 以脱敏 Span 时间线展示。完整跨服务 Trace（网关、用户中心、账户中心、AI）归阶段七 OTel 集成，
- * 本页面只展示已核验事实，未知阶段不显示为成功。
+ * 支持按交易号或链路编号（32 位 hex）查询跨服务脱敏链路片段（业务中心、账户账本、用户审计、AI）。
+ * 时间线默认按业务步骤展示（支付受理、资金处理、账本记账、终态发布、用户核验、AI 辅助等）；
+ * 只有交易或资金状态为人工审核（MANUAL_REVIEW）时才展示「待人工处理」，
+ * 事件投递状态与来源、操作名、详情、链路编号等技术字段默认折叠，通过「查看技术证据」开关展开。
  */
 export default function Trace() {
   const { message } = App.useApp();
   const [input, setInput] = useState('');
-  const [queryId, setQueryId] = useState<string | undefined>(undefined);
+  const [query, setQuery] = useState<{ id: string; mode: 'transaction' | 'trace' }>();
+  // 默认业务视图；展开技术证据后展示 service、operation、detail 与 traceId 等技术字段。
+  const [showTech, setShowTech] = useState(false);
 
   const { data, isFetching, isError, error, refetch } = useQuery({
-    queryKey: ['ops-transaction-trace', queryId],
-    queryFn: () => getOpsTransactionTrace(queryId!),
-    enabled: !!queryId,
+    queryKey: ['ops', 'trace', query?.mode, query?.id],
+    queryFn: () => {
+      if (!query) throw new Error('缺少查询编号');
+      return query.mode === 'trace'
+        ? getOpsTraceByTraceId(query.id)
+        : getOpsTransactionTrace(query.id);
+    },
+    enabled: !!query,
     retry: false,
   });
 
   const spans: TraceSpanItem[] = data?.data ?? [];
 
-  const timelineItems = spans.map((span) => ({
-    color: spanStatusColor(span.status),
-    children: (
-      <div>
-        <Space size="small" wrap>
-          <Typography.Text strong>{span.operation}</Typography.Text>
-          <Tag>{span.service}</Tag>
-          <Tag color={spanStatusColor(span.status)}>{span.status}</Tag>
-        </Space>
+  const timelineItems = spans.map((span) => {
+    const step = businessStep(span);
+    const statusText = spanStatusLabels[span.status] ?? span.status;
+    // 只有交易与资金状态反映业务结果；Outbox 投递、审计等状态属技术字段，默认业务视图不展示。
+    const isBusinessState = businessStateOperations.has(span.operation);
+    return {
+      color: spanStatusColor(span.status),
+      children: (
         <div>
-          <Typography.Text type="secondary" style={{ fontSize: 12 }}>
-            {span.detail} · {span.traceId} · {new Date(span.occurredAt).toLocaleString()}
-          </Typography.Text>
+          <Space size="small" wrap>
+            <Typography.Text strong>{step}</Typography.Text>
+            {isBusinessState && <Tag color={spanStatusColor(span.status)}>{statusText}</Tag>}
+          </Space>
+          <div>
+            <Typography.Text type="secondary" style={{ fontSize: 12 }}>
+              {new Date(span.occurredAt).toLocaleString()}
+            </Typography.Text>
+          </div>
+          {showTech && (
+            <>
+              <Space size="small" wrap style={{ marginTop: 4 }}>
+                <Tag color={serviceColor(span.service)}>{span.service}</Tag>
+                <Tag>{span.operation}</Tag>
+                <Tag color={spanStatusColor(span.status)}>{statusText}</Tag>
+                {span.transactionId && <Tag>{span.transactionId}</Tag>}
+              </Space>
+              <div>
+                <Typography.Text type="secondary" style={{ fontSize: 12 }}>
+                  {span.detail} · {span.traceId}
+                </Typography.Text>
+              </div>
+            </>
+          )}
         </div>
-      </div>
-    ),
-  }));
+      ),
+    };
+  });
 
   const submit = () => {
     const value = input.trim();
     if (!value) {
-      message.warning('请输入交易编号');
+      message.warning('请输入交易号或链路编号');
       return;
     }
-    if (!isLikelyId(value)) {
-      message.error('交易编号格式不正确');
+    if (value.length > 64) {
+      message.error('交易号或链路编号格式不正确');
       return;
     }
-    setQueryId(value);
+    setQuery(isTraceId(value) ? { id: value, mode: 'trace' } : { id: value, mode: 'transaction' });
   };
+
+  const emptyText = !query
+    ? '输入交易号或链路编号后，按时间展示交易经历的业务步骤'
+    : query.mode === 'trace'
+      ? '未查询到该链路编号的跨服务记录'
+      : '未查询到该交易的链路记录';
 
   return (
     <main className={pageStyles.page}>
@@ -75,8 +153,8 @@ export default function Trace() {
       <section className={pageStyles.toolbar} aria-label="链路检索">
         <Input
           className={pageStyles.searchInput}
-          aria-label="交易编号"
-          placeholder="输入交易编号"
+          aria-label="交易号或链路编号"
+          placeholder="输入交易号或链路编号"
           prefix={<SearchOutlined />}
           value={input}
           onChange={(e) => setInput(e.target.value)}
@@ -86,16 +164,22 @@ export default function Trace() {
           查询链路
         </Button>
       </section>
-      <section className={pageStyles.panel} aria-label="链路时间线">
-        <Typography.Title level={4} className={pageStyles.panelTitle}>
-          脱敏 Span 时间线
-        </Typography.Title>
+      <section className={pageStyles.panel} aria-label="交易处理时间线">
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 }}>
+          <Typography.Title level={4} className={pageStyles.panelTitle}>
+            交易处理时间线
+          </Typography.Title>
+          <Space size="small">
+            <Switch size="small" checked={showTech} onChange={setShowTech} aria-label="查看技术证据" />
+            <Typography.Text type="secondary">查看技术证据</Typography.Text>
+          </Space>
+        </div>
         {isError && (
           <Alert
             type="error"
             showIcon
             message="链路查询失败"
-            description={(error as Error)?.message ?? '请确认交易编号后重试'}
+            description={(error as Error)?.message ?? '请确认输入后重试'}
             action={<Button size="small" onClick={() => refetch()}>重试</Button>}
             style={{ marginBottom: 16 }}
           />
@@ -103,7 +187,7 @@ export default function Trace() {
         {spans.length > 0 ? (
           <Timeline items={timelineItems} />
         ) : (
-          <Empty description={queryId ? '未查询到该交易的链路片段' : '输入交易编号后按时间展示各服务 Span'} />
+          <Empty description={emptyText} />
         )}
       </section>
     </main>

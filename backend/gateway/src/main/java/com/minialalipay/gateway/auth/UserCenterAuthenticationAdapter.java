@@ -2,6 +2,7 @@ package com.minialalipay.gateway.auth;
 
 import com.minialalipay.gateway.filter.GatewayAuthContext;
 import org.springframework.beans.factory.annotation.Value;
+import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.stereotype.Component;
 import org.springframework.http.HttpStatus;
 import org.springframework.web.server.ResponseStatusException;
@@ -27,6 +28,7 @@ import java.time.Duration;
  * </ul>
  */
 @Component
+@ConditionalOnProperty(name = "gateway.authentication.stub-enabled", havingValue = "false", matchIfMissing = true)
 public final class UserCenterAuthenticationAdapter implements GatewayAuthenticationPort {
     private final WebClient webClient;
     private final String serviceToken;

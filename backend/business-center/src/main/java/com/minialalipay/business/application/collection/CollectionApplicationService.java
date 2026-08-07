@@ -6,6 +6,7 @@ import com.minialalipay.business.application.port.SecurityMaterialPort;
 import com.minialalipay.business.domain.collection.CollectionRequest;
 import com.minialalipay.business.domain.collection.CollectionOrder;
 import com.minialalipay.business.domain.collection.CollectionOrderEvent;
+import com.minialalipay.business.domain.collection.CollectionOrderStatus;
 import com.minialalipay.business.domain.collection.PersonalCollectionCode;
 import com.minialalipay.business.domain.transaction.BusinessErrorCode;
 import com.minialalipay.common.error.BusinessException;
@@ -167,7 +168,12 @@ public class CollectionApplicationService {
         CollectionOrder existing = store.findOrderByBootstrapSessionId(sessionKey).orElse(null);
         if (existing != null) {
             if (!existing.getPayerUserId().equals(payerUserId)) throw new BusinessException(BusinessErrorCode.ORDER_NOT_FOUND);
-            return existing;
+            // 如果旧订单是终态，清除会话绑定，允许创建新订单
+            if (isTerminalStatus(existing.getStatus())) {
+                store.clearSessionBinding(existing.getOrderId());
+            } else {
+                return existing;
+            }
         }
         var payer = accounts.resolvePersonalAccount(payerUserId);
         if (!"ACTIVE".equals(payer.status())) throw new BusinessException(BusinessErrorCode.ACCOUNT_UNAVAILABLE);
@@ -284,6 +290,10 @@ public class CollectionApplicationService {
         String normalized = value.replaceAll("[\\p{Cntrl}]", "").trim();
         if (normalized.isBlank() || normalized.length() > 50) throw new BusinessException(CommonErrorCode.INVALID_REQUEST);
         return normalized;
+    }
+    private static boolean isTerminalStatus(CollectionOrderStatus status) {
+        return status == CollectionOrderStatus.SUCCESS || status == CollectionOrderStatus.CANCELLED
+                || status == CollectionOrderStatus.MANUAL_REVIEW || status == CollectionOrderStatus.EXPIRED;
     }
 
     /** 新个人码和仅本次响应可见的公开令牌。 */

@@ -1,16 +1,21 @@
 package com.minialalipay.user.application.auth;
 
 import com.minialalipay.common.error.BusinessException;
+import com.minialalipay.common.error.CommonErrorCode;
 import com.minialalipay.user.application.auth.dto.AuthResult;
+import com.minialalipay.user.application.auth.dto.CurrentIdentity;
 import com.minialalipay.user.application.auth.dto.LoginRequest;
 import com.minialalipay.user.application.auth.dto.RegisterRequest;
+import com.minialalipay.user.application.auth.dto.SessionIdentity;
 import com.minialalipay.user.domain.auth.UserErrorCode;
 import com.minialalipay.user.domain.credential.Credential;
 import com.minialalipay.user.domain.credential.CredentialRepository;
 import com.minialalipay.user.domain.credential.PasswordHasherPort;
+import com.minialalipay.user.domain.user.RoleAssignmentRepository;
 import com.minialalipay.user.domain.user.SessionManagerPort;
 import com.minialalipay.user.domain.user.User;
 import com.minialalipay.user.domain.user.UserRepository;
+import com.minialalipay.user.domain.user.UserStatus;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Service;
@@ -18,6 +23,8 @@ import org.springframework.transaction.annotation.Transactional;
 import org.springframework.transaction.support.TransactionSynchronization;
 import org.springframework.transaction.support.TransactionSynchronizationManager;
 
+import java.util.Optional;
+import java.util.Set;
 import java.util.UUID;
 
 /**
@@ -39,6 +46,7 @@ public class AuthService {
     private final PasswordHasherPort passwordHasher;
     private final SessionManagerPort sessionManager;
     private final AccountProvisioningPort accountProvisioningPort;
+    private final RoleAssignmentRepository roleAssignmentRepository;
 
     /**
      * 构造认证服务所需依赖。
@@ -48,19 +56,22 @@ public class AuthService {
      * @param passwordHasher 密码哈希端口
      * @param sessionManager 会话管理端口
      * @param accountProvisioningPort 账户中心开户注册端口
+     * @param roleAssignmentRepository 角色授权仓储端口
      */
     public AuthService(
             UserRepository userRepository,
             CredentialRepository credentialRepository,
             PasswordHasherPort passwordHasher,
             SessionManagerPort sessionManager,
-            AccountProvisioningPort accountProvisioningPort
+            AccountProvisioningPort accountProvisioningPort,
+            RoleAssignmentRepository roleAssignmentRepository
     ) {
         this.userRepository = userRepository;
         this.credentialRepository = credentialRepository;
         this.passwordHasher = passwordHasher;
         this.sessionManager = sessionManager;
         this.accountProvisioningPort = accountProvisioningPort;
+        this.roleAssignmentRepository = roleAssignmentRepository;
     }
 
     /**
@@ -193,6 +204,53 @@ public class AuthService {
     /** 供内部网关校验会话并解析真实用户 ID。 */
     public String validateSession(String token) {
         return sessionManager.validateSession(token);
+    }
+
+    /**
+     * 校验会话并解析可信主体与真实角色集合。
+     *
+     * <p>角色来自 {@code role_assignment} 表；普通用户无授权时回退为默认 {@code USER} 角色。
+     * 无效会话返回空结果，调用方不得据此伪造身份。</p>
+     *
+     * @param token 不含 Bearer 前缀的会话令牌
+     * @return 会话对应的主体与角色；会话无效返回空
+     */
+    public Optional<SessionIdentity> resolveSession(String token) {
+        String userId = sessionManager.validateSession(token);
+        if (userId == null || userId.isBlank()) {
+            return Optional.empty();
+        }
+        // 冻结（DISABLED）与未完成开户（PROVISIONING）用户会话立即失效：
+        // 冻结须即时禁止发起新业务，而非仅阻止下次登录。
+        User user = userRepository.findById(userId).orElse(null);
+        if (user == null || user.getStatus() != UserStatus.ACTIVE) {
+            return Optional.empty();
+        }
+        return Optional.of(new SessionIdentity(userId, resolveRoles(userId)));
+    }
+
+    /**
+     * 查询当前身份（展示名 + 角色），供 B 端当前身份接口消费。
+     *
+     * @param userId 网关注入的可信用户 ID
+     * @return 当前身份
+     * @throws BusinessException 用户不存在时抛出 {@link CommonErrorCode#NOT_FOUND}
+     */
+    public CurrentIdentity currentIdentity(String userId) {
+        User user = userRepository.findById(userId)
+                .orElseThrow(() -> new BusinessException(CommonErrorCode.NOT_FOUND));
+        String displayName = (user.getRealName() == null || user.getRealName().isBlank())
+                ? user.getNickname()
+                : user.getRealName();
+        return new CurrentIdentity(userId, displayName, resolveRoles(userId));
+    }
+
+    /**
+     * 解析用户实际角色；无角色授权时回退为默认 {@code USER}，保证普通用户仍可访问 C 端能力。
+     */
+    private Set<String> resolveRoles(String userId) {
+        Set<String> roles = roleAssignmentRepository.findRolesByUserId(userId);
+        return roles.isEmpty() ? Set.of("USER") : roles;
     }
 
     /**

@@ -1,6 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { history } from 'umi';
 import { Tabs, Card, Button, Input, Toast, SpinLoading } from 'antd-mobile';
+import { QRCodeSVG } from 'qrcode.react';
 import * as collectionService from '@/services/collection';
 import { AmountInput } from '@/components/h5/AmountInput';
 import { formatTime } from '@/utils/format';
@@ -20,10 +21,23 @@ const CollectionPage: React.FC = () => {
 
   const loadPersonalCode = async () => {
     try {
+      // 先尝试获取已有收款码
+      console.log('正在获取收款码...');
       const data = await collectionService.getMyCode();
-      setPersonalCode(data);
+      console.log('获取收款码结果:', data);
+
+      if (data && data.status === 'ACTIVE' && !data.collectionUrl) {
+        // 已有收款码但没有URL（安全设计：服务器不存储原始令牌），需要重新生成获取URL
+        console.log('收款码存在但没有URL，正在重新生成...');
+        const regenData = await collectionService.regenerateCode();
+        console.log('重新生成结果:', regenData);
+        setPersonalCode(regenData);
+      } else {
+        setPersonalCode(data);
+      }
     } catch (error) {
       console.error('加载失败', error);
+      Toast.show({ content: '加载收款码失败', icon: 'fail' });
     } finally {
       setLoading(false);
     }
@@ -60,6 +74,17 @@ const CollectionPage: React.FC = () => {
     }
   };
 
+  // 生成收款码URL
+  const getCollectionUrl = () => {
+    if (!personalCode?.collectionUrl) return '';
+    // 如果后端返回的是相对路径，拼接基础URL
+    if (personalCode.collectionUrl.startsWith('/')) {
+      const baseUrl = window.location.origin;
+      return `${baseUrl}${personalCode.collectionUrl}`;
+    }
+    return personalCode.collectionUrl;
+  };
+
   if (loading) {
     return (
       <div className="loading-container">
@@ -82,10 +107,18 @@ const CollectionPage: React.FC = () => {
               <div className="code-status">
                 状态：{personalCode.status === 'ACTIVE' ? '正常' : '已停用'}
               </div>
-              {personalCode.qrCodeUrl && (
+              {personalCode.status === 'ACTIVE' && getCollectionUrl() && (
                 <div className="code-qr">
-                  <img src={personalCode.qrCodeUrl} alt="收款码" />
+                  <QRCodeSVG
+                    value={getCollectionUrl()}
+                    size={200}
+                    level="H"
+                    includeMargin={true}
+                  />
                 </div>
+              )}
+              {personalCode.status === 'ACTIVE' && !getCollectionUrl() && (
+                <div className="code-empty">收款码加载中，请稍候...</div>
               )}
               <div className="code-actions">
                 <Button size="small" onClick={handleRegenerate}>

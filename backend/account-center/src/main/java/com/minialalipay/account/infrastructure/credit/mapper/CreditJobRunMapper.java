@@ -14,6 +14,10 @@ import java.time.LocalDate;
  *
  * <p>提供定时任务执行记录的按任务类型和业务日期查询、插入及乐观锁 CAS 更新能力。
  * 通过 (jobType, businessDate) 唯一键保证同一业务日期同一类型任务不重复执行。</p>
+ *
+ * <p>插入写入全部列（含非空的 triggerType、requestDigest）；CAS 更新仅修改可变字段
+ * （status、cursorCreditAccountId、retryCount、errorCode、startedAt、completedAt），
+ * 触发参数与请求摘要等创建事实保持不变。</p>
  */
 @Mapper
 public interface CreditJobRunMapper {
@@ -38,10 +42,12 @@ public interface CreditJobRunMapper {
      * @return 受影响行数
      */
     @Insert("INSERT INTO ledger_db.credit_job_run "
-            + "(job_run_id, job_type, business_date, status, started_at, finished_at, "
-            + "error_message, version, created_at, updated_at) "
-            + "VALUES (#{jobRunId}, #{jobType}, #{businessDate}, #{status}, #{startedAt}, "
-            + "#{finishedAt}, #{errorMessage}, #{version}, #{createdAt}, #{updatedAt})")
+            + "(run_id, job_type, business_date, status, cursor_credit_account_id, "
+            + "trigger_type, triggered_by_user_id, request_digest, retry_count, error_code, "
+            + "version, started_at, completed_at, created_at, updated_at) "
+            + "VALUES (#{runId}, #{jobType}, #{businessDate}, #{status}, #{cursorCreditAccountId}, "
+            + "#{triggerType}, #{triggeredByUserId}, #{requestDigest}, #{retryCount}, #{errorCode}, "
+            + "#{version}, #{startedAt}, #{completedAt}, #{createdAt}, #{updatedAt})")
     int insert(CreditJobRunPO po);
 
     /**
@@ -54,8 +60,10 @@ public interface CreditJobRunMapper {
      * @return 受影响行数，0 表示版本号不匹配（并发冲突）
      */
     @Update("UPDATE ledger_db.credit_job_run "
-            + "SET status = #{status}, started_at = #{startedAt}, finished_at = #{finishedAt}, "
-            + "error_message = #{errorMessage}, version = version + 1, updated_at = #{updatedAt} "
-            + "WHERE job_run_id = #{jobRunId} AND version = #{version}")
+            + "SET status = #{status}, cursor_credit_account_id = #{cursorCreditAccountId}, "
+            + "retry_count = #{retryCount}, error_code = #{errorCode}, "
+            + "started_at = #{startedAt}, completed_at = #{completedAt}, "
+            + "version = version + 1, updated_at = #{updatedAt} "
+            + "WHERE run_id = #{runId} AND version = #{version}")
     int updateByCas(CreditJobRunPO po);
 }

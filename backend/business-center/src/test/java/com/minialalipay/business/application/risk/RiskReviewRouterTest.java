@@ -8,6 +8,7 @@ import com.minialalipay.business.application.port.SecurityMaterialPort;
 import com.minialalipay.business.domain.collection.CollectionOrder;
 import com.minialalipay.business.domain.collection.CollectionOrderStatus;
 import com.minialalipay.business.domain.manualcase.ManualCase;
+import com.minialalipay.business.domain.manualcase.ManualCaseStatus;
 import com.minialalipay.business.domain.manualcase.ManualCaseType;
 import com.minialalipay.business.domain.qrpay.QrPayOrder;
 import com.minialalipay.business.domain.qrpay.QrPayOrderStatus;
@@ -128,7 +129,9 @@ class RiskReviewRouterTest {
     private static final class MemoryManualCaseStore implements ManualCaseStore {
         private final List<ManualCase> created = new ArrayList<>();
         private final Set<String> subjects = new HashSet<>();
-        @Override public List<ManualCase> list(String cursor, int limit) { return created; }
+        @Override public List<ManualCase> list(String cursor, ManualCaseStatus status, ManualCaseType type, int limit) {
+            return created;
+        }
         @Override public Optional<ManualCase> find(String caseId) { return created.stream().filter(c -> c.getCaseId().equals(caseId)).findFirst(); }
         @Override public boolean create(ManualCase manualCase) {
             String subject = manualCase.getSubjectType() + ":" + manualCase.getSubjectId();

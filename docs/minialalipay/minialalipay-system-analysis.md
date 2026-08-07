@@ -1160,6 +1160,29 @@ sequenceDiagram
     B-->>W: 交易状态与回执
 ```
 
+#### 联系人自动归档
+
+转账成功后，业务中心异步调用用户中心归档收款人到付款人的常用联系人列表。
+
+```mermaid
+sequenceDiagram
+    participant B as 业务中心
+    participant UC as 用户中心
+    participant DB as 联系人表
+
+    B->>B: 转账事务提交成功
+    B-->>UC: POST /internal/v1/contacts/archive（异步）
+    UC->>DB: INSERT ON DUPLICATE KEY UPDATE
+    DB-->>UC: 归档成功
+    UC-->>B: 200 OK
+```
+
+关键点：
+- 归档失败不影响转账主流程，仅记录告警日志
+- 归档接口使用 `X-Internal-Service-Token` 认证，禁止外部访问
+- upsert 语义天然幂等，重复调用安全
+- 联系人按置顶优先、最近成功转账时间倒序排列，最多展示 5 人
+
 ### 9.3 AI Talk 转账
 
 ```mermaid
@@ -1447,6 +1470,7 @@ flowchart TD
 | `GET /internal/v1/credit-accounts/by-user/{userId}` | `business-center` -> `account-center` | 只返回信用账户 ID、状态和 CAS 版本，不返回可用、已用或冻结额度；业务中心仅可将引用绑定至信用确认摘要和 TCC 分支 |
 | `POST /internal/v1/tcc/balance/{role}/{action}` | `business-center` -> `account-center` | `role` 为 `payer/payee`，`action` 为 `try/confirm/cancel`；按 `xid + branch_type + resource_id` 幂等，支持空回滚和防悬挂 |
 | `POST /internal/v1/tcc/ledger/{action}` | `business-center` -> `account-center` | Try 持久化 `PREPARED` 平衡凭证，Confirm 汇总验平后过账，Cancel 只取消未过账凭证 |
+| `POST /internal/v1/seata-tcc/transfer/try` | `business-center` -> `account-center` | 仅在 Seata 全局事务内调用（必须携带 `TX_XID` 请求头）；一次请求依次注册付款冻结、收款预占和账本凭证三个 TCC 分支 Try，分支参数随 Seata 分支上下文持久化供 TC 回调 Confirm/Cancel |
 | `POST /internal/v1/tcc/credit-ledger/{action}` | `business-center` -> `account-center` | 仅用于 `CREDIT_PAY`；请求只传信用账户和收款余额账户，账户中心固定借记信用应收资产、贷记收款用户余额负债；按 `xid + CREDIT_PAY_LEDGER + voucher_id` 幂等，支持空回滚和防悬挂 |
 | `POST /internal/v1/tcc/credit-pay/{action}` | `business-center` -> `account-center` | `action` 为 `try/confirm/cancel`；Try 冻结额度，Confirm 占用额度并增加消费明细和信用应收，Cancel 释放冻结；按 `xid + CREDIT_PAY + credit_account_id` 幂等并持久化空回滚屏障 |
 | `POST /internal/v1/tcc/credit-repay/{action}` | `business-center` -> `account-center` | `action` 为 `try/confirm/cancel`；Try 冻结还款余额，Confirm 扣减余额、减少应收并恢复额度，Cancel 释放余额；按 `xid + CREDIT_REPAY + credit_account_id` 幂等并持久化空回滚屏障 |
@@ -1888,7 +1912,7 @@ stateDiagram-v2
 | `quarantined_event` | `event_id CHAR(26)`、`consumer_name VARCHAR(64)`、`reason_code VARCHAR(32)`、`schema_version SMALLINT UNSIGNED`、`payload JSON`、`status VARCHAR(16)`、`quarantined_at/resolved_at DATETIME(3)` | PK `(consumer_name, event_id)` | `(status, quarantined_at)` |
 | `metric_definition` | `metric_code VARCHAR(64)`、`version INT UNSIGNED`、`name VARCHAR(128)`、`formula TEXT`、`dimensions_json JSON`、`owner_id CHAR(26)`、`status VARCHAR(16)`、`effective_at DATETIME(3)` | PK `(metric_code, version)` | `(status, effective_at)` |
 | `quality_result` | `result_id CHAR(26)`、`task_code VARCHAR(64)`、`data_date DATE`、`rule_code VARCHAR(64)`、`status VARCHAR(16)`、`expected_value/actual_value DECIMAL(24,6)`、`evidence_json JSON`、`checked_at DATETIME(3)` | PK `result_id`；UK `(task_code, data_date, rule_code)` | `(status, checked_at)` |
-| `monitor_alert` | `alert_id CHAR(26)`、`rule_code VARCHAR(64)`、`severity VARCHAR(8)`、`status VARCHAR(16)`、`subject_id VARCHAR(128)`、`evidence_json JSON`、`assignee_id CHAR(26)`、`opened_at/updated_at/closed_at DATETIME(3)` | PK `alert_id` | `(status, severity, opened_at)` |
+| `monitor_alert` | `alert_id CHAR(26)`、`rule_code VARCHAR(64)`、`severity VARCHAR(8)`、`status VARCHAR(16)`、`subject_id VARCHAR(128)`、`evidence_json JSON`、`assignee_id CHAR(26)`、`last_reason VARCHAR(256)`、`version BIGINT UNSIGNED`、`opened_at/updated_at/closed_at DATETIME(3)` | PK `alert_id` | `(status, severity, opened_at)` |
 | `daily_metric` | `metric_date DATE`、`metric_code VARCHAR(64)`、`dimension_hash BINARY(32)`、`dimensions_json JSON`、`value_decimal DECIMAL(24,6)`、`quality_status VARCHAR(16)`、`version INT UNSIGNED` | PK `(metric_date, metric_code, dimension_hash, version)` | `(metric_code, metric_date)` |
 
 每个业务 Schema 都拥有结构一致的 `outbox_event`，但不共享表；所有对外创建接口的所有者 Schema 拥有 `idempotency_record`。监控侧 `inbox_event` 与指标投影在同一个 `metrics_db` 本地事务中提交。
@@ -2398,7 +2422,7 @@ erDiagram
 
 接口路径不强制增加 `/b` 或 `/c` 前缀：C 端本人资源优先使用 `/me` 和对象级授权，B 端运营资源集中在 `/ops/**`、`/manual-cases/**` 及明确授权的脱敏 Trace 操作。OpenAPI 中每个操作必须标明 `C`、`B`、`SHARED` 或 `INTERNAL` 调用范围，并分别生成 `frontend-h5` 与 `frontend-admin` 客户端，禁止把全部操作生成到两个前端工程。
 
-当前 B 端用户管理、全局交易列表与详情、全局电子回执查询只有页面和业务需求，尚未形成明确 REST path、DTO 和错误契约。它们属于接口设计缺口，不得由前端自行推断路径或使用 C 端本人接口拼接全局能力；补充时必须同步 OpenAPI、后端系分和对象级授权测试。
+当前 B 端全局交易列表与详情、全局电子回执查询只有页面和业务需求，尚未形成明确 REST path、DTO 和错误契约。它们属于接口设计缺口，不得由前端自行推断路径或使用 C 端本人接口拼接全局能力；补充时必须同步 OpenAPI、后端系分和对象级授权测试。用户管理已按 `/api/v1/admin/users/**` 落地（列表/冻结/解冻，系统管理员专属，登录名脱敏、冻结记录操作者与理由）。
 
 ### 12.3 关键错误码
 
@@ -2496,7 +2520,7 @@ erDiagram
 | 方法 | 路径 | 权限 | 用途 | 幂等/并发要求 |
 |---|---|---|---|---|
 | POST | `/api/v1/auth/register` | 匿名 | 注册并创建初始余额为 0 的账户 | `Idempotency-Key`；登录名唯一 |
-| POST | `/api/v1/recharges` | 登录用户 | 创建模拟充值订单 | `X-Request-Id`、`Idempotency-Key`；单笔不超过 `5000000` 分，单用户单日累计不超过 `25000000` 分且最多 `5` 次；阶段四接入前只创建 `PENDING_CHANNEL` 来源订单 |
+| POST | `/api/v1/recharges` | 登录用户 | 创建模拟充值订单 | `X-Request-Id`、`Idempotency-Key`；单笔不超过 `5000000` 分，单用户单日累计不超过 `25000000` 分且最多 `5` 次；渠道成功后由充值 TCC Confirm 增加余额并完成 RECHARGE 复式记账 |
 | POST | `/api/v1/auth/login` | 匿名 | 登录并建立会话 | IP + 登录名限流 |
 | POST | `/api/v1/auth/logout` | 登录用户 | 销毁当前会话 | 重复退出返回成功 |
 | PUT | `/api/v1/payment-password` | 首次注册/登录用户 | 设置独立 6 位支付密码 | 已设置时拒绝覆盖；只存强哈希 |
@@ -3234,6 +3258,8 @@ SSE 只在终态发布事务的 Outbox 事件投递后发送 `SUCCESS`。断线�
 
 ### 13.2 TCC 执行规则
 
+转账链路的三分支 Try 在 Seata `@GlobalTransactional` 全局事务内注册，由 Seata TC 负责全局提交/回滚决策与崩溃兜底；Confirm/Cancel 仍直接调用账户中心幂等分支接口立即收敛，分支屏障键由交易 ID 稳定派生，与 Seata 技术 XID 解耦，保证 TC 重试与恢复扫描安全重入。充值链路参与者结构不同，继续使用自研 HTTP 编排；设置 `TCC_COORDINATOR=http` 可整体回退到自研编排。
+
 1. 受理事务提交 `PROCESSING` 主单后创建全局事务；全局事务和每个分支先持久化再调用下游。
 2. Try 只做可撤销的冻结/预占，不提前展示成功。
 3. Confirm 和 Cancel 必须幂等，允许协调器无限安全重试。
@@ -3503,7 +3529,11 @@ B 端管理员可通过 `business-center` 的 `/api/v1/ops/alert-rules` 系列�
 
 ### 16.8 B 端身份与用户管理边界
 
-B 端登录、当前身份、用户管理和角色管理依赖 `user-center`（负责人闫泽华）的身份与用户接口；`business-center` 与 `frontend-admin` 不持有用户身份与角色事实，只消费网关注入的可信 `X-User-Id`/`X-User-Roles`。当前网关 dev Stub 已提供可控身份用于本地演示；真实 B 端身份契约（运营登录、当前身份、用户列表）由用户中心合入 OpenAPI 后，B 端登录、用户管理和角色管理页面方可接通。在此之前这些页面保持诚实占位、不发起请求，`frontend-admin` 的 `getInitialState` 以开发身份兜底，B 端权限模型（OPERATOR/OBSERVER/ADMIN）已就绪，待身份契约合入后由当前身份接口填充。
+B 端登录、当前身份、用户管理和角色管理依赖 `user-center`（负责人闫泽华）的身份与用户接口；`business-center` 与 `frontend-admin` 不持有用户身份与角色事实，只消费网关注入的可信 `X-User-Id`/`X-User-Roles`。
+
+B 端身份闭环已落地：`frontend-admin` 通过网关调用 `POST /api/v1/auth/login` 登录并持久化访问令牌，请求层统一注入 `Authorization: Bearer <token>`；`GET /api/v1/auth/me` 以网关注入的可信 `X-User-Id` 换取展示名与角色集合，填充前端权限模型；网关 `AuthenticationGlobalFilter` 一律用认证主体覆盖客户端身份头，普通用户角色（`USER`）无 B 端准入权限。
+
+本地演示支持网关 dev Stub（`GATEWAY_AUTH_STUB_ENABLED=true` 时激活，令牌默认 `dev-admin-token`，角色默认 `ADMIN`）：开发环境未登录时 `frontend-admin` 注入 Stub 令牌并以开发身份兜底，使演示直接打通；生产构建不注入任何演示令牌，未登录一律引导到登录页。用户列表/冻结/解冻接口仍待用户中心合入后接通，在此之前用户管理页保持诚实占位、不发起请求。
 
 ## 17. 安全与合规分析
 

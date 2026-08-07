@@ -37,13 +37,18 @@ class AuthenticationGlobalFilterTest {
                     ? Mono.just(new GatewayAuthContext("ops-001", Set.of("OPERATOR")))
                     : Mono.empty();
 
+    private static final GatewayAuthenticationPort ADMIN_PORT =
+            token -> "admin-token".equals(token)
+                    ? Mono.just(new GatewayAuthContext("adm-001", Set.of("ADMIN")))
+                    : Mono.empty();
+
     /** 永远拒绝的端口（模拟未配置 Stub 的生产环境）。 */
     private static final GatewayAuthenticationPort REJECTING_PORT =
             token -> Mono.empty();
 
     private final ObjectMapper objectMapper = new ObjectMapper();
     private final GatewayAuditLogger auditLogger = new GatewayAuditLogger();
-    private final JwtService jwtService = new JwtService("test-secret-for-filter-tests");
+    private final JwtService jwtService = new JwtService("test-secret-for-filter-tests-0123456789");
 
     /** 创建过滤器实例的便捷方法。 */
     private AuthenticationGlobalFilter createFilter(GatewayAuthenticationPort port) {
@@ -263,7 +268,7 @@ class AuthenticationGlobalFilterTest {
     void normalUserAccessingOpsPathReturns403() {
         var filter = createFilter(PASSING_PORT);
         var exchange = MockServerWebExchange.from(
-                MockServerHttpRequest.get("/api/v1/ops/credit/status")
+                MockServerHttpRequest.get("/api/v1/ops/alerts")
                         .header(HttpHeaders.AUTHORIZATION, "Bearer valid-dev-token"));
 
         filter.filter(exchange, downstream -> Mono.empty()).block();
@@ -272,12 +277,76 @@ class AuthenticationGlobalFilterTest {
     }
 
     @Test
-    @DisplayName("运维角色可以访问运维路径")
+    @DisplayName("运维角色可以访问通用运维路径")
     void operatorCanAccessOpsPath() {
         var filter = createFilter(OPERATOR_PORT);
         var exchange = MockServerWebExchange.from(
-                MockServerHttpRequest.get("/api/v1/ops/credit/status")
+                MockServerHttpRequest.get("/api/v1/ops/alerts")
                         .header(HttpHeaders.AUTHORIZATION, "Bearer operator-token"));
+
+        boolean[] chainCalled = {false};
+        Mono<Void> result = filter.filter(exchange, downstream -> {
+            chainCalled[0] = true;
+            return Mono.empty();
+        });
+
+        StepVerifier.create(result).verifyComplete();
+        assertThat(chainCalled[0]).isTrue();
+    }
+
+    @Test
+    @DisplayName("运营人员访问信用运维路径返回 403")
+    void operatorCannotAccessCreditOps() {
+        var filter = createFilter(OPERATOR_PORT);
+        var exchange = MockServerWebExchange.from(
+                MockServerHttpRequest.post("/api/v1/ops/credit/statement-runs")
+                        .header(HttpHeaders.AUTHORIZATION, "Bearer operator-token"));
+
+        filter.filter(exchange, downstream -> Mono.empty()).block();
+
+        assertThat(exchange.getResponse().getStatusCode()).isEqualTo(HttpStatus.FORBIDDEN);
+    }
+
+    @Test
+    @DisplayName("系统管理员可以触发信用运维任务")
+    void adminCanAccessCreditOps() {
+        var filter = createFilter(ADMIN_PORT);
+        var exchange = MockServerWebExchange.from(
+                MockServerHttpRequest.post("/api/v1/ops/credit/due-check-runs")
+                        .header(HttpHeaders.AUTHORIZATION, "Bearer admin-token"));
+
+        boolean[] chainCalled = {false};
+        Mono<Void> result = filter.filter(exchange, downstream -> {
+            chainCalled[0] = true;
+            return Mono.empty();
+        });
+
+        StepVerifier.create(result).verifyComplete();
+        assertThat(chainCalled[0]).isTrue();
+    }
+
+    // ---- B 端用户管理角色门禁 ----
+
+    @Test
+    @DisplayName("运营人员访问用户管理路径返回 403")
+    void operatorCannotAccessAdminUsers() {
+        var filter = createFilter(OPERATOR_PORT);
+        var exchange = MockServerWebExchange.from(
+                MockServerHttpRequest.get("/api/v1/admin/users")
+                        .header(HttpHeaders.AUTHORIZATION, "Bearer operator-token"));
+
+        filter.filter(exchange, downstream -> Mono.empty()).block();
+
+        assertThat(exchange.getResponse().getStatusCode()).isEqualTo(HttpStatus.FORBIDDEN);
+    }
+
+    @Test
+    @DisplayName("系统管理员可以访问用户管理路径")
+    void adminCanAccessAdminUsers() {
+        var filter = createFilter(ADMIN_PORT);
+        var exchange = MockServerWebExchange.from(
+                MockServerHttpRequest.post("/api/v1/admin/users/01J00000000000000000000001/freeze")
+                        .header(HttpHeaders.AUTHORIZATION, "Bearer admin-token"));
 
         boolean[] chainCalled = {false};
         Mono<Void> result = filter.filter(exchange, downstream -> {

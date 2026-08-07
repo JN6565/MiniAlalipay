@@ -5,15 +5,18 @@ import com.minialalipay.common.idempotency.IdempotencyKeyValidator;
 import com.minialalipay.common.trace.RequestIdGenerator;
 import com.minialalipay.user.application.auth.AuthService;
 import com.minialalipay.user.application.auth.dto.AuthResult;
+import com.minialalipay.user.application.auth.dto.CurrentIdentity;
 import com.minialalipay.user.application.auth.dto.LoginRequest;
 import com.minialalipay.user.application.auth.dto.RegisterRequest;
 import com.minialalipay.user.interfaces.dto.auth.AuthResponseDTO;
 import com.minialalipay.user.interfaces.dto.auth.ChangeLoginPasswordRequestDTO;
+import com.minialalipay.user.interfaces.dto.auth.CurrentIdentityResponseDTO;
 import com.minialalipay.user.interfaces.dto.auth.LoginRequestDTO;
 import com.minialalipay.user.interfaces.dto.auth.RegisterRequestDTO;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.validation.Valid;
 import org.springframework.http.ResponseEntity;
+import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.PatchMapping;
 import org.springframework.web.bind.annotation.RequestBody;
@@ -236,6 +239,29 @@ public class AuthController {
     /**
      * 修改当前用户的登录密码。请求必须经过网关认证；成功后当前会话立即失效。
      */
+    /**
+     * 查询当前身份（展示名 + 角色）。
+     *
+     * <p>B 端登录后调用，用网关注入的可信 {@code X-User-Id} 换取当前身份与角色集合，
+     * 供前端权限模型填充。普通用户无角色授权时返回默认 {@code USER}。</p>
+     *
+     * @param userId      网关注入的可信用户 ID
+     * @param httpRequest HTTP 请求（用于提取 X-Request-Id 和 X-Trace-Id）
+     * @return 当前身份
+     */
+    @GetMapping("/me")
+    public ResponseEntity<ApiResponse<CurrentIdentityResponseDTO>> me(
+            @RequestHeader("X-User-Id") String userId,
+            HttpServletRequest httpRequest
+    ) {
+        String requestId = requestIdGenerator.resolve(httpRequest.getHeader("X-Request-Id"));
+        String traceId = httpRequest.getHeader("X-Trace-Id");
+        CurrentIdentity identity = authService.currentIdentity(userId);
+        return ResponseEntity.ok(ApiResponse.success(
+                new CurrentIdentityResponseDTO(identity.userId(), identity.displayName(), identity.roles()),
+                requestId, traceId));
+    }
+
     @PatchMapping("/login-password")
     public ResponseEntity<ApiResponse<Void>> changeLoginPassword(
             @RequestHeader("X-User-Id") String userId,

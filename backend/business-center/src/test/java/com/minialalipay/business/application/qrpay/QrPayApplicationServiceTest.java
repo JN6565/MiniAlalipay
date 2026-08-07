@@ -14,6 +14,8 @@ import com.minialalipay.business.application.risk.RiskEvaluationService;
 import com.minialalipay.business.application.risk.RiskReviewRouter;
 import com.minialalipay.business.domain.confirmation.Confirmation;
 import com.minialalipay.business.domain.manualcase.ManualCase;
+import com.minialalipay.business.domain.manualcase.ManualCaseStatus;
+import com.minialalipay.business.domain.manualcase.ManualCaseType;
 import com.minialalipay.business.domain.qrpay.QrPayOrder;
 import com.minialalipay.business.domain.qrpay.QrPayOrderEvent;
 import com.minialalipay.business.domain.risk.RiskDecision;
@@ -254,7 +256,9 @@ class QrPayApplicationServiceTest {
 
     private static final class MemoryManualStore implements ManualCaseStore {
         private final List<ManualCase> created = new ArrayList<>();
-        @Override public List<ManualCase> list(String cursor, int limit) { return created; }
+        @Override public List<ManualCase> list(String cursor, ManualCaseStatus status, ManualCaseType type, int limit) {
+            return created;
+        }
         @Override public Optional<ManualCase> find(String caseId) {
             return created.stream().filter(c -> c.getCaseId().equals(caseId)).findFirst();
         }

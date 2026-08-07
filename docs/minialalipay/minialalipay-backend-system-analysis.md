@@ -422,9 +422,10 @@ B 端和 C 端共用 `gateway` 和统一响应外壳，但不能因后端服务�
 | 告警闭环 | `/api/v1/ops/alerts/**` | 运营、观察者 | 观察者只读；确认、解决和关闭使用状态 CAS |
 | 数据质量与指标口径 | `/api/v1/ops/data-quality`、`ops/metric-definitions` | 运营、观察者 | 不允许通过监控接口直接修改业务库或资金事实 |
 | 信用演示任务 | `/api/v1/ops/credit/statement-runs`、`ops/credit/due-check-runs` | 演示管理员 | 只触发受审计任务，不允许直接修改额度、应收和账单金额 |
-| 链路追溯 | `/api/v1/transfers/{id}/trace` | 运营、观察者 | 返回脱敏 Span；普通 C 端用户无权访问 |
+| 链路追溯 | `/api/v1/ops/transactions/{id}/trace`、`/api/v1/ops/traces/{traceId}` | 运营、观察者 | 返回脱敏跨服务 Span；普通 C 端用户无权访问 |
+| 用户管理 | `/api/v1/admin/users/**` | 系统管理员 | 列表只读且登录名脱敏；冻结/解冻携带 `version` CAS 并记录操作者与理由 |
 
-B 端页面中以下能力已由 PRD 和前端系分提出，但当前总体端点目录和 OpenAPI 尚未形成可编码契约：用户管理、全局交易列表与详情、全局电子回执查询。实现前必须明确 path、角色矩阵、查询条件、分页、脱敏字段、响应 DTO 和错误码；在契约完成前禁止前端自行假设 `/api/v1/ops/users` 或 `/api/v1/ops/transactions` 等路径。
+B 端页面中以下能力已由 PRD 和前端系分提出，但当前总体端点目录和 OpenAPI 尚未形成可编码契约：全局电子回执查询。实现前必须明确 path、角色矩阵、查询条件、分页、脱敏字段、响应 DTO 和错误码；在契约完成前禁止前端自行假设 `/api/v1/ops/users` 或 `/api/v1/ops/receipts` 等路径。全局交易列表、详情与链路追溯已按 `/api/v1/ops/transactions/**`、`/api/v1/ops/traces/{traceId}` 落地（OpenAPI 与对象级授权测试同步补齐）；用户管理已按 `/api/v1/admin/users/**` 落地。
 
 #### 8.2.4 AI/MCP 与内部服务接口
 
@@ -439,10 +440,10 @@ B 端页面中以下能力已由 PRD 和前端系分提出，但当前总体端�
 |---|---|---|---|---|---|
 | `/actuator/health` | 运维探针 | gateway | Actuator | 已定义 | 可联调 |
 | `/api/v1/auth/**`、`users/**`、`contacts/**`、`payment-password` | C；登录/退出为 B/C 共用 | user-center | `AuthController` 等 | 未定义 | 禁止实现业务 Controller |
-| `/api/v1/transfer-drafts/**`、`transfers/**`、`confirmations` | C；Trace 为 B | business-center | `TransferController` 等 | 未定义 | 先补契约 |
-| `/api/v1/qr-pay/**`、`p2p-collections/**` | C | business-center | `QrPayController`、`CollectionController` | 未定义 | 先补契约与网关路由 |
-| `/api/v1/recharges/**` | C | business-center | `RechargeController` | 未定义 | 先补契约与网关路由 |
-| `/api/v1/manual-cases/**`、`/api/v1/ops/**`（不含 `ops/credit/**`） | B | business-center | 对应用途 Controller | 未定义 | 先补契约与网关路由 |
+| `/api/v1/transfer-drafts/**`、`transfers/**`、`confirmations` | C；Trace 为 B | business-center | `TransferController` 等 | 已定义 | 契约门禁与网关路由已具备 |
+| `/api/v1/qr-pay/**`、`p2p-collections/**` | C | business-center | `QrPayController`、`CollectionController` | 已定义 | 契约门禁与网关路由已具备 |
+| `/api/v1/recharges/**` | C | business-center | `RechargeController` | 已定义 | 契约门禁与网关路由已具备 |
+| `/api/v1/manual-cases/**`、`/api/v1/ops/**`（不含 `ops/credit/**`） | B | business-center | 对应用途 Controller | 已定义 | 契约门禁与网关路由已具备 |
 | `/api/v1/accounts/**`、`/api/v1/credit/**`、`/api/v1/ops/credit/**` | C/B | account-center | `AccountController`、`CreditController`、`CreditJobController` | 未定义 | 先补契约；还款资金执行调用 business-center 内部契约 |
 | `/api/v1/agent/**` | C | ai-service | `AgentController` | 未定义 | 先补契约 |
 
@@ -509,7 +510,7 @@ B 端页面中以下能力已由 PRD 和前端系分提出，但当前总体端�
 | 方法与路径 | 请求参数/DTO | 成功返回 `data` | 主要错误 |
 |---|---|---|---|
 | `POST /api/v1/agent/messages` | `AgentMessageRequest(sessionId,message,clientMessageId)`；同会话串行 | `AgentMessageView(sessionId,messageId,reply,cards[],toolStatus,createdAt)` | `AGENT_BUSY`、`TOOL_UNAVAILABLE`、`PROMPT_INJECTION_REJECTED` |
-| `GET /api/v1/ops/realtime-metrics` | `metricCode`、`from`、`to`、`cursor` | `MetricPage(items,definitionVersion,nextCursor)` | `INVALID_TIME_RANGE` |
+| `GET /api/v1/ops/realtime-metrics` | `metricCode`、`from`、`to`、`cursor`；未指定时间范围默认回看最近 60 分钟 | `MetricPage(items,definitionVersion,nextCursor)` | `INVALID_TIME_RANGE` |
 | `GET /api/v1/ops/alerts` | `severity`、`status`、`cursor`、`limit` | `AlertPage(items,nextCursor)` | `OPS_PERMISSION_REQUIRED` |
 | `POST /api/v1/ops/alerts/{id}/acknowledge` | `AlertDecisionRequest(version,comment)` | `AlertView(id,status,assigneeId,version,updatedAt)` | `VERSION_CONFLICT`、`ALERT_STATE_INVALID` |
 | `POST /api/v1/ops/alerts/{id}/resolve` | `ResolveAlertRequest(version,comment,evidenceRefs[])` | `AlertView` | `EVIDENCE_REQUIRED` |
@@ -522,7 +523,8 @@ B 端页面中以下能力已由 PRD 和前端系分提出，但当前总体端�
 |---|---|---|---|
 | `GET /api/v1/accounts/me/analytics` | `range=7d/30d/month` | `PersonalAnalyticsView(range,definitionVersion,incomeFen,expenseFen,balanceFlow,creditFlow,counterparties[])` | `RANGE_NOT_SUPPORTED` |
 | `GET /api/v1/qr-pay/me/qr-collection-analytics` | `range=today/month` | `QrCollectionAnalyticsResponse(orderCount,transactionCount,grossAmountFen,refundAmountFen,netAmountFen,byPaymentMethod[],since,now)` | `RANGE_NOT_SUPPORTED`、`ACCOUNT_UNAVAILABLE` |
-| `GET /api/v1/transfers/{id}/trace` | 交易 ID | `TraceView(traceId,transactionId,spans[],masked=true)` | `OPS_PERMISSION_REQUIRED` |
+| `GET /api/v1/ops/transactions/{id}/trace` | 交易 ID | `TraceSpan[]`，按交易归属链路编号返回跨服务脱敏 Span（业务中心、账户账本、用户审计、AI） | `OPS_PERMISSION_REQUIRED` |
+| `GET /api/v1/ops/traces/{traceId}` | 链路编号 | `TraceSpan[]`，无已核验片段返回空列表 | `OPS_PERMISSION_REQUIRED` |
 | `GET /api/v1/manual-cases` | `status,type,cursor,limit` | `ManualCasePage(items,nextCursor)` | `OPS_PERMISSION_REQUIRED` |
 | `POST /api/v1/manual-cases/{id}/decisions` | `ManualCaseDecisionRequest(decision,comment,version)` | `ManualCaseView(id,status,decision,version,updatedAt)` | `CASE_STATE_INVALID`、`VERSION_CONFLICT` |
 | `GET /api/v1/qr-pay/orders/by-token` | 查询参数 `t`，只建立 bootstrap 会话 | `BootstrapView(bootstrapSessionId,expiresAt)`，不返回订单业务数据 | `QR_TOKEN_INVALID` |
@@ -539,7 +541,7 @@ B 端页面中以下能力已由 PRD 和前端系分提出，但当前总体端�
 | `GET /api/v1/agent/sessions/{id}` | 会话 ID | `AgentSessionView(sessionId,status,messages[],toolTraces[])`，不返回内部推理 | `SESSION_NOT_FOUND` |
 | `DELETE /api/v1/agent/sessions/{id}/memory` | 会话 ID | `OperationResult(success=true)` | `SESSION_NOT_FOUND` |
 | `GET /api/v1/ops/daily-reports` | `businessDate,metricCode,cursor` | `DailyReportPage(items,definitionVersion,qualityStatus,nextCursor)` | `REPORT_NOT_PUBLISHED` |
-| `GET /api/v1/ops/data-quality` | `businessDate,jobType,status,cursor` | `QualityResultPage(items,nextCursor)` | `OPS_PERMISSION_REQUIRED` |
+| `GET /api/v1/ops/data-quality` | `dataDate`、`jobCode`、`ruleCode` | `DataQualityResult[]` | `OPS_PERMISSION_REQUIRED` |
 | `GET /api/v1/ops/metric-definitions` | `metricCode,version,cursor` | `MetricDefinitionPage(items,nextCursor)` | `OPS_PERMISSION_REQUIRED` |
 | `POST /api/v1/ops/alerts/{id}/close` | `CloseAlertRequest(version,comment)` | `AlertView(status=CLOSED)` | `ALERT_STATE_INVALID`、`VERSION_CONFLICT` |
 | `POST /api/v1/ops/credit/statement-runs` | `CreditJobRunRequest(businessDate)` | `CreditJobRunView(runId,jobType,businessDate,status)` | `JOB_ALREADY_RUNNING` |
@@ -617,6 +619,19 @@ B 端页面中以下能力已由 PRD 和前端系分提出，但当前总体端�
 
 ### 10.1 TCC 分支职责
 
+#### 10.1.1 Seata 转账落地约束
+
+转账主链路已经接入 Seata 2 TCC：`business-center` 的
+`SeataGlobalTransactionExecutor.execute` 使用 `@GlobalTransactional` 创建全局事务，
+通过 `/internal/v1/seata-tcc/transfer/try` 仅注册三个 Try 分支；
+`account-center` 的 `SeataTransferTccParticipant` 和 `SeataLedgerTccParticipant`
+使用 `@LocalTCC` 与 `@TwoPhaseBusinessAction` 暴露 Confirm/Cancel 回调。
+
+HTTP 请求中的 `TX_XID` 是 Seata 技术标识，只在请求线程绑定，不能作为业务屏障键、幂等键或对外返回值。
+账户中心的 `tcc_branch` 仍使用由交易 ID 派生的 `businessXid`，负责幂等、空回滚、防悬挂和 CAS；
+因此 Seata TC 重试与现有恢复扫描不会产生第二套业务分支事实。充值等尚未迁移的交易类型继续走 HTTP 协调器，
+由 `minialalipay.tcc.coordinator=http` 显式回退。
+
 | 分支 | Try | Confirm | Cancel |
 |---|---|---|---|
 | 付款余额 | 建冻结记录并减少可用 | 冻结转已扣 | 释放冻结一次 |
@@ -679,9 +694,10 @@ B 端页面中以下能力已由 PRD 和前端系分提出，但当前总体端�
 
 ### 12.2 Trace 与日志
 
-- 网关、HTTP 客户端、TCC、Outbox、SSE 和 MCP 传播 `requestId/traceId`。
+- 网关、HTTP 客户端、TCC、Outbox、SSE 和 MCP 传播 `requestId/traceId`；各服务在自有库记录同一 `trace_id`。
 - 资金日志必须包含业务类型、资源 ID、旧/新状态、结果码和耗时，不记录敏感原文。
 - 交易、来源订单、TCC 分支、凭证、Outbox 和人工工单可通过同一 Trace 关联。
+- B 端链路追溯由业务中心作为 Ops 只读聚合点，跨库只读投影聚合业务中心、账户账本、用户审计与 AI 工具/审计片段（只读不改写；领域写入仍归属各自服务）；完整 OTel 跨服务 Trace 归阶段七接入。
 - 指标投影不能反向决定资金终态；实时和离线指标都只消费确定性事件。
 
 ## 13. 设计用例与测试覆盖

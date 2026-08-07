@@ -11,12 +11,12 @@ import java.util.stream.Collectors;
 /**
  * B 端运营接口的角色守卫。
  *
- * <p>角色只读取网关清洗并注入的 {@code X-User-Roles}，不接受请求体或查询参数中的角色。观察者可以访问
- * 只读投影，工单和告警处置只允许管理员或运营人员执行。</p>
+ * <p>角色只读取网关清洗并注入的 {@code X-User-Roles}，不接受请求体或查询参数中的角色。B 端只保留
+ * 管理员与运营人员两类角色，均拥有只读投影与工单、告警处置权限。</p>
  */
 @Component
 public final class OpsAccessGuard {
-    private static final Set<String> READ_ROLES = Set.of("ADMIN", "OPERATOR", "OBSERVER");
+    private static final Set<String> READ_ROLES = Set.of("ADMIN", "OPERATOR");
     private static final Set<String> WRITE_ROLES = Set.of("ADMIN", "OPERATOR");
     private static final Set<String> ADMIN_ROLES = Set.of("ADMIN");
 
@@ -30,7 +30,7 @@ public final class OpsAccessGuard {
         requireAny(trustedRolesHeader, WRITE_ROLES);
     }
 
-    /** 校验管理员权限；用于非资金配置类操作（如告警阈值配置），运营人员与观察者无权限。 */
+    /** 校验管理员权限；用于非资金配置类操作（如告警阈值配置），运营人员无权限。 */
     public void requireAdmin(String trustedRolesHeader) {
         requireAny(trustedRolesHeader, ADMIN_ROLES);
     }

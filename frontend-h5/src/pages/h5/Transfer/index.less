@@ -1,51 +1,159 @@
 .transfer-page {
   min-height: 100vh;
-  background: #f5f5f5;
-  padding: 16px;
+  background: #f5f7fa;
+  padding: 0;
 }
 
-.transfer-form {
-  background: #fff;
-  border-radius: 12px;
-  padding: 24px;
+/* 页面标题 */
+.page-header {
+  background: white;
+  padding: 20px;
+  border-bottom: 1px solid #e8e8e8;
 }
 
-.payee-candidates {
-  margin-top: 8px;
-  border: 1px solid #e5e5e5;
-  border-radius: 8px;
-  max-height: 200px;
-  overflow-y: auto;
+.page-title {
+  font-size: 20px;
+  font-weight: 600;
+  color: #1a1a1a;
+  margin: 0;
 }
 
-.payee-item {
+/* 收款人搜索区域 */
+.payee-section {
+  background: white;
+  padding: 16px 20px;
+  margin-bottom: 12px;
+}
+
+.section-label {
+  font-size: 14px;
+  color: #666;
+  margin-bottom: 12px;
+  font-weight: 500;
+}
+
+/* 最近转账列表 */
+.recent-transfers-section,
+.search-results-section {
+  background: white;
+  padding: 0 20px 16px;
+  margin-bottom: 12px;
+}
+
+.section-header {
   display: flex;
-  justify-content: space-between;
   align-items: center;
-  padding: 12px;
-  border-bottom: 1px solid #f0f0f0;
+  justify-content: space-between;
+  padding: 12px 0;
   cursor: pointer;
+  user-select: none;
 }
 
-.payee-item:hover {
-  background: #f5f5f5;
+.section-title {
+  font-size: 15px;
+  font-weight: 600;
+  color: #1a1a1a;
+}
+
+.section-arrow {
+  font-size: 12px;
+  color: #999;
+  transition: transform 0.2s;
+  display: inline-flex;
+  align-items: center;
+
+  &.expanded {
+    transform: rotate(180deg);
+  }
+}
+
+.contacts-list,
+.payee-candidates {
+  border-radius: 12px;
+  overflow: hidden;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.04);
+}
+
+/* 已选收款人卡片 */
+.selected-payee-card {
+  margin: 0 20px 16px;
+  padding: 16px;
+  background: linear-gradient(135deg, #f0f4ff 0%, #e6f0ff 100%);
+  border-radius: 12px;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  border: 2px solid #667eea;
+}
+
+.payee-info {
+  flex: 1;
 }
 
 .payee-name {
-  font-size: 14px;
-  color: #333;
+  font-size: 15px;
+  font-weight: 600;
+  color: #1a1a1a;
+  margin-bottom: 4px;
 }
 
 .payee-account {
-  font-size: 12px;
-  color: #999;
+  font-size: 13px;
+  color: #666;
 }
 
-.selected-payee {
+/* 金额输入区域 */
+.amount-section {
+  background: white;
+  padding: 20px;
+  margin-bottom: 12px;
+}
+
+.amount-input-wrapper {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 12px 0;
+}
+
+.amount-warning {
   margin-top: 8px;
   padding: 8px 12px;
-  background: #e6f7ff;
-  border-radius: 4px;
-  font-size: 14px;
-  color: #1677ff;
+  background: #fff3e0;
+  border-left: 3px solid #ff9800;
+  border-radius: 6px;
+  font-size: 13px;
+  color: #e65100;
+}
+
+/* 备注输入 */
+.remark-section {
+  background: white;
+  padding: 20px;
+  margin-bottom: 12px;
+}
+
+/* 提交按钮 */
+.submit-section {
+  padding: 20px;
+}
+
+.submit-btn {
+  height: 52px;
+  font-size: 17px;
+  font-weight: 600;
+  border-radius: 12px;
+  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+  box-shadow: 0 4px 12px rgba(102, 126, 234, 0.4);
+  transition: all 0.3s;
+}
+
+.submit-btn:active:not(:disabled) {
+  transform: scale(0.98);
+  box-shadow: 0 2px 8px rgba(102, 126, 234, 0.3);
+}
+
+.submit-btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
 }

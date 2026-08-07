@@ -628,18 +628,20 @@ erDiagram
 | `registration_id` | `CHAR(26)` | 必填 | 用户中心生成的注册幂等键，用于开户恢复和既有资源查询 |
 | `account_number` | `VARCHAR(64)` | 必填 | 系统生成的 16 位账户号，以 `62` 开头，用于登录和唯一识别 |
 | `phone_number` | `VARCHAR(11)` | 新注册必填、历史数据可空 | 完整手机号，用于登录及转账查询；禁止跨上下文透传或写日志 |
-| `real_name` | `VARCHAR(64)` | 新注册必填、历史数据可空 | 注册真实姓名，用于转账收款人查询和确认展示 |
-| `nickname` | `VARCHAR(64)` | 必填 | 可重复的展示名称和模糊搜索条件 |
-| `phone_tail` | `CHAR(4)` | 可空 | 手机号尾号，仅用于辅助检索和脱敏展示 |
+| `real_name` | `VARCHAR(64)` | 新注册必填、历史数据可空 | 注册真实姓名，用于收款确认展示 |
+| `nickname` | `VARCHAR(64)` | 必填 | 可重复的展示名称 |
+| `phone_tail` | `CHAR(4)` | 可空 | 手机号尾号，仅用于脱敏展示 |
 | `identity_status` | `VARCHAR(16)` | 必填 | 演示身份状态，不代表真实 KYC |
 | `status` | `VARCHAR(16)` | `PROVISIONING` | 用户状态：`PROVISIONING/ACTIVE/DISABLED` |
+| `disabled_by` | `CHAR(26)` | 可空 | 管理冻结操作者用户 ID，解冻后清空 |
+| `disabled_reason` | `VARCHAR(200)` | 可空 | 管理冻结理由，解冻后清空 |
 | `version` | `BIGINT UNSIGNED` | `0` | 用户资料和状态的 CAS 版本 |
 | `created_at` | `DATETIME(3)` | 必填 | 用户注册时间 |
 | `updated_at` | `DATETIME(3)` | 必填 | 最近资料或状态变更时间 |
 
 **键与索引**：UK `(registration_id)`、UK `(account_number)`、UK `(phone_number)`；索引 `(real_name,status)`、`(nickname,status)`、`(status,created_at)`。手机号唯一索引是并发重复注册的最终一致性防线。
 
-**写入规则**：注册事务以 `PROVISIONING` 创建用户并触发开户，但不得写初始资金；账户中心以 `registration_id` 作为开户幂等键，用户中心核验余额账户和适用的信用账户后才能 CAS 更新为 `ACTIVE`。恢复期间禁止登录，超过自动恢复阈值后仍保持 `PROVISIONING` 并创建人工工单。临时登录锁定只更新 `credential.login_fail_count/login_lock_until`，不修改用户状态；管理停用使用 `DISABLED`。RBAC 角色只写 `role_assignment`，不得在本表重复保存 `user_type`。
+**写入规则**：注册事务以 `PROVISIONING` 创建用户并触发开户，但不得写初始资金；账户中心以 `registration_id` 作为开户幂等键，用户中心核验余额账户和适用的信用账户后才能 CAS 更新为 `ACTIVE`。恢复期间禁止登录，超过自动恢复阈值后仍保持 `PROVISIONING` 并创建人工工单。临时登录锁定只更新 `credential.login_fail_count/login_lock_until`，不修改用户状态；管理停用使用 `DISABLED`，冻结时记录 `disabled_by/disabled_reason`，解冻时清空，二者与状态同事务变更。RBAC 角色只写 `role_assignment`，不得在本表重复保存 `user_type`。
 
 ### 5.2 `credential`
 
@@ -1191,7 +1193,7 @@ MVP 退款仅支持单笔全额受控虚拟退款，不接入真实支付通道�
 
 **键与索引**：UK `(transaction_id)`；索引 `(user_id,business_date,status,created_at)`。
 
-**写入规则**：不要求支付密码，但必须校验登录态、账户、策略、日额度、限流、幂等和审计。`status` 从 `PENDING_CHANNEL` 起，由业务中心内部渠道回调推进：渠道成功经 `acceptFundTransaction` 进入 `PROCESSING` 并创建 `fund_transaction(RECHARGE)`，付款对手为虚拟发行权益科目；渠道拒绝进入 `REJECTED` 并记录 `reject_reason_code`；重复回调幂等。账户中心充值 TCC 参与者与虚拟发行权益科目尚未交付前，成功入账依赖后续资金内核实现。
+**写入规则**：不要求支付密码，但必须校验登录态、账户、策略、日额度、限流、幂等和审计。`status` 从 `PENDING_CHANNEL` 起，由业务中心内部渠道回调推进：渠道成功经 `acceptFundTransaction` 进入 `PROCESSING` 并创建 `fund_transaction(RECHARGE)`，付款账户为空且资金来源为 `SYSTEM_ISSUANCE`；账户中心充值 TCC 的 Try 创建 `PREPARED` 充值凭证，Confirm 原子增加目标账户可用余额并借记系统发行权益、贷记用户余额负债，Cancel 取消未过账凭证；重复回调幂等。
 
 ### 9.4 `refund_order`
 
@@ -1772,16 +1774,15 @@ MVP 退款仅支持单笔全额受控虚拟退款，不接入真实支付通道�
 
 | 字段 | 类型 | 必填/默认 | 功能 |
 | --- | --- | --- | --- |
+| `metric_date` | `DATE` | 联合 PK，必填 | 指标业务日期 |
 | `metric_code` | `VARCHAR(64)` | 联合 PK，必填 | 指标编码 |
-| `business_date` | `DATE` | 联合 PK，必填 | 指标业务日期 |
 | `dimension_hash` | `BINARY(32)` | 联合 PK，必填 | 规范化维度摘要 |
-| `definition_version` | `INT UNSIGNED` | 联合 PK，必填 | 指标口径版本 |
+| `version` | `INT UNSIGNED` | 联合 PK，必填 | 指标口径版本 |
 | `dimensions_json` | `JSON` | 必填 | 脱敏维度值 |
 | `value_decimal` | `DECIMAL(24,6)` | 必填 | 日指标数值 |
-| `quality_status` | `VARCHAR(16)` | `PENDING` | `PENDING/PASSED/FAILED` |
-| `updated_at` | `DATETIME(3)` | 必填 | 最近计算时间 |
+| `quality_status` | `VARCHAR(16)` | 必填 | `PENDING/PASSED/FAILED/UNKNOWN` |
 
-**键与索引**：PK `(metric_code,business_date,dimension_hash,definition_version)`；索引 `(business_date,quality_status)`。
+**键与索引**：PK `(metric_date,metric_code,dimension_hash,version)`；索引 `(metric_code,metric_date)`。定义与迁移 `V202608051211`、`V202608070001` 一致。
 
 **写入规则**：只有完整性、唯一性和对账质量通过后才发布。
 
@@ -1815,14 +1816,16 @@ MVP 退款仅支持单笔全额受控虚拟退款，不接入真实支付通道�
 | `rule_code` | `VARCHAR(64)` | 必填 | 触发规则编码 |
 | `severity` | `VARCHAR(8)` | 必填 | `P0/P1/P2` |
 | `status` | `VARCHAR(16)` | `OPEN` | `OPEN/ACKNOWLEDGED/RESOLVED/CLOSED` |
-| `subject_id` | `VARCHAR(128)` | 必填 | 告警主体 ID |
+| `subject_id` | `VARCHAR(128)` | 可空 | 告警主体 ID |
 | `evidence_json` | `JSON` | 必填 | 指标、交易和 Trace 证据 |
 | `assignee_id` | `CHAR(26)` | 可空 | 当前处理人 |
+| `last_reason` | `VARCHAR(256)` | 可空 | 最后处置理由 |
+| `version` | `BIGINT UNSIGNED` | `0` | 乐观锁 CAS 版本 |
 | `opened_at` | `DATETIME(3)` | 必填 | 告警打开时间 |
 | `updated_at` | `DATETIME(3)` | 必填 | 最近处置时间 |
 | `closed_at` | `DATETIME(3)` | 可空 | 人工关闭时间 |
 
-**键与索引**：索引 `(status,severity,opened_at)`、`(subject_id,opened_at)`。
+**键与索引**：索引 `(status,severity,opened_at)`。定义与迁移 `V202608051211`、`V202608070001` 一致。
 
 **写入规则**：恢复正常只生成恢复证据，P0/P1 仍需人工确认后关闭；证据不得删除。
 

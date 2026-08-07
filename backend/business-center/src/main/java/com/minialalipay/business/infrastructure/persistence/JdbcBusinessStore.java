@@ -335,23 +335,95 @@ public class JdbcBusinessStore implements BusinessStore, OpsTransactionQueryPort
     }
 
     @Override
-    public List<TraceSpan> findTraceSpans(String transactionId) {
-        Optional<FundTransactionRecord> tx = findTransaction(transactionId);
-        if (tx.isEmpty()) return List.of();
-        FundTransaction t = tx.get().transaction();
-        String traceId = t.getTraceId();
+    public List<TraceSpan> findTraceSpansByTraceId(String traceId) {
+        if (traceId == null || traceId.isBlank()) return List.of();
         List<TraceSpan> spans = new ArrayList<>();
-        spans.add(new TraceSpan("business-center", "统一交易受理", t.getStatus().name(),
-                t.getBusinessType().name() + "/" + t.getSourceType().name(), traceId, t.getCreatedAt()));
-        jdbc.query("SELECT xid,status,retry_count,updated_at FROM business_db.tcc_global WHERE transaction_id=?",
-                rs -> { if (rs.next()) { spans.add(new TraceSpan("business-center", "TCC 全局事务", rs.getString("status"),
-                        "xid=" + rs.getString("xid") + ",retry=" + rs.getInt("retry_count"), traceId, instant(rs, "updated_at"))); } return null; },
-                transactionId);
-        jdbc.query("SELECT event_type,status,occurred_at FROM business_db.outbox_event WHERE transaction_id=? ORDER BY occurred_at",
-                rs -> { while (rs.next()) { spans.add(new TraceSpan("business-center", "终态事件发布", rs.getString("status"),
-                        rs.getString("event_type"), traceId, instant(rs, "occurred_at"))); } return null; },
-                transactionId);
+        // 业务中心统一交易受理：按链路编号关联交易，交易归属明确。
+        jdbc.query("SELECT transaction_id,business_type,source_type,status,trace_id,created_at "
+                        + "FROM business_db.fund_transaction WHERE trace_id=?",
+                rs -> {
+                    while (rs.next()) {
+                        spans.add(new TraceSpan("business-center", "统一交易受理", spanStatus(rs.getString("status")),
+                                rs.getString("business_type") + "/" + rs.getString("source_type"),
+                                rs.getString("trace_id"), instant(rs, "created_at"), rs.getString("transaction_id")));
+                    }
+                    return null;
+                }, traceId);
+        // 业务中心 TCC 全局事务：经统一交易的链路编号关联。
+        jdbc.query("SELECT t.xid,t.status,t.retry_count,t.updated_at,f.trace_id,f.transaction_id "
+                        + "FROM business_db.tcc_global t "
+                        + "JOIN business_db.fund_transaction f ON f.transaction_id=t.transaction_id WHERE f.trace_id=?",
+                rs -> {
+                    while (rs.next()) {
+                        spans.add(new TraceSpan("business-center", "TCC 全局事务", spanStatus(rs.getString("status")),
+                                "xid=" + rs.getString("xid") + ",retry=" + rs.getInt("retry_count"),
+                                rs.getString("trace_id"), instant(rs, "updated_at"), rs.getString("transaction_id")));
+                    }
+                    return null;
+                }, traceId);
+        // 业务中心终态事件发布。
+        jdbc.query("SELECT event_type,status,trace_id,transaction_id,occurred_at "
+                        + "FROM business_db.outbox_event WHERE trace_id=?",
+                rs -> {
+                    while (rs.next()) {
+                        spans.add(new TraceSpan("business-center", "终态事件发布", spanStatus(rs.getString("status")),
+                                rs.getString("event_type"), rs.getString("trace_id"), instant(rs, "occurred_at"),
+                                rs.getString("transaction_id")));
+                    }
+                    return null;
+                }, traceId);
+        // 账户中心账本过账事件（只读投影，不修改账本数据）。
+        jdbc.query("SELECT event_type,status,trace_id,transaction_id,occurred_at "
+                        + "FROM ledger_db.outbox_event WHERE trace_id=?",
+                rs -> {
+                    while (rs.next()) {
+                        spans.add(new TraceSpan("account-center", "账本过账事件", spanStatus(rs.getString("status")),
+                                rs.getString("event_type"), rs.getString("trace_id"), instant(rs, "occurred_at"),
+                                rs.getString("transaction_id")));
+                    }
+                    return null;
+                }, traceId);
+        // 用户中心审计（只读投影，不暴露完整用户标识）。
+        jdbc.query("SELECT action,result_code,trace_id,occurred_at FROM user_db.audit_log WHERE trace_id=?",
+                rs -> {
+                    while (rs.next()) {
+                        spans.add(new TraceSpan("user-center", "用户中心审计", spanStatus(rs.getString("result_code")),
+                                rs.getString("action"), rs.getString("trace_id"), instant(rs, "occurred_at"), null));
+                    }
+                    return null;
+                }, traceId);
+        // AI 服务工具调用证据（只读投影，仅摘要不落原始参数）。
+        jdbc.query("SELECT tool_name,result_code,duration_ms,trace_id,occurred_at "
+                        + "FROM agent_db.tool_call_log WHERE trace_id=?",
+                rs -> {
+                    while (rs.next()) {
+                        spans.add(new TraceSpan("ai-service", "AI 工具调用", spanStatus(rs.getString("result_code")),
+                                rs.getString("tool_name") + ",duration_ms=" + rs.getInt("duration_ms"),
+                                rs.getString("trace_id"), instant(rs, "occurred_at"), null));
+                    }
+                    return null;
+                }, traceId);
+        // AI 服务审计日志（只读投影）。
+        jdbc.query("SELECT action,result_code,trace_id,occurred_at FROM agent_db.audit_log WHERE trace_id=?",
+                rs -> {
+                    while (rs.next()) {
+                        spans.add(new TraceSpan("ai-service", "AI 审计", spanStatus(rs.getString("result_code")),
+                                rs.getString("action"), rs.getString("trace_id"), instant(rs, "occurred_at"), null));
+                    }
+                    return null;
+                }, traceId);
+        spans.sort(java.util.Comparator.comparing(TraceSpan::occurredAt));
         return spans;
+    }
+
+    /** 将各服务状态值归一化到链路片段词汇表：成功/失败/处理中；未知值原样保留避免掩盖真实状态。 */
+    private static String spanStatus(String raw) {
+        if (raw == null || raw.isBlank()) return "PROCESSING";
+        return switch (raw.toUpperCase()) {
+            case "SUCCESS", "OK", "COMPLETED", "PASSED" -> "SUCCESS";
+            case "ERROR", "FAILED", "FAILURE", "TIMEOUT" -> "ERROR";
+            default -> raw;
+        };
     }
 
     /** 运营脱敏摘要行映射；发起用户 ID 只保留首尾片段，避免运营页面暴露完整用户标识。 */

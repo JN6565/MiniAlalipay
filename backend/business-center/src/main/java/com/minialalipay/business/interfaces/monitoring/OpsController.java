@@ -83,16 +83,17 @@ public class OpsController {
         return ResponseEntity.ok(success(service.listRealtimeMetrics(metricCode, from, to), request));
     }
 
-    /** 查询脱敏告警分页。 */
+    /** 查询脱敏告警分页；支持按状态与级别（severity）筛选。 */
     @GetMapping("/alerts")
     public ResponseEntity<ApiResponse<AlertPage>> alerts(
             @RequestHeader("X-User-Roles") String roles,
             @RequestParam(required = false) String status,
+            @RequestParam(required = false) String severity,
             @RequestParam(required = false) String cursor,
             @RequestParam(defaultValue = "50") @Min(1) @Max(100) int limit,
             HttpServletRequest request) {
         access.requireRead(roles);
-        List<AlertResponse> items = service.listAlerts(status, cursor, limit)
+        List<AlertResponse> items = service.listAlerts(status, severity, cursor, limit)
                 .stream().map(AlertResponse::from).toList();
         String nextCursor = items.size() == limit ? items.getLast().alertId() : null;
         return ResponseEntity.ok(success(new AlertPage(items, nextCursor), request));
@@ -180,7 +181,7 @@ public class OpsController {
         return ResponseEntity.ok(success(service.listMetricDefinitions(), request));
     }
 
-    /** 按游标分页查询全平台脱敏交易摘要；运营与观察者只读，金额为整数分。 */
+    /** 按游标分页查询全平台脱敏交易摘要；管理员与运营人员只读，金额为整数分。 */
     @GetMapping("/transactions")
     public ResponseEntity<ApiResponse<OpsTransactionPage>> transactions(
             @RequestHeader("X-User-Roles") String roles,
@@ -206,7 +207,7 @@ public class OpsController {
         return ResponseEntity.ok(success(OpsTransactionDetailResponse.from(transactionService.getTransaction(id)), request));
     }
 
-    /** 查询交易链路片段；仅返回业务中心可核验的资金事实阶段，完整跨服务 Trace 归阶段七 OTel 集成。 */
+    /** 查询交易链路片段；按交易归属的链路编号返回跨服务脱敏 Span（业务中心 + 账户账本 + 用户审计 + AI）。 */
     @GetMapping("/transactions/{id}/trace")
     public ResponseEntity<ApiResponse<List<TraceSpanResponse>>> transactionTrace(
             @RequestHeader("X-User-Roles") String roles, @PathVariable String id, HttpServletRequest request) {
@@ -215,7 +216,17 @@ public class OpsController {
         return ResponseEntity.ok(success(spans, request));
     }
 
-    /** 查询全部告警规则及阈值配置；运营与观察者只读。 */
+    /** 按链路编号查询跨服务脱敏 Span；链路无已核验片段时返回空列表。 */
+    @GetMapping("/traces/{traceId}")
+    public ResponseEntity<ApiResponse<List<TraceSpanResponse>>> traceByTraceId(
+            @RequestHeader("X-User-Roles") String roles, @PathVariable String traceId, HttpServletRequest request) {
+        access.requireRead(roles);
+        List<TraceSpanResponse> spans = transactionService.getTraceByTraceId(traceId).stream()
+                .map(TraceSpanResponse::from).toList();
+        return ResponseEntity.ok(success(spans, request));
+    }
+
+    /** 查询全部告警规则及阈值配置；管理员与运营人员只读。 */
     @GetMapping("/alert-rules")
     public ResponseEntity<ApiResponse<List<AlertRuleResponse>>> alertRules(
             @RequestHeader("X-User-Roles") String roles, HttpServletRequest request) {
@@ -229,15 +240,11 @@ public class OpsController {
     public ResponseEntity<ApiResponse<AlertRuleResponse>> updateAlertRuleThreshold(
             @RequestHeader("X-User-Id") String operatorId,
             @RequestHeader("X-User-Roles") String roles,
-            @RequestHeader("Idempotency-Key") String idempotencyKey,
             @PathVariable String ruleCode,
             @Valid @RequestBody UpdateAlertRuleThresholdRequest body,
             HttpServletRequest request) {
         access.requireAdmin(roles);
-        if (!idempotencyKeyValidator.isValid(idempotencyKey)) {
-            throw new BusinessException(CommonErrorCode.INVALID_REQUEST);
-        }
-        AlertRule value = service.updateAlertRuleThreshold(operatorId, ruleCode, body.thresholdValue(), body.version(), idempotencyKey);
+        AlertRule value = service.updateAlertRuleThreshold(operatorId, ruleCode, body.thresholdValue(), body.version());
         return ResponseEntity.ok(success(AlertRuleResponse.from(value), request));
     }
 
@@ -293,12 +300,12 @@ public class OpsController {
     /** 交易分页响应。 */
     public record OpsTransactionPage(List<OpsTransactionResponse> items, String nextCursor) { }
 
-    /** 链路追溯片段响应 DTO。 */
+    /** 链路追溯片段响应 DTO；transactionId 可为空（非交易归属的服务片段）。 */
     public record TraceSpanResponse(String service, String operation, String status, String detail, String traceId,
-                                    Instant occurredAt) {
+                                    Instant occurredAt, String transactionId) {
         static TraceSpanResponse from(TraceSpan span) {
             return new TraceSpanResponse(span.service(), span.operation(), span.status(), span.detail(),
-                    span.traceId(), span.occurredAt());
+                    span.traceId(), span.occurredAt(), span.transactionId());
         }
     }
 

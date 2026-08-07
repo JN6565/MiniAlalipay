@@ -98,21 +98,34 @@ public interface UserRepository {
     boolean existsByPhoneNumber(String phoneNumber);
 
     /**
-     * 按关键词搜索用户。
+     * 按手机号搜索用户。
      *
      * <p>搜索规则：
      * <ul>
-     *   <li>按登录名或昵称模糊搜索</li>
+     *   <li>按手机号精确匹配搜索</li>
      *   <li>只返回 ACTIVE 状态的用户</li>
      *   <li>排除指定的用户 ID（通常是当前用户）</li>
      *   <li>最多返回指定数量的结果</li>
      * </ul>
      * </p>
      *
-     * @param keyword   搜索关键词（登录名或昵称）
+     * @param keyword   搜索手机号
      * @param excludeId 排除的用户 ID（可为 null）
      * @param limit     最大返回数量
      * @return 用户列表
      */
     List<User> searchByKeyword(String keyword, String excludeId, int limit);
+
+    /**
+     * B 端管理分页查询用户（只读投影）。
+     *
+     * <p>按稳定 {@code user_id} 游标分页，可选按用户状态过滤。只用于 B 端运营管理，
+     * 不返回密码、支付密码或手机号等敏感原值。</p>
+     *
+     * @param status 用户状态过滤，null 表示不限定
+     * @param cursor 上一页最后一条 {@code user_id}，null 表示第一页
+     * @param limit  每页最大返回条数
+     * @return 用户只读投影列表
+     */
+    List<UserAdminView> findAdminPage(UserStatus status, String cursor, int limit);
 }

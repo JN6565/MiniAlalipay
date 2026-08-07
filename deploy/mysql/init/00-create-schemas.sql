@@ -1738,22 +1738,19 @@ CREATE TABLE IF NOT EXISTS minute_metric (
     )
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
 
--- T+1 日指标投影。绑定口径版本并通过质量门禁后才能发布。
+-- T+1 日指标投影。绑定口径版本并通过质量门禁后才能发布；列定义与 V202608051211 一致。
 CREATE TABLE IF NOT EXISTS daily_metric (
+    metric_date DATE NOT NULL,
     metric_code VARCHAR(64) NOT NULL,
-    business_date DATE NOT NULL,
     dimension_hash BINARY(32) NOT NULL,
-    definition_version INT UNSIGNED NOT NULL,
     dimensions_json JSON NOT NULL,
     value_decimal DECIMAL(24,6) NOT NULL,
-    quality_status VARCHAR(16) NOT NULL DEFAULT 'PENDING',
-    updated_at DATETIME(3) NOT NULL,
-    PRIMARY KEY (metric_code, business_date, dimension_hash, definition_version),
-    KEY idx_daily_metric_date_quality (business_date, quality_status),
-    CONSTRAINT fk_daily_metric_definition FOREIGN KEY (metric_code, definition_version)
-        REFERENCES metric_definition (metric_code, version),
+    quality_status VARCHAR(16) NOT NULL,
+    version INT UNSIGNED NOT NULL,
+    PRIMARY KEY (metric_date, metric_code, dimension_hash, version),
+    KEY idx_daily_metric_code (metric_code, metric_date),
     CONSTRAINT ck_daily_metric_quality CHECK (
-        quality_status IN ('PENDING', 'PASSED', 'FAILED')
+        quality_status IN ('PENDING', 'PASSED', 'FAILED', 'UNKNOWN')
     )
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
 
@@ -1774,22 +1771,22 @@ CREATE TABLE IF NOT EXISTS quality_result (
     CONSTRAINT ck_quality_result_status CHECK (status IN ('PASSED', 'FAILED'))
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
 
--- 监控告警闭环。状态记录确认、解决与关闭过程，不提供任何直接改资金入口。
+-- 监控告警闭环。状态记录确认、解决与关闭过程，不提供任何直接改资金入口；列定义与 V202608051211 一致。
 CREATE TABLE IF NOT EXISTS monitor_alert (
     alert_id CHAR(26) NOT NULL,
     rule_code VARCHAR(64) NOT NULL,
     severity VARCHAR(8) NOT NULL,
     status VARCHAR(16) NOT NULL DEFAULT 'OPEN',
-    subject_id VARCHAR(128) NOT NULL,
+    subject_id VARCHAR(128) NULL,
     evidence_json JSON NOT NULL,
     assignee_id CHAR(26) NULL,
+    last_reason VARCHAR(256) NULL,
+    version BIGINT UNSIGNED NOT NULL DEFAULT 0,
     opened_at DATETIME(3) NOT NULL,
     updated_at DATETIME(3) NOT NULL,
     closed_at DATETIME(3) NULL,
     PRIMARY KEY (alert_id),
-    KEY idx_monitor_alert_status_severity_time (status, severity, opened_at),
-    KEY idx_monitor_alert_subject_time (subject_id, opened_at),
-    CONSTRAINT ck_monitor_alert_severity CHECK (severity IN ('P0', 'P1', 'P2')),
+    KEY idx_monitor_alert_status (status, severity, opened_at),
     CONSTRAINT ck_monitor_alert_status CHECK (
         status IN ('OPEN', 'ACKNOWLEDGED', 'RESOLVED', 'CLOSED')
     )

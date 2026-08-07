@@ -1,5 +1,5 @@
 import { useQuery } from '@tanstack/react-query';
-import { Button, Drawer, Descriptions, Select, Space, Table, Tag, Typography } from 'antd';
+import { Button, Collapse, Drawer, Descriptions, Select, Space, Table, Tag, Typography } from 'antd';
 import type { TableProps } from 'antd';
 import { useMemo, useState } from 'react';
 import PageHeader from '@/components/PageHeader';
@@ -30,6 +30,34 @@ const businessLabels: Record<string, string> = {
   REFUND: '受控退款',
 };
 
+/** 资金来源展示标签。 */
+const fundingLabels: Record<string, string> = {
+  BALANCE: '余额',
+  MINI_CREDIT: '花呗',
+};
+
+/** 风险等级展示标签。 */
+const riskLevelLabels: Record<string, string> = {
+  LOW: '低',
+  MEDIUM: '中',
+  HIGH: '高',
+};
+
+/** 资金处理状态展示标签（TCC 全局状态的业务翻译）。 */
+const fundProcessLabels: Record<string, string> = {
+  SUCCESS: '资金已处理',
+  PROCESSING: '资金处理中',
+  FAILED: '资金处理失败',
+  CANCELLED: '资金已释放',
+};
+
+/** 终态发布状态展示标签（Outbox 投递状态的业务翻译）。 */
+const terminalPublishLabels: Record<string, string> = {
+  COMPLETED: '终态已发布',
+  PENDING: '终态待发布',
+  FAILED: '终态发布失败',
+};
+
 /** 状态与业务类型筛选项；与 OpenAPI 枚举一致。 */
 const statusOptions = Object.keys(statusLabels);
 const businessOptions = Object.keys(businessLabels);
@@ -37,7 +65,9 @@ const businessOptions = Object.keys(businessLabels);
 /**
  * 交易查询与回执页面。
  *
- * 按游标分页查询全平台脱敏交易摘要，点击行查看单笔交易详情与关联资金事实（TCC 全局、Outbox 事件、活动工单）。
+ * 按游标分页查询全平台脱敏交易摘要，点击行查看单笔交易唯一事实详情。
+ * 详情拆为「交易结果、处理进度、风险/人工处理、技术追溯」四块，默认只展开交易结果，
+ * 技术字段（资金来源、TCC、重试次数、Outbox、链路编号）默认折叠。
  * 展示约定：金额遵循整数分并在展示边界转换；发起人已由服务端脱敏；未知结果不显示为成功。
  */
 export default function Transactions() {
@@ -140,23 +170,35 @@ export default function Transactions() {
   );
 
   const detailItem = detail?.data?.transaction;
-  const detailSpans = [
+  // 交易结果：只展示服务端确定的业务结果，不掺入实现细节。
+  const resultItems = [
     { key: 'transactionId', label: '交易编号', children: detailItem?.transactionId ?? '-' },
     { key: 'businessType', label: '业务类型', children: detailItem ? (businessLabels[detailItem.businessType] ?? detailItem.businessType) : '-' },
     { key: 'status', label: '交易状态', children: detailItem ? (statusLabels[detailItem.status]?.text ?? detailItem.status) : '-' },
     { key: 'amount', label: '金额（元）', children: detailItem ? formatAmountFen(detailItem.amountFen) : '-' },
-    { key: 'source', label: '来源', children: detailItem ? `${detailItem.sourceType}/${detailItem.sourceOrderId}` : '-' },
+    { key: 'source', label: '来源订单', children: detailItem ? `${detailItem.sourceType}/${detailItem.sourceOrderId}` : '-' },
     { key: 'initiator', label: '发起人', children: detailItem?.initiatorMasked ?? '-' },
-    { key: 'fundingSource', label: '资金来源', children: detail?.data?.fundingSource ?? '-' },
-    { key: 'riskLevel', label: '风险等级', children: detailItem?.riskLevel ?? '-' },
+    { key: 'createdAt', label: '创建时间', children: detailItem ? new Date(detailItem.createdAt).toLocaleString() : '-' },
+    { key: 'updatedAt', label: '最近更新', children: detailItem ? new Date(detailItem.updatedAt).toLocaleString() : '-' },
+  ];
+  // 处理进度：把 TCC 与 Outbox 事实翻译为业务可读的资金处理与终态发布状态。
+  const progressItems = [
+    { key: 'fundingSource', label: '资金来源', children: detail?.data ? (fundingLabels[detail.data.fundingSource] ?? detail.data.fundingSource) : '-' },
+    { key: 'fundProcess', label: '资金处理', children: detail?.data ? (detail.data.tccStatus ? (fundProcessLabels[detail.data.tccStatus] ?? detail.data.tccStatus) : '未涉及') : '-' },
+    { key: 'terminalPublish', label: '终态发布', children: detail?.data ? (detail.data.outboxStatus ? (terminalPublishLabels[detail.data.outboxStatus] ?? detail.data.outboxStatus) : '未涉及') : '-' },
+  ];
+  // 风险/人工处理：交易是否需要人工介入。
+  const riskItems = [
+    { key: 'riskLevel', label: '风险等级', children: detailItem ? (riskLevelLabels[detailItem.riskLevel] ?? detailItem.riskLevel) : '-' },
+    { key: 'manualCase', label: '人工工单', children: detail?.data?.activeManualCaseId ? `待处理（${detail.data.activeManualCaseId}）` : '无需人工处理' },
+  ];
+  // 技术追溯：原始技术字段，供运营与开发排查时展开。
+  const techItems = [
     { key: 'tccStatus', label: 'TCC 全局状态', children: detail?.data?.tccStatus ?? '-' },
     { key: 'tccRetry', label: 'TCC 重试次数', children: detail?.data?.tccRetryCount ?? '-' },
     { key: 'outbox', label: '最新终态事件', children: detail?.data?.latestOutboxEventType ?? '-' },
     { key: 'outboxStatus', label: '事件投递状态', children: detail?.data?.outboxStatus ?? '-' },
-    { key: 'manualCase', label: '活动人工工单', children: detail?.data?.activeManualCaseId ?? '-' },
     { key: 'traceId', label: '链路编号', children: detailItem?.traceId ?? '-' },
-    { key: 'createdAt', label: '创建时间', children: detailItem ? new Date(detailItem.createdAt).toLocaleString() : '-' },
-    { key: 'updatedAt', label: '最近更新', children: detailItem ? new Date(detailItem.updatedAt).toLocaleString() : '-' },
   ];
 
   return (
@@ -210,9 +252,18 @@ export default function Transactions() {
         width={560}
         loading={detailLoading}
       >
-        <Descriptions bordered size="small" column={1} items={detailSpans} />
+        <Collapse
+          ghost
+          defaultActiveKey={['result']}
+          items={[
+            { key: 'result', label: '交易结果', children: <Descriptions bordered size="small" column={1} items={resultItems} /> },
+            { key: 'progress', label: '处理进度', children: <Descriptions bordered size="small" column={1} items={progressItems} /> },
+            { key: 'risk', label: '风险/人工处理', children: <Descriptions bordered size="small" column={1} items={riskItems} /> },
+            { key: 'tech', label: '技术追溯', children: <Descriptions bordered size="small" column={1} items={techItems} /> },
+          ]}
+        />
         <Typography.Paragraph type="secondary" style={{ marginTop: 16 }}>
-          以上字段均来自服务端统一交易与关联资金事实，不包含确认令牌或支付密码等敏感材料。
+          以上事实均以服务端统一交易记录为准，不以页面或订单状态猜测为准；不包含确认令牌或支付密码等敏感材料。
         </Typography.Paragraph>
       </Drawer>
     </main>

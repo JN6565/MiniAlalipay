@@ -18,7 +18,7 @@ public class AccountDirectoryHttpAdapter implements AccountDirectoryPort {
     }
     @Override public AccountReference resolvePersonalAccount(String userId) {
         try {
-            System.out.println("DEBUG: Calling account-center with userId=" + userId + ", length=" + userId.length());
+
             AccountReference result = client.get().uri("/internal/v1/accounts/by-user/{id}", userId)
                     .retrieve().body(AccountReference.class);
             if (result == null) throw new BusinessException(BusinessErrorCode.PAYEE_NOT_FOUND);

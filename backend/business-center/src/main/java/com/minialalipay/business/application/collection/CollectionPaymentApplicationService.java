@@ -87,6 +87,9 @@ public class CollectionPaymentApplicationService {
                                                 String paymentProof, FundingSource fundingSource) {
         if (fundingSource != FundingSource.BALANCE) throw new BusinessException(BusinessErrorCode.FUNDING_SOURCE_NOT_ALLOWED);
         CollectionOrder order = payerOrder(userId, orderId, sessionId);
+        if (order.getAmountFen() == null || order.getAmountFen() < 1) {
+            throw new BusinessException(BusinessErrorCode.ORDER_NOT_FOUND);
+        }
         if (order.getVersion() != version) throw new BusinessException(BusinessErrorCode.VERSION_CONFLICT);
         routeOnRiskVerdict(subjectType(order).name(), order, version);
         PaymentProofPort.VerifiedProof proof = proofs.verify(userId, paymentProof, "COLLECTION_CONFIRM");

@@ -23,11 +23,10 @@ describe('B 端界面权限', () => {
       canViewTrace: false,
       canRunDemoTasks: false,
       canManageUsers: false,
-      isReadOnlyObserver: false,
     });
   });
 
-  it('运营人员可以查看公共页面并处置工单和告警', () => {
+  it('运营人员可以查看公共页面并处置工单、告警，但不能触发演示任务', () => {
     const permissions = access({
       currentAdmin: { displayName: '运营人员', roles: ['OPERATOR'] },
     });
@@ -46,34 +45,10 @@ describe('B 端界面权限', () => {
       canViewTrace: true,
       canRunDemoTasks: false,
       canManageUsers: false,
-      isReadOnlyObserver: false,
     });
   });
 
-  it('观察者只能查看公共运营页面', () => {
-    const permissions = access({
-      currentAdmin: { displayName: '观察者', roles: ['OBSERVER'] },
-    });
-
-    expect(permissions).toEqual({
-      canEnterAdmin: true,
-      canViewDashboard: true,
-      canViewManualCases: false,
-      canOperateManualCases: false,
-      canViewReports: true,
-      canViewAlerts: true,
-      canOperateAlerts: false,
-      canConfigureAlertThresholds: false,
-      canViewDataQuality: true,
-      canViewTransactions: true,
-      canViewTrace: true,
-      canRunDemoTasks: false,
-      canManageUsers: false,
-      isReadOnlyObserver: true,
-    });
-  });
-
-  it('管理员可以查看公共页面、配置告警并管理系统能力', () => {
+  it('管理员拥有运营人员全部能力并可配置告警与管理系统用户', () => {
     const permissions = access({
       currentAdmin: { displayName: '管理员', roles: ['ADMIN'] },
     });
@@ -81,26 +56,25 @@ describe('B 端界面权限', () => {
     expect(permissions).toEqual({
       canEnterAdmin: true,
       canViewDashboard: true,
-      canViewManualCases: false,
-      canOperateManualCases: false,
+      canViewManualCases: true,
+      canOperateManualCases: true,
       canViewReports: true,
       canViewAlerts: true,
-      canOperateAlerts: false,
+      canOperateAlerts: true,
       canConfigureAlertThresholds: true,
       canViewDataQuality: true,
       canViewTransactions: true,
       canViewTrace: true,
       canRunDemoTasks: true,
       canManageUsers: true,
-      isReadOnlyObserver: false,
     });
   });
 
-  it('多角色身份按权限并集计算且不判定为只读观察者', () => {
+  it('多角色身份按权限并集计算', () => {
     const permissions = access({
       currentAdmin: {
         displayName: '复合角色管理员',
-        roles: ['OBSERVER', 'OPERATOR', 'ADMIN'],
+        roles: ['OPERATOR', 'ADMIN'],
       },
     });
 
@@ -111,6 +85,5 @@ describe('B 端界面权限', () => {
     expect(permissions.canConfigureAlertThresholds).toBe(true);
     expect(permissions.canRunDemoTasks).toBe(true);
     expect(permissions.canManageUsers).toBe(true);
-    expect(permissions.isReadOnlyObserver).toBe(false);
   });
 });

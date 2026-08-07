@@ -4,9 +4,8 @@ import PermissionGuard from './PermissionGuard';
 /**
  * 用户管理页面守卫。
  *
- * 用户管理属系统管理能力，仅开放给管理员（canManageUsers）。
- * 注意：用户管理接口尚未进入正式 OpenAPI，菜单也不会生成入口（见 AdminLayout/menu.tsx），
- * 该守卫是为契约落地后的路由接入做准备。
+ * 用户管理属系统管理能力，仅开放给管理员（canManageUsers）；菜单入口同权限过滤
+ * （见 AdminLayout/menu.tsx），无权限时路由守卫先行拦截，服务端角色门禁为最终授权方。
  */
 export default function UserManagementGuard() {
   const access = useAccess();

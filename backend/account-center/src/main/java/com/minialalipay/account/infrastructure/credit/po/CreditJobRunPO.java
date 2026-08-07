@@ -7,33 +7,49 @@ import java.time.LocalDate;
  * 信用定时任务执行记录持久化对象，对应 {@code ledger_db.credit_job_run} 表。
  *
  * <p>该表记录月度出账、逾期检查等定时任务的执行流水，
- * 通过 (jobType, businessDate) 唯一键保证同一业务日期同一类型任务不重复执行。</p>
+ * 通过 (jobType, businessDate) 唯一键保证同一业务日期同一类型任务不重复执行。
+ * requestDigest 为触发参数摘要（SHA-256，32 字节），retryCount 为恢复重试次数。</p>
  */
 public class CreditJobRunPO {
 
     /** 任务执行 ID，对应 CHAR(26) */
-    private String jobRunId;
+    private String runId;
 
-    /** 任务类型，对应 VARCHAR */
+    /** 任务类型，对应 VARCHAR(16) */
     private String jobType;
 
     /** 业务日期，对应 DATE */
     private LocalDate businessDate;
 
-    /** 执行状态，对应 CHAR */
+    /** 执行状态，对应 VARCHAR(16) */
     private String status;
+
+    /** 游标信用账户 ID，对应 CHAR(26) */
+    private String cursorCreditAccountId;
+
+    /** 触发类型，对应 VARCHAR(16) */
+    private String triggerType;
+
+    /** 触发用户 ID，对应 CHAR(26) */
+    private String triggeredByUserId;
+
+    /** 触发参数摘要，对应 BINARY(32) */
+    private byte[] requestDigest;
+
+    /** 恢复重试次数，对应 INT UNSIGNED */
+    private Integer retryCount;
+
+    /** 错误码，对应 VARCHAR(32) */
+    private String errorCode;
+
+    /** 乐观锁版本号，对应 BIGINT UNSIGNED */
+    private Long version;
 
     /** 开始时间，对应 DATETIME(3) */
     private Instant startedAt;
 
-    /** 结束时间，对应 DATETIME(3) */
-    private Instant finishedAt;
-
-    /** 错误信息，对应 TEXT */
-    private String errorMessage;
-
-    /** 乐观锁版本号，对应 BIGINT UNSIGNED */
-    private Long version;
+    /** 完成时间，对应 DATETIME(3) */
+    private Instant completedAt;
 
     /** 创建时间，对应 DATETIME(3) */
     private Instant createdAt;
@@ -46,27 +62,33 @@ public class CreditJobRunPO {
     }
 
     /** 全参数构造器 */
-    public CreditJobRunPO(String jobRunId, String jobType, LocalDate businessDate, String status,
-                          Instant startedAt, Instant finishedAt, String errorMessage, Long version,
-                          Instant createdAt, Instant updatedAt) {
-        this.jobRunId = jobRunId;
+    public CreditJobRunPO(String runId, String jobType, LocalDate businessDate, String status,
+                          String cursorCreditAccountId, String triggerType, String triggeredByUserId,
+                          byte[] requestDigest, Integer retryCount, String errorCode, Long version,
+                          Instant startedAt, Instant completedAt, Instant createdAt, Instant updatedAt) {
+        this.runId = runId;
         this.jobType = jobType;
         this.businessDate = businessDate;
         this.status = status;
-        this.startedAt = startedAt;
-        this.finishedAt = finishedAt;
-        this.errorMessage = errorMessage;
+        this.cursorCreditAccountId = cursorCreditAccountId;
+        this.triggerType = triggerType;
+        this.triggeredByUserId = triggeredByUserId;
+        this.requestDigest = requestDigest;
+        this.retryCount = retryCount;
+        this.errorCode = errorCode;
         this.version = version;
+        this.startedAt = startedAt;
+        this.completedAt = completedAt;
         this.createdAt = createdAt;
         this.updatedAt = updatedAt;
     }
 
-    public String getJobRunId() {
-        return jobRunId;
+    public String getRunId() {
+        return runId;
     }
 
-    public void setJobRunId(String jobRunId) {
-        this.jobRunId = jobRunId;
+    public void setRunId(String runId) {
+        this.runId = runId;
     }
 
     public String getJobType() {
@@ -93,28 +115,52 @@ public class CreditJobRunPO {
         this.status = status;
     }
 
-    public Instant getStartedAt() {
-        return startedAt;
+    public String getCursorCreditAccountId() {
+        return cursorCreditAccountId;
     }
 
-    public void setStartedAt(Instant startedAt) {
-        this.startedAt = startedAt;
+    public void setCursorCreditAccountId(String cursorCreditAccountId) {
+        this.cursorCreditAccountId = cursorCreditAccountId;
     }
 
-    public Instant getFinishedAt() {
-        return finishedAt;
+    public String getTriggerType() {
+        return triggerType;
     }
 
-    public void setFinishedAt(Instant finishedAt) {
-        this.finishedAt = finishedAt;
+    public void setTriggerType(String triggerType) {
+        this.triggerType = triggerType;
     }
 
-    public String getErrorMessage() {
-        return errorMessage;
+    public String getTriggeredByUserId() {
+        return triggeredByUserId;
     }
 
-    public void setErrorMessage(String errorMessage) {
-        this.errorMessage = errorMessage;
+    public void setTriggeredByUserId(String triggeredByUserId) {
+        this.triggeredByUserId = triggeredByUserId;
+    }
+
+    public byte[] getRequestDigest() {
+        return requestDigest;
+    }
+
+    public void setRequestDigest(byte[] requestDigest) {
+        this.requestDigest = requestDigest;
+    }
+
+    public Integer getRetryCount() {
+        return retryCount;
+    }
+
+    public void setRetryCount(Integer retryCount) {
+        this.retryCount = retryCount;
+    }
+
+    public String getErrorCode() {
+        return errorCode;
+    }
+
+    public void setErrorCode(String errorCode) {
+        this.errorCode = errorCode;
     }
 
     public Long getVersion() {
@@ -123,6 +169,22 @@ public class CreditJobRunPO {
 
     public void setVersion(Long version) {
         this.version = version;
+    }
+
+    public Instant getStartedAt() {
+        return startedAt;
+    }
+
+    public void setStartedAt(Instant startedAt) {
+        this.startedAt = startedAt;
+    }
+
+    public Instant getCompletedAt() {
+        return completedAt;
+    }
+
+    public void setCompletedAt(Instant completedAt) {
+        this.completedAt = completedAt;
     }
 
     public Instant getCreatedAt() {

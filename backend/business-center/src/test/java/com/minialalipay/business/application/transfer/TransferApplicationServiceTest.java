@@ -2,6 +2,7 @@ package com.minialalipay.business.application.transfer;
 
 import com.minialalipay.business.application.port.AccountDirectoryPort;
 import com.minialalipay.business.application.port.BusinessStore;
+import com.minialalipay.business.application.port.ContactArchivePort;
 import com.minialalipay.business.application.port.PaymentProofPort;
 import com.minialalipay.business.application.port.SecurityMaterialPort;
 import com.minialalipay.business.application.port.TccCoordinatorPort;
@@ -31,7 +32,8 @@ class TransferApplicationServiceTest {
                 .thenReturn(Optional.empty());
         TransferApplicationService service = new TransferApplicationService(store, accounts,
                 mock(PaymentProofPort.class), mock(TccCoordinatorPort.class), secure,
-                new IdempotencyKeyValidator(), Clock.fixed(Instant.parse("2026-08-04T08:00:00Z"), ZoneOffset.UTC));
+                new IdempotencyKeyValidator(), mock(ContactArchivePort.class),
+                Clock.fixed(Instant.parse("2026-08-04T08:00:00Z"), ZoneOffset.UTC));
 
         assertThatThrownBy(() -> service.createDraft("user-1", "user-1", 100L, null, "idem-key-00000001"))
                 .isInstanceOfSatisfying(BusinessException.class,
@@ -50,7 +52,7 @@ class TransferApplicationServiceTest {
                 .thenReturn(Optional.of(new BusinessStore.IdempotencyRecord(new byte[32], "draft-1")));
         TransferApplicationService service = new TransferApplicationService(store, mock(AccountDirectoryPort.class),
                 mock(PaymentProofPort.class), mock(TccCoordinatorPort.class), secure,
-                new IdempotencyKeyValidator(), Clock.systemUTC());
+                new IdempotencyKeyValidator(), mock(ContactArchivePort.class), Clock.systemUTC());
 
         assertThatThrownBy(() -> service.createDraft("user-1", "user-2", 100L, null, "idem-key-00000001"))
                 .isInstanceOfSatisfying(BusinessException.class,

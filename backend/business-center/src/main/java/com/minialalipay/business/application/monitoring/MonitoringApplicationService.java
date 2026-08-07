@@ -29,8 +29,8 @@ import java.util.List;
  */
 @Service
 public class MonitoringApplicationService {
-    /** 未指定实时指标时间范围时的默认回看窗口。 */
-    private static final long DEFAULT_REALTIME_WINDOW_SECONDS = 5 * 60;
+    /** 未指定实时指标时间范围时的默认回看窗口（PRD：实时概览默认最近 60 分钟）。 */
+    private static final long DEFAULT_REALTIME_WINDOW_SECONDS = 60 * 60;
 
     private final MonitoringProjectionStore store;
     private final SecurityMaterialPort secure;
@@ -48,11 +48,11 @@ public class MonitoringApplicationService {
         this.clock = clock;
     }
 
-    /** 查询运营可见告警。 */
+    /** 查询运营可见告警；状态与级别均可选筛选项。 */
     @Transactional(readOnly = true)
-    public List<Alert> listAlerts(String status, String cursor, int limit) {
+    public List<Alert> listAlerts(String status, String severity, String cursor, int limit) {
         if (limit < 1 || limit > 100) throw new IllegalArgumentException("告警分页数量必须在 1 到 100 之间");
-        return store.listAlerts(status, cursor, limit);
+        return store.listAlerts(status, severity, cursor, limit);
     }
 
     /** 确认开放告警；同操作人同键重试保持幂等。 */
@@ -118,7 +118,7 @@ public class MonitoringApplicationService {
      */
     @Transactional
     public AlertRule updateAlertRuleThreshold(String operatorId, String ruleCode, long thresholdValue,
-                                              long version, String idempotencyKey) {
+                                              long version) {
         AlertRule rule = store.findAlertRule(ruleCode)
                 .orElseThrow(() -> new BusinessException(CommonErrorCode.NOT_FOUND));
         AlertRule next = rule.withThreshold(thresholdValue, operatorId, clock.instant());

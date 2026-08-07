@@ -58,7 +58,7 @@ public class UserPO {
 
     /**
      * 昵称（最大 64 字符）。
-     * <p>可重复的展示名称和模糊搜索条件，对应数据库字段 {@code nickname}。</p>
+     * <p>可重复的展示名称，对应数据库字段 {@code nickname}。</p>
      */
     private String nickname;
 
@@ -100,6 +100,19 @@ public class UserPO {
      */
     private Instant updatedAt;
 
+    /** 管理冻结操作者用户 ID，对应数据库字段 {@code disabled_by}，可空。 */
+    private String disabledBy;
+
+    /** 管理冻结理由，对应数据库字段 {@code disabled_reason}，可空。 */
+    private String disabledReason;
+
+    /**
+     * 登录锁定截止时间，可空。
+     * <p>来自 {@code credential.login_lock_until}，仅供 B 端用户列表投影使用，
+     * 不参与 {@code app_user} 的插入与更新。</p>
+     */
+    private Instant loginLockedUntil;
+
     /**
      * 默认构造函数（MyBatis 反射需要）。
      */
@@ -121,7 +134,9 @@ public class UserPO {
             String status,
             long version,
             Instant createdAt,
-            Instant updatedAt
+            Instant updatedAt,
+            String disabledBy,
+            String disabledReason
     ) {
         this.userId = userId;
         this.registrationId = registrationId;
@@ -135,6 +150,8 @@ public class UserPO {
         this.version = version;
         this.createdAt = createdAt;
         this.updatedAt = updatedAt;
+        this.disabledBy = disabledBy;
+        this.disabledReason = disabledReason;
     }
 
     // ==================== Getters and Setters ====================
@@ -225,5 +242,29 @@ public class UserPO {
 
     public void setUpdatedAt(Instant updatedAt) {
         this.updatedAt = updatedAt;
+    }
+
+    public String getDisabledBy() {
+        return disabledBy;
+    }
+
+    public void setDisabledBy(String disabledBy) {
+        this.disabledBy = disabledBy;
+    }
+
+    public String getDisabledReason() {
+        return disabledReason;
+    }
+
+    public void setDisabledReason(String disabledReason) {
+        this.disabledReason = disabledReason;
+    }
+
+    public Instant getLoginLockedUntil() {
+        return loginLockedUntil;
+    }
+
+    public void setLoginLockedUntil(Instant loginLockedUntil) {
+        this.loginLockedUntil = loginLockedUntil;
     }
 }

@@ -176,9 +176,6 @@ class AccountApplicationServiceTest {
             accounts.put(account.getCreditAccountId(), account);
             createCount++;
         }
-        @Override public List<CreditAccount> findByStatus(CreditAccountStatus status) {
-            return accounts.values().stream().filter(a -> a.getStatus() == status).toList();
-        }
     }
 
     static class InMemoryCreditReceivableRepository implements CreditReceivableRepository {

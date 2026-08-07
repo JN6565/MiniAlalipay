@@ -1,5 +1,6 @@
+import { useAccess } from '@umijs/max';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { App, Button, Empty, Form, Input, Modal, Select, Table } from 'antd';
+import { App, Button, Empty, Form, Input, Modal, Select, Space, Table } from 'antd';
 import type { ColumnsType } from 'antd/es/table';
 import { useState } from 'react';
 import PageHeader from '@/components/PageHeader';
@@ -17,6 +18,13 @@ const STATUS_LABEL: Record<string, string> = {
   CLOSED: '已关闭',
 };
 
+/** 告警级别中文标签。 */
+const SEVERITY_LABEL: Record<string, string> = {
+  INFO: '提示',
+  WARNING: '警告',
+  CRITICAL: '严重',
+};
+
 /**
  * 告警中心。
  *
@@ -25,21 +33,53 @@ const STATUS_LABEL: Record<string, string> = {
  */
 export default function Alerts() {
   const { message } = App.useApp();
+  const access = useAccess();
   const queryClient = useQueryClient();
   const [status, setStatus] = useState<string>();
+  const [severity, setSeverity] = useState<string>();
   const [action, setAction] = useState<{ alert: AlertItem; type: AlertAction }>();
   const [form] = Form.useForm();
+  // 服务端仅提供正向游标，使用游标栈回退上一页；空字符串表示第一页。
+  const [cursor, setCursor] = useState<string>();
+  const [cursorStack, setCursorStack] = useState<string[]>([]);
 
   const alertsQuery = useQuery({
-    queryKey: ['ops', 'alerts', status],
-    queryFn: () => listAlerts(status),
+    queryKey: ['ops', 'alerts', status, severity, cursor],
+    queryFn: () => listAlerts(status, severity, cursor),
   });
 
+  const nextCursor = alertsQuery.data?.data.nextCursor ?? null;
+
+  function changeStatus(value?: string) {
+    setStatus(value);
+    setCursor(undefined);
+    setCursorStack([]);
+  }
+
+  function changeSeverity(value?: string) {
+    setSeverity(value);
+    setCursor(undefined);
+    setCursorStack([]);
+  }
+
+  function goNextPage() {
+    if (!nextCursor) return;
+    setCursorStack((prev) => [...prev, cursor ?? '']);
+    setCursor(nextCursor);
+  }
+
+  function goPrevPage() {
+    const prevCursor = cursorStack.at(-1);
+    if (prevCursor === undefined) return;
+    setCursorStack((prev) => prev.slice(0, -1));
+    setCursor(prevCursor === '' ? undefined : prevCursor);
+  }
+
   const mutation = useMutation({
-    mutationFn: () => {
+    mutationFn: async () => {
       const target = action;
       if (!target) throw new Error('缺少处置对象');
-      const values = form.getFieldsValue();
+      const values = await form.validateFields();
       if (target.type === 'acknowledge') {
         return acknowledgeAlert(target.alert.alertId, target.alert.version, values.reason);
       }
@@ -69,6 +109,7 @@ export default function Alerts() {
       title: '操作',
       key: 'actions',
       render: (_, record) => {
+        if (!access.canOperateAlerts) return null;
         if (record.status === 'OPEN') {
           return <Button size="small" onClick={() => setAction({ alert: record, type: 'acknowledge' })}>确认</Button>;
         }
@@ -93,11 +134,27 @@ export default function Alerts() {
           placeholder="告警状态"
           style={{ width: 180 }}
           options={Object.entries(STATUS_LABEL).map(([value, label]) => ({ value, label }))}
-          onChange={setStatus}
+          onChange={changeStatus}
+        />
+        <Select
+          aria-label="告警级别"
+          allowClear
+          placeholder="告警级别"
+          style={{ width: 160 }}
+          options={Object.entries(SEVERITY_LABEL).map(([value, label]) => ({ value, label }))}
+          onChange={changeSeverity}
         />
         <Button type="primary" onClick={() => alertsQuery.refetch()}>
           查询
         </Button>
+        <Space>
+          <Button onClick={goPrevPage} disabled={cursorStack.length === 0}>
+            上一页
+          </Button>
+          <Button onClick={goNextPage} disabled={!nextCursor}>
+            下一页
+          </Button>
+        </Space>
       </section>
       <section className={pageStyles.panel} aria-label="告警列表">
         <Table<AlertItem>
@@ -108,7 +165,13 @@ export default function Alerts() {
           pagination={false}
           locale={{
             emptyText: (
-              <Empty description={alertsQuery.isError ? '加载失败，请确认网关已启动' : '暂无告警'} />
+              <Empty
+                description={alertsQuery.isError
+                  ? '加载失败，请确认网关已启动'
+                  : status || severity
+                    ? '暂无符合条件的告警'
+                    : '暂无告警'}
+              />
             ),
           }}
           scroll={{ x: 980 }}

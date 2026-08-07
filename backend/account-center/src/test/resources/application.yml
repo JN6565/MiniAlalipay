@@ -6,3 +6,9 @@ spring:
     driver-class-name: org.h2.Driver
   flyway:
     enabled: false
+mybatis:
+  configuration:
+    map-underscore-to-camel-case: true
+# 单元测试不启动 Seata RM，避免测试上下文连接远端 TC。
+seata:
+  enabled: false

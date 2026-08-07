@@ -69,3 +69,4 @@ redis-data/
 /docs/superpowers/
 
 frontend-admin/demo
+.workbuddy/db-backup

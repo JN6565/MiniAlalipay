@@ -1,0 +1,17 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+
+<!--
+  角色授权 Mapper XML 映射文件。
+
+  只读查询 role_assignment 表，角色数据由受控脚本或后续角色管理接口维护。
+-->
+<mapper namespace="com.minialalipay.user.infrastructure.persistence.mapper.RoleAssignmentMapper">
+
+    <select id="selectRolesByUserId" resultType="string">
+        SELECT role_code
+        FROM role_assignment
+        WHERE user_id = #{userId}
+    </select>
+
+</mapper>

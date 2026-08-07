@@ -147,6 +147,11 @@ public class JdbcCollectionStore implements CollectionStore {
     }
 
     @Override
+    public void clearSessionBinding(String orderId) {
+        jdbc.update("UPDATE business_db.collection_order SET h5_session_id=order_id WHERE order_id=?", orderId);
+    }
+
+    @Override
     public boolean acceptOrderForPayment(CollectionOrder order, long expectedVersion, CollectionOrderEvent event) {
         if (!updateOrder(order, expectedVersion)) return false;
         if (order.getRequestId() != null) {
@@ -229,10 +234,14 @@ public class JdbcCollectionStore implements CollectionStore {
     }
 
     private static CollectionOrder mapOrder(java.sql.ResultSet rs) throws java.sql.SQLException {
+        Object amountObj = rs.getObject("amount_fen");
+        Long amountFen = amountObj == null ? null : ((Number) amountObj).longValue();
+        Object versionObj = rs.getObject("version");
+        long version = versionObj == null ? 0L : ((Number) versionObj).longValue();
         return new CollectionOrder(rs.getString("order_id"), rs.getString("code_id"), rs.getString("request_id"),
                 rs.getString("payee_user_id"), rs.getString("payee_account_id"), rs.getString("payer_user_id"),
-                rs.getString("payer_account_id"), (Long) rs.getObject("amount_fen"), rs.getString("subject"),
-                CollectionOrderStatus.valueOf(rs.getString("status")), rs.getString("transaction_id"), rs.getLong("version"), rs.getTimestamp("created_at").toInstant(),
+                rs.getString("payer_account_id"), amountFen, rs.getString("subject"),
+                CollectionOrderStatus.valueOf(rs.getString("status")), rs.getString("transaction_id"), version, rs.getTimestamp("created_at").toInstant(),
                 rs.getTimestamp("expires_at").toInstant(), rs.getTimestamp("updated_at").toInstant());
     }
 

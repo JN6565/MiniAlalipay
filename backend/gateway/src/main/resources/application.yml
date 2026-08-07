@@ -1,4 +1,4 @@
-server:
+﻿server:
   port: ${GATEWAY_PORT:8080}
 
 spring:
@@ -31,7 +31,7 @@ spring:
         - id: user-center-api
           uri: ${USER_CENTER_URI:http://localhost:8081}
           predicates:
-            - Path=/api/v1/users/**,/api/v1/contacts/**
+            - Path=/api/v1/users/**,/api/v1/contacts/**,/api/v1/friends/**
           filters:
             - name: RequestRateLimiter
               args:
@@ -51,8 +51,21 @@ spring:
                 redis-rate-limiter.replenishRate: 1
                 redis-rate-limiter.burstCapacity: 5
                 redis-rate-limiter.requestedTokens: 1
+        # B 端用户管理（列表/冻结/解冻）由用户中心提供，仅系统管理员可访问（网关角色门禁见 AuthenticationGlobalFilter）
+        - id: user-center-admin-users
+          uri: ${USER_CENTER_URI:http://localhost:8081}
+          predicates:
+            - Path=/api/v1/admin/**
+          filters:
+            - name: RequestRateLimiter
+              args:
+                key-resolver: "#{@userKeyResolver}"
+                redis-rate-limiter.replenishRate: 1
+                redis-rate-limiter.burstCapacity: 60
+                redis-rate-limiter.requestedTokens: 1
 
         # ========== 业务中心路由（仅已实现 Controller 的操作） ==========
+        # 本地开发使用直连；生产环境通过 BUSINESS_CENTER_URI 环境变量设为 lb://business-center
         - id: business-center-transfers
           uri: ${BUSINESS_CENTER_URI:http://localhost:8082}
           predicates:
@@ -77,19 +90,6 @@ spring:
                 redis-rate-limiter.replenishRate: 1
                 redis-rate-limiter.burstCapacity: 30
                 redis-rate-limiter.requestedTokens: 1
-        # C2C 令牌交换：公开匿名入口，IP 维度限流且容量更高，防止预取和批量扫描
-        - id: business-center-p2p-collections-token
-          uri: ${BUSINESS_CENTER_URI:lb://business-center}
-          predicates:
-            - Path=/api/v1/p2p-collections/by-token,/api/v1/p2p-collections/token-exchanges
-          filters:
-            - name: RequestRateLimiter
-              args:
-                key-resolver: "#{@qrTokenKeyResolver}"
-                redis-rate-limiter.replenishRate: 1
-                redis-rate-limiter.burstCapacity: 60
-                redis-rate-limiter.requestedTokens: 1
-        # C2C 通用操作：登录后的订单修改、确认、付款等，用户维度限流
         - id: business-center-p2p-collections
           uri: ${BUSINESS_CENTER_URI:http://localhost:8082}
           predicates:
@@ -101,31 +101,7 @@ spring:
                 redis-rate-limiter.replenishRate: 1
                 redis-rate-limiter.burstCapacity: 30
                 redis-rate-limiter.requestedTokens: 1
-        # ---- 以下路由已列入契约但对应 Controller 尚未实现，暂预留 ----
         # transactions → 王钧平 阶段四已完成，Controller 待补充
-        - id: business-center-transactions
-          uri: ${BUSINESS_CENTER_URI:lb://business-center}
-          predicates:
-            - Path=/api/v1/transactions/**
-          filters:
-            - name: RequestRateLimiter
-              args:
-                key-resolver: "#{@userKeyResolver}"
-                redis-rate-limiter.replenishRate: 1
-                redis-rate-limiter.burstCapacity: 60
-                redis-rate-limiter.requestedTokens: 1
-        # monitoring → 实时指标、T+1 报表、告警处置，Controller 待补充
-        - id: business-center-monitoring
-          uri: ${BUSINESS_CENTER_URI:lb://business-center}
-          predicates:
-            - Path=/api/v1/monitoring/**
-          filters:
-            - name: RequestRateLimiter
-              args:
-                key-resolver: "#{@userKeyResolver}"
-                redis-rate-limiter.replenishRate: 1
-                redis-rate-limiter.burstCapacity: 30
-                redis-rate-limiter.requestedTokens: 1
         - id: business-center-recharges
           uri: ${BUSINESS_CENTER_URI:http://localhost:8082}
           predicates:
@@ -242,6 +218,11 @@ gateway:
   authentication:
     user-center-uri: ${USER_CENTER_URI:http://localhost:8081}
     service-token: ${INTERNAL_AUTH_SERVICE_TOKEN:local-internal-token}
+    stub:
+      enabled: ${GATEWAY_AUTH_STUB_ENABLED:true}
+      token: ${GATEWAY_AUTH_STUB_TOKEN:any}
+      principal-id: ${GATEWAY_AUTH_STUB_PRINCIPAL:dev-user-001}
+      roles: ${GATEWAY_AUTH_STUB_ROLES:USER}
   cors:
     allowed-origins: ${GATEWAY_CORS_ORIGINS:http://localhost:8000,http://localhost:8001}
     max-age-seconds: ${GATEWAY_CORS_MAX_AGE:3600}

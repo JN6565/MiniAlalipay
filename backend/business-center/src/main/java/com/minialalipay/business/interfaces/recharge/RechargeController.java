@@ -23,7 +23,7 @@ import java.time.Instant;
  * 受控模拟充值订单 API。
  *
  * <p>登录用户只能创建和查询本人订单；写操作要求 {@code X-Request-Id} 与 {@code Idempotency-Key}。
- * 当前接口只返回待渠道状态，不代表账户入账或充值成功，也不调用统一交易和 TCC。</p>
+ * 模拟渠道在创建请求内自动确认；接口返回处理中或成功状态，最终以账户余额和账本事实为准。</p>
  */
 @RestController
 @RequestMapping("/api/v1/recharges")
@@ -37,7 +37,7 @@ public class RechargeController {
         this.requestIds = requestIds;
     }
 
-    /** 创建待渠道处理的模拟充值订单；同一幂等键同参返回既有订单。 */
+    /** 创建并自动确认模拟充值；同一幂等键同参返回既有订单。 */
     @PostMapping
     public ResponseEntity<ApiResponse<RechargeOrderResponse>> create(
             @RequestHeader("X-User-Id") String userId,

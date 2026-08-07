@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { history, useSearchParams } from 'umi';
+import { history, useSearchParams, useLocation } from 'umi';
 import { Card, Button, Toast, SpinLoading, Dialog } from 'antd-mobile';
 import * as transferService from '@/services/transfer';
 import * as paymentPasswordService from '@/services/paymentPassword';
@@ -7,14 +7,28 @@ import { AmountDisplay } from '@/components/h5/AmountDisplay';
 import { PasswordInput } from '@/components/h5/PasswordInput';
 import './index.less';
 
+/** 账号脱敏：保留前 4 位和后 4 位，中间用 **** 代替；短账号直接展示。 */
+const maskAccount = (account: string) => {
+  if (!account) return '';
+  if (account.length <= 8) return account;
+  return `${account.slice(0, 4)}****${account.slice(-4)}`;
+};
+
 const TransferConfirmPage: React.FC = () => {
   const [searchParams] = useSearchParams();
+  const location = useLocation();
   const draftId = searchParams.get('draftId');
+  // 转账页跳转时携带的收款人展示信息（后端草稿接口仅返回 payeeUserId）
+  const navState = (location.state || {}) as {
+    payeeNickname?: string;
+    payeeAccountNumber?: string;
+  };
   const [loading, setLoading] = useState(false);
   const [draftLoading, setDraftLoading] = useState(true);
   const [draft, setDraft] = useState<transferService.TransferDraft | null>(null);
   const [password, setPassword] = useState('');
-  const [riskWarning, setRiskWarning] = useState<string | null>(null);
+  // 校验通过后服务端返回的新版本，签发确认令牌必须使用它
+  const [validatedVersion, setValidatedVersion] = useState<number | null>(null);
 
   useEffect(() => {
     if (draftId) {
@@ -28,16 +42,9 @@ const TransferConfirmPage: React.FC = () => {
       const draftData = await transferService.getDraft(draftId!);
       setDraft(draftData);
 
-      // 风控预检
-      const riskResult = await transferService.validateDraft(draftId!);
-      if (riskResult.riskAction === 'REJECT') {
-        Toast.show({ content: riskResult.riskMessage || '转账被拒绝', icon: 'fail' });
-        history.back();
-        return;
-      }
-      if (riskResult.riskMessage) {
-        setRiskWarning(riskResult.riskMessage);
-      }
+      // 风控预检；后端当前仅返回 PASS，不通过时抛异常由 catch 处理
+      const riskResult = await transferService.validateDraft(draftId!, draftData.version);
+      setValidatedVersion(riskResult.version);
     } catch (error: any) {
       Toast.show({ content: error.message || '加载草稿失败', icon: 'fail' });
       history.back();
@@ -52,8 +59,13 @@ const TransferConfirmPage: React.FC = () => {
       return;
     }
 
+    if (!draft || validatedVersion === null) {
+      Toast.show({ content: '草稿未就绪，请返回重试', icon: 'fail' });
+      return;
+    }
+
     // 大额转账二次确认
-    if (draft && draft.amountFen >= 500000) {
+    if (draft.amountFen >= 500000) {
       const confirmed = await Dialog.confirm({
         content: `确认转账 ¥${(draft.amountFen / 100).toFixed(2)} 元？`,
         confirmText: '确认',
@@ -64,19 +76,15 @@ const TransferConfirmPage: React.FC = () => {
 
     setLoading(true);
     try {
-      // 1. 校验支付密码，获取支付凭证
-      const { paymentProof } = await paymentPasswordService.verifyPaymentPassword({
-        paymentPassword: password,
-        subjectType: 'TRANSFER_DRAFT',
-        subjectId: draftId!,
-      });
+      // 1. 验证支付密码并签发一次性支付证明（TRANSFER_CONFIRM 用途）
+      const { paymentProof } = await paymentPasswordService.issuePaymentProof(password);
 
-      // 2. 生成确认令牌
-      const { confirmationToken } = await transferService.createConfirmation({
-        subjectType: 'TRANSFER_DRAFT',
-        subjectId: draftId!,
+      // 2. 用支付证明签发一次性确认令牌；令牌不得写入日志、URL 或浏览器存储
+      const { confirmationToken } = await transferService.issueConfirmation(
+        draftId!,
         paymentProof,
-      });
+        validatedVersion,
+      );
 
       // 3. 提交转账
       const result = await transferService.submitTransfer({
@@ -84,8 +92,10 @@ const TransferConfirmPage: React.FC = () => {
         confirmationToken,
       });
 
-      // 跳转到结果页
-      history.push(`/h5/transfer/result/${result.transactionId}`);
+      // 跳转到结果页；后端状态接口不含收款人昵称，通过路由 state 携带展示
+      history.push(`/h5/transfer/result/${result.transactionId}`, {
+        payeeNickname: navState.payeeNickname,
+      });
     } catch (error: any) {
       Toast.show({ icon: 'fail', content: error.message || '转账失败' });
     } finally {
@@ -119,8 +129,8 @@ const TransferConfirmPage: React.FC = () => {
         <div className="confirm-row">
           <span className="confirm-label">收款方</span>
           <span className="confirm-value">
-            {draft?.payeeNickname || '-'}
-            {draft?.payeeAccountMasked && ` (${draft.payeeAccountMasked})`}
+            {navState.payeeNickname || draft?.payeeUserId || '-'}
+            {navState.payeeAccountNumber && ` (${maskAccount(navState.payeeAccountNumber)})`}
           </span>
         </div>
 
@@ -141,13 +151,6 @@ const TransferConfirmPage: React.FC = () => {
           <span className="confirm-value">¥0.00</span>
         </div>
       </Card>
-
-      {riskWarning && (
-        <Card className="risk-warning-card">
-          <div className="risk-icon">⚠️</div>
-          <div className="risk-message">{riskWarning}</div>
-        </Card>
-      )}
 
       <Card className="password-card">
         <div className="password-title">请输入支付密码</div>

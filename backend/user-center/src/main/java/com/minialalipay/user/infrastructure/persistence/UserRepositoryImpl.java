@@ -3,6 +3,7 @@ package com.minialalipay.user.infrastructure.persistence;
 import com.minialalipay.common.error.BusinessException;
 import com.minialalipay.user.domain.auth.UserErrorCode;
 import com.minialalipay.user.domain.user.User;
+import com.minialalipay.user.domain.user.UserAdminView;
 import com.minialalipay.user.domain.user.UserRepository;
 import com.minialalipay.user.domain.user.UserStatus;
 import com.minialalipay.user.infrastructure.persistence.mapper.UserMapper;
@@ -165,26 +166,25 @@ public class UserRepositoryImpl implements UserRepository {
     }
 
     /**
-     * 按关键词搜索用户。
+     * 按手机号搜索用户。
      *
      * <p>搜索规则：
      * <ul>
-     *   <li>按登录名或昵称模糊搜索</li>
+     *   <li>按手机号精确匹配搜索</li>
      *   <li>只返回 ACTIVE 状态的用户</li>
      *   <li>排除指定的用户 ID（通常是当前用户）</li>
      *   <li>最多返回指定数量的结果</li>
      * </ul>
      * </p>
      *
-     * @param keyword   搜索关键词（登录名或昵称）
+     * @param keyword   搜索手机号
      * @param excludeId 排除的用户 ID（可为 null）
      * @param limit     最大返回数量
      * @return 用户列表
      */
     @Override
     public List<User> searchByKeyword(String keyword, String excludeId, int limit) {
-        String searchPattern = "%" + keyword + "%";
-        return userMapper.searchByKeyword(keyword, searchPattern, excludeId, limit).stream()
+        return userMapper.searchByKeyword(keyword, excludeId, limit).stream()
                 .map(this::toDomain)
                 .collect(Collectors.toList());
     }
@@ -210,7 +210,9 @@ public class UserRepositoryImpl implements UserRepository {
                 user.getStatus().name(),
                 user.getVersion(),
                 user.getCreatedAt(),
-                user.getUpdatedAt()
+                user.getUpdatedAt(),
+                user.getDisabledBy(),
+                user.getDisabledReason()
         );
     }
 
@@ -235,7 +237,25 @@ public class UserRepositoryImpl implements UserRepository {
                 UserStatus.valueOf(userPO.getStatus()),
                 userPO.getVersion(),
                 userPO.getCreatedAt(),
-                userPO.getUpdatedAt()
+                userPO.getUpdatedAt(),
+                userPO.getDisabledBy(),
+                userPO.getDisabledReason()
         );
+    }
+
+    /**
+     * B 端管理分页查询用户（只读投影）。
+     *
+     * @param status 用户状态过滤，null 表示不限定
+     * @param cursor 上一页最后一条 {@code user_id}，null 表示第一页
+     * @param limit  每页最大返回条数
+     * @return 用户只读投影列表
+     */
+    @Override
+    public List<UserAdminView> findAdminPage(UserStatus status, String cursor, int limit) {
+        String statusName = status == null ? null : status.name();
+        return userMapper.selectAdminPage(statusName, cursor, limit).stream()
+                .map(po -> new UserAdminView(toDomain(po), po.getLoginLockedUntil()))
+                .collect(Collectors.toList());
     }
 }

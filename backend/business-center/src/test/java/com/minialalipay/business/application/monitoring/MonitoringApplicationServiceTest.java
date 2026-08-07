@@ -115,10 +115,13 @@ class MonitoringApplicationServiceTest {
         private final Map<String, Alert> alerts = new LinkedHashMap<>();
         private final Map<String, AlertOpsIdempotencyRecord> idempotency = new LinkedHashMap<>();
 
-        @Override public List<Alert> listAlerts(String status, String cursor, int limit) {
+        @Override public List<Alert> listAlerts(String status, String severity, String cursor, int limit) {
             List<Alert> all = new ArrayList<>(alerts.values());
             if (status != null && !status.isBlank()) {
                 all.removeIf(alert -> !status.equals(alert.getStatus().name()));
+            }
+            if (severity != null && !severity.isBlank()) {
+                all.removeIf(alert -> !severity.equals(alert.getSeverity()));
             }
             return all;
         }

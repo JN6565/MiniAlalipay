@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { history, useSearchParams, useParams } from 'umi';
+import { history, useSearchParams, useParams, useLocation } from 'umi';
 import { Card, Button, Result, SpinLoading } from 'antd-mobile';
 import { CheckCircleFill, CloseCircleFill } from 'antd-mobile-icons';
 import * as transferService from '@/services/transfer';
@@ -9,6 +9,9 @@ import './index.less';
 
 const TransferResultPage: React.FC = () => {
   const { id } = useParams();
+  const location = useLocation();
+  // 后端交易状态接口不返回收款人昵称，由确认页跳转时通过路由 state 携带展示
+  const navState = (location.state || {}) as { payeeNickname?: string };
   const [loading, setLoading] = useState(true);
   const [result, setResult] = useState<transferService.TransferResult | null>(null);
 
@@ -38,14 +41,31 @@ const TransferResultPage: React.FC = () => {
   }
 
   const isSuccess = result?.status === 'SUCCESS';
+  const isProcessing = result?.status === 'PROCESSING';
+
+  const getStatusText = () => {
+    if (isSuccess) return '转账成功';
+    if (result?.status === 'REVERSED') return '转账已冲正';
+    if (result?.status === 'CANCELLED') return '转账已取消';
+    if (isProcessing) return '转账处理中';
+    return '转账状态未知';
+  };
+
+  const getStatusDescription = () => {
+    if (isSuccess) return '资金已到账';
+    if (result?.status === 'REVERSED') return '资金已退回';
+    if (result?.status === 'CANCELLED') return '转账已取消';
+    if (isProcessing) return '请稍后查看结果';
+    return '请联系客服查询';
+  };
 
   return (
     <div className="transfer-result-page">
       <Result
-        icon={isSuccess ? <CheckCircleFill /> : <CloseCircleFill />}
-        status={isSuccess ? 'success' : 'error'}
-        title={isSuccess ? '转账成功' : '转账处理中'}
-        description={isSuccess ? '资金已到账' : '请稍后查看结果'}
+        icon={isSuccess ? <CheckCircleFill /> : isProcessing ? <SpinLoading /> : <CloseCircleFill />}
+        status={isSuccess ? 'success' : isProcessing ? 'waiting' : 'error'}
+        title={getStatusText()}
+        description={getStatusDescription()}
       />
 
       <Card className="result-card">
@@ -55,7 +75,7 @@ const TransferResultPage: React.FC = () => {
         </div>
         <div className="result-row">
           <span className="result-label">收款人</span>
-          <span className="result-value">{result?.payeeNickname || '-'}</span>
+          <span className="result-value">{navState.payeeNickname || '-'}</span>
         </div>
         <div className="result-row">
           <span className="result-label">金额</span>
@@ -66,7 +86,7 @@ const TransferResultPage: React.FC = () => {
         <div className="result-row">
           <span className="result-label">时间</span>
           <span className="result-value">
-            {result?.createdAt ? formatTime(result.createdAt) : '-'}
+            {result?.updatedAt ? formatTime(result.updatedAt) : '-'}
           </span>
         </div>
       </Card>

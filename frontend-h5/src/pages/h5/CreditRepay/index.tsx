@@ -83,17 +83,16 @@ const CreditRepayPage: React.FC = () => {
       const draft = await handleCreateDraft();
       if (!draft) return;
 
-      // 2. 校验支付密码
-      const { confirmationToken } = await paymentPasswordService.verifyPaymentPassword({
+      // 2. 验证支付密码并签发还款用途的一次性支付证明
+      const { paymentProof } = await paymentPasswordService.verifyPaymentPassword({
         paymentPassword: password,
-        subjectType: 'CREDIT_REPAYMENT',
-        subjectId: draft.repaymentDraftId,
+        purpose: 'CREDIT_REPAY',
       });
 
       // 3. 提交还款
       const result = await creditService.submitRepayment({
         repaymentDraftId: draft.repaymentDraftId,
-        confirmationToken,
+        paymentProofToken: paymentProof,
       });
 
       Toast.show({ icon: 'success', content: '还款成功' });

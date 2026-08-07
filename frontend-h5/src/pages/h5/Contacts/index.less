@@ -4,34 +4,119 @@
   padding-bottom: 70px;
 }
 
-.contacts-content {
-  padding: 20px;
+.search-section {
+  padding: 12px 16px;
+  background: #fff;
 }
 
-.empty-state {
+.section-card {
+  background: #fff;
+  margin: 12px 0;
+  border-radius: 12px;
+  overflow: hidden;
+}
+
+.section-title {
+  padding: 12px 16px 8px;
+  font-size: 14px;
+  color: #999;
+  font-weight: normal;
+}
+
+.search-item,
+.friend-item {
   display: flex;
-  flex-direction: column;
+  align-items: center;
+  justify-content: space-between;
+  padding: 12px 16px;
+  border-bottom: 1px solid #f5f5f5;
+
+  &:last-child {
+    border-bottom: none;
+  }
+}
+
+.user-info {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex: 1;
+}
+
+.avatar-circle {
+  width: 44px;
+  height: 44px;
+  border-radius: 50%;
+  background: linear-gradient(135deg, #1677ff, #69b1ff);
+  color: #fff;
+  display: flex;
   align-items: center;
   justify-content: center;
-  padding: 60px 20px;
-  text-align: center;
+  font-size: 18px;
+  font-weight: 600;
+  flex-shrink: 0;
 }
 
-.empty-icon {
-  font-size: 64px;
-  margin-bottom: 16px;
+.user-meta {
+  flex: 1;
+  min-width: 0;
 }
 
-.empty-text {
+.user-name {
   font-size: 16px;
   color: #333;
   font-weight: 500;
-  margin-bottom: 8px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
-.empty-desc {
-  font-size: 14px;
+.user-phone {
+  font-size: 12px;
   color: #999;
+  margin-top: 4px;
+}
+
+.alias-tag {
+  font-size: 12px;
+  color: #999;
+  margin-left: 4px;
+  font-weight: normal;
+}
+
+.request-entry {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 14px 16px;
+  background: #fff;
+  margin: 12px 0;
+  cursor: pointer;
+}
+
+.request-left {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  font-size: 16px;
+  color: #333;
+}
+
+.request-icon {
+  font-size: 22px;
+}
+
+.badge {
+  background: #ff4d4f;
+  color: #fff;
+  font-size: 12px;
+  min-width: 20px;
+  height: 20px;
+  border-radius: 10px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0 6px;
 }
 
 .tabbar {

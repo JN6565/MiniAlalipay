@@ -37,6 +37,13 @@ public class LedgerAccountRepositoryImpl implements LedgerAccountRepository {
     }
 
     @Override
+    public Optional<LedgerAccount> findSystemIssuance() {
+        return jdbcTemplate.query("SELECT * FROM ledger_db.ledger_account WHERE owner_type='SYSTEM' "
+                        + "AND owner_id='SYSTEM_ISSUANCE' AND account_type='SYSTEM_ISSUANCE_EQUITY' AND currency='CNY'",
+                this::map).stream().findFirst();
+    }
+
+    @Override
     public void create(LedgerAccount account) {
         jdbcTemplate.update("INSERT INTO ledger_db.ledger_account "
                         + "(ledger_account_id,owner_type,owner_id,account_code,account_type,account_class,"

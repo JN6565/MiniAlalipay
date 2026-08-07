@@ -1,13 +1,13 @@
 import request from './request';
+import { generateIdempotencyKey } from './utils';
 
-/** 转账草稿 */
+/** 转账草稿（与后端 DraftResponse 字段一致；收款人昵称和账号不在草稿响应中） */
 export interface TransferDraft {
   draftId: string;
   payeeUserId: string;
-  payeeNickname: string;
-  payeeAccountMasked: string;
   amountFen: number;
   remark?: string;
+  status: string;
   version: number;
   expiresAt: string;
 }
@@ -15,32 +15,44 @@ export interface TransferDraft {
 /** 转账结果 */
 export interface TransferResult {
   transactionId: string;
+  businessType: string;
   status: string;
   amountFen: number;
-  payeeNickname: string;
-  createdAt: string;
+  statusUrl: string;
+  updatedAt: string;
 }
 
 /** 风控预检结果 */
-export interface RiskCheckResult {
-  riskAction: 'PASS' | 'REJECT' | 'MANUAL';
-  riskMessage?: string;
-  riskLevel: string;
+export interface ValidationResult {
+  result: 'PASS' | 'MANUAL';
+  riskLevel: 'LOW' | 'MEDIUM' | 'HIGH';
+  version: number;
+}
+
+/** 确认令牌签发结果 */
+export interface IssuedConfirmation {
+  confirmationToken: string;
+  subjectHash: string;
+  expiresAt: string;
 }
 
 /**
- * 创建转账草稿
+ * 创建转账草稿；契约要求携带 Idempotency-Key，超时可传入同一幂等键重试
  * @param params 转账参数
+ * @param idempotencyKey 幂等键，缺省时自动生成；重试同一笔转账时必须复用原键
  * @returns 草稿信息
  */
-export const createDraft = (params: {
-  payeeUserId: string;
-  amountFen: number;
-  remark?: string;
-}): Promise<TransferDraft> => {
-  return request.post('/api/v1/transfer-drafts', {
-    data: params,
-  }) as unknown as Promise<TransferDraft>;
+export const createDraft = (
+  params: {
+    payeeUserId: string;
+    amountFen: number;
+    remark?: string;
+  },
+  idempotencyKey?: string,
+) => {
+  return request.post<TransferDraft>('/api/v1/transfer-drafts', params, {
+    headers: { 'Idempotency-Key': idempotencyKey || generateIdempotencyKey() },
+  });
 };
 
 /**
@@ -48,12 +60,12 @@ export const createDraft = (params: {
  * @param draftId 草稿ID
  * @returns 草稿信息
  */
-export const getDraft = (draftId: string): Promise<TransferDraft> => {
-  return request.get(`/api/v1/transfer-drafts/${draftId}`) as unknown as Promise<TransferDraft>;
+export const getDraft = (draftId: string) => {
+  return request.get<TransferDraft>(`/api/v1/transfer-drafts/${draftId}`);
 };
 
 /**
- * 更新草稿
+ * 更新草稿（CAS 版本控制）
  * @param draftId 草稿ID
  * @param params 更新参数
  * @returns 更新后的草稿
@@ -65,48 +77,54 @@ export const updateDraft = (
     remark?: string;
     version: number;
   },
-): Promise<TransferDraft> => {
-  return request.patch(`/api/v1/transfer-drafts/${draftId}`, {
-    data: params,
-  }) as unknown as Promise<TransferDraft>;
+) => {
+  return request.patch<TransferDraft>(`/api/v1/transfer-drafts/${draftId}`, params);
 };
 
 /**
- * 校验草稿（风控预检）
+ * 校验草稿（风控预检）；后端要求携带客户端读取到的草稿版本
  * @param draftId 草稿ID
- * @returns 风控结果
+ * @param version 草稿 CAS 版本
+ * @returns 风控结果和新版本
  */
-export const validateDraft = (draftId: string): Promise<RiskCheckResult> => {
-  return request.post(`/api/v1/transfer-drafts/${draftId}/validate`) as unknown as Promise<RiskCheckResult>;
+export const validateDraft = (draftId: string, version: number) => {
+  return request.post<ValidationResult>(`/api/v1/transfer-drafts/${draftId}/validate`, {
+    version,
+  });
 };
 
 /**
- * 生成确认令牌
- * @param params 确认参数
- * @returns 确认令牌
+ * 签发确认令牌；契约要求四个字段齐全：subjectType + subjectId + subjectVersion + paymentProof
+ * @param draftId 草稿ID
+ * @param paymentProof 支付证明（不得写入日志、URL 或浏览器存储）
+ * @param subjectVersion 校验后的草稿版本
+ * @returns 一次性确认令牌（两分钟有效）
  */
-export const createConfirmation = (params: {
-  subjectType: string;
-  subjectId: string;
-  paymentProof: string;
-}): Promise<{ confirmationToken: string; expiresAt: string }> => {
-  return request.post('/api/v1/confirmations', {
-    data: params,
-  }) as unknown as Promise<{ confirmationToken: string; expiresAt: string }>;
+export const issueConfirmation = (draftId: string, paymentProof: string, subjectVersion: number) => {
+  return request.post<IssuedConfirmation>('/api/v1/confirmations', {
+    subjectType: 'TRANSFER_DRAFT',
+    subjectId: draftId,
+    subjectVersion,
+    paymentProof,
+  });
 };
 
 /**
- * 执行转账
+ * 执行转账；契约要求携带 Idempotency-Key，超时可传入同一幂等键重试
  * @param params 转账参数
+ * @param idempotencyKey 幂等键，缺省时自动生成；重试同一笔转账时必须复用原键
  * @returns 转账结果
  */
-export const submitTransfer = (params: {
-  draftId: string;
-  confirmationToken: string;
-}): Promise<TransferResult> => {
-  return request.post('/api/v1/transfers', {
-    data: params,
-  }) as unknown as Promise<TransferResult>;
+export const submitTransfer = (
+  params: {
+    draftId: string;
+    confirmationToken: string;
+  },
+  idempotencyKey?: string,
+) => {
+  return request.post<TransferResult>('/api/v1/transfers', params, {
+    headers: { 'Idempotency-Key': idempotencyKey || generateIdempotencyKey() },
+  });
 };
 
 /**
@@ -114,6 +132,6 @@ export const submitTransfer = (params: {
  * @param transactionId 交易ID
  * @returns 交易结果
  */
-export const getTransferStatus = (transactionId: string): Promise<TransferResult> => {
-  return request.get(`/api/v1/transfers/${transactionId}`) as unknown as Promise<TransferResult>;
+export const getTransferStatus = (transactionId: string) => {
+  return request.get<TransferResult>(`/api/v1/transfers/${transactionId}`);
 };

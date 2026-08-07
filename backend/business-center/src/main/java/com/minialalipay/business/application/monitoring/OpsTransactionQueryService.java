@@ -16,7 +16,7 @@ import java.util.List;
 /**
  * B 端运营交易查询应用服务。
  *
- * <p>只读投影 {@code business_db} 中业务中心拥有的资金交易事实，供运营与观察者查看全平台脱敏交易
+ * <p>只读投影 {@code business_db} 中业务中心拥有的资金交易事实，供管理员与运营人员查看全平台脱敏交易
  * 和链路追溯；本服务不修改余额、账本或交易状态，也不调用任何资金写入端口。</p>
  */
 @Service
@@ -43,10 +43,18 @@ public class OpsTransactionQueryService {
                 .orElseThrow(() -> new BusinessException(CommonErrorCode.NOT_FOUND));
     }
 
-    /** 查询交易链路片段；交易不存在时按资源不存在返回。 */
+    /** 查询交易链路片段；交易不存在时按资源不存在返回，返回跨服务链路（业务中心 + 账户账本 + 用户审计 + AI）。 */
     @Transactional(readOnly = true)
     public List<TraceSpan> getTrace(String transactionId) {
-        store.findTransactionForOps(transactionId).orElseThrow(() -> new BusinessException(CommonErrorCode.NOT_FOUND));
-        return store.findTraceSpans(transactionId);
+        String traceId = store.findTransactionForOps(transactionId)
+                .map(detail -> detail.row().traceId())
+                .orElseThrow(() -> new BusinessException(CommonErrorCode.NOT_FOUND));
+        return store.findTraceSpansByTraceId(traceId);
+    }
+
+    /** 按链路编号查询跨服务链路片段；无结果返回空列表。 */
+    @Transactional(readOnly = true)
+    public List<TraceSpan> getTraceByTraceId(String traceId) {
+        return store.findTraceSpansByTraceId(traceId);
     }
 }

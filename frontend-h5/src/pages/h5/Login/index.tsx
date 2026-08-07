@@ -1,11 +1,12 @@
 import React, { useState } from 'react';
-import { history } from '@umijs/max';
+import { history, useSearchParams } from '@umijs/max';
 import { Toast } from 'antd-mobile';
 import { login } from '@/services/auth';
 import { ApiError } from '@/services/request';
 import './index.less';
 
 const LoginPage: React.FC = () => {
+  const [searchParams] = useSearchParams();
   const [loginIdentifier, setLoginIdentifier] = useState('');
   const [loginPassword, setLoginPassword] = useState('');
   const [loading, setLoading] = useState(false);
@@ -61,9 +62,13 @@ const LoginPage: React.FC = () => {
       // 显示登录成功提示
       Toast.show({ content: '登录成功', icon: 'success' });
 
-      // 跳转到首页
-      // 登录页不应保留在历史栈中；浏览器级跳转还能避免旧的路由实例阻止导航。
-      history.replace('/h5/home');
+      // 跳转到目标页面（如果有 redirect 参数则跳转回去，否则跳转首页）
+      const redirect = searchParams.get('redirect');
+      if (redirect && redirect.startsWith('/')) {
+        window.location.href = redirect;
+      } else {
+        history.replace('/h5/home');
+      }
     } catch (error: any) {
       const code = error instanceof ApiError ? error.code : 'UNKNOWN';
       const messages: Record<string, string> = {

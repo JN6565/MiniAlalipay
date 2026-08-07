@@ -2,6 +2,7 @@ package com.minialalipay.business.application.transfer;
 
 import com.minialalipay.business.application.port.AccountDirectoryPort;
 import com.minialalipay.business.application.port.BusinessStore;
+import com.minialalipay.business.application.port.ContactArchivePort;
 import com.minialalipay.business.application.port.PaymentProofPort;
 import com.minialalipay.business.application.port.TccCoordinatorPort;
 import com.minialalipay.business.application.port.SecurityMaterialPort;
@@ -44,19 +45,23 @@ public class TransferApplicationService {
     private final TccCoordinatorPort coordinator;
     private final SecurityMaterialPort secure;
     private final IdempotencyKeyValidator keyValidator;
+    private final ContactArchivePort contactArchive;
     private final Clock clock;
 
     @Autowired
     public TransferApplicationService(BusinessStore store, AccountDirectoryPort accounts,
                                       PaymentProofPort paymentProofs, TccCoordinatorPort coordinator,
-                                      SecurityMaterialPort secure, IdempotencyKeyValidator keyValidator) {
-        this(store, accounts, paymentProofs, coordinator, secure, keyValidator, Clock.systemUTC());
+                                      SecurityMaterialPort secure, IdempotencyKeyValidator keyValidator,
+                                      ContactArchivePort contactArchive) {
+        this(store, accounts, paymentProofs, coordinator, secure, keyValidator, contactArchive, Clock.systemUTC());
     }
     TransferApplicationService(BusinessStore store, AccountDirectoryPort accounts,
                                PaymentProofPort paymentProofs, TccCoordinatorPort coordinator,
-                               SecurityMaterialPort secure, IdempotencyKeyValidator keyValidator, Clock clock) {
+                               SecurityMaterialPort secure, IdempotencyKeyValidator keyValidator,
+                               ContactArchivePort contactArchive, Clock clock) {
         this.store = store; this.accounts = accounts; this.paymentProofs = paymentProofs;
-        this.coordinator = coordinator; this.secure = secure; this.keyValidator = keyValidator; this.clock = clock;
+        this.coordinator = coordinator; this.secure = secure; this.keyValidator = keyValidator;
+        this.contactArchive = contactArchive; this.clock = clock;
     }
 
     /** 创建服务端派生账户归属的转账草稿；同键同参返回原草稿。 */
@@ -191,7 +196,10 @@ public class TransferApplicationService {
                 FundingSource.BALANCE, draft.getAmountFen(), idempotencyKey, "LOW",
                 traceId == null || traceId.length() != 32 ? secure.newTraceId() : traceId, now);
         store.createTransaction(transaction, requestHash, secure.newId(), now);
-        afterCommit(() -> coordinator.startOrResume(transaction));
+        afterCommit(() -> {
+            coordinator.startOrResume(transaction);
+            contactArchive.archivePayee(userId, draft.getPayeeUserId());
+        });
         return transaction;
     }
 

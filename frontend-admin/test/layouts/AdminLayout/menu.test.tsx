@@ -2,7 +2,7 @@ import type { MenuProps } from 'antd';
 import type { AdminAccess } from '@/access';
 import { buildAdminMenuItems, filterGroupedMenuByAccess } from '../../../src/layouts/AdminLayout/menu';
 
-/** 布局中的分组菜单样例（不含用户管理，与生产布局保持一致）。 */
+/** 布局中的分组菜单样例（抽样总览/数据两组，用于验证分组过滤逻辑）。 */
 const groupedMenus: NonNullable<MenuProps['items']> = [
   {
     type: 'group',
@@ -30,7 +30,7 @@ function groupedKeys(groups: NonNullable<MenuProps['items']>): string[] {
  * B 端权限菜单单元测试。
  *
  * 验证菜单随权限模型正确增删：空权限不生成菜单、公共页面全员可见、
- * 运营人员多出人工确认台、管理员多出演示任务，以及用户管理在正式契约落地前始终隐藏。
+ * 运营人员多出人工确认台、管理员多出演示任务与用户管理，无权限身份不生成用户管理菜单。
  */
 
 /** 全权限关闭的基准身份，供各用例在其上叠加所需权限。 */
@@ -48,10 +48,9 @@ const noAccess: AdminAccess = {
   canViewTrace: false,
   canRunDemoTasks: false,
   canManageUsers: false,
-  isReadOnlyObserver: false,
 };
 
-/** 公共运营页面可见的权限组合（对应观察者）。 */
+/** 公共运营页面可见的权限组合。 */
 const publicPageAccess: AdminAccess = {
   ...noAccess,
   canEnterAdmin: true,
@@ -73,11 +72,11 @@ describe('B 端权限菜单', () => {
     expect(buildAdminMenuItems(noAccess)).toEqual([]);
   });
 
-  it('观察者只生成公共运营页面菜单', () => {
+  it('仅具备公共页面权限时只生成公共运营页面菜单', () => {
     expect(
       menuKeys({
         ...publicPageAccess,
-        isReadOnlyObserver: true,
+        canViewManualCases: false,
       }),
     ).toEqual([
       '/admin/dashboard',
@@ -108,7 +107,7 @@ describe('B 端权限菜单', () => {
     ]);
   });
 
-  it('管理员额外获得告警规则配置与演示任务菜单', () => {
+  it('管理员额外获得告警规则配置、演示任务与用户管理菜单', () => {
     expect(
       menuKeys({
         ...publicPageAccess,
@@ -125,13 +124,14 @@ describe('B 端权限菜单', () => {
       '/admin/trace',
       '/admin/alert-rules',
       '/admin/demo-tasks',
+      '/admin/users',
     ]);
   });
 
-  it('正式 OpenAPI 落地前始终隐藏用户管理菜单', () => {
+  it('无用户管理权限时不生成用户管理菜单', () => {
     const keys = menuKeys({
       ...publicPageAccess,
-      canManageUsers: true,
+      canManageUsers: false,
     });
 
     expect(keys).not.toContain('/admin/users');
@@ -139,10 +139,10 @@ describe('B 端权限菜单', () => {
 });
 
 describe('B 端分组菜单按权限过滤', () => {
-  it('观察者仅看到公共分组中的可见子项，隐藏无权限的运营菜单', () => {
+  it('仅具备公共页面权限时仅看到公共分组中的可见子项，隐藏无权限的运营菜单', () => {
     const filtered = filterGroupedMenuByAccess(groupedMenus, {
       ...publicPageAccess,
-      isReadOnlyObserver: true,
+      canViewManualCases: false,
     });
 
     expect(groupedKeys(filtered)).toEqual(['/admin/dashboard', '/admin/data-quality']);

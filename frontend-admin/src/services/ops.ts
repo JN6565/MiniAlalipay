@@ -66,15 +66,20 @@ export interface RealtimeMetricItem {
   qualityStatus: string;
 }
 
-/** 人工工单行，与 OpenAPI ManualCase 对齐。 */
+/** 人工工单行，与 OpenAPI ManualCase 对齐；处置后暴露操作者、理由与证据引用等审计事实。 */
 export interface ManualCaseItem {
   caseId: string;
   caseType: string;
   subjectType: string;
   subjectId: string;
   status: 'OPEN' | 'CLAIMED' | 'RESOLVED' | 'CLOSED';
+  reasonCode: string;
+  operatorId: string | null;
+  lastReason: string | null;
+  evidenceReference: string | null;
   version: number;
   createdAt: string;
+  updatedAt: string;
 }
 
 /** 人工工单分页，与 OpenAPI ManualCasePage 对齐。 */
@@ -115,7 +120,7 @@ export interface OpsTransactionDetailItem {
   activeManualCaseId: string | null;
 }
 
-/** 链路追溯片段，与 OpenAPI TraceSpan 对齐。 */
+/** 链路追溯片段，与 OpenAPI TraceSpan 对齐；transactionId 表示片段归属的交易号，非交易归属的服务片段为空。 */
 export interface TraceSpanItem {
   service: string;
   operation: string;
@@ -123,6 +128,7 @@ export interface TraceSpanItem {
   detail: string;
   traceId: string;
   occurredAt: string;
+  transactionId?: string;
 }
 
 /** 告警规则及阈值配置，与 OpenAPI AlertRule 对齐。 */
@@ -139,6 +145,26 @@ export interface AlertRuleItem {
   updatedAt: string;
 }
 
+/** 指标口径定义，与 OpenAPI MetricDefinition 对齐。 */
+export interface MetricDefinitionItem {
+  metricCode: string;
+  version: string;
+  name: string;
+  unit: string;
+  formula?: string;
+}
+
+/** 信用运维任务运行记录，与 OpenAPI CreditJobRun 对齐。 */
+export interface CreditJobRun {
+  runId: string;
+  jobType: 'STATEMENT' | 'DUE_CHECK';
+  businessDate: string;
+  status: 'PENDING' | 'RUNNING' | 'SUCCESS' | 'FAILED' | 'MANUAL_REVIEW';
+  startedAt?: string | null;
+  completedAt?: string | null;
+  errorCode?: string | null;
+}
+
 /** 写操作统一携带随机幂等键，避免重复提交产生重复业务结果。 */
 function writeAction<T>(url: string, data: Record<string, unknown>): Promise<ApiResponse<T>> {
   return gatewayRequest<ApiResponse<T>>(url, {
@@ -148,10 +174,17 @@ function writeAction<T>(url: string, data: Record<string, unknown>): Promise<Api
   });
 }
 
-/** 查询告警投影。 */
-export function listAlerts(status?: string, limit = 50): Promise<ApiResponse<AlertPage>> {
+/** 查询告警投影，支持状态与级别（severity）筛选及稳定游标分页。 */
+export function listAlerts(
+  status?: string,
+  severity?: string,
+  cursor?: string,
+  limit = 50,
+): Promise<ApiResponse<AlertPage>> {
   const params = new URLSearchParams({ limit: String(limit) });
   if (status) params.set('status', status);
+  if (severity) params.set('severity', severity);
+  if (cursor) params.set('cursor', cursor);
   return gatewayRequest<ApiResponse<AlertPage>>(`/api/v1/ops/alerts?${params.toString()}`);
 }
 
@@ -170,10 +203,12 @@ export function closeAlert(alertId: string, version: number, reason: string, evi
   return writeAction(`/api/v1/ops/alerts/${alertId}/close`, { version, reason, evidence });
 }
 
-/** 查询数据质量结果。 */
-export function listDataQuality(dataDate?: string): Promise<ApiResponse<DataQualityItem[]>> {
+/** 查询数据质量结果，支持按数据日期、任务编码与规则编码筛选。 */
+export function listDataQuality(dataDate?: string, jobCode?: string, ruleCode?: string): Promise<ApiResponse<DataQualityItem[]>> {
   const params = new URLSearchParams();
   if (dataDate) params.set('dataDate', dataDate);
+  if (jobCode) params.set('jobCode', jobCode);
+  if (ruleCode) params.set('ruleCode', ruleCode);
   return gatewayRequest<ApiResponse<DataQualityItem[]>>(`/api/v1/ops/data-quality?${params.toString()}`);
 }
 
@@ -184,16 +219,29 @@ export function listDailyReports(reportDate?: string): Promise<ApiResponse<Daily
   return gatewayRequest<ApiResponse<DailyMetricItem[]>>(`/api/v1/ops/daily-reports?${params.toString()}`);
 }
 
-/** 查询分钟级实时指标。 */
-export function listRealtimeMetrics(metricCode?: string): Promise<ApiResponse<RealtimeMetricItem[]>> {
+/** 查询分钟级实时指标；可指定指标代码与时间范围，未指定范围由服务端回看默认窗口（60 分钟）。 */
+export function listRealtimeMetrics(
+  metricCode?: string,
+  from?: string,
+  to?: string,
+): Promise<ApiResponse<RealtimeMetricItem[]>> {
   const params = new URLSearchParams();
   if (metricCode) params.set('metricCode', metricCode);
+  if (from) params.set('from', from);
+  if (to) params.set('to', to);
   return gatewayRequest<ApiResponse<RealtimeMetricItem[]>>(`/api/v1/ops/realtime-metrics?${params.toString()}`);
 }
 
-/** 查询运营可见人工工单。 */
-export function listManualCases(cursor?: string, limit = 50): Promise<ApiResponse<ManualCasePage>> {
+/** 查询运营可见人工工单，支持按状态、类型筛选与稳定游标分页。 */
+export function listManualCases(
+  status?: string,
+  type?: string,
+  cursor?: string,
+  limit = 50,
+): Promise<ApiResponse<ManualCasePage>> {
   const params = new URLSearchParams({ limit: String(limit) });
+  if (status) params.set('status', status);
+  if (type) params.set('type', type);
   if (cursor) params.set('cursor', cursor);
   return gatewayRequest<ApiResponse<ManualCasePage>>(`/api/v1/manual-cases?${params.toString()}`);
 }
@@ -209,14 +257,19 @@ export function decideManualCase(
   return writeAction(`/api/v1/manual-cases/${caseId}/decisions`, { decision, version, reason, evidence });
 }
 
-/** 触发信用出账任务（管理员受审计动作）。 */
-export function runCreditStatement(businessDate: string): Promise<ApiResponse<unknown>> {
+/** 触发信用出账任务（仅系统管理员的受审计动作，系统分析 16.7）。 */
+export function runCreditStatement(businessDate: string): Promise<ApiResponse<CreditJobRun>> {
   return writeAction('/api/v1/ops/credit/statement-runs', { businessDate });
 }
 
-/** 触发信用到期检查任务（管理员受审计动作）。 */
-export function runCreditDueCheck(businessDate: string): Promise<ApiResponse<unknown>> {
+/** 触发信用到期检查任务（仅系统管理员的受审计动作，系统分析 16.7）。 */
+export function runCreditDueCheck(businessDate: string): Promise<ApiResponse<CreditJobRun>> {
   return writeAction('/api/v1/ops/credit/due-check-runs', { businessDate });
+}
+
+/** 查询历史指标口径版本，供报表按 metricCode 展示名称与单位。 */
+export function listMetricDefinitions(): Promise<ApiResponse<MetricDefinitionItem[]>> {
+  return gatewayRequest<ApiResponse<MetricDefinitionItem[]>>('/api/v1/ops/metric-definitions');
 }
 
 /** 分页查询全平台脱敏交易摘要；金额为整数分，仅展示服务端确定的资金事实。 */
@@ -235,9 +288,14 @@ export function getOpsTransaction(transactionId: string): Promise<ApiResponse<Op
   return gatewayRequest<ApiResponse<OpsTransactionDetailItem>>(`/api/v1/ops/transactions/${encodeURIComponent(transactionId)}`);
 }
 
-/** 查询交易链路片段；仅展示业务中心可核验的资金事实阶段。 */
+/** 查询交易链路片段；按交易归属的链路编号返回跨服务脱敏 Span。 */
 export function getOpsTransactionTrace(transactionId: string): Promise<ApiResponse<TraceSpanItem[]>> {
   return gatewayRequest<ApiResponse<TraceSpanItem[]>>(`/api/v1/ops/transactions/${encodeURIComponent(transactionId)}/trace`);
+}
+
+/** 按链路编号查询跨服务链路片段；无已核验片段时返回空列表。 */
+export function getOpsTraceByTraceId(traceId: string): Promise<ApiResponse<TraceSpanItem[]>> {
+  return gatewayRequest<ApiResponse<TraceSpanItem[]>>(`/api/v1/ops/traces/${encodeURIComponent(traceId)}`);
 }
 
 /** 查询全部告警规则及阈值配置。 */
@@ -245,11 +303,14 @@ export function listAlertRules(): Promise<ApiResponse<AlertRuleItem[]>> {
   return gatewayRequest<ApiResponse<AlertRuleItem[]>>('/api/v1/ops/alert-rules');
 }
 
-/** 按版本 CAS 更新告警规则阈值（管理员受审计动作）。 */
+/** 按版本 CAS 更新告警规则阈值（管理员受审计动作）；阈值写入由版本 CAS 保证并发安全，无需幂等键。 */
 export function updateAlertRuleThreshold(
   ruleCode: string,
   thresholdValue: number,
   version: number,
 ): Promise<ApiResponse<AlertRuleItem>> {
-  return writeAction(`/api/v1/ops/alert-rules/${encodeURIComponent(ruleCode)}/thresholds`, { thresholdValue, version });
+  return gatewayRequest<ApiResponse<AlertRuleItem>>(
+    `/api/v1/ops/alert-rules/${encodeURIComponent(ruleCode)}/thresholds`,
+    { method: 'POST', data: { thresholdValue, version } },
+  );
 }

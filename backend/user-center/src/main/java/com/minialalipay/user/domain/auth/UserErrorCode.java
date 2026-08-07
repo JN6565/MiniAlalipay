@@ -96,7 +96,12 @@ public enum UserErrorCode implements ErrorCode {
     /**
      * 资源版本已经变化。
      */
-    VERSION_CONFLICT("VERSION_CONFLICT", "资源版本已经变化", 409);
+    VERSION_CONFLICT("VERSION_CONFLICT", "资源版本已经变化", 409),
+
+    /**
+     * 用户状态不允许该操作（如非 ACTIVE 冻结、非 DISABLED 解冻）。
+     */
+    USER_STATE_INVALID("USER_STATE_INVALID", "用户状态不允许该操作", 409);
 
     private final String code;
     private final String message;

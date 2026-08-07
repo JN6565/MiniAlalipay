@@ -15,8 +15,8 @@ import static org.assertj.core.api.Assertions.assertThat;
  */
 class JwtServiceTest {
 
-    /** 使用固定密钥确保测试可重复。 */
-    private final JwtService jwtService = new JwtService("test-secret-key-for-unit-test");
+    /** 使用固定密钥确保测试可重复；HS256 要求密钥至少 256 位（32 字节），此处取足长固定串。 */
+    private final JwtService jwtService = new JwtService("test-secret-key-for-unit-test-0123456789");
 
     @Test
     @DisplayName("签发并校验有效 JWT 返回正确的认证上下文")
@@ -47,7 +47,10 @@ class JwtServiceTest {
     @DisplayName("签名被篡改的 JWT 返回 null")
     void tamperedTokenReturnsNull() {
         String token = jwtService.createToken("user-001", Set.of("USER"));
-        String tampered = token.substring(0, token.length() - 1) + "X";
+        // 篡改签名段首字符：base64url 末位含填充位，改末位可能解码出相同字节导致校验意外通过；
+        // 改首字符必然改变签名字节，保证断言不依赖 iat 时间的随机性。
+        int signatureStart = token.lastIndexOf('.');
+        String tampered = token.substring(0, signatureStart + 1) + "X" + token.substring(signatureStart + 2);
         assertThat(jwtService.validateToken(tampered)).isNull();
     }
 

@@ -69,10 +69,11 @@ class GatewayRouteForwardingIntegrationTest {
     void allowRequestsThroughRateLimiter() {
         when(redisRateLimiter.isAllowed(anyString(), anyString()))
                 .thenReturn(Mono.just(new RedisRateLimiter.Response(true, Map.of())));
-        // 认证端口 Mock：接受任意非空令牌，返回测试用 OPERATOR 用户（覆盖运维路径访问场景）
+        // 认证端口 Mock：接受任意非空令牌，返回测试用 ADMIN 用户，同时覆盖通用运维路径与
+        // 仅系统管理员的信用运维路径（/api/v1/ops/credit/**）转发场景。
         when(authenticationPort.authenticate(anyString()))
                 .thenReturn(Mono.just(new GatewayAuthContext("dev-user-001",
-                        Set.of("USER", "OPERATOR"))));
+                        Set.of("USER", "OPERATOR", "ADMIN"))));
     }
 
     @ParameterizedTest(name = "{0} 转发到 {1}")
