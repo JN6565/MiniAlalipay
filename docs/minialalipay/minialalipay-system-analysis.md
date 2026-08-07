@@ -1469,6 +1469,7 @@ flowchart TD
 | `GET /internal/v1/credit-accounts/by-user/{userId}` | `business-center` -> `account-center` | 只返回信用账户 ID、状态和 CAS 版本，不返回可用、已用或冻结额度；业务中心仅可将引用绑定至信用确认摘要和 TCC 分支 |
 | `POST /internal/v1/tcc/balance/{role}/{action}` | `business-center` -> `account-center` | `role` 为 `payer/payee`，`action` 为 `try/confirm/cancel`；按 `xid + branch_type + resource_id` 幂等，支持空回滚和防悬挂 |
 | `POST /internal/v1/tcc/ledger/{action}` | `business-center` -> `account-center` | Try 持久化 `PREPARED` 平衡凭证，Confirm 汇总验平后过账，Cancel 只取消未过账凭证 |
+| `POST /internal/v1/seata-tcc/transfer/try` | `business-center` -> `account-center` | 仅在 Seata 全局事务内调用（必须携带 `TX_XID` 请求头）；一次请求依次注册付款冻结、收款预占和账本凭证三个 TCC 分支 Try，分支参数随 Seata 分支上下文持久化供 TC 回调 Confirm/Cancel |
 | `POST /internal/v1/tcc/credit-ledger/{action}` | `business-center` -> `account-center` | 仅用于 `CREDIT_PAY`；请求只传信用账户和收款余额账户，账户中心固定借记信用应收资产、贷记收款用户余额负债；按 `xid + CREDIT_PAY_LEDGER + voucher_id` 幂等，支持空回滚和防悬挂 |
 | `POST /internal/v1/tcc/credit-pay/{action}` | `business-center` -> `account-center` | `action` 为 `try/confirm/cancel`；Try 冻结额度，Confirm 占用额度并增加消费明细和信用应收，Cancel 释放冻结；按 `xid + CREDIT_PAY + credit_account_id` 幂等并持久化空回滚屏障 |
 | `POST /internal/v1/tcc/credit-repay/{action}` | `business-center` -> `account-center` | `action` 为 `try/confirm/cancel`；Try 冻结还款余额，Confirm 扣减余额、减少应收并恢复额度，Cancel 释放余额；按 `xid + CREDIT_REPAY + credit_account_id` 幂等并持久化空回滚屏障 |
@@ -3254,6 +3255,8 @@ SSE 只在终态发布事务的 Outbox 事件投递后发送 `SUCCESS`。断线�
 业务主单不是负责发布成功的普通 TCC 分支。六类交易受理时均已在 `business_db` 创建 `PROCESSING` 主单；TCC 完成后由独立终态发布器按业务类型验证余额、信用、发行权益、退款及账本事实和来源聚合，再更新主单和来源状态。
 
 ### 13.2 TCC 执行规则
+
+转账链路的三分支 Try 在 Seata `@GlobalTransactional` 全局事务内注册，由 Seata TC 负责全局提交/回滚决策与崩溃兜底；Confirm/Cancel 仍直接调用账户中心幂等分支接口立即收敛，分支屏障键由交易 ID 稳定派生，与 Seata 技术 XID 解耦，保证 TC 重试与恢复扫描安全重入。充值链路参与者结构不同，继续使用自研 HTTP 编排；设置 `TCC_COORDINATOR=http` 可整体回退到自研编排。
 
 1. 受理事务提交 `PROCESSING` 主单后创建全局事务；全局事务和每个分支先持久化再调用下游。
 2. Try 只做可撤销的冻结/预占，不提前展示成功。

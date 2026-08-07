@@ -84,7 +84,7 @@ const CreditRepayPage: React.FC = () => {
       if (!draft) return;
 
       // 2. 验证支付密码并签发还款用途的一次性支付证明
-      const { paymentProof } = await paymentPasswordService.verifyPaymentPassword(password, 'CREDIT_REPAY');
+      const { paymentProof } = await paymentPasswordService.issuePaymentProof(password, 'CREDIT_REPAY');
 
       // 3. 提交还款
       const result = await creditService.submitRepayment({

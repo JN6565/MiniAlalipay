@@ -20,6 +20,32 @@ minialalipay:
     # 与 user-center 的 internal.auth.service-token / minialalipay.internal.service-token 保持一致，
     # 否则支付证明验证等内部调用会被拒绝并映射为 PAYMENT_PROOF_INVALID。
     service-token: ${INTERNAL_SERVICE_TOKEN:local-internal-token}
+  tcc:
+    # TCC 全局协调模式：seata 表示由 Seata TC 编排转账 TCC；http 回退为自研 HTTP 协调器。
+    coordinator: ${TCC_COORDINATOR:seata}
+# Seata 分布式事务客户端（TM）：转账 TCC 全局事务发起方。
+# TC 通过 Nacos SEATA_GROUP 分组的 seata-server 服务发现；配置中心使用本地 file（即本文件属性）。
+seata:
+  enabled: ${SEATA_ENABLED:true}
+  application-id: ${spring.application.name}
+  tx-service-group: ${SEATA_TX_SERVICE_GROUP:minialalipay-tx-group}
+  # 资金链路只使用 TCC 模式，不需要 AT 模式的全局锁，禁止自动代理数据源以免影响 JDBC/Flyway。
+  enable-auto-data-source-proxy: false
+  registry:
+    type: ${SEATA_REGISTRY_TYPE:nacos}
+    nacos:
+      application: ${SEATA_REGISTRY_APPLICATION:seata-server}
+      server-addr: ${NACOS_SERVER_ADDR:121.43.51.164:8848}
+      group: ${SEATA_REGISTRY_GROUP:SEATA_GROUP}
+      cluster: ${SEATA_REGISTRY_CLUSTER:default}
+      namespace: ${NACOS_NAMESPACE:}
+      username: ${NACOS_USERNAME:nacos}
+      password: ${NACOS_PASSWORD:nacos}
+  config:
+    type: ${SEATA_CONFIG_TYPE:file}
+  service:
+    vgroup-mapping:
+      minialalipay-tx-group: ${SEATA_CLUSTER:default}
 management:
   endpoints:
     web:
