@@ -1774,16 +1774,15 @@ MVP 退款仅支持单笔全额受控虚拟退款，不接入真实支付通道�
 
 | 字段 | 类型 | 必填/默认 | 功能 |
 | --- | --- | --- | --- |
+| `metric_date` | `DATE` | 联合 PK，必填 | 指标业务日期 |
 | `metric_code` | `VARCHAR(64)` | 联合 PK，必填 | 指标编码 |
-| `business_date` | `DATE` | 联合 PK，必填 | 指标业务日期 |
 | `dimension_hash` | `BINARY(32)` | 联合 PK，必填 | 规范化维度摘要 |
-| `definition_version` | `INT UNSIGNED` | 联合 PK，必填 | 指标口径版本 |
+| `version` | `INT UNSIGNED` | 联合 PK，必填 | 指标口径版本 |
 | `dimensions_json` | `JSON` | 必填 | 脱敏维度值 |
 | `value_decimal` | `DECIMAL(24,6)` | 必填 | 日指标数值 |
-| `quality_status` | `VARCHAR(16)` | `PENDING` | `PENDING/PASSED/FAILED` |
-| `updated_at` | `DATETIME(3)` | 必填 | 最近计算时间 |
+| `quality_status` | `VARCHAR(16)` | 必填 | `PENDING/PASSED/FAILED/UNKNOWN` |
 
-**键与索引**：PK `(metric_code,business_date,dimension_hash,definition_version)`；索引 `(business_date,quality_status)`。
+**键与索引**：PK `(metric_date,metric_code,dimension_hash,version)`；索引 `(metric_code,metric_date)`。定义与迁移 `V202608051211`、`V202608070001` 一致。
 
 **写入规则**：只有完整性、唯一性和对账质量通过后才发布。
 
@@ -1817,14 +1816,16 @@ MVP 退款仅支持单笔全额受控虚拟退款，不接入真实支付通道�
 | `rule_code` | `VARCHAR(64)` | 必填 | 触发规则编码 |
 | `severity` | `VARCHAR(8)` | 必填 | `P0/P1/P2` |
 | `status` | `VARCHAR(16)` | `OPEN` | `OPEN/ACKNOWLEDGED/RESOLVED/CLOSED` |
-| `subject_id` | `VARCHAR(128)` | 必填 | 告警主体 ID |
+| `subject_id` | `VARCHAR(128)` | 可空 | 告警主体 ID |
 | `evidence_json` | `JSON` | 必填 | 指标、交易和 Trace 证据 |
 | `assignee_id` | `CHAR(26)` | 可空 | 当前处理人 |
+| `last_reason` | `VARCHAR(256)` | 可空 | 最后处置理由 |
+| `version` | `BIGINT UNSIGNED` | `0` | 乐观锁 CAS 版本 |
 | `opened_at` | `DATETIME(3)` | 必填 | 告警打开时间 |
 | `updated_at` | `DATETIME(3)` | 必填 | 最近处置时间 |
 | `closed_at` | `DATETIME(3)` | 可空 | 人工关闭时间 |
 
-**键与索引**：索引 `(status,severity,opened_at)`、`(subject_id,opened_at)`。
+**键与索引**：索引 `(status,severity,opened_at)`。定义与迁移 `V202608051211`、`V202608070001` 一致。
 
 **写入规则**：恢复正常只生成恢复证据，P0/P1 仍需人工确认后关闭；证据不得删除。
 

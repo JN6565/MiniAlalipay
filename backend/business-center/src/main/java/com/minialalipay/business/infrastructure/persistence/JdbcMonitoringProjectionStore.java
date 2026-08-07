@@ -125,23 +125,29 @@ public class JdbcMonitoringProjectionStore implements MonitoringProjectionStore 
 
     @Override
     public List<DailyMetric> listDailyReports(LocalDate reportDate) {
-        return jdbc.query("SELECT metric_code,metric_date,value_decimal,version,quality_status "
-                + "FROM metrics_db.daily_metric WHERE metric_date=? AND quality_status IN ('PASSED','WARNING') "
-                + "ORDER BY metric_code ASC",
-                (rs, rowNum) -> new DailyMetric(rs.getString("metric_code"),
-                        rs.getDate("metric_date").toLocalDate(),
-                        rs.getBigDecimal("value_decimal").longValue(),
-                        String.valueOf(rs.getInt("version")),
-                        rs.getString("quality_status")),
-                java.sql.Date.valueOf(reportDate));
+        String select = "SELECT metric_code,metric_date,value_decimal,version,quality_status FROM metrics_db.daily_metric ";
+        if (reportDate == null) {
+            // OpenAPI 中 reportDate 可选；未指定时返回最近一个已通过质量门禁的报表日期。
+            return jdbc.query(select
+                            + "WHERE metric_date=(SELECT MAX(metric_date) FROM metrics_db.daily_metric "
+                            + "WHERE quality_status IN ('PASSED','WARNING')) "
+                            + "AND quality_status IN ('PASSED','WARNING') ORDER BY metric_code ASC",
+                    (rs, rowNum) -> mapDailyMetric(rs));
+        }
+        return jdbc.query(select + "WHERE metric_date=? AND quality_status IN ('PASSED','WARNING') ORDER BY metric_code ASC",
+                (rs, rowNum) -> mapDailyMetric(rs), java.sql.Date.valueOf(reportDate));
     }
 
     @Override
     public List<DataQualityResult> listDataQuality(LocalDate dataDate, String jobCode, String ruleCode) {
         StringBuilder sql = new StringBuilder("SELECT result_id,task_code,rule_code,status,evidence_json,checked_at "
-                + "FROM metrics_db.quality_result WHERE data_date=?");
+                + "FROM metrics_db.quality_result WHERE 1=1");
         List<Object> args = new ArrayList<>();
-        args.add(java.sql.Date.valueOf(dataDate));
+        // OpenAPI 中 dataDate 可选；未指定时按任务与规则筛选全部结果。
+        if (dataDate != null) {
+            sql.append(" AND data_date=?");
+            args.add(java.sql.Date.valueOf(dataDate));
+        }
         if (jobCode != null && !jobCode.isBlank()) {
             sql.append(" AND task_code=?");
             args.add(jobCode);
@@ -225,6 +231,14 @@ public class JdbcMonitoringProjectionStore implements MonitoringProjectionStore 
                 alert.getOperatorId(), alert.getLastReason(), alert.getVersion(),
                 Timestamp.from(alert.getCreatedAt()), Timestamp.from(alert.getUpdatedAt()),
                 Timestamp.from(clock.instant()), operatorId, idempotencyKey);
+    }
+
+    private static DailyMetric mapDailyMetric(ResultSet rs) throws SQLException {
+        return new DailyMetric(rs.getString("metric_code"),
+                rs.getDate("metric_date").toLocalDate(),
+                rs.getBigDecimal("value_decimal").longValue(),
+                String.valueOf(rs.getInt("version")),
+                rs.getString("quality_status"));
     }
 
     private Alert mapAlert(ResultSet rs) throws SQLException {
