@@ -260,7 +260,7 @@ public class JdbcMonitoringProjectionStore implements MonitoringProjectionStore 
             if ("FAILED".equals(rs.getString("status"))) failedCount = 1L;
         }
         return new DataQualityResult(rs.getString("result_id"), rs.getString("task_code"),
-                rs.getString("status"), checkedCount, failedCount,
+                rs.getString("rule_code"), rs.getString("status"), checkedCount, failedCount,
                 rs.getTimestamp("checked_at").toInstant());
     }
 

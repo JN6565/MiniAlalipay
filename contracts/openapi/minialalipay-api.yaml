@@ -2197,6 +2197,27 @@ components:
             data:
               type: array
               items: { $ref: '#/components/schemas/MetricDefinition' }
+    DataQualityResult:
+      type: object
+      additionalProperties: false
+      required: [resultId, taskCode, ruleCode, status, checkedCount, failedCount, completedAt]
+      properties:
+        resultId: { type: string, description: 质量检查结果 ID。 }
+        taskCode: { type: string, description: 检查任务编码，对应业务检查任务（如“交易完整性”）；运营端按此生成任务下拉。 }
+        ruleCode: { type: string, description: 规则编码，对应任务下的检查规则（如“完整性校验”）；运营端按任务过滤生成规则下拉。 }
+        status: { type: string, enum: [PASSED, WARNING, FAILED, UNKNOWN], description: 检查结果状态。 }
+        checkedCount: { type: integer, format: int64, description: 检查数量。 }
+        failedCount: { type: integer, format: int64, description: 失败数量。 }
+        completedAt: { type: string, format: date-time, description: 检查完成时间。 }
+    DataQualityPageResponse:
+      allOf:
+        - $ref: '#/components/schemas/ApiResponse'
+        - type: object
+          required: [data]
+          properties:
+            data:
+              type: array
+              items: { $ref: '#/components/schemas/DataQualityResult' }
     ProvisionAccountRequest:
       type: object
       additionalProperties: false

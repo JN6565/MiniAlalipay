@@ -110,6 +110,10 @@ class JdbcMonitoringProjectionStoreIntegrationTest {
 
         var results = store.listDataQuality(LocalDate.of(2026, 8, 4), "交易完整性", "rule-1");
         assertThat(results).hasSize(1);
+        assertThat(results.get(0).resultId()).isEqualTo("q-1");
+        assertThat(results.get(0).taskCode()).isEqualTo("交易完整性");
+        assertThat(results.get(0).ruleCode()).isEqualTo("rule-1");
+        assertThat(results.get(0).status()).isEqualTo("PASSED");
         assertThat(results.get(0).checkedCount()).isEqualTo(100L);
         assertThat(results.get(0).failedCount()).isZero();
     }

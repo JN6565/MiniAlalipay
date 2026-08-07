@@ -1763,19 +1763,20 @@ sequenceDiagram
     participant Web as B端Web
     participant API as 后端API
     O->>Web: 进入 /admin/data-quality
-    Web->>API: GET /api/v1/ops/data-quality?dataDate=&jobCode=&ruleCode=
+    Web->>API: GET /api/v1/ops/data-quality?dataDate=（该日期全部结果）
     API-->>Web: {qualityResults[]}
-    Web-->>O: 质量检查结果
-    O->>Web: 筛选(数据日期/任务编码/规则编码)
+    Web-->>O: 任务/规则下拉选项（由结果中的 task_code、rule_code 去重生成）
+    O->>Web: 选择数据日期/任务/规则（默认“全部”）
     Web->>API: GET /api/v1/ops/data-quality?dataDate=&jobCode=&ruleCode=
     API-->>Web: 筛选结果
+    Web-->>O: 质量检查结果（含任务编码/规则编码列）
 ```
 
 **前端逻辑**
 
-+ 查询质量检查结果，默认数据日期为最近一个数据日，支持按数据日期（dataDate）、任务编码（jobCode）与规则编码（ruleCode）筛选。
-+ 筛选条件变化时重新查询，不前端聚合。
-+ 质量 FAILED 联动 T+1 报表页"数据不可用"，报表发布状态以后端 12.7.6 为准。
++ 选择数据日期后先查询该日期全部质量结果，前端从结果提取任务编码（task_code）去重生成“任务”下拉选项（展示为如“交易完整性”），选中任务后“规则”下拉只展示该任务对应的规则编码（rule_code，展示为如“完整性校验”），选项支持搜索，运营人员不必猜测编码。
++ 默认任务与规则均为“全部”，不填也能查询；选择后再按精确条件查询，筛选条件或数据日期变化时重新查询，结果表保留任务编码、规则编码两列，便于从查询结果直接复用筛选条件。
++ 质量 FAILED 联动 T+1 报表页“数据不可用”，报表发布状态以后端 12.7.6 为准。
 + 隔离数据摘要（quarantined_event）与重跑入口：V1.1 未提供查询与重跑端点（前端系统分析已移除 rerun 路由），前端不展示隔离明细、不提供重跑入口；隔离数据仅供后端运维侧排查。
 
 **所需 API**

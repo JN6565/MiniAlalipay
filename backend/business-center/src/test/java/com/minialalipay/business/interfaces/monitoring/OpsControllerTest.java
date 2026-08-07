@@ -72,7 +72,10 @@ class OpsControllerTest {
 
         mvc.perform(get("/api/v1/ops/data-quality").header("X-User-Roles", "ADMIN")
                         .param("dataDate", "2026-08-04"))
-                .andExpect(status().isOk()).andExpect(jsonPath("$.data[0].status").value("PASSED"));
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data[0].taskCode").value("交易完整性"))
+                .andExpect(jsonPath("$.data[0].ruleCode").value("rule-1"))
+                .andExpect(jsonPath("$.data[0].status").value("PASSED"));
     }
 
     @Test
@@ -239,7 +242,7 @@ class OpsControllerTest {
             return List.of(new DailyMetric("transaction_success", reportDate, 120L, "v1", "PASSED"));
         }
         @Override public List<DataQualityResult> listDataQuality(LocalDate dataDate, String jobCode, String ruleCode) {
-            return List.of(new DataQualityResult("quality-1", "交易完整性", "PASSED", 100L, 0L, NOW));
+            return List.of(new DataQualityResult("quality-1", "交易完整性", "rule-1", "PASSED", 100L, 0L, NOW));
         }
         @Override public List<MetricDefinition> listMetricDefinitions() {
             return List.of(new MetricDefinition("transaction_success", "v1", "交易成功量", "笔", "COUNT(transaction_id)"));

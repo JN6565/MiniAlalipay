@@ -41,7 +41,8 @@ export interface AlertPage {
 /** 数据质量结果，与 OpenAPI DataQualityResult 对齐。 */
 export interface DataQualityItem {
   resultId: string;
-  checkType: string;
+  taskCode: string;
+  ruleCode: string;
   status: string;
   checkedCount: number;
   failedCount: number;
