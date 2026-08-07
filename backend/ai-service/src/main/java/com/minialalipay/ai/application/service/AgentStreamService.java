@@ -236,6 +236,8 @@ public class AgentStreamService {
             // 9. 工具执行分支
             String finalContent;
             Map<String, Object> finalSlots;
+            // 标记内容是否已通过流式 LLM 调用推送给前端
+            boolean contentAlreadyStreamed = false;
 
             if (shouldExecuteTools(llmResponse)) {
                 // 转账意图前置校验：逐项检查必填槽位（收款人 → 金额），并做异常金额风险提示
@@ -360,10 +362,15 @@ public class AgentStreamService {
                         callback.onStatus("GENERATING", "正在生成回复…");
                         String toolContext = formatToolResultsAsSystemMessage(toolResults);
                         context.add(new ChatMessage(MessageRole.SYSTEM, toolContext));
-                        ChatResponse secondResponse = languageModelPort.chat(
+                        // 使用纯自然语言流式调用：不附加 JSON 格式指令，避免结构化 JSON 泄漏到前端
+                        // 安全边界：强制要求 LLM 严格基于工具结果回复，禁止编造工具未返回的数据
+                        ChatResponse secondResponse = languageModelPort.streamNaturalLanguageChat(
                                 systemPrompt, context.subList(0, context.size() - 1),
-                                "请基于工具调用结果回复用户，使用自然语言。");
+                                "请严格基于以下工具调用结果回复用户。如果工具返回空列表或空数据，必须如实告知用户未找到匹配内容，绝对不得编造工具未返回的姓名、金额或状态。使用自然语言回复。",
+                                callback::onContentDelta);
                         finalContent = secondResponse.content();
+                        // 内容已通过流式回调推送，后续无需再次 emitContentDeltas
+                        contentAlreadyStreamed = true;
                     }
                 } else {
                     finalContent = llmResponse.content();
@@ -374,14 +381,16 @@ public class AgentStreamService {
                 finalSlots = llmResponse.slots();
             }
 
-            // 10. 流式推送最终内容：先发射“正在生成”状态并等待思考延迟，模拟真实 LLM 推理体验
-            callback.onStatus("GENERATING", "正在生成回复…");
-            try {
-                Thread.sleep(thinkingDelayMs);
-            } catch (InterruptedException e) {
-                Thread.currentThread().interrupt();
+            // 10. 流式推送最终内容（仅在内容未通过流式 LLM 推送时分块发射）
+            if (!contentAlreadyStreamed) {
+                callback.onStatus("GENERATING", "正在生成回复…");
+                try {
+                    Thread.sleep(thinkingDelayMs);
+                } catch (InterruptedException e) {
+                    Thread.currentThread().interrupt();
+                }
+                emitContentDeltas(finalContent, callback);
             }
-            emitContentDeltas(finalContent, callback);
 
             // 11. 保存 AI 回复
             String assistantMessageId = AiServiceUtils.generateUlid();

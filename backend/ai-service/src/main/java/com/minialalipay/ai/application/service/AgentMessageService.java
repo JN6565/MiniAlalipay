@@ -308,9 +308,12 @@ public class AgentMessageService {
                     } else {
                         String toolContext = formatToolResultsAsSystemMessage(toolResults);
                         context.add(new ChatMessage(MessageRole.SYSTEM, toolContext));
-                        ChatResponse secondResponse = languageModelPort.chat(
+                        // 安全边界：强制要求 LLM 严格基于工具结果回复，禁止编造工具未返回的数据
+                        // 使用纯自然语言调用：第二次 LLM 不需要结构化输出，避免 JSON 泄漏风险
+                        ChatResponse secondResponse = languageModelPort.streamNaturalLanguageChat(
                                 systemPrompt, context.subList(0, context.size() - 1),
-                                "请基于工具调用结果回复用户，使用自然语言。");
+                                "请严格基于以下工具调用结果回复用户。如果工具返回空列表或空数据，必须如实告知用户未找到匹配内容，绝对不得编造工具未返回的姓名、金额或状态。使用自然语言回复。",
+                                delta -> {});
                         finalContent = secondResponse.content();
                     }
                 } else {

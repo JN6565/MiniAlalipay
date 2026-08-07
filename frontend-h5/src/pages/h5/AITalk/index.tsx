@@ -13,7 +13,7 @@ import {
   ConfirmationMessage,
 } from './types';
 import MessageList from './components/MessageList';
-import InputBar, { InputFeatures } from './components/InputBar';
+import InputBar from './components/InputBar';
 import ClarificationBubble from './components/ClarificationBubble';
 import StreamingBubble from './components/StreamingBubble';
 import ToolResultCard from './components/ToolResultCard';
@@ -48,10 +48,8 @@ const AITalkPage: React.FC = () => {
   const [messages, setMessages] = useState<Message[]>([]);
   const [inputValue, setInputValue] = useState('');
   const [sessionDrawerOpen, setSessionDrawerOpen] = useState(false);
-  /** 当前会话标题（用于顶部居中展示），新建会话时显示"新对话" */
+  /** 当前会话标题（用于顶部居中展示），新建会话时显示“新对话” */
   const [sessionTitle, setSessionTitle] = useState('新对话');
-  /** 输入栏功能开关（深度思考 / 智能搜索） */
-  const [features, setFeatures] = useState<InputFeatures>({});
 
   const {
     sessionId,
@@ -370,7 +368,7 @@ const AITalkPage: React.FC = () => {
       // 更新卡片状态为已取消
       setMessages((prev) =>
         prev.map((m) =>
-          m.kind === 'confirmation' && m.draftId === draftId
+          'kind' in m && m.kind === 'confirmation' && (m as ConfirmationMessage).draftId === draftId
             ? { ...m, status: 'cancelled' as const }
             : m,
         ),
@@ -537,7 +535,7 @@ const AITalkPage: React.FC = () => {
         <div className="ai-top-title-block">
           <div className="ai-top-title">{sessionTitle}</div>
           <div className="ai-top-subtitle">
-            {features.deepThinking ? '深度思考模式' : '快速模式'}
+            快速模式
           </div>
         </div>
         <button
@@ -574,8 +572,6 @@ const AITalkPage: React.FC = () => {
           onSend={handleSend}
           loading={streaming}
           disabled={!inputValue.trim() || streaming}
-          features={features}
-          onFeaturesChange={setFeatures}
         />
       </div>
 

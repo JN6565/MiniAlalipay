@@ -79,8 +79,8 @@ ai:
       - 不要编造任何金额、账户或交易状态
   streaming:
     chunk-size: 2
-    chunk-delay-ms: 120
-    thinking-delay-ms: 800
+    chunk-delay-ms: 50
+    thinking-delay-ms: 200
   llm:
     mock-mode: ${AI_LLM_MOCK_MODE:false}
     connect-timeout: 2s

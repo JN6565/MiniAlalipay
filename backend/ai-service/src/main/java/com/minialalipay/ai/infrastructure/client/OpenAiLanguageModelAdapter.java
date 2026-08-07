@@ -14,17 +14,20 @@ import org.springframework.ai.chat.messages.SystemMessage;
 import org.springframework.ai.chat.messages.UserMessage;
 import org.springframework.ai.chat.messages.AssistantMessage;
 import org.springframework.ai.chat.model.ChatModel;
+import org.springframework.ai.chat.model.StreamingChatModel;
 import org.springframework.ai.chat.prompt.Prompt;
 import org.springframework.ai.openai.OpenAiChatOptions;
 import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Component;
+import reactor.core.publisher.Flux;
 
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.Semaphore;
 import java.util.concurrent.atomic.AtomicInteger;
+import java.util.function.Consumer;
 
 /**
  * OpenAI 兼容协议的语言模型适配器（基于 Spring AI）。
@@ -48,6 +51,7 @@ public class OpenAiLanguageModelAdapter {
     private final String outputFormatInstruction;
 
     private final ChatModel chatModel;
+    private final StreamingChatModel streamingChatModel;
     private final String model;
     private final Semaphore semaphore;
     private final CircuitBreaker circuitBreaker;
@@ -62,6 +66,7 @@ public class OpenAiLanguageModelAdapter {
             @Value("${ai.llm.circuit-breaker.open-state-duration:30s}") String openStateDuration,
             @Value("${ai.prompt.output-format:}" ) String outputFormatInstruction,
             ObjectProvider<ChatModel> chatModelProvider,
+            ObjectProvider<StreamingChatModel> streamingChatModelProvider,
             StructuredOutputValidator validator
     ) {
         this.model = model;
@@ -72,6 +77,7 @@ public class OpenAiLanguageModelAdapter {
         this.mockMode = apiKey == null || apiKey.isBlank() || !apiKey.startsWith("sk-");
         // mock 模式下不获取 ChatModel（Spring AI 必须删除了 ChatAutoConfiguration 排除才能创建该 Bean）
         this.chatModel = mockMode ? null : chatModelProvider.getIfAvailable();
+        this.streamingChatModel = mockMode ? null : streamingChatModelProvider.getIfAvailable();
         this.semaphore = new Semaphore(maxConcurrent);
         this.circuitBreaker = new CircuitBreaker(failureThreshold, parseDurationSeconds(openStateDuration));
         log.info("LLM 适配器启动: mode={}, model={}, apiKeyPrefix={}",
@@ -108,6 +114,87 @@ public class OpenAiLanguageModelAdapter {
                 return mockLlmResponse(userMessage);
             }
             throw new BusinessException(AgentErrorCode.LLM_UNAVAILABLE);
+        } finally {
+            semaphore.release();
+        }
+    }
+
+    /**
+     * 流式调用语言模型，在生成过程中逐步回调文本增量。
+     *
+     * <p>真实模式下使用 Spring AI {@link StreamingChatModel} 的流式 API，
+     * 每收到一个 Token 即回调 {@code onContentDelta}，实现“边生成边推送”效果。
+     * Mock 模式或流式不可用时回退到阻塞式调用。</p>
+     */
+    public ChatResponse streamChat(String systemPrompt, List<ChatMessage> history,
+                                   String userMessage, Consumer<String> onContentDelta) {
+        circuitBreaker.assertNotOpen();
+        if (!semaphore.tryAcquire()) {
+            throw new BusinessException(AgentErrorCode.AGENT_BUSY);
+        }
+        try {
+            if (mockMode || streamingChatModel == null) {
+                // Mock 模式或流式模型不可用：回退到阻塞式调用
+                ChatResponse response = mockMode
+                        ? mockLlmResponse(userMessage)
+                        : realLlmCall(systemPrompt, history, userMessage);
+                if (response.content() != null) {
+                    onContentDelta.accept(response.content());
+                }
+                circuitBreaker.recordSuccess();
+                return response;
+            }
+            // 真实流式模式
+            ChatResponse result = realLlmStreamCall(systemPrompt, history, userMessage, onContentDelta);
+            circuitBreaker.recordSuccess();
+            return result;
+        } catch (BusinessException e) {
+            throw e;
+        } catch (Exception e) {
+            log.warn("LLM 流式调用异常: {}", e.getMessage());
+            circuitBreaker.recordFailure();
+            log.info("真实 LLM 不可用，降级到 Mock 响应");
+            return mockLlmResponse(userMessage);
+        } finally {
+            semaphore.release();
+        }
+    }
+
+    /**
+     * 纯自然语言流式调用，不附加结构化输出格式指令。
+     *
+     * <p>用于工具执行后的第二次 LLM 调用：此时意图已由第一次调用确定，
+     * 只需让 LLM 基于工具结果生成自然语言回复，不再要求 JSON 格式输出。
+     * 避免结构化 JSON 被直接流式推送到前端。</p>
+     */
+    public ChatResponse streamNaturalLanguageChat(String systemPrompt, List<ChatMessage> history,
+                                                  String userMessage, Consumer<String> onContentDelta) {
+        circuitBreaker.assertNotOpen();
+        if (!semaphore.tryAcquire()) {
+            throw new BusinessException(AgentErrorCode.AGENT_BUSY);
+        }
+        try {
+            if (mockMode || streamingChatModel == null) {
+                ChatResponse response = mockMode
+                        ? mockLlmResponse(userMessage)
+                        : realLlmCall(systemPrompt, history, userMessage);
+                if (response.content() != null) {
+                    onContentDelta.accept(response.content());
+                }
+                circuitBreaker.recordSuccess();
+                return response;
+            }
+            // 真实流式模式：不附加 outputFormatInstruction
+            ChatResponse result = realLlmStreamCallPlain(systemPrompt, history, userMessage, onContentDelta);
+            circuitBreaker.recordSuccess();
+            return result;
+        } catch (BusinessException e) {
+            throw e;
+        } catch (Exception e) {
+            log.warn("LLM 自然语言流式调用异常: {}", e.getMessage());
+            circuitBreaker.recordFailure();
+            log.info("真实 LLM 不可用，降级到 Mock 响应");
+            return mockLlmResponse(userMessage);
         } finally {
             semaphore.release();
         }
@@ -157,11 +244,113 @@ public class OpenAiLanguageModelAdapter {
         }
     }
 
+    /**
+     * 通过 Spring AI StreamingChatModel 流式调用 DeepSeek 等 OpenAI 兼容 API。
+     *
+     * <p>每收到一个 Token 片段即通过 {@code onContentDelta} 回调推送，
+     * 实现真正的“边生成边推送”流式效果，而非等待完整响应后再分块模拟。</p>
+     */
+    private ChatResponse realLlmStreamCall(String systemPrompt, List<ChatMessage> history,
+                                           String userMessage, Consumer<String> onContentDelta) {
+        List<Message> messages = new ArrayList<>();
+        messages.add(new SystemMessage(systemPrompt + outputFormatInstruction));
+        for (ChatMessage msg : history) {
+            messages.add(switch (msg.role()) {
+                case USER -> new UserMessage(msg.content());
+                case ASSISTANT -> new AssistantMessage(msg.content());
+                case SYSTEM -> new SystemMessage(msg.content());
+            });
+        }
+        messages.add(new UserMessage(userMessage));
+
+        Prompt prompt = new Prompt(messages, OpenAiChatOptions.builder()
+                .model(model)
+                .temperature(0.1)
+                .build());
+
+        // 使用流式 API：逐 Token 回调 onContentDelta
+        StringBuilder contentBuilder = new StringBuilder();
+        Flux<org.springframework.ai.chat.model.ChatResponse> flux = streamingChatModel.stream(prompt);
+        flux.doOnNext(cr -> {
+            if (cr.getResult() != null && cr.getResult().getOutput() != null
+                    && cr.getResult().getOutput().getText() != null) {
+                String token = cr.getResult().getOutput().getText();
+                contentBuilder.append(token);
+                onContentDelta.accept(token);
+            }
+        }).blockLast(); // 阻塞等待流完成，同时已逐步回调了 onContentDelta
+
+        String content = contentBuilder.toString();
+        if (content.isBlank()) {
+            return fallbackResponse();
+        }
+
+        // 结构化校验（与 realLlmCall 相同逻辑）
+        try {
+            StructuredOutputValidator.ValidatedResponse validated = validator.validate(content);
+            log.debug("流式结构化输出校验通过: intent={}", validated.chatResponse().intent());
+            return validated.chatResponse();
+        } catch (IllegalArgumentException e) {
+            log.warn("流式结构化输出校验失败，尝试提取 naturalReply: {}", e.getMessage());
+            String naturalReply = extractNaturalReply(content);
+            if (naturalReply != null) {
+                int estimatedTokens = AiServiceUtils.estimateTokens(userMessage) + AiServiceUtils.estimateTokens(naturalReply);
+                return parseLlmOutput(naturalReply, userMessage, estimatedTokens);
+            }
+            int estimatedTokens = AiServiceUtils.estimateTokens(userMessage) + AiServiceUtils.estimateTokens(content);
+            return parseLlmOutput(content, userMessage, estimatedTokens);
+        }
+    }
+
     private String extractNaturalReply(String text) {
         if (text == null || text.isBlank()) return null;
         var m = java.util.regex.Pattern.compile("\"naturalReply\"\\s*:\\s*\"((?:[^\"\\\\]|\\\\.)*)\"")
                 .matcher(text);
         return m.find() ? m.group(1).replace("\\\"", "\"").replace("\\n", "\n") : null;
+    }
+
+    /**
+     * 纯自然语言流式调用，不附加结构化输出格式指令。
+     *
+     * <p>与 {@link #realLlmStreamCall} 相同，但 system prompt 不拼接
+     * {@code outputFormatInstruction}，LLM 直接返回自然语言文本而非 JSON。</p>
+     */
+    private ChatResponse realLlmStreamCallPlain(String systemPrompt, List<ChatMessage> history,
+                                                String userMessage, Consumer<String> onContentDelta) {
+        List<Message> messages = new ArrayList<>();
+        // 关键差异：不附加 outputFormatInstruction，LLM 直接输出自然语言
+        messages.add(new SystemMessage(systemPrompt));
+        for (ChatMessage msg : history) {
+            messages.add(switch (msg.role()) {
+                case USER -> new UserMessage(msg.content());
+                case ASSISTANT -> new AssistantMessage(msg.content());
+                case SYSTEM -> new SystemMessage(msg.content());
+            });
+        }
+        messages.add(new UserMessage(userMessage));
+
+        Prompt prompt = new Prompt(messages, OpenAiChatOptions.builder()
+                .model(model)
+                .temperature(0.3)
+                .build());
+
+        StringBuilder contentBuilder = new StringBuilder();
+        Flux<org.springframework.ai.chat.model.ChatResponse> flux = streamingChatModel.stream(prompt);
+        flux.doOnNext(cr -> {
+            if (cr.getResult() != null && cr.getResult().getOutput() != null
+                    && cr.getResult().getOutput().getText() != null) {
+                String token = cr.getResult().getOutput().getText();
+                contentBuilder.append(token);
+                onContentDelta.accept(token);
+            }
+        }).blockLast();
+
+        String content = contentBuilder.toString();
+        if (content.isBlank()) {
+            return fallbackResponse();
+        }
+        int estimatedTokens = AiServiceUtils.estimateTokens(userMessage) + AiServiceUtils.estimateTokens(content);
+        return new ChatResponse(content, IntentType.UNKNOWN, Map.of(), estimatedTokens, false);
     }
 
     // ---- 输出解析 ----
@@ -172,6 +361,15 @@ public class OpenAiLanguageModelAdapter {
         // 若基于回复做关键词匹配会导致意图误判（用户说"你好"却被识别为交易查询）。
         String inputLower = originalInput.toLowerCase();
         String contentLower = content.toLowerCase();
+        // 交易状态查询必须在转账之前检查，避免“转账状态”“转账处理中”被 TRANSFER 抢先匹配
+        if (containsAny(inputLower, "交易状态", "转账状态", "处理中")) {
+            Map<String, Object> slots = new java.util.HashMap<>();
+            String txId = extractTransactionId(originalInput);
+            if (txId != null && !txId.isBlank()) {
+                slots.put("transactionId", txId);
+            }
+            return new ChatResponse(content, IntentType.TRANSACTION_STATUS, slots, tokens, slots.isEmpty());
+        }
         if (containsAny(inputLower, "转账", "转给")) {
             Map<String, Object> slots = new java.util.HashMap<>();
             slots.put("amountFen", inferAmountFen(originalInput + " " + content));
@@ -199,15 +397,7 @@ public class OpenAiLanguageModelAdapter {
         if (containsAny(inputLower, "余额")) {
             return new ChatResponse(content, IntentType.BALANCE_QUERY, Map.of(), tokens, false);
         }
-        if (containsAny(inputLower, "交易状态", "处理中")) {
-            // 尝试提取交易编号作为 transactionId 槽位
-            Map<String, Object> slots = new java.util.HashMap<>();
-            String txId = extractTransactionId(originalInput);
-            if (txId != null && !txId.isBlank()) {
-                slots.put("transactionId", txId);
-            }
-            return new ChatResponse(content, IntentType.TRANSACTION_STATUS, slots, tokens, slots.isEmpty());
-        }
+        // 交易状态已在转账之前检查，无需重复
         if (containsAny(inputLower, "收款人", "搜索", "找到")) {
             return new ChatResponse(content, IntentType.USER_SEARCH, Map.of(), tokens, true);
         }

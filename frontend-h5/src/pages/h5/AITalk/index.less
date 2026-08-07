@@ -1,20 +1,20 @@
-/* AI 对话页：DeepSeek 风格深色主题 */
+/* AI 对话页：浅色主题，与首页/联系人/我的等页面统一 */
 
 /* ==================== 设计令牌 ==================== */
 :root {
-  --ai-bg: #1a1a1a;
-  --ai-bg-elev: #232323;
-  --ai-bg-message: #2a2a2a;
-  --ai-bg-message-hover: #2f2f2f;
-  --ai-bg-user: #2563eb;
-  --ai-text: #ececec;
-  --ai-text-secondary: #b8b8b8;
-  --ai-text-muted: #8a8a8a;
-  --ai-border: rgba(255, 255, 255, 0.08);
-  --ai-brand: #4d8cff;
-  --ai-brand-soft: rgba(77, 140, 255, 0.18);
-  --ai-danger: #ff5b5b;
-  --ai-success: #4ade80;
+  --ai-bg: #f5f5f5;
+  --ai-bg-elev: #ffffff;
+  --ai-bg-message: #f0f2f5;
+  --ai-bg-message-hover: #e8eaed;
+  --ai-bg-user: #1677ff;
+  --ai-text: #333333;
+  --ai-text-secondary: #666666;
+  --ai-text-muted: #999999;
+  --ai-border: rgba(0, 0, 0, 0.08);
+  --ai-brand: #1677ff;
+  --ai-brand-soft: rgba(22, 119, 255, 0.1);
+  --ai-danger: #ff4d4f;
+  --ai-success: #52c41a;
   --ai-radius-bubble: 18px;
   --ai-radius-card: 14px;
 }
@@ -57,7 +57,7 @@
   transition: background 0.15s;
 
   &:active {
-    background: rgba(255, 255, 255, 0.08);
+    background: rgba(0, 0, 0, 0.04);
   }
 }
 
@@ -197,7 +197,7 @@
   font-size: 15px;
   line-height: 1.65;
   word-break: break-word;
-  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.2);
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.06);
 }
 
 .ai-message-user .ai-message-content {
@@ -251,7 +251,7 @@
   }
 
   code {
-    background: rgba(255, 255, 255, 0.08);
+    background: rgba(0, 0, 0, 0.04);
     border-radius: 4px;
     padding: 1px 5px;
     font-size: 13px;
@@ -259,7 +259,7 @@
   }
 
   pre {
-    background: rgba(0, 0, 0, 0.35);
+    background: #f6f8fa;
     border-radius: 8px;
     padding: 10px 12px;
     overflow-x: auto;
@@ -283,7 +283,7 @@
     }
 
     th {
-      background: rgba(255, 255, 255, 0.04);
+      background: #fafafa;
       font-weight: 600;
     }
   }
@@ -332,7 +332,7 @@
 .ai-thinking-body {
   margin-top: 6px;
   padding: 10px 12px;
-  background: rgba(255, 255, 255, 0.03);
+  background: rgba(0, 0, 0, 0.02);
   border-radius: 8px;
   font-size: 13px;
   color: var(--ai-text-secondary);
@@ -418,7 +418,7 @@
   transition: background 0.15s, color 0.15s;
 
   &:active:not(:disabled) {
-    background: rgba(255, 255, 255, 0.06);
+    background: rgba(0, 0, 0, 0.04);
   }
 
   &:disabled {
@@ -466,10 +466,10 @@
   display: flex;
   align-items: center;
   gap: 8px;
-  background: rgba(255, 91, 91, 0.12) !important;
+  background: rgba(255, 77, 79, 0.06) !important;
   color: var(--ai-danger);
   font-size: 13px;
-  border: 1px solid rgba(255, 91, 91, 0.25);
+  border: 1px solid rgba(255, 77, 79, 0.15);
 }
 
 .ai-error-icon {
@@ -490,7 +490,7 @@
   font-size: 12px;
 
   &:active {
-    background: rgba(255, 91, 91, 0.12);
+    background: rgba(255, 77, 79, 0.06);
   }
 }
 
@@ -512,39 +512,17 @@
   gap: 8px;
 }
 
+/* ==================== 输入区功能按钮（已删除“深度思考/智能搜索”，保留样式以备后续扩展） ==================== */
 .ai-input-features {
-  display: flex;
-  gap: 8px;
-  padding: 0 2px;
+  display: none;
 }
 
 .ai-feature-chip {
-  display: inline-flex;
-  align-items: center;
-  gap: 4px;
-  padding: 5px 12px;
-  border: 1px solid var(--ai-brand);
-  border-radius: 9999px;
-  background: transparent;
-  color: var(--ai-brand);
-  font-size: 12px;
-  transition: background 0.15s;
-
-  &:active:not(:disabled) {
-    background: var(--ai-brand-soft);
-  }
-
-  &:disabled {
-    opacity: 0.5;
-  }
-
-  &--active {
-    background: var(--ai-brand-soft);
-  }
+  display: none;
 }
 
 .ai-feature-icon {
-  font-size: 13px;
+  display: none;
 }
 
 .ai-input-row {
@@ -569,7 +547,7 @@
   transition: background 0.15s;
 
   &:active:not(:disabled) {
-    background: rgba(255, 255, 255, 0.06);
+    background: rgba(0, 0, 0, 0.04);
   }
 
   &:disabled {
@@ -614,7 +592,7 @@
   height: 36px;
   border: none;
   border-radius: 50%;
-  background: rgba(255, 255, 255, 0.08);
+  background: rgba(0, 0, 0, 0.06);
   color: var(--ai-text-muted);
   display: flex;
   align-items: center;
@@ -707,14 +685,14 @@
 
 .ai-card-bar {
   height: 6px;
-  background: rgba(255, 255, 255, 0.08);
+  background: rgba(0, 0, 0, 0.06);
   border-radius: 3px;
   margin: 8px 0;
   overflow: hidden;
 
   .ai-card-bar-fill {
     height: 100%;
-    background: linear-gradient(90deg, var(--ai-brand), #7aaaff);
+    background: linear-gradient(90deg, var(--ai-brand), #69b1ff);
     border-radius: 3px;
     transition: width 0.6s ease;
   }
@@ -777,9 +755,9 @@
 }
 
 .ai-card-failed {
-  background: rgba(255, 91, 91, 0.1);
+  background: rgba(255, 77, 79, 0.06);
   text-align: center;
-  border-color: rgba(255, 91, 91, 0.3);
+  border-color: rgba(255, 77, 79, 0.2);
 
   .ai-card-label {
     color: var(--ai-danger);
@@ -804,7 +782,7 @@
 .ai-card-spinner {
   width: 14px;
   height: 14px;
-  border: 2px solid rgba(77, 140, 255, 0.3);
+  border: 2px solid rgba(22, 119, 255, 0.2);
   border-top-color: var(--ai-brand);
   border-radius: 50%;
   animation: spin 0.8s linear infinite;
@@ -831,20 +809,20 @@
   }
 }
 
-/* ==================== 会话侧边抽屉（深色） ==================== */
+/* ==================== 会话侧边抽屉 ==================== */
 .session-list {
   display: flex;
   flex-direction: column;
   height: 100%;
   padding: 16px 12px;
-  background: #1f1f1f;
-  color: #e8e8e8;
+  background: #fff;
+  color: var(--ai-text);
 }
 
 .session-list-header {
   flex: none;
   padding-bottom: 12px;
-  border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+  border-bottom: 1px solid var(--ai-border);
 }
 
 .session-list-new {
@@ -862,7 +840,7 @@
   transition: background 0.15s;
 
   &:active {
-    background: rgba(77, 140, 255, 0.3);
+    background: rgba(22, 119, 255, 0.15);
   }
 }
 
@@ -883,7 +861,7 @@
 
 .session-list-group-title {
   font-size: 11px;
-  color: #777;
+  color: #999;
   margin-bottom: 4px;
   padding: 0 6px;
   text-transform: none;
@@ -894,7 +872,7 @@
   text-align: center;
   padding: 40px 0;
   font-size: 13px;
-  color: #777;
+  color: #999;
 }
 
 .session-list-item {
@@ -906,7 +884,7 @@
   transition: background 0.15s;
 
   &:active {
-    background: rgba(255, 255, 255, 0.06);
+    background: rgba(0, 0, 0, 0.04);
   }
 
   &--active {
@@ -921,14 +899,14 @@
 
 .session-list-item-title {
   font-size: 14px;
-  color: #e8e8e8;
+  color: var(--ai-text);
   flex: 1;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
 
-/* ==================== 底部导航栏（深色） ==================== */
+/* ==================== 底部导航栏 ==================== */
 .tabbar {
   position: fixed;
   bottom: 0;
