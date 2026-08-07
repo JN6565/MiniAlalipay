@@ -1,4 +1,5 @@
 import request from './request';
+import { generateIdempotencyKey } from './utils';
 
 /** 转账草稿（与后端 DraftResponse 字段一致；收款人昵称和账号不在草稿响应中） */
 export interface TransferDraft {
@@ -36,16 +37,22 @@ export interface IssuedConfirmation {
 }
 
 /**
- * 创建转账草稿；幂等键由 request 拦截器统一生成
+ * 创建转账草稿；契约要求携带 Idempotency-Key，超时可传入同一幂等键重试
  * @param params 转账参数
+ * @param idempotencyKey 幂等键，缺省时自动生成；重试同一笔转账时必须复用原键
  * @returns 草稿信息
  */
-export const createDraft = (params: {
-  payeeUserId: string;
-  amountFen: number;
-  remark?: string;
-}) => {
-  return request.post<TransferDraft>('/api/v1/transfer-drafts', params);
+export const createDraft = (
+  params: {
+    payeeUserId: string;
+    amountFen: number;
+    remark?: string;
+  },
+  idempotencyKey?: string,
+) => {
+  return request.post<TransferDraft>('/api/v1/transfer-drafts', params, {
+    headers: { 'Idempotency-Key': idempotencyKey || generateIdempotencyKey() },
+  });
 };
 
 /**
@@ -103,15 +110,21 @@ export const issueConfirmation = (draftId: string, paymentProof: string, subject
 };
 
 /**
- * 执行转账；幂等键由 request 拦截器统一生成
+ * 执行转账；契约要求携带 Idempotency-Key，超时可传入同一幂等键重试
  * @param params 转账参数
+ * @param idempotencyKey 幂等键，缺省时自动生成；重试同一笔转账时必须复用原键
  * @returns 转账结果
  */
-export const submitTransfer = (params: {
-  draftId: string;
-  confirmationToken: string;
-}) => {
-  return request.post<TransferResult>('/api/v1/transfers', params);
+export const submitTransfer = (
+  params: {
+    draftId: string;
+    confirmationToken: string;
+  },
+  idempotencyKey?: string,
+) => {
+  return request.post<TransferResult>('/api/v1/transfers', params, {
+    headers: { 'Idempotency-Key': idempotencyKey || generateIdempotencyKey() },
+  });
 };
 
 /**

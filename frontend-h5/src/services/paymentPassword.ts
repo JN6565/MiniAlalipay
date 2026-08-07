@@ -1,4 +1,5 @@
 import request from './request';
+import { generateIdempotencyKey } from './utils';
 
 /**
  * 设置支付密码（注册后首次设置）。
@@ -6,7 +7,9 @@ import request from './request';
  * @returns 成功响应
  */
 export const setupPaymentPassword = (paymentPassword: string) => {
-  return request.put('/api/v1/payment-password', { paymentPassword });
+  return request.put('/api/v1/payment-password', { paymentPassword }, {
+    headers: { 'Idempotency-Key': generateIdempotencyKey() },
+  });
 };
 
 /**
@@ -19,7 +22,9 @@ export const changePaymentPassword = (params: {
   currentPassword: string;
   newPassword: string;
 }) => {
-  return request.patch('/api/v1/payment-password', params);
+  return request.patch('/api/v1/payment-password', params, {
+    headers: { 'Idempotency-Key': generateIdempotencyKey() },
+  });
 };
 
 /**
@@ -29,7 +34,9 @@ export const changePaymentPassword = (params: {
  * @returns 成功响应
  */
 export const verifyPaymentPassword = (paymentPassword: string) => {
-  return request.post('/api/v1/payment-password/verify', { paymentPassword });
+  return request.post('/api/v1/payment-password/verify', { paymentPassword }, {
+    headers: { 'Idempotency-Key': generateIdempotencyKey() },
+  });
 };
 
 export interface PaymentProofResult {
@@ -50,9 +57,10 @@ export const issuePaymentProof = async (
   paymentPassword: string,
   purpose: string = 'TRANSFER_CONFIRM',
 ): Promise<PaymentProofResult> => {
-  const result = await request.post<{ accessToken: string }>('/api/v1/payment-password/proof', {
-    paymentPassword,
-    purpose,
-  });
+  const result = await request.post<{ accessToken: string }>(
+    '/api/v1/payment-password/proof',
+    { paymentPassword, purpose },
+    { headers: { 'Idempotency-Key': generateIdempotencyKey() } },
+  );
   return { paymentProof: result.accessToken };
 };
