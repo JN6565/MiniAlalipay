@@ -1,187 +1,151 @@
 import React, { useEffect, useState } from 'react';
 import { history } from 'umi';
-import { List, Avatar, Button, Toast, SwipeAction, Modal, Input, SpinLoading, Empty } from 'antd-mobile';
+import { Button, Toast, Empty, SearchBar } from 'antd-mobile';
 import * as userService from '@/services/user';
 import './index.less';
 
 const ContactsPage: React.FC = () => {
-  const [loading, setLoading] = useState(true);
-  const [contacts, setContacts] = useState<userService.Contact[]>([]);
-  const [aliasModalVisible, setAliasModalVisible] = useState(false);
-  const [editingContact, setEditingContact] = useState<userService.Contact | null>(null);
-  const [aliasValue, setAliasValue] = useState('');
+  const [friends, setFriends] = useState<userService.Friend[]>([]);
+  const [searchKeyword, setSearchKeyword] = useState('');
+  const [searchResults, setSearchResults] = useState<userService.PayeeInfo[]>([]);
+  const [searching, setSearching] = useState(false);
+  const [pendingCount, setPendingCount] = useState(0);
 
   useEffect(() => {
-    loadContacts();
+    loadFriends();
+    loadPendingCount();
   }, []);
 
-  const loadContacts = async () => {
-    setLoading(true);
+  const loadFriends = async () => {
     try {
-      const result = await userService.getContacts(20);
-      setContacts(result || []);
-    } catch (error: any) {
-      Toast.show({ icon: 'fail', content: error.message || '加载失败' });
+      const res = await userService.getFriends();
+      setFriends(res || []);
+    } catch (e: any) {
+      Toast.show(e.message || '加载失败');
+    }
+  };
+
+  const loadPendingCount = async () => {
+    try {
+      const res = await userService.getPendingFriendRequests();
+      setPendingCount((res || []).length);
+    } catch {
+      // ignore
+    }
+  };
+
+  const handleSearch = async (val: string) => {
+    setSearchKeyword(val);
+    if (!val.trim()) {
+      setSearchResults([]);
+      return;
+    }
+    setSearching(true);
+    try {
+      const res = await userService.searchUsers(val.trim(), 10);
+      setSearchResults(res || []);
+    } catch (e: any) {
+      Toast.show(e.message || '搜索失败');
     } finally {
-      setLoading(false);
+      setSearching(false);
     }
   };
 
-  const handleTogglePin = async (contact: userService.Contact) => {
+  const handleSendRequest = async (userId: string) => {
     try {
-      await userService.updateContact(contact.payeeUserId, {
-        pinned: !contact.pinned,
-      });
-      setContacts((prev) =>
-        prev.map((c) =>
-          c.payeeUserId === contact.payeeUserId ? { ...c, pinned: !c.pinned } : c
-        )
-      );
-      Toast.show({ content: contact.pinned ? '已取消置顶' : '已置顶' });
-    } catch (error: any) {
-      Toast.show({ icon: 'fail', content: error.message || '操作失败' });
+      await userService.sendFriendRequest(userId);
+      Toast.show({ content: '好友请求已发送', icon: 'success' });
+      setSearchKeyword('');
+      setSearchResults([]);
+    } catch (e: any) {
+      Toast.show(e.message || '发送失败');
     }
   };
 
-  const handleHide = async (contact: userService.Contact) => {
-    const result = await Modal.confirm({
-      content: '确定隐藏该联系人？隐藏后不再显示在列表中',
+  const handleTransfer = (friend: userService.Friend) => {
+    const params = new URLSearchParams({
+      payeeUserId: friend.friendUserId,
+      payeeName: friend.friendName,
+      accountNumber: friend.accountNumber,
     });
-    if (result) {
-      try {
-        await userService.updateContact(contact.payeeUserId, { hidden: true });
-        setContacts((prev) => prev.filter((c) => c.payeeUserId !== contact.payeeUserId));
-        Toast.show({ content: '已隐藏' });
-      } catch (error: any) {
-        Toast.show({ icon: 'fail', content: error.message || '操作失败' });
-      }
-    }
+    history.push(`/h5/transfer?${params.toString()}`);
   };
-
-  const handleEditAlias = (contact: userService.Contact) => {
-    setEditingContact(contact);
-    setAliasValue(contact.alias || '');
-    setAliasModalVisible(true);
-  };
-
-  const handleSaveAlias = async () => {
-    if (!editingContact) return;
-    try {
-      await userService.updateContact(editingContact.payeeUserId, {
-        alias: aliasValue || undefined,
-      });
-      setContacts((prev) =>
-        prev.map((c) =>
-          c.payeeUserId === editingContact.payeeUserId ? { ...c, alias: aliasValue || undefined } : c
-        )
-      );
-      setAliasModalVisible(false);
-      Toast.show({ content: '已保存' });
-    } catch (error: any) {
-      Toast.show({ icon: 'fail', content: error.message || '保存失败' });
-    }
-  };
-
-  const handleContactClick = (contact: userService.Contact) => {
-    // 跳转到转账页面，通过 URL 参数传递收款人
-    history.push(`/h5/transfer?payeeUserId=${contact.payeeUserId}`);
-  };
-
-  if (loading) {
-    return (
-      <div className="loading-container">
-        <SpinLoading color="primary" />
-      </div>
-    );
-  }
 
   return (
     <div className="contacts-page">
-      <div className="contacts-header">
-        <h3>常用联系人</h3>
+      {/* 搜索栏 */}
+      <div className="search-section">
+        <SearchBar
+          placeholder="搜索手机号添加好友"
+          value={searchKeyword}
+          onChange={handleSearch}
+        />
       </div>
 
-      {contacts.length === 0 ? (
-        <Empty
-          description="暂无常用联系人，转账后自动添加"
-          style={{ padding: '40px 0' }}
-        />
-      ) : (
-        <List className="contacts-list">
-          {contacts.map((contact) => (
-            <SwipeAction
-              key={contact.payeeUserId}
-              rightActions={[
-                {
-                  key: 'pin',
-                  text: contact.pinned ? '取消置顶' : '置顶',
-                  color: 'primary',
-                  onClick: () => handleTogglePin(contact),
-                },
-                {
-                  key: 'alias',
-                  text: '备注',
-                  color: 'warning',
-                  onClick: () => handleEditAlias(contact),
-                },
-                {
-                  key: 'hide',
-                  text: '隐藏',
-                  color: 'danger',
-                  onClick: () => handleHide(contact),
-                },
-              ]}
-            >
-              <List.Item
-                prefix={
-                  <Avatar
-                    style={{ '--size': '40px', '--border-radius': '50%' }}
-                    src={undefined}
-                  />
-                }
-                description={
-                  <div className="contact-meta">
-                    <span>成功转账 {contact.successCount} 次</span>
-                    {contact.pinned && <span className="pinned-tag">置顶</span>}
+      {/* 搜索结果 */}
+      {searchResults.length > 0 && (
+        <div className="section-card">
+          <div className="section-title">搜索结果</div>
+          {searchResults.map((user) => {
+            const isFriend = friends.some((f) => f.friendUserId === user.userId);
+            return (
+              <div key={user.userId} className="search-item">
+                <div className="user-info">
+                  <div className="avatar-circle">{user.nickname?.charAt(0) || '?'}</div>
+                  <div className="user-meta">
+                    <div className="user-name">{user.nickname}</div>
+                    <div className="user-phone">{user.accountNumber}</div>
                   </div>
-                }
-                onClick={() => handleContactClick(contact)}
-              >
-                <div className="contact-name">
-                  {contact.alias || contact.payeeUserId.slice(0, 8)}
                 </div>
-              </List.Item>
-            </SwipeAction>
-          ))}
-        </List>
+                {isFriend ? (
+                  <Button size="small" fill="outline" disabled>
+                    已是好友
+                  </Button>
+                ) : (
+                  <Button size="small" color="primary" onClick={() => handleSendRequest(user.userId)}>
+                    添加好友
+                  </Button>
+                )}
+              </div>
+            );
+          })}
+        </div>
       )}
 
-      {/* 备注别名弹窗 */}
-      <Modal
-        visible={aliasModalVisible}
-        title="设置备注名"
-        content={
-          <Input
-            placeholder="输入备注名"
-            value={aliasValue}
-            onChange={setAliasValue}
-            maxLength={64}
-          />
-        }
-        actions={[
-          {
-            key: 'cancel',
-            text: '取消',
-            onClick: () => setAliasModalVisible(false),
-          },
-          {
-            key: 'save',
-            text: '保存',
-            bold: true,
-            onClick: handleSaveAlias,
-          },
-        ]}
-      />
+      {/* 好友请求入口 */}
+      <div className="request-entry" onClick={() => history.push('/h5/friend-requests')}>
+        <div className="request-left">
+          <span className="request-icon">📬</span>
+          <span>新朋友</span>
+        </div>
+        {pendingCount > 0 && <span className="badge">{pendingCount}</span>}
+      </div>
+
+      {/* 好友列表 */}
+      <div className="section-card">
+        <div className="section-title">联系人 ({friends.length})</div>
+        {friends.length === 0 ? (
+          <Empty description="暂无联系人，搜索手机号添加好友" style={{ padding: '40px 0' }} />
+        ) : (
+          friends.map((friend) => (
+            <div key={friend.friendUserId} className="friend-item">
+              <div className="user-info">
+                <div className="avatar-circle">{friend.friendName?.charAt(0) || '?'}</div>
+                <div className="user-meta">
+                  <div className="user-name">
+                    {friend.friendName}
+                    {friend.alias ? <span className="alias-tag">({friend.alias})</span> : null}
+                  </div>
+                  <div className="user-phone">{friend.accountNumber}</div>
+                </div>
+              </div>
+              <Button size="small" color="primary" onClick={() => handleTransfer(friend)}>
+                转账
+              </Button>
+            </div>
+          ))
+        )}
+      </div>
 
       {/* 底部导航栏 */}
       <div className="tabbar">

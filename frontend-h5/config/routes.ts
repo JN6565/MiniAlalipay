@@ -125,6 +125,13 @@ export default [
         auth: true,
       },
       {
+        path: '/h5/friend-requests',
+        component: '@/pages/h5/FriendRequests',
+        exact: true,
+        title: '新朋友',
+        auth: true,
+      },
+      {
         path: '/h5/profile',
         component: '@/pages/h5/Profile',
         exact: true,

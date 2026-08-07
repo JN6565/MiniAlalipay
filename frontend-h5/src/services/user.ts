@@ -18,10 +18,30 @@ export interface PayeeInfo {
 
 export interface Contact {
   payeeUserId: string;
+  payeeName?: string;
+  accountNumber?: string;
   alias?: string;
   successCount: number;
   lastSuccessAt?: string;
   pinned: boolean;
+}
+
+export interface Friend {
+  friendUserId: string;
+  friendName: string;
+  accountNumber: string;
+  alias?: string;
+  createdAt: string;
+}
+
+export interface FriendRequest {
+  requestId: string;
+  fromUserId: string;
+  fromUserName: string;
+  toUserId: string;
+  status: string;
+  message?: string;
+  createdAt: string;
 }
 
 // 查询当前用户信息
@@ -53,4 +73,36 @@ export const updateContact = (
   },
 ) => {
   return request.patch(`/api/v1/contacts/${payeeUserId}`, params);
+};
+
+// ====== 好友系统 ======
+
+// 发送好友请求
+export const sendFriendRequest = (toUserId: string, message?: string) => {
+  return request.post<FriendRequest>('/api/v1/friends/request', { toUserId, message });
+};
+
+// 获取待处理的好友请求
+export const getPendingFriendRequests = () => {
+  return request.get<FriendRequest[]>('/api/v1/friends/request/pending');
+};
+
+// 接受好友请求
+export const acceptFriendRequest = (requestId: string) => {
+  return request.post<FriendRequest>(`/api/v1/friends/request/${requestId}/accept`);
+};
+
+// 拒绝好友请求
+export const rejectFriendRequest = (requestId: string) => {
+  return request.post<FriendRequest>(`/api/v1/friends/request/${requestId}/reject`);
+};
+
+// 获取好友列表
+export const getFriends = () => {
+  return request.get<Friend[]>('/api/v1/friends/list');
+};
+
+// 删除好友
+export const removeFriend = (friendUserId: string) => {
+  return request.delete(`/api/v1/friends/${friendUserId}`);
 };

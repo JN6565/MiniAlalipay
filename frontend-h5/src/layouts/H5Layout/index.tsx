@@ -81,6 +81,7 @@ function getPageTitle(pathname: string): string {
     '/h5/recharge': '充值',
     '/h5/ai-talk': 'AI助手',
     '/h5/contacts': '联系人',
+    '/h5/friend-requests': '新朋友',
     '/h5/profile': '我的',
     '/h5/scan': '扫一扫',
     '/h5/collection': '收款',
