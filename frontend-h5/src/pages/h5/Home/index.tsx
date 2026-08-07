@@ -31,9 +31,8 @@ const HomePage: React.FC = () => {
 
       if (creditResult.status === 'fulfilled') {
         setCredit(creditResult.value);
-      } else {
-        setCredit({ creditAccountId: '', status: 'ACTIVE', totalLimitFen: 500000, usedFen: 0, frozenFen: 0, availableFen: 500000, unbilledFen: 0, billedFen: 0, overdueFen: 0 });
       }
+      // 信用 API 失败时保持 credit 为 null，UI 层显示"暂无数据"
 
       if (txResult.status === 'fulfilled') {
         setTransactions(txResult.value.items || []);
@@ -102,7 +101,7 @@ const HomePage: React.FC = () => {
             </div>
             <div>
               <span>花呗可用</span>
-              <b>{formatAmount(credit?.availableFen || 0)}</b>
+              <b>{credit ? formatAmount(credit.availableFen) : '--'}</b>
             </div>
           </div>
         </div>

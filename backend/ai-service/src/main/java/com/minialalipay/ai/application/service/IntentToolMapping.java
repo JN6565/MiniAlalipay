@@ -25,7 +25,11 @@ public final class IntentToolMapping {
                             List.of(new ToolMapping("get_balance", Map.of(), false))),
                     Map.entry(IntentType.TRANSACTION_LIST,
                             List.of(new ToolMapping("list_transactions",
-                                    Map.of("limit", ParamSource.CONSTANT), false))),
+                                    Map.of("limit", ParamSource.CONSTANT,
+                                            "startTime", ParamSource.SLOTS_OPTIONAL,
+                                            "endTime", ParamSource.SLOTS_OPTIONAL,
+                                            "direction", ParamSource.SLOTS_OPTIONAL,
+                                            "status", ParamSource.SLOTS_OPTIONAL), false))),
                     Map.entry(IntentType.TRANSACTION_STATUS,
                             List.of(new ToolMapping("get_transaction_status",
                                     Map.of("transactionId", ParamSource.SLOTS), false))),
@@ -43,15 +47,27 @@ public final class IntentToolMapping {
                                     Map.of("amountFen", ParamSource.SLOTS), false))),
                     Map.entry(IntentType.TRANSFER,
                             List.of(
+                                    // 第一步：通过手机号搜索收款人，获取 payeeId
+                                    new ToolMapping("search_payees",
+                                            Map.of("query", ParamSource.SLOTS,
+                                                    "limit", ParamSource.CONSTANT),
+                                            false),
+                                    // 第二步：创建转账草稿（需要前一步返回的 payeeId）
                                     new ToolMapping("create_transfer_draft",
-                                            Map.of("payeeId", ParamSource.SLOTS,
+                                            Map.of("payeeId", ParamSource.PREVIOUS_RESULT,
                                                     "amountFen", ParamSource.SLOTS,
                                                     "remark", ParamSource.SLOTS_OPTIONAL),
-                                            false),
+                                            true),
+                                    // 第三步：校验草稿
                                     new ToolMapping("validate_transfer_draft",
                                             Map.of("draftId", ParamSource.PREVIOUS_RESULT),
                                             true),
+                                    // 第四步：生成确认卡片
                                     new ToolMapping("prepare_confirmation_card",
+                                            Map.of("draftId", ParamSource.PREVIOUS_RESULT),
+                                            true),
+                                    // 第五步：提交已确认转账
+                                    new ToolMapping("submit_confirmed_transfer",
                                             Map.of("draftId", ParamSource.PREVIOUS_RESULT),
                                             true))));
 

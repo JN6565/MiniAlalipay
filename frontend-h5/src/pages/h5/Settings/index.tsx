@@ -1,6 +1,7 @@
 import React from 'react';
 import { history } from '@umijs/max';
 import { Toast, Dialog } from 'antd-mobile';
+import { clearSession } from '@/services/request';
 import './index.less';
 
 const SettingsPage: React.FC = () => {
@@ -12,12 +13,7 @@ const SettingsPage: React.FC = () => {
     });
 
     if (result) {
-      localStorage.removeItem('accessToken');
-      localStorage.removeItem('userId');
-      localStorage.removeItem('nickname');
-      localStorage.removeItem('userType');
-      localStorage.removeItem('accountNumber');
-      localStorage.removeItem('session-storage');
+      clearSession();
       Toast.show({ icon: 'success', content: '已退出登录' });
       window.location.replace('/h5/login');
     }

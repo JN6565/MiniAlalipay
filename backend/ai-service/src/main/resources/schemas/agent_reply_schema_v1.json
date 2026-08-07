@@ -16,17 +16,18 @@
     },
     "slots": {
       "type": "object",
-      "description": "从用户输入中提取的结构化槽位",
+      "description": "从用户输入中提取的结构化槽位，值可为 null",
       "properties": {
-        "payeeQuery": { "type": "string", "description": "收款人搜索关键词" },
-        "payeeId": { "type": "string", "description": "收款人用户ID，必须来自search_payees返回值" },
-        "amountFen": { "type": "integer", "format": "int64", "minimum": 0, "description": "金额（分），整数" },
-        "remark": { "type": "string", "maxLength": 50, "description": "转账备注" },
-        "transactionId": { "type": "string", "description": "交易ID" },
-        "limit": { "type": "integer", "default": 10, "maximum": 50 },
-        "query": { "type": "string", "maxLength": 64 }
+        "payeeQuery": { "type": ["string", "null"], "description": "收款人搜索关键词" },
+        "payeeName": { "type": ["string", "null"], "description": "收款人姓名" },
+        "payeeId": { "type": ["string", "null"], "description": "收款人用户ID" },
+        "amountFen": { "type": ["integer", "null"], "format": "int64", "minimum": 0, "description": "金额（分）" },
+        "remark": { "type": ["string", "null"], "maxLength": 50, "description": "转账备注" },
+        "transactionId": { "type": ["string", "null"], "description": "交易ID" },
+        "limit": { "type": ["integer", "null"], "default": 10, "maximum": 50 },
+        "query": { "type": ["string", "null"], "maxLength": 64 }
       },
-      "additionalProperties": false
+      "additionalProperties": true
     },
     "missingFields": {
       "type": "array",

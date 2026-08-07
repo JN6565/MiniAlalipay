@@ -81,6 +81,10 @@ export const CACHE_TIME = {
   CACHE_TIME: 5 * 60 * 1000,
 } as const;
 
+// 充值限额
+export const DAILY_RECHARGE_LIMIT_FEN = 25000000; // 每日限额 250,000 元
+export const DAILY_RECHARGE_COUNT = 5; // 每日充值次数上限
+
 // 轮询间隔（毫秒）
 export const POLL_INTERVAL = {
   ORDER_STATUS: 2000,

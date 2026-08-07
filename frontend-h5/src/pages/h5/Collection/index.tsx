@@ -3,6 +3,7 @@ import { history } from 'umi';
 import { Tabs, Card, Button, Input, Toast, SpinLoading } from 'antd-mobile';
 import { QRCodeSVG } from 'qrcode.react';
 import * as collectionService from '@/services/collection';
+import { AMOUNT_MIN, AMOUNT_MAX } from '@/constants';
 import { AmountInput } from '@/components/h5/AmountInput';
 import { formatTime } from '@/utils/format';
 import './index.less';
@@ -54,8 +55,8 @@ const CollectionPage: React.FC = () => {
   };
 
   const handleCreateRequest = async () => {
-    if (requestAmount < 0.01 || requestAmount > 50000) {
-      Toast.show({ content: '金额范围0.01-50000元', icon: 'fail' });
+    if (requestAmount < AMOUNT_MIN || requestAmount > AMOUNT_MAX) {
+      Toast.show({ content: `金额范围 ${AMOUNT_MIN}-${AMOUNT_MAX} 元`, icon: 'fail' });
       return;
     }
 

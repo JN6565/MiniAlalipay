@@ -43,7 +43,7 @@ public enum AgentErrorCode implements ErrorCode {
     TOOL_UNAVAILABLE("TOOL_UNAVAILABLE", "工具服务暂不可用", 503),
 
     /** 请求内容违反 AI 安全策略（提示注入、越权指令等）。 */
-    PROMPT_INJECTION_REJECTED("PROMPT_INJECTION_REJECTED", "请求包含不安全内容，已被拒绝", 400),
+    PROMPT_INJECTION_REJECTED("PROMPT_INJECTION_REJECTED", "请求违反安全策略", 422),
 
     /** 同一幂等键的请求摘要不一致。 */
     IDEMPOTENCY_CONFLICT("IDEMPOTENCY_CONFLICT", "请求内容与前次不一致，请重新发起", 409),

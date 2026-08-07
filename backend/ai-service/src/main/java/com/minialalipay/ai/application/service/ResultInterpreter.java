@@ -152,8 +152,17 @@ public class ResultInterpreter {
                     "请核对以下信息后完成支付：\n"
                             + "收款人: " + data.getOrDefault("payeeNickname", "")
                             + "\n金额: " + formatFen(data.get("amountFen")) + " 元";
-            case "list_transactions" ->
-                    "以下是您最近的交易明细。";
+            case "list_transactions" -> {
+                // GAP-1：根据筛选参数生成更精确的结果解释
+                Object items = data.get("items");
+                int count = (items instanceof java.util.List<?> list) ? list.size() : 0;
+                String direction = (String) data.get("direction");
+                String filterDesc = direction != null
+                        ? ("IN".equals(direction) ? "收入" : "支出") : "";
+                yield count > 0
+                        ? "为您找到 " + count + " 条" + filterDesc + "交易明细。"
+                        : (filterDesc.isEmpty() ? "暂无交易记录。" : "暂无" + filterDesc + "交易记录。");
+            }
             case "list_credit_bills" ->
                     "以下是您的花呗账单。";
             case "get_transaction_status" -> {
