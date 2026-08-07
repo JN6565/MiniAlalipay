@@ -1,0 +1,49 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+
+<!--
+  用户 ID 日序列 Mapper XML 映射文件。
+
+  操作 user_id_sequence 表，为每日序列号提供原子递增。
+  分两步完成（避免依赖 allowMultiQueries）：
+  1. incrementValue：INSERT ... ON DUPLICATE KEY UPDATE，并通过 LAST_INSERT_ID(expr)
+     将新值写入 MySQL 会话状态；
+  2. lastInsertId：SELECT LAST_INSERT_ID()，读取会话状态中的值。
+  两步必须在同一数据库连接（同一事务）内执行，由 UserIdGenerator 的 @Transactional 保证。
+-->
+<mapper namespace="com.minialalipay.user.infrastructure.persistence.mapper.UserIdSequenceMapper">
+
+    <!--
+      原子递增当日序列值。
+
+      首次调用某日期时插入初始值 1；后续调用在既有值上加 1。
+      通过 LAST_INSERT_ID(current_value + 1) 将新值写入 MySQL 会话状态，
+      随后由 lastInsertId 读取。
+
+      参数：
+      - seqDate: 序列所属日期
+
+      返回值：
+      - 受影响的行数（INSERT 返回 1，UPDATE 返回 2，调用方无需关心）
+    -->
+    <insert id="incrementValue">
+        INSERT INTO user_id_sequence (seq_date, current_value)
+        VALUES (#{seqDate}, 1)
+        ON DUPLICATE KEY UPDATE
+            current_value = LAST_INSERT_ID(current_value + 1)
+    </insert>
+
+    <!--
+      读取当前会话 LAST_INSERT_ID() 值。
+
+      必须在 incrementValue 之后、同一连接（同一事务）内调用，
+      否则返回 0。
+
+      返回值：
+      - 最近一次 incrementValue 设置/递增后的序列值
+    -->
+    <select id="lastInsertId" resultType="int">
+        SELECT LAST_INSERT_ID()
+    </select>
+
+</mapper>

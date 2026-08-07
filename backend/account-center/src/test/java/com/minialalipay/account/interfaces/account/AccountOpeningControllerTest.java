@@ -26,8 +26,8 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 @WebMvcTest(AccountOpeningController.class)
 class AccountOpeningControllerTest {
 
-    private static final String USER_ID = "01K1ABCDEFGHJKMNPQRSTVWXYZ";
-    private static final String REGISTRATION_ID = "01K1ZYXWVTSRQPNMKJHGFEDCBA";
+    private static final String USER_ID = "USRABCDEFGHI20260807000001";
+    private static final String REGISTRATION_ID = "REGABCDEFGHI20260807000001";
 
     @Autowired private MockMvc mockMvc;
     @MockBean private AccountApplicationService accountApplicationService;

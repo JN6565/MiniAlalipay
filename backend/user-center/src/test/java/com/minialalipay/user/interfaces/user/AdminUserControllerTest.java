@@ -43,14 +43,14 @@ class AdminUserControllerTest {
 
     /** 构造处于 ACTIVE 状态的用户重建对象。 */
     private User activeUser(String userId) {
-        return new User(userId, "REG" + userId, "6200000000000001", "13800138000", "张三", "小张",
+        return new User(userId, "REGTESTUSER0120260801000001", "6200000000000001", "13800138000", "张三", "小张",
                 "8000", "VERIFIED", UserStatus.ACTIVE, 3, Instant.parse("2026-08-01T00:00:00Z"),
                 Instant.parse("2026-08-01T00:00:00Z"), null, null);
     }
 
     @Test
     void 管理员可分页查询脱敏用户列表() throws Exception {
-        User user = activeUser("01J00000000000000000000001");
+        User user = activeUser("USRTESTUSER0120260801000001");
         when(adminUserService.list(UserStatus.ACTIVE, null, 50))
                 .thenReturn(List.of(new UserAdminView(user, null)));
 
@@ -59,7 +59,7 @@ class AdminUserControllerTest {
                         .header("X-User-Roles", "ADMIN")
                         .param("status", "ACTIVE"))
                 .andExpect(status().isOk())
-                .andExpect(jsonPath("$.data.items[0].userId").value("01J00000000000000000000001"))
+                .andExpect(jsonPath("$.data.items[0].userId").value("USRTESTUSER0120260801000001"))
                 .andExpect(jsonPath("$.data.items[0].loginNameMasked").value("620****0001"))
                 .andExpect(jsonPath("$.data.items[0].status").value("ACTIVE"))
                 .andExpect(jsonPath("$.data.items[0].version").value(3));
@@ -75,13 +75,13 @@ class AdminUserControllerTest {
 
     @Test
     void 管理员冻结用户并返回最新版本() throws Exception {
-        User user = activeUser("01J00000000000000000000001");
-        User frozen = activeUser("01J00000000000000000000001");
+        User user = activeUser("USRTESTUSER0120260801000001");
+        User frozen = activeUser("USRTESTUSER0120260801000001");
         frozen.freeze("adm-001", "风险账户冻结");
-        when(adminUserService.freeze("01J00000000000000000000001", 3, "adm-001", "风险账户冻结"))
+        when(adminUserService.freeze("USRTESTUSER0120260801000001", 3, "adm-001", "风险账户冻结"))
                 .thenReturn(new AdminUserService.UserUpdateResult(frozen, 4));
 
-        mockMvc.perform(post("/api/v1/admin/users/01J00000000000000000000001/freeze")
+        mockMvc.perform(post("/api/v1/admin/users/USRTESTUSER0120260801000001/freeze")
                         .header("X-User-Id", "adm-001")
                         .header("X-User-Roles", "ADMIN")
                         .contentType(MediaType.APPLICATION_JSON)
@@ -96,7 +96,7 @@ class AdminUserControllerTest {
 
     @Test
     void 冻结缺失理由返回400() throws Exception {
-        mockMvc.perform(post("/api/v1/admin/users/01J00000000000000000000001/freeze")
+        mockMvc.perform(post("/api/v1/admin/users/USRTESTUSER0120260801000001/freeze")
                         .header("X-User-Id", "adm-001")
                         .header("X-User-Roles", "ADMIN")
                         .contentType(MediaType.APPLICATION_JSON)
@@ -108,10 +108,10 @@ class AdminUserControllerTest {
 
     @Test
     void 冻结版本冲突返回409() throws Exception {
-        when(adminUserService.freeze("01J00000000000000000000001", 2, "adm-001", "理由"))
+        when(adminUserService.freeze("USRTESTUSER0120260801000001", 2, "adm-001", "理由"))
                 .thenThrow(new BusinessException(UserErrorCode.VERSION_CONFLICT));
 
-        mockMvc.perform(post("/api/v1/admin/users/01J00000000000000000000001/freeze")
+        mockMvc.perform(post("/api/v1/admin/users/USRTESTUSER0120260801000001/freeze")
                         .header("X-User-Id", "adm-001")
                         .header("X-User-Roles", "ADMIN")
                         .contentType(MediaType.APPLICATION_JSON)
@@ -123,10 +123,10 @@ class AdminUserControllerTest {
 
     @Test
     void 冻结非ACTIVE用户返回409() throws Exception {
-        when(adminUserService.freeze("01J00000000000000000000001", 3, "adm-001", "理由"))
+        when(adminUserService.freeze("USRTESTUSER0120260801000001", 3, "adm-001", "理由"))
                 .thenThrow(new BusinessException(UserErrorCode.USER_STATE_INVALID));
 
-        mockMvc.perform(post("/api/v1/admin/users/01J00000000000000000000001/freeze")
+        mockMvc.perform(post("/api/v1/admin/users/USRTESTUSER0120260801000001/freeze")
                         .header("X-User-Id", "adm-001")
                         .header("X-User-Roles", "ADMIN")
                         .contentType(MediaType.APPLICATION_JSON)
@@ -139,7 +139,7 @@ class AdminUserControllerTest {
 
     @Test
     void 运营人员冻结用户返回403() throws Exception {
-        mockMvc.perform(post("/api/v1/admin/users/01J00000000000000000000001/freeze")
+        mockMvc.perform(post("/api/v1/admin/users/USRTESTUSER0120260801000001/freeze")
                         .header("X-User-Id", "ops-001")
                         .header("X-User-Roles", "OPERATOR")
                         .contentType(MediaType.APPLICATION_JSON)
@@ -151,13 +151,13 @@ class AdminUserControllerTest {
 
     @Test
     void 管理员解冻用户() throws Exception {
-        User user = activeUser("01J00000000000000000000001");
+        User user = activeUser("USRTESTUSER0120260801000001");
         user.freeze("adm-001", "风险账户冻结");
         user.unfreeze();
-        when(adminUserService.unfreeze("01J00000000000000000000001", 4, "adm-001"))
+        when(adminUserService.unfreeze("USRTESTUSER0120260801000001", 4, "adm-001"))
                 .thenReturn(new AdminUserService.UserUpdateResult(user, 5));
 
-        mockMvc.perform(post("/api/v1/admin/users/01J00000000000000000000001/unfreeze")
+        mockMvc.perform(post("/api/v1/admin/users/USRTESTUSER0120260801000001/unfreeze")
                         .header("X-User-Id", "adm-001")
                         .header("X-User-Roles", "ADMIN")
                         .contentType(MediaType.APPLICATION_JSON)

@@ -57,7 +57,7 @@ public class AccountOpeningController {
     @PutMapping("/{registrationId}")
     public ResponseEntity<ApiResponse<AccountSummaryDTO>> openAccount(
             @PathVariable @NotBlank @Size(min = 26, max = 26)
-            @Pattern(regexp = "^[0-9A-HJKMNP-TV-Z]{26}$") String registrationId,
+            @Pattern(regexp = "^(REG[A-Z]{9}\\d{14}|[0-9A-HJKMNP-TV-Z]{26})$") String registrationId,
             @Valid @RequestBody OpenAccountRequestDTO requestDTO,
             HttpServletRequest httpRequest
     ) {
@@ -94,7 +94,7 @@ public class AccountOpeningController {
     public record OpenAccountRequestDTO(
             @NotBlank(message = "用户 ID 不能为空")
             @Size(min = 26, max = 26, message = "用户 ID 必须为 26 位")
-            @Pattern(regexp = "^[0-9A-HJKMNP-TV-Z]{26}$", message = "用户 ID 格式不正确")
+            @Pattern(regexp = "^(USR[A-Z]{9}\\d{14}|[0-9A-HJKMNP-TV-Z]{26})$", message = "用户 ID 格式不正确")
             String userId
     ) {
     }

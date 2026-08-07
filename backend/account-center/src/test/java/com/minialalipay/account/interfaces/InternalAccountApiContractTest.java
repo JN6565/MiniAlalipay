@@ -53,7 +53,7 @@ class InternalAccountApiContractTest {
             Map<String, Object> userId = (Map<String, Object>) provisionProperties.get("userId");
             assertThat(userId.get("minLength")).isEqualTo(26);
             assertThat(userId.get("maxLength")).isEqualTo(26);
-            assertThat(userId.get("pattern")).isEqualTo("^[0-9A-HJKMNP-TV-Z]{26}$");
+            assertThat(userId.get("pattern")).isEqualTo("^(USR[A-Z]{9}\\d{14}|[0-9A-HJKMNP-TV-Z]{26})$");
         }
     }
 

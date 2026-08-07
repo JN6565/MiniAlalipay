@@ -31,13 +31,13 @@ import java.time.Instant;
 public class UserPO {
 
     /**
-     * 用户 ID（ULID 格式，26 位字符）。
+     * 用户 ID（26 位字符，格式：{@code USR} + 9 位随机大写字母 + {@code YYYYMMDD} + 6 位日序列号）。
      * <p>主键，对应数据库字段 {@code user_id}。</p>
      */
     private String userId;
 
     /**
-     * 注册幂等键（ULID 格式，26 位字符）。
+     * 注册幂等键（26 位字符，格式：{@code REG} + 9 位随机大写字母 + {@code YYYYMMDD} + 6 位日序列号）。
      * <p>唯一键，对应数据库字段 {@code registration_id}。
      * 用于开户恢复和既有资源查询。</p>
      */

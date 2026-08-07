@@ -442,7 +442,7 @@ paths:
         - name: registrationId
           in: path
           required: true
-          schema: { type: string, minLength: 26, maxLength: 26 }
+          schema: { type: string, minLength: 26, maxLength: 26, pattern: '^(REG[A-Z]{9}\d{14}|[0-9A-HJKMNP-TV-Z]{26})$' }
       requestBody:
         required: true
         content:
@@ -469,7 +469,7 @@ paths:
         - name: userId
           in: path
           required: true
-          schema: { type: string, minLength: 26, maxLength: 26 }
+          schema: { type: string, minLength: 26, maxLength: 26, pattern: '^(USR[A-Z]{9}\d{14}|[0-9A-HJKMNP-TV-Z]{26})$' }
       responses:
         '200':
           description: 返回不含余额的账户引用
@@ -490,7 +490,7 @@ paths:
         - name: userId
           in: path
           required: true
-          schema: { type: string, minLength: 26, maxLength: 26 }
+          schema: { type: string, minLength: 26, maxLength: 26, pattern: '^(USR[A-Z]{9}\d{14}|[0-9A-HJKMNP-TV-Z]{26})$' }
       responses:
         '200':
           description: 返回不含额度数值的信用账户 ID、状态和 CAS 版本
@@ -2290,7 +2290,7 @@ components:
       additionalProperties: false
       required: [userId]
       properties:
-        userId: { type: string, minLength: 26, maxLength: 26, pattern: '^[0-9A-HJKMNP-TV-Z]{26}$' }
+        userId: { type: string, minLength: 26, maxLength: 26, pattern: '^(USR[A-Z]{9}\d{14}|[0-9A-HJKMNP-TV-Z]{26})$' }
     InternalAccountReference:
       type: object
       additionalProperties: false

@@ -7,9 +7,14 @@ spring:
       discovery:
         # 网关注册到 Nacos，便于运维观测与未来 lb:// 路由；如 Nacos 的 gRPC 端口(9848)不可达
         # 导致启动失败，可通过 NACOS_REGISTER_ENABLED=false 临时关闭注册。
-        register-enabled: ${NACOS_REGISTER_ENABLED:true}
         server-addr: ${NACOS_SERVER_ADDR:121.43.51.164:8848}
         username: ${NACOS_USERNAME:nacos}
         password: ${NACOS_PASSWORD:nacos}
-        namespace: ${NACOS_NAMESPACE:}
+        namespace: ${NACOS_NAMESPACE:jm-dev}
         group: DEFAULT_GROUP
+      config:
+        # 配置中心也使用相同的命名空间进行隔离
+        server-addr: ${NACOS_SERVER_ADDR:121.43.51.164:8848}
+        # 同样指定命名空间ID
+        namespace: ${NACOS_NAMESPACE:jm-dev}
+        file-extension: yaml

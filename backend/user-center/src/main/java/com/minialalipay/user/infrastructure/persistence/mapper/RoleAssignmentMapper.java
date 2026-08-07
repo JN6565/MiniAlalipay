@@ -16,7 +16,7 @@ public interface RoleAssignmentMapper {
     /**
      * 查询用户拥有的全部角色代码。
      *
-     * @param userId 用户 ID（ULID 格式，26 位字符）
+     * @param userId 用户 ID（26 位字符，USR 前缀）
      * @return 角色代码列表，无授权时返回空列表
      */
     List<String> selectRolesByUserId(@Param("userId") String userId);
