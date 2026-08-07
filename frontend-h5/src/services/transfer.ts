@@ -108,6 +108,8 @@ export const submitTransfer = (params: {
 }): Promise<TransferResult> => {
   return request.post('/api/v1/transfers', params, {
     headers: { 'Idempotency-Key': generateUUID() },
+    // 后端在事务提交后同步启动 TCC，账户与账本参与者完成前可能超过全局 10 秒超时。
+    timeout: 30_000,
   }) as unknown as Promise<TransferResult>;
 };
 
