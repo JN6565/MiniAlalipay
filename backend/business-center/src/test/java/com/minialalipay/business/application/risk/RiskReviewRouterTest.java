@@ -120,6 +120,8 @@ class RiskReviewRouterTest {
         @Override public boolean createPersonalOrder(CollectionOrder order, String bootstrapSessionId) { return true; }
         @Override public boolean reserveRequestAndCreateOrder(com.minialalipay.business.domain.collection.CollectionRequest request, long requestExpectedVersion, CollectionOrder order, String bootstrapSessionId) { return true; }
         @Override public boolean updateOrder(CollectionOrder order, long expectedVersion) { lastUpdated = order; return true; }
+        // 内存 Mock 不维护 H5 会话绑定，清除为空操作。
+        @Override public void clearSessionBinding(String orderId) { }
         @Override public boolean createRequest(com.minialalipay.business.domain.collection.CollectionRequest request, byte[] tokenDigest, String recordId, String userId, String idempotencyKey, byte[] requestDigest) { return true; }
         @Override public boolean updateRequest(com.minialalipay.business.domain.collection.CollectionRequest request, long expectedVersion) { return true; }
         @Override public Optional<IdempotencyRecord> findIdempotency(String principal, String operation, String idempotencyKey) { return Optional.empty(); }
