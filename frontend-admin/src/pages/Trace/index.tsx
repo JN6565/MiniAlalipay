@@ -30,6 +30,35 @@ const serviceColor = (service: string): string => {
   }
 };
 
+/** 技术证据中的服务名称：保留服务编码，补充其承担的业务职责，便于排查跨服务链路。 */
+const serviceLabel = (service: string): string => {
+  const names: Record<string, string> = {
+    'business-center': '支付业务服务',
+    'account-center': '账户与账本服务',
+    'user-center': '用户服务',
+    'ai-service': 'AI 服务',
+  };
+  return `${names[service] ?? '未知服务'}（${service}）`;
+};
+
+/** 技术证据展示的状态文本；保持业务状态含义，但避免直接暴露英文枚举值。 */
+const technicalStatusLabel = (status: string): string => {
+  switch (status) {
+    case 'SUCCESS':
+      return '已完成';
+    case 'PROCESSING':
+      return '处理中';
+    case 'PENDING':
+      return '待发布';
+    case 'MANUAL_REVIEW':
+      return '待人工处理';
+    case 'ERROR':
+      return '失败';
+    default:
+      return status;
+  }
+};
+
 /** 服务端 Span 操作名到业务步骤的默认翻译；未知操作原样保留服务端中文操作名。 */
 const stepNameByOperation: Record<string, string> = {
   统一交易受理: '支付受理',
@@ -111,14 +140,14 @@ export default function Trace() {
           {showTech && (
             <>
               <Space size="small" wrap style={{ marginTop: 4 }}>
-                <Tag color={serviceColor(span.service)}>{span.service}</Tag>
-                <Tag>{span.operation}</Tag>
-                <Tag color={spanStatusColor(span.status)}>{statusText}</Tag>
-                {span.transactionId && <Tag>{span.transactionId}</Tag>}
+                <Tag color={serviceColor(span.service)}>服务：{serviceLabel(span.service)}</Tag>
+                <Tag>原始事件：{span.operation}</Tag>
+                <Tag color={spanStatusColor(span.status)}>事件状态：{technicalStatusLabel(span.status)}</Tag>
+                {span.transactionId && <Tag>交易号：{span.transactionId}</Tag>}
               </Space>
               <div>
                 <Typography.Text type="secondary" style={{ fontSize: 12 }}>
-                  {span.detail} · {span.traceId}
+                  事件详情：{span.detail || '无'}；链路号：{span.traceId}
                 </Typography.Text>
               </div>
             </>
