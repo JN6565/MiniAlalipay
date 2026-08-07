@@ -27,6 +27,8 @@ public class CreditJobRun {
     private String cursorCreditAccountId;
     private final CreditJobTriggerType triggerType;
     private final String triggeredByUserId;
+    private final byte[] requestDigest;
+    private int retryCount;
     private long version;
     private Instant startedAt;
     private Instant completedAt;
@@ -42,11 +44,13 @@ public class CreditJobRun {
      * @param businessDate 业务日期
      * @param triggerType 触发类型
      * @param triggeredByUserId 触发用户 ID，定时调度时为 null
+     * @param requestDigest 触发参数摘要（SHA-256，32 字节），识别同键异参
      * @param now 创建时间
      */
     public CreditJobRun(
             String runId, CreditJobType jobType, LocalDate businessDate,
-            CreditJobTriggerType triggerType, String triggeredByUserId, Instant now
+            CreditJobTriggerType triggerType, String triggeredByUserId,
+            byte[] requestDigest, Instant now
     ) {
         this.runId = Objects.requireNonNull(runId, "任务执行 ID 不能为空");
         this.jobType = Objects.requireNonNull(jobType, "任务类型不能为空");
@@ -55,6 +59,8 @@ public class CreditJobRun {
         this.cursorCreditAccountId = null;
         this.triggerType = Objects.requireNonNull(triggerType, "触发类型不能为空");
         this.triggeredByUserId = triggeredByUserId;
+        this.requestDigest = Objects.requireNonNull(requestDigest, "触发参数摘要不能为空").clone();
+        this.retryCount = 0;
         this.version = 0L;
         this.startedAt = null;
         this.completedAt = null;
@@ -73,6 +79,8 @@ public class CreditJobRun {
      * @param cursorCreditAccountId 游标信用账户 ID
      * @param triggerType 触发类型
      * @param triggeredByUserId 触发用户 ID
+     * @param requestDigest 触发参数摘要（SHA-256，32 字节）
+     * @param retryCount 恢复重试次数
      * @param version 版本号
      * @param startedAt 开始时间
      * @param completedAt 完成时间
@@ -84,6 +92,7 @@ public class CreditJobRun {
             String runId, CreditJobType jobType, LocalDate businessDate,
             CreditJobStatus status, String cursorCreditAccountId,
             CreditJobTriggerType triggerType, String triggeredByUserId,
+            byte[] requestDigest, int retryCount,
             long version, Instant startedAt, Instant completedAt,
             Instant createdAt, Instant updatedAt, String errorCode
     ) {
@@ -94,6 +103,8 @@ public class CreditJobRun {
         this.cursorCreditAccountId = cursorCreditAccountId;
         this.triggerType = triggerType;
         this.triggeredByUserId = triggeredByUserId;
+        this.requestDigest = requestDigest.clone();
+        this.retryCount = retryCount;
         this.version = version;
         this.startedAt = startedAt;
         this.completedAt = completedAt;
@@ -113,6 +124,28 @@ public class CreditJobRun {
         }
         this.status = CreditJobStatus.RUNNING;
         this.startedAt = Objects.requireNonNull(now, "开始时间不能为空");
+        this.updatedAt = now;
+    }
+
+    /**
+     * 重新执行失败或中断的任务（手动重触发或恢复任务接管）。
+     *
+     * <p>FAILED、RUNNING、MANUAL_REVIEW 或 PENDING 均可回到 RUNNING，
+     * 清除上次执行的游标与错误信息并递增恢复重试次数；
+     * SUCCESS 为终态，不允许重跑，避免同一业务日期重复建账单或重复汇总消费。</p>
+     *
+     * @param now 当前时间
+     */
+    public void restart(Instant now) {
+        if (this.status == CreditJobStatus.SUCCESS) {
+            throw new IllegalStateException("已成功的任务不可重跑，runId: " + this.runId);
+        }
+        this.status = CreditJobStatus.RUNNING;
+        this.startedAt = Objects.requireNonNull(now, "开始时间不能为空");
+        this.cursorCreditAccountId = null;
+        this.completedAt = null;
+        this.errorCode = null;
+        this.retryCount = this.retryCount + 1;
         this.updatedAt = now;
     }
 
@@ -179,6 +212,12 @@ public class CreditJobRun {
 
     /** @return 触发用户 ID */
     public String getTriggeredByUserId() { return triggeredByUserId; }
+
+    /** @return 触发参数摘要（SHA-256，32 字节）的防御性副本 */
+    public byte[] getRequestDigest() { return requestDigest == null ? null : requestDigest.clone(); }
+
+    /** @return 恢复重试次数 */
+    public int getRetryCount() { return retryCount; }
 
     /** @return 版本号 */
     public long getVersion() { return version; }

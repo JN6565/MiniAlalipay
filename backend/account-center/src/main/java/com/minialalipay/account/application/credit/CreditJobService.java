@@ -22,6 +22,9 @@ import com.minialalipay.account.domain.credit.CreditPurchaseRepository;
 import com.minialalipay.account.domain.credit.CreditReceivable;
 import com.minialalipay.account.domain.credit.CreditReceivableRepository;
 import com.minialalipay.common.error.BusinessException;
+import java.nio.charset.StandardCharsets;
+import java.security.MessageDigest;
+import java.security.NoSuchAlgorithmException;
 import java.time.Instant;
 import java.time.LocalDate;
 import java.time.ZoneId;
@@ -103,16 +106,18 @@ public class CreditJobService {
             return toDTO(existing);
         }
 
-        // 创建或更新任务记录
+        // 创建或更新任务记录：已失败/中断的旧记录允许重跑，成功后幂等返回原结果。
         Instant now = Instant.now();
         CreditJobRun jobRun;
         if (existing != null) {
             jobRun = existing;
-            jobRun.start(now);
+            jobRun.restart(now);
         } else {
             jobRun = new CreditJobRun(
                     generateId(), CreditJobType.STATEMENT, businessDate,
-                    CreditJobTriggerType.MANUAL, operatorUserId, now
+                    CreditJobTriggerType.MANUAL, operatorUserId,
+                    requestDigestOf(CreditJobType.STATEMENT, businessDate,
+                            CreditJobTriggerType.MANUAL, operatorUserId), now
             );
             jobRun.start(now);
         }
@@ -167,11 +172,13 @@ public class CreditJobService {
         CreditJobRun jobRun;
         if (existing != null) {
             jobRun = existing;
-            jobRun.start(now);
+            jobRun.restart(now);
         } else {
             jobRun = new CreditJobRun(
                     generateId(), CreditJobType.DUE_CHECK, businessDate,
-                    CreditJobTriggerType.MANUAL, operatorUserId, now
+                    CreditJobTriggerType.MANUAL, operatorUserId,
+                    requestDigestOf(CreditJobType.DUE_CHECK, businessDate,
+                            CreditJobTriggerType.MANUAL, operatorUserId), now
             );
             jobRun.start(now);
         }
@@ -312,6 +319,27 @@ public class CreditJobService {
                 jobRun.getCompletedAt(),
                 jobRun.getErrorCode()
         );
+    }
+
+    /**
+     * 由触发参数生成请求摘要（SHA-256，32 字节），识别同键异参。
+     *
+     * <p>同一 (jobType, businessDate) 键重复触发时，若触发参数不同则摘要不同，
+     * 供恢复任务识别同键异参冲突；参数按固定顺序规范化拼接。</p>
+     */
+    private byte[] requestDigestOf(CreditJobType jobType, LocalDate businessDate,
+                                   CreditJobTriggerType triggerType, String operatorUserId) {
+        return computeSha256(jobType.name() + "|" + businessDate + "|"
+                + triggerType.name() + "|" + operatorUserId);
+    }
+
+    private byte[] computeSha256(String input) {
+        try {
+            MessageDigest digest = MessageDigest.getInstance("SHA-256");
+            return digest.digest(input.getBytes(StandardCharsets.UTF_8));
+        } catch (NoSuchAlgorithmException e) {
+            throw new IllegalStateException("SHA-256 算法不可用", e);
+        }
     }
 
     private String generateId() {

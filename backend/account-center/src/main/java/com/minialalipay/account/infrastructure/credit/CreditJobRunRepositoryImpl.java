@@ -18,15 +18,8 @@ import java.util.Optional;
  * <p>基于 {@link CreditJobRunMapper} 实现任务执行记录的持久化操作，
  * 负责领域对象 {@link CreditJobRun} 与 {@link CreditJobRunPO} 之间的转换。</p>
  *
- * <p>字段映射说明：
- * <ul>
- *   <li>领域对象 {@code runId} ↔ PO {@code jobRunId}</li>
- *   <li>领域对象 {@code completedAt} ↔ PO {@code finishedAt}</li>
- *   <li>领域对象 {@code errorCode} ↔ PO {@code errorMessage}</li>
- *   <li>领域对象 {@code cursorCreditAccountId}、{@code triggerType}、{@code triggeredByUserId}
- *       在当前 PO 中无对应字段，持久化时不写入</li>
- * </ul>
- * </p>
+ * <p>领域对象 {@link CreditJobRun} 与 {@link CreditJobRunPO} 同名同构，
+ * 15 个字段一一映射，无字段丢弃或错位。</p>
  */
 @Repository
 public class CreditJobRunRepositoryImpl implements CreditJobRunRepository {
@@ -63,19 +56,21 @@ public class CreditJobRunRepositoryImpl implements CreditJobRunRepository {
      */
     private CreditJobRun toDomain(CreditJobRunPO po) {
         return new CreditJobRun(
-                po.getJobRunId(),
+                po.getRunId(),
                 CreditJobType.valueOf(po.getJobType()),
                 po.getBusinessDate(),
                 CreditJobStatus.valueOf(po.getStatus()),
-                null,
-                null,
-                null,
-                po.getVersion(),
+                po.getCursorCreditAccountId(),
+                CreditJobTriggerType.valueOf(po.getTriggerType()),
+                po.getTriggeredByUserId(),
+                po.getRequestDigest(),
+                po.getRetryCount() == null ? 0 : po.getRetryCount(),
+                po.getVersion() == null ? 0L : po.getVersion(),
                 po.getStartedAt(),
-                po.getFinishedAt(),
+                po.getCompletedAt(),
                 po.getCreatedAt(),
                 po.getUpdatedAt(),
-                po.getErrorMessage()
+                po.getErrorCode()
         );
     }
 
@@ -84,14 +79,19 @@ public class CreditJobRunRepositoryImpl implements CreditJobRunRepository {
      */
     private CreditJobRunPO toPO(CreditJobRun jobRun) {
         CreditJobRunPO po = new CreditJobRunPO();
-        po.setJobRunId(jobRun.getRunId());
+        po.setRunId(jobRun.getRunId());
         po.setJobType(jobRun.getJobType().name());
         po.setBusinessDate(jobRun.getBusinessDate());
         po.setStatus(jobRun.getStatus().name());
-        po.setStartedAt(jobRun.getStartedAt());
-        po.setFinishedAt(jobRun.getCompletedAt());
-        po.setErrorMessage(jobRun.getErrorCode());
+        po.setCursorCreditAccountId(jobRun.getCursorCreditAccountId());
+        po.setTriggerType(jobRun.getTriggerType().name());
+        po.setTriggeredByUserId(jobRun.getTriggeredByUserId());
+        po.setRequestDigest(jobRun.getRequestDigest());
+        po.setRetryCount(jobRun.getRetryCount());
+        po.setErrorCode(jobRun.getErrorCode());
         po.setVersion(jobRun.getVersion());
+        po.setStartedAt(jobRun.getStartedAt());
+        po.setCompletedAt(jobRun.getCompletedAt());
         po.setCreatedAt(jobRun.getCreatedAt());
         po.setUpdatedAt(jobRun.getUpdatedAt());
         return po;
