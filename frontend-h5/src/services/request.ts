@@ -9,7 +9,8 @@ export class ApiError extends Error {
 }
 
 export const clearSession = () => {
-  ['accessToken', 'userId', 'accountNumber', 'nickname', 'userType', 'session-storage']
+  ['accessToken', 'userId', 'accountNumber', 'nickname', 'userType', 'session-storage',
+   'ai_session_id', 'ai_session_expiry']
     .forEach((key) => localStorage.removeItem(key));
 };
 

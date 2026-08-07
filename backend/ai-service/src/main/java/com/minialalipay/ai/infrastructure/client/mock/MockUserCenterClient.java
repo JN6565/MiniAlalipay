@@ -14,7 +14,7 @@ import java.util.Map;
  * 通过 {@code ai.client.mock-mode} 属性控制。</p>
  */
 @Service
-@ConditionalOnProperty(name = "ai.client.mock-mode", havingValue = "true", matchIfMissing = true)
+@ConditionalOnProperty(name = "ai.client.mock-mode", havingValue = "true", matchIfMissing = false)
 public class MockUserCenterClient implements UserCenterPort {
 
     private static final List<Map<String, Object>> MOCK_USERS = List.of(
@@ -26,25 +26,29 @@ public class MockUserCenterClient implements UserCenterPort {
                     "phoneTail", "1234"),
             Map.of("userId", "01J5Q000000000000000000012",
                     "nickname", "王五",
-                    "phoneTail", "9012")
+                    "phoneTail", "9012"),
+            Map.of("userId", "01J5Q000000000000000000013",
+                    "nickname", "老王",
+                    "phoneTail", "3456")
     );
 
     @Override
     public List<Map<String, Object>> searchPayees(String userId, String query, int limit) {
-        return MOCK_USERS;
-    }
-
-    /**
-     * 调用用户中心工具（兼容旧 ToolRouter 的调度模式）。
-     *
-     * @param toolName 工具名
-     * @param params 参数
-     * @return Mock 响应数据
-     */
-    public Map<String, Object> invoke(String toolName, Map<String, Object> params) {
-        if ("search_payees".equals(toolName)) {
-            return Map.of("users", searchPayees("", "", 10));
+        // 空 query 返回空列表，与真实 API 的 minLength:1 约束保持一致
+        if (query == null || query.isBlank()) {
+            return List.of();
         }
-        return Map.of();
+        // Mock 实现：根据 query 过滤昵称或手机号尾号，按 limit 截断
+        String lowerQuery = query.toLowerCase();
+        List<Map<String, Object>> filtered = MOCK_USERS.stream()
+                .filter(user -> {
+                    String nickname = (String) user.get("nickname");
+                    String phoneTail = (String) user.get("phoneTail");
+                    return (nickname != null && nickname.toLowerCase().contains(lowerQuery))
+                            || (phoneTail != null && phoneTail.contains(query));
+                })
+                .limit(Math.max(limit, 0))
+                .toList();
+        return filtered;
     }
 }

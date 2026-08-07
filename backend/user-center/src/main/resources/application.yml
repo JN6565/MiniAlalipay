@@ -7,7 +7,7 @@ spring:
     redis:
       host: ${REDIS_HOST:121.43.51.164}
       port: ${REDIS_PORT:6379}
-      password: ${REDIS_PASSWORD:${spring.datasource.password}}
+      password: ${REDIS_PASSWORD:teamuser2026}
       timeout: 2000ms
   datasource:
     url: ${USER_DB_URL:jdbc:mysql://121.43.51.164:3306/user_db?useSSL=false&serverTimezone=Asia/Shanghai&allowPublicKeyRetrieval=true&characterEncoding=UTF-8}
@@ -29,9 +29,6 @@ account-center:
   url: ${ACCOUNT_CENTER_URL:http://localhost:8083}
 internal:
   auth:
-    service-token: ${INTERNAL_AUTH_SERVICE_TOKEN:local-internal-token}
-minialalipay:
-  internal:
     # 内部接口服务令牌，必须与 business-center/account-center 的同名配置一致
     service-token: ${INTERNAL_SERVICE_TOKEN:local-internal-token}
 management:

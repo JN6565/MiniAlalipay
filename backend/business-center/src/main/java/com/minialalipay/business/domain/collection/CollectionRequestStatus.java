@@ -19,8 +19,6 @@ public enum CollectionRequestStatus {
     CANCELLED,
     /** 资金事实不一致时不得继续自动推进的终态。 */
     MANUAL_REVIEW,
-    /** 收款方主动关闭的终态。 */
-    CLOSED,
     /** 超过创建后 30 分钟的终态。 */
     EXPIRED
 }

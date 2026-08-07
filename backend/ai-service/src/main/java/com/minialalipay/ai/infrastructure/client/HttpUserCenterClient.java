@@ -9,9 +9,11 @@ import org.springframework.beans.factory.annotation.Value;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.http.HttpStatusCode;
 import org.springframework.http.MediaType;
+import org.springframework.http.client.SimpleClientHttpRequestFactory;
 import org.springframework.stereotype.Component;
 import org.springframework.web.client.RestClient;
 
+import java.time.Duration;
 import java.util.Collections;
 import java.util.List;
 import java.util.Map;
@@ -34,8 +36,12 @@ public class HttpUserCenterClient implements UserCenterPort {
             @Value("${ai.client.user-center.base-url:http://localhost:8081}") String baseUrl,
             @Value("${ai.client.timeout-ms:3000}") int timeoutMs
     ) {
+        SimpleClientHttpRequestFactory factory = new SimpleClientHttpRequestFactory();
+        factory.setConnectTimeout(Duration.ofMillis(timeoutMs));
+        factory.setReadTimeout(Duration.ofMillis(timeoutMs));
         this.restClient = RestClient.builder()
                 .baseUrl(baseUrl)
+                .requestFactory(factory)
                 .defaultHeader("Content-Type", "application/json")
                 .build();
         log.info("用户中心客户端初始化: baseUrl={}, timeout={}ms", baseUrl, timeoutMs);
@@ -49,7 +55,7 @@ public class HttpUserCenterClient implements UserCenterPort {
             var spec = restClient.get()
                     .uri(uriBuilder -> uriBuilder
                             .path("/api/v1/users/search")
-                            .queryParam("q", query)
+                            .queryParam("keyword", query)
                             .queryParam("limit", limit)
                             .build())
                     .header("X-User-Id", userId);
@@ -68,9 +74,11 @@ public class HttpUserCenterClient implements UserCenterPort {
             if (response == null) {
                 return Collections.emptyList();
             }
-            Object users = response.get("users");
-            if (users instanceof List) {
-                return (List<Map<String, Object>>) users;
+            // user-center 返回 ApiResponse<List<UserSearchResultDTO>>，
+            // 数据在 "data" 字段中
+            Object data = response.get("data");
+            if (data instanceof List) {
+                return (List<Map<String, Object>>) data;
             }
             return Collections.emptyList();
         } catch (BusinessException e) {

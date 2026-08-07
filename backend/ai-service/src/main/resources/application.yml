@@ -14,6 +14,10 @@ spring:
     username: ${AGENT_DB_USERNAME:root}
     password: ${AGENT_DB_PASSWORD:teamuser2026}
     driver-class-name: com.mysql.cj.jdbc.Driver
+    hikari:
+      max-lifetime: 300000
+      keepalive-time: 60000
+      connection-timeout: 10000
   flyway:
     enabled: true
     locations: classpath:db/migration
@@ -45,8 +49,40 @@ mybatis:
     map-underscore-to-camel-case: true
 
 ai:
+  prompt:
+    system: |
+      你是一只傲娇猫娘，名叫吱托芙，现在作为aialipay助手，你的职责是帮助用户完成转账、查余额、查交易、
+      查花呗和还花呗等操作。你必须遵守以下规则：
+      1. 不臆造金额、账户或交易状态
+      2. 缺失必填槽位时必须生成澄清问题，不臆造默认值
+      3. 意图置信度不足时展示支持范围，不执行写工具
+      4. 支付密码、确认令牌和访问令牌不出现在任何回复或摘要中
+      5. 收款人必须来自受控查询工具返回值
+    output-format: |
+      ---
+      你必须使用以下 JSON 格式回复，不要包含任何 JSON 之外的内容：
+      {
+        "intent": "TRANSFER|BALANCE_QUERY|TRANSACTION_LIST|TRANSACTION_STATUS|USER_SEARCH|CREDIT_SUMMARY|CREDIT_BILL|CREDIT_REPAYMENT|UNKNOWN",
+        "slots": {"槽位名": "槽位值"},
+        "missingFields": ["缺失的必填字段"],
+        "confidence": 0.0到1.0之间的数值,
+        "clarificationNeeded": true或false,
+        "naturalReply": "面向用户展示的自然语言回复"
+      }
+      规则：
+      - intent 必须是枚举值之一，无法确定时用 UNKNOWN
+      - 缺失必填字段时 clarificationNeeded=true，missingFields 列出字段名
+      - amountFen 必须是整数（分），例如 10000 表示 100.00 元
+      - payeeId 留 null，由工具查询后填入
+      - 转账时必须将用户提到的收款人名称/手机号提取到 query 槽位，供搜索工具使用
+      - naturalReply 是给用户看的自然语言回复
+      - 不要编造任何金额、账户或交易状态
+  streaming:
+    chunk-size: 2
+    chunk-delay-ms: 120
+    thinking-delay-ms: 800
   llm:
-    mock-mode: ${AI_LLM_MOCK_MODE:true}
+    mock-mode: ${AI_LLM_MOCK_MODE:false}
     connect-timeout: 2s
     read-timeout: 8s
     max-concurrent: 20
@@ -54,10 +90,9 @@ ai:
       failure-threshold: 3
       open-state-duration: 30s
   client:
-    mock-mode: ${AI_CLIENT_MOCK_MODE:true}
+    mock-mode: ${AI_CLIENT_MOCK_MODE:false}
     timeout-ms: 3000
-    # AI 服务调用下游时应统一经过网关(localhost:8080)，由网关完成鉴权、限流和审计。
-    # 当前 Token 传播机制尚未完成，生产部署前需补充 Authorization 头传递链路。
+    # AI 服务通过网关(localhost:8080)调用下游，由网关完成鉴权、限流和审计。
     user-center:
       base-url: ${USER_CENTER_URI:http://localhost:8080}
     business-center:

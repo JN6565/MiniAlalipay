@@ -21,6 +21,8 @@
         <dependency><groupId>com.mysql</groupId><artifactId>mysql-connector-j</artifactId><scope>runtime</scope></dependency>
         <dependency><groupId>org.flywaydb</groupId><artifactId>flyway-core</artifactId></dependency>
         <dependency><groupId>org.flywaydb</groupId><artifactId>flyway-mysql</artifactId></dependency>
+        <!-- JSON Schema 校验 -->
+        <dependency><groupId>com.networknt</groupId><artifactId>json-schema-validator</artifactId><version>1.5.7</version></dependency>
         <!-- 测试依赖 -->
         <dependency><groupId>com.h2database</groupId><artifactId>h2</artifactId><scope>test</scope></dependency>
         <dependency><groupId>org.mybatis.spring.boot</groupId><artifactId>mybatis-spring-boot-starter-test</artifactId><version>3.0.3</version><scope>test</scope></dependency>

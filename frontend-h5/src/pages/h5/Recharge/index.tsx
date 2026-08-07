@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import { history } from 'umi';
 import { Toast, Button, Input, Dialog } from 'antd-mobile';
 import * as rechargeService from '@/services/recharge';
+import { AMOUNT_MIN, AMOUNT_MAX, DAILY_RECHARGE_LIMIT_FEN, DAILY_RECHARGE_COUNT } from '@/constants';
 import './index.less';
 
 const RechargePage: React.FC = () => {
@@ -28,13 +29,13 @@ const RechargePage: React.FC = () => {
       return;
     }
 
-    if (amountNum < 0.01) {
-      Toast.show({ content: '充值金额不能小于0.01元', icon: 'fail' });
+    if (amountNum < AMOUNT_MIN) {
+      Toast.show({ content: `充值金额不能小于${AMOUNT_MIN}元`, icon: 'fail' });
       return;
     }
 
-    if (amountNum > 50000) {
-      Toast.show({ content: '单次充值不能超过50000元', icon: 'fail' });
+    if (amountNum > AMOUNT_MAX) {
+      Toast.show({ content: `单次充值不能超过${AMOUNT_MAX}元`, icon: 'fail' });
       return;
     }
 
@@ -122,9 +123,9 @@ const RechargePage: React.FC = () => {
       <div className="rules">
         <h3>充值规则</h3>
         <ul>
-          <li>单笔限额：0.01 - 50,000 元</li>
-          <li>每日限额：250,000 元</li>
-          <li>每日次数：5 次</li>
+          <li>单笔限额：{AMOUNT_MIN} - {AMOUNT_MAX.toLocaleString()} 元</li>
+          <li>每日限额：{(DAILY_RECHARGE_LIMIT_FEN / 100).toLocaleString()} 元</li>
+          <li>每日次数：{DAILY_RECHARGE_COUNT} 次</li>
           <li>充值方式：模拟充值（虚拟资金）</li>
         </ul>
       </div>

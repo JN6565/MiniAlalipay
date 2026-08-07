@@ -12,7 +12,7 @@ import java.util.Map;
  * <p>当未配置真实 API Key 或显式启用 Mock 模式时使用。</p>
  */
 @Service
-@ConditionalOnProperty(name = "ai.client.mock-mode", havingValue = "true", matchIfMissing = true)
+@ConditionalOnProperty(name = "ai.client.mock-mode", havingValue = "true", matchIfMissing = false)
 public class MockAccountCenterClient implements AccountCenterPort {
 
     @Override
@@ -32,11 +32,34 @@ public class MockAccountCenterClient implements AccountCenterPort {
 
     @Override
     public Map<String, Object> listTransactions(String userId, int limit) {
-        return Map.of("transactions", java.util.List.of(
-                Map.of("transactionId", "01J5Q000000000000000000090",
-                        "amountFen", 50000L, "status", "SUCCESS",
-                        "occurredAt", "2026-08-04T06:00:00Z")
-        ));
+        // 字段名与真实 API LedgerEntryPageDTO 对齐：items + nextCursor
+        return Map.of("items", java.util.List.of(
+                Map.of("entryId", 1L, "transactionId", "01J5Q000000000000000000090",
+                        "direction", "OUT", "amountFen", 50000L,
+                        "memo", "转账", "createdAt", "2026-08-04T06:00:00Z")
+        ), "nextCursor", "");
+    }
+
+    @Override
+    public Map<String, Object> listTransactions(String userId, int limit,
+            String startTime, String endTime, String direction, String status) {
+        // Mock 模式：返回包含多种方向的交易数据，便于前端测试筛选
+        var allItems = java.util.List.of(
+                Map.of("entryId", 1L, "transactionId", "01J5Q000000000000000000090",
+                        "direction", "OUT", "amountFen", 50000L,
+                        "memo", "转账", "createdAt", "2026-08-04T06:00:00Z"),
+                Map.of("entryId", 2L, "transactionId", "01J5Q000000000000000000091",
+                        "direction", "IN", "amountFen", 100000L,
+                        "memo", "收款", "createdAt", "2026-08-03T10:00:00Z")
+        );
+        // 简单筛选：按方向过滤
+        var filtered = allItems;
+        if (direction != null && !direction.isBlank()) {
+            filtered = allItems.stream()
+                    .filter(item -> direction.equals(item.get("direction")))
+                    .toList();
+        }
+        return Map.of("items", filtered, "nextCursor", "");
     }
 
     @Override
@@ -46,7 +69,8 @@ public class MockAccountCenterClient implements AccountCenterPort {
 
     @Override
     public Map<String, Object> listCreditBills(String userId, int limit) {
-        return Map.of("bills", java.util.List.of());
+        // 字段名与真实 API 信封解包后格式对齐：data 为 List
+        return Map.of("data", java.util.List.of());
     }
 
     @Override
@@ -71,48 +95,5 @@ public class MockAccountCenterClient implements AccountCenterPort {
                 "repaymentId", "01J5Q000000000000000000110",
                 "status", "PROCESSING"
         );
-    }
-
-    /**
-     * 调用账户中心工具（兼容旧 ToolRouter 的调度模式）。
-     */
-    public Map<String, Object> invoke(String toolName, Map<String, Object> params) {
-        return switch (toolName) {
-            case "get_account_summary" -> Map.of(
-                    "accountId", "01J5Q000000000000000000080",
-                    "availableFen", 1_000_000L,
-                    "frozenFen", 0L,
-                    "status", "ACTIVE"
-            );
-            case "get_balance" -> Map.of(
-                    "availableFen", 1_000_000L,
-                    "frozenFen", 0L
-            );
-            case "list_transactions" -> Map.of(
-                    "transactions", java.util.List.of(
-                            Map.of("transactionId", "01J5Q000000000000000000090",
-                                    "amountFen", 50000L,
-                                    "status", "SUCCESS",
-                                    "occurredAt", "2026-08-04T06:00:00Z")
-                    )
-            );
-            case "get_credit_summary" -> Map.of(
-                    "totalLimitFen", 500_000L,
-                    "usedFen", 0L,
-                    "availableFen", 500_000L
-            );
-            case "list_credit_bills" -> Map.of(
-                    "bills", java.util.List.of()
-            );
-            case "create_credit_repayment_draft" -> Map.of(
-                    "repaymentDraftId", "01J5Q000000000000000000100",
-                    "version", 0L
-            );
-            case "submit_confirmed_credit_repayment" -> Map.of(
-                    "transactionId", "01J5Q000000000000000000110",
-                    "status", "PROCESSING"
-            );
-            default -> Map.of();
-        };
     }
 }

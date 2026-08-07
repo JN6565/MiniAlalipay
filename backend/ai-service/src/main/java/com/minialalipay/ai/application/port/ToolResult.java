@@ -16,4 +16,8 @@ public record ToolResult(
         String errorMessage,
         int durationMs
 ) {
+    /** 工具调用是否成功（resultCode 为 SUCCESS）。 */
+    public boolean isSuccess() {
+        return "SUCCESS".equals(resultCode);
+    }
 }

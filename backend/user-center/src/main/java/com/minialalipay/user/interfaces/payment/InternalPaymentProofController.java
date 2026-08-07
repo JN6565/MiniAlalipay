@@ -36,7 +36,7 @@ public class InternalPaymentProofController {
 
     public InternalPaymentProofController(
             PaymentProofService paymentProofService,
-            @Value("${minialalipay.internal.service-token:}") String serviceToken
+            @Value("${internal.auth.service-token:local-internal-token}") String serviceToken
     ) {
         this.paymentProofService = paymentProofService;
         this.serviceToken = serviceToken;

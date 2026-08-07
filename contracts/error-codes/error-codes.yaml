@@ -89,3 +89,7 @@ codes:
   TOOL_UNAVAILABLE: {httpStatus: 503, message: 工具服务暂不可用}
   PROMPT_INJECTION_REJECTED: {httpStatus: 422, message: 请求违反安全策略}
   SESSION_NOT_FOUND: {httpStatus: 404, message: AI 会话不存在}
+  AGENT_SESSION_EXPIRED: {httpStatus: 404, message: 会话已过期，请重新开始对话}
+  INTENT_LOW_CONFIDENCE: {httpStatus: 422, message: 未能识别您的意图，请重新描述}
+  TOOL_FORBIDDEN: {httpStatus: 403, message: 当前不支持该操作}
+  LLM_UNAVAILABLE: {httpStatus: 503, message: AI 服务暂时不可用，请稍后重试}

@@ -781,6 +781,7 @@ ai-service/domain/
 ├── memory/               # 可授权的跨会话记忆
 ├── tool/                 # 工具 Schema、调用记录和结果摘要
 ├── mcp/                  # MCP 工具目录与协议适配
+├── stream/               # SSE 流式事件类型与回调契约（新增）
 └── policy/               # 高风险工具确认、脱敏和注入防护
 ```
 
@@ -2618,6 +2619,7 @@ C2C 创建请求与个人码订单金额锁定共用以下 OpenAPI 字段约束�
 | 方法 | 路径 | 权限 | 用途 | 幂等/并发要求 |
 |---|---|---|---|---|
 | POST | `/api/v1/agent/messages` | 登录用户 | 发送消息并获得 Agent 回复 | `sessionId` 隔离；同会话串行 |
+| POST | `/api/v1/agent/messages/stream` | 登录用户 | SSE 流式 AI 对话 | `clientMessageId` 幂等 |
 | GET | `/api/v1/agent/sessions/{id}` | 会话所有者 | 查询脱敏对话与工具轨迹 | 不返回内部推理和确认句柄 |
 | DELETE | `/api/v1/agent/sessions/{id}/memory` | 会话所有者 | 清除可删除记忆 | 不删除资金审计日志 |
 | GET | `/api/v1/ops/realtime-metrics` | 运营/观察者 | 查询分钟级指标 | `metricCode` + 时间范围限制 |

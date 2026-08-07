@@ -76,6 +76,16 @@ paths:
         '200': { description: 返回当前身份, content: { application/json: { schema: { $ref: '#/components/schemas/CurrentIdentityResponse' } } } }
         '401': { $ref: '#/components/responses/Unauthorized' }
         '404': { $ref: '#/components/responses/NotFound' }
+  /api/v1/auth/logout:
+    post:
+      summary: 用户退出登录并销毁会话令牌
+      operationId: logoutUser
+      x-client-scope: C
+      parameters:
+        - $ref: '#/components/parameters/RequestIdHeader'
+      responses:
+        '200': { description: 退出成功，令牌已失效 }
+        '401': { $ref: '#/components/responses/Unauthorized' }
   /actuator/health:
     get:
       summary: 网关健康检查
@@ -348,6 +358,36 @@ paths:
         '401': { $ref: '#/components/responses/Unauthorized' }
         '404': { $ref: '#/components/responses/NotFound' }
         '409': { $ref: '#/components/responses/Conflict' }
+  /api/v1/users/search:
+    get:
+      summary: 按手机号搜索用户（用于转账收款人查找）
+      operationId: searchUsers
+      x-client-scope: C
+      parameters:
+        - $ref: '#/components/parameters/RequestIdHeader'
+        - name: keyword
+          in: query
+          required: true
+          description: 搜索关键词，目支持 11 位手机号
+          schema: { type: string, minLength: 1, maxLength: 32 }
+        - name: limit
+          in: query
+          required: false
+          schema: { type: integer, minimum: 1, maximum: 20, default: 10 }
+      responses:
+        '200':
+          description: 返回匹配的用户列表
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/ApiResponse'
+                  - type: object
+                    properties:
+                      data:
+                        type: array
+                        items: { $ref: '#/components/schemas/UserSearchResult' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
   /api/v1/contacts:
     get:
       summary: 查询当前用户的常用联系人列表
@@ -459,31 +499,6 @@ paths:
               schema: { $ref: '#/components/schemas/InternalCreditAccountReference' }
         '400': { $ref: '#/components/responses/BadRequest' }
         '404': { $ref: '#/components/responses/NotFound' }
-  /internal/v1/seata-tcc/transfer/try:
-    post:
-      summary: 在 Seata 全局事务内注册转账 TCC Try 分支
-      description: 仅允许业务中心服务调用。请求必须携带 Seata XID；Confirm/Cancel 由 Seata TC 回调参与者，不提供 HTTP 回调入口。
-      operationId: trySeataTransferTcc
-      x-client-scope: INTERNAL
-      x-service-auth: required
-      servers: [{ url: http://localhost:8083 }]
-      security: [{ internalServiceAuth: [] }]
-      parameters:
-        - name: TX_XID
-          in: header
-          required: true
-          schema: { type: string, minLength: 1, maxLength: 128 }
-          description: Seata 技术全局事务 XID，不得写入业务屏障或对外响应。
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema: { $ref: '#/components/schemas/SeataTransferTccRequest' }
-      responses:
-        '200': { description: 三个 TCC Try 分支已注册 }
-        '400': { $ref: '#/components/responses/BadRequest' }
-        '409': { $ref: '#/components/responses/Conflict' }
-        '500': { $ref: '#/components/responses/InternalError' }
   /internal/v1/tcc/balance/{role}/{action}:
     post:
       summary: 执行付款方或收款方余额 TCC 分支
@@ -1881,6 +1896,78 @@ paths:
         '409': { $ref: '#/components/responses/Conflict' }
         '429': { $ref: '#/components/responses/TooManyRequests' }
         '500': { $ref: '#/components/responses/InternalError' }
+  /api/v1/agent/messages/stream:
+    post:
+      summary: AI 流式对话入口（SSE）
+      operationId: streamAgentMessage
+      x-client-scope: C
+      description: |
+        向 AI Talk 发送消息并通过 Server-Sent Events 接收流式响应。
+        事件类型包括 agent-status、agent-content、agent-tool-call、agent-tool-result、agent-clarification、agent-done、agent-error。
+      parameters:
+        - $ref: '#/components/parameters/RequestIdHeader'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/SendAgentMessageRequest' }
+      responses:
+        '200':
+          description: SSE 流式响应，Content-Type 为 text/event-stream
+          content:
+            text/event-stream:
+              schema: { type: string, description: 'SSE 事件流，每个事件格式为 event: <type>\ndata: <json>\n\n' }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '409': { $ref: '#/components/responses/Conflict' }
+        '503': { $ref: '#/components/responses/ServiceUnavailable' }
+  /api/v1/agent/sessions:
+    get:
+      summary: 查询当前用户的活跃 AI 会话列表
+      operationId: listAgentSessions
+      x-client-scope: C
+      parameters:
+        - $ref: '#/components/parameters/RequestIdHeader'
+      responses:
+        '200':
+          description: 返回会话列表
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/ApiResponse'
+                  - type: object
+                    properties:
+                      data:
+                        type: array
+                        items: { $ref: '#/components/schemas/AgentSessionSummary' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+  /api/v1/agent/sessions/{sessionId}/messages:
+    get:
+      summary: 查询指定会话的消息历史
+      operationId: getAgentSessionMessages
+      x-client-scope: C
+      parameters:
+        - $ref: '#/components/parameters/RequestIdHeader'
+        - name: sessionId
+          in: path
+          required: true
+          schema: { type: string, maxLength: 26 }
+      responses:
+        '200':
+          description: 返回会话消息列表
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/ApiResponse'
+                  - type: object
+                    properties:
+                      data:
+                        type: array
+                        items: { $ref: '#/components/schemas/AgentMessageSummary' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '404': { $ref: '#/components/responses/NotFound' }
 components:
   securitySchemes:
     bearerAuth:
@@ -2221,23 +2308,6 @@ components:
         userId: { type: string, minLength: 26, maxLength: 26 }
         status: { type: string, enum: [ACTIVE, SUSPENDED, CLOSED] }
         version: { type: integer, format: int64, minimum: 0 }
-    SeataTransferTccRequest:
-      type: object
-      additionalProperties: false
-      required: [businessXid, transactionId, payerAccountId, payeeAccountId, amountFen, payerFreezeId, payeeReservationId, voucherId, debitEntryId, creditEntryId, ledgerEventId, traceId]
-      properties:
-        businessXid: { type: string, minLength: 1, maxLength: 128, description: 业务屏障键，与 Seata 技术 XID 解耦。 }
-        transactionId: { type: string, minLength: 26, maxLength: 26 }
-        payerAccountId: { type: string, minLength: 26, maxLength: 26 }
-        payeeAccountId: { type: string, minLength: 26, maxLength: 26 }
-        amountFen: { type: integer, format: int64, minimum: 1 }
-        payerFreezeId: { type: string, minLength: 26, maxLength: 26 }
-        payeeReservationId: { type: string, minLength: 26, maxLength: 26 }
-        voucherId: { type: string, minLength: 26, maxLength: 26 }
-        debitEntryId: { type: integer, format: int64, minimum: 1 }
-        creditEntryId: { type: integer, format: int64, minimum: 1 }
-        ledgerEventId: { type: string, minLength: 26, maxLength: 26 }
-        traceId: { type: string, pattern: '^[a-fA-F0-9]{32}$' }
     BalanceTccCommand:
       type: object
       additionalProperties: false
@@ -2486,7 +2556,7 @@ components:
         sessionId: { type: string, minLength: 1, maxLength: 26, description: 当前会话 ID }
         messageId: { type: string, minLength: 1, maxLength: 26, description: 本条 AI 回复的消息 ID }
         content: { type: string, description: AI 的自然语言回复正文 }
-        intent: { type: string, enum: [TRANSFER, BALANCE_QUERY, TRANSACTION_LIST, TRANSACTION_STATUS, USER_SEARCH, CREDIT_SUMMARY, CREDIT_BILL, CREDIT_REPAYMENT], description: 识别出的意图类型 }
+        intent: { type: string, enum: [TRANSFER, BALANCE_QUERY, TRANSACTION_LIST, TRANSACTION_STATUS, USER_SEARCH, CREDIT_SUMMARY, CREDIT_BILL, CREDIT_REPAYMENT, UNKNOWN], description: 识别出的意图类型；UNKNOWN 表示无法识别意图 }
         slots: { type: object, description: 当前会话的结构化槽位，键为字段名，值为提取的原始值 }
         clarificationNeeded: { type: boolean, description: 是否需要用户进一步澄清 }
     SendAgentMessageResponse:
@@ -2497,6 +2567,31 @@ components:
           properties:
             data:
               $ref: '#/components/schemas/SendAgentMessageResponseData'
+    UserSearchResult:
+      type: object
+      additionalProperties: false
+      required: [userId, nickname]
+      properties:
+        userId: { type: string, description: 用户 ID }
+        nickname: { type: string, description: 用户昵称 }
+        phoneTail: { type: string, description: 手机号后四位，脱敏展示 }
+    AgentSessionSummary:
+      type: object
+      additionalProperties: false
+      required: [sessionId, createdAt, lastActiveAt]
+      properties:
+        sessionId: { type: string, description: 会话 ID（ULID） }
+        createdAt: { type: string, format: date-time, description: 会话创建时间 }
+        lastActiveAt: { type: string, format: date-time, description: 最后活跃时间 }
+    AgentMessageSummary:
+      type: object
+      additionalProperties: false
+      required: [messageId, role, content, createdAt]
+      properties:
+        messageId: { type: string, description: 消息 ID }
+        role: { type: string, enum: [USER, ASSISTANT, SYSTEM], description: 消息角色 }
+        content: { type: string, description: 消息内容 }
+        createdAt: { type: string, format: date-time, description: 消息创建时间 }
     HealthResponse:
       type: object
       additionalProperties: false

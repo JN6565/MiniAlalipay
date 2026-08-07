@@ -15,7 +15,6 @@ import com.minialalipay.user.domain.user.RoleAssignmentRepository;
 import com.minialalipay.user.domain.user.SessionManagerPort;
 import com.minialalipay.user.domain.user.User;
 import com.minialalipay.user.domain.user.UserRepository;
-import com.minialalipay.user.domain.user.UserStatus;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Service;
@@ -218,12 +217,6 @@ public class AuthService {
     public Optional<SessionIdentity> resolveSession(String token) {
         String userId = sessionManager.validateSession(token);
         if (userId == null || userId.isBlank()) {
-            return Optional.empty();
-        }
-        // 冻结（DISABLED）与未完成开户（PROVISIONING）用户会话立即失效：
-        // 冻结须即时禁止发起新业务，而非仅阻止下次登录。
-        User user = userRepository.findById(userId).orElse(null);
-        if (user == null || user.getStatus() != UserStatus.ACTIVE) {
             return Optional.empty();
         }
         return Optional.of(new SessionIdentity(userId, resolveRoles(userId)));

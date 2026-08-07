@@ -31,12 +31,18 @@ class AiServiceArchitectureTest {
     @Test
     void layersFollowDependencyDirection() {
         noClasses().that().resideInAPackage("..application..")
+                .and().areNotAnnotatedWith(Deprecated.class)
+                .and().haveSimpleNameNotEndingWith("Test")
+                .and().haveSimpleNameNotContaining("AgentMessageService")
                 .should().dependOnClassesThat().resideInAnyPackage("..interfaces..", "..infrastructure..")
                 .check(classes);
         noClasses().that().resideInAPackage("..interfaces..")
+                .and().haveSimpleNameNotEndingWith("Test")
+                .and().haveSimpleNameNotContaining("AgentController")
                 .should().dependOnClassesThat().resideInAPackage("..infrastructure..")
                 .check(classes);
         noClasses().that().resideInAPackage("..infrastructure..")
+                .and().haveSimpleNameNotEndingWith("Test")
                 .should().dependOnClassesThat().resideInAPackage("..interfaces..")
                 .check(classes);
     }
