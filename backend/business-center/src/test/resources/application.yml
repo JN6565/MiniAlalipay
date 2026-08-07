@@ -13,3 +13,6 @@ minialalipay:
   recovery:
     fixed-delay-ms: 3600000
     initial-delay-ms: 3600000
+# 单元测试不启动 Seata TM/RM，避免测试上下文连接远端 TC。
+seata:
+  enabled: false

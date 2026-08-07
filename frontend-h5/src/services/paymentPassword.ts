@@ -1,10 +1,5 @@
 import request from './request';
 
-const generateUUID = (): string => 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, (char) => {
-  const random = (Math.random() * 16) | 0;
-  return (char === 'x' ? random : (random & 0x3) | 0x8).toString(16);
-});
-
 /**
  * 设置支付密码（注册后首次设置）。
  * @param paymentPassword 支付密码（6 位数字）
@@ -28,18 +23,36 @@ export const changePaymentPassword = (params: {
 };
 
 /**
- * 验证支付密码并获取支付凭证。
- * @param params 支付密码和关联信息
- * @returns 支付凭证
+ * 验证支付密码（仅校验正确性，不签发证明）。
+ *
+ * @param paymentPassword 支付密码（6 位数字）
+ * @returns 成功响应
  */
-export const verifyPaymentPassword = (params: {
-  paymentPassword: string;
-  purpose: string;
-}): Promise<{ paymentProof: string; expiresAt: string }> => {
-  return request.post('/api/v1/payment-password/proof', params, {
-    headers: { 'Idempotency-Key': generateUUID() },
-  }).then((response) => ({
-    paymentProof: (response as unknown as { accessToken: string }).accessToken,
-    expiresAt: '',
-  }));
+export const verifyPaymentPassword = (paymentPassword: string) => {
+  return request.post('/api/v1/payment-password/verify', { paymentPassword });
+};
+
+export interface PaymentProofResult {
+  paymentProof: string;
+}
+
+/**
+ * 验证支付密码并签发一次性支付证明，用于转账确认。
+ *
+ * 后端 `/verify` 仅返回验证结果不含证明，支付证明由 `/proof` 接口签发；
+ * 响应中的 `accessToken` 即原始证明令牌，此处统一映射为 `paymentProof` 供上层使用。
+ *
+ * @param paymentPassword 支付密码（6 位数字）
+ * @param purpose 证明用途，默认 TRANSFER_CONFIRM；信用还款传 CREDIT_REPAY
+ * @returns 支付证明（两分钟有效，不得写入日志、URL 或浏览器存储）
+ */
+export const issuePaymentProof = async (
+  paymentPassword: string,
+  purpose: string = 'TRANSFER_CONFIRM',
+): Promise<PaymentProofResult> => {
+  const result = await request.post<{ accessToken: string }>('/api/v1/payment-password/proof', {
+    paymentPassword,
+    purpose,
+  });
+  return { paymentProof: result.accessToken };
 };

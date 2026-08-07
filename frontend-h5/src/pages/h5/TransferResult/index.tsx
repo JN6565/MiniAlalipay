@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { history, useSearchParams, useParams } from 'umi';
+import { history, useSearchParams, useParams, useLocation } from 'umi';
 import { Card, Button, Result, SpinLoading } from 'antd-mobile';
 import { CheckCircleFill, CloseCircleFill } from 'antd-mobile-icons';
 import * as transferService from '@/services/transfer';
@@ -9,6 +9,9 @@ import './index.less';
 
 const TransferResultPage: React.FC = () => {
   const { id } = useParams();
+  const location = useLocation();
+  // 后端交易状态接口不返回收款人昵称，由确认页跳转时通过路由 state 携带展示
+  const navState = (location.state || {}) as { payeeNickname?: string };
   const [loading, setLoading] = useState(true);
   const [result, setResult] = useState<transferService.TransferResult | null>(null);
 
@@ -72,7 +75,7 @@ const TransferResultPage: React.FC = () => {
         </div>
         <div className="result-row">
           <span className="result-label">收款人</span>
-          <span className="result-value">{result?.payeeNickname || '-'}</span>
+          <span className="result-value">{navState.payeeNickname || '-'}</span>
         </div>
         <div className="result-row">
           <span className="result-label">金额</span>
@@ -83,7 +86,7 @@ const TransferResultPage: React.FC = () => {
         <div className="result-row">
           <span className="result-label">时间</span>
           <span className="result-value">
-            {result?.createdAt ? formatTime(result.createdAt) : '-'}
+            {result?.updatedAt ? formatTime(result.updatedAt) : '-'}
           </span>
         </div>
       </Card>
