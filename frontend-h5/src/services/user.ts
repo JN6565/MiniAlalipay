@@ -14,6 +14,8 @@ export interface PayeeInfo {
   nickname: string;
   accountNumber: string;
   identityStatus?: string; // 身份状态（如：VERIFIED）
+  phoneTail?: string; // 手机尾号（4 位），后端未返回脱敏手机号时的降级展示
+  maskedPhone?: string; // 脱敏手机号，如 138****9150
 }
 
 export interface Contact {
@@ -24,6 +26,10 @@ export interface Contact {
   successCount: number;
   lastSuccessAt?: string;
   pinned: boolean;
+  payeeNickname?: string; // 收款人昵称；收款人不存在或非 ACTIVE 时为空，前端降级展示
+  payeeAccountNumber?: string; // 收款人系统账户号（同上，可空）
+  maskedPhone?: string; // 收款人脱敏手机号，如 138****9150
+  phoneTail?: string; // 收款人手机尾号（4 位），脱敏手机号缺失时的降级展示
 }
 
 export interface Friend {

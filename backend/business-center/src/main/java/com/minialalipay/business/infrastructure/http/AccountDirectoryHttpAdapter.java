@@ -3,6 +3,7 @@ package com.minialalipay.business.infrastructure.http;
 import com.minialalipay.business.application.port.AccountDirectoryPort;
 import com.minialalipay.business.domain.transaction.BusinessErrorCode;
 import com.minialalipay.common.error.BusinessException;
+import com.minialalipay.common.error.CommonErrorCode;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Component;
 import org.springframework.web.client.HttpClientErrorException;
@@ -16,6 +17,14 @@ public class AccountDirectoryHttpAdapter implements AccountDirectoryPort {
                                        @Value("${minialalipay.internal.account-center-url}") String baseUrl) {
         this.client = builder.baseUrl(baseUrl).build();
     }
+
+    /**
+     * 解析用户个人账户引用。
+     *
+     * <p>账户中心返回任意 4xx（含 400 参数校验失败、404 未开户）都意味着无法解析出
+     * 权威账户，统一映射为收款用户不存在；连接失败或 5xx 属于下游不可用，
+     * 映射为服务暂不可用。绝不能把下游错误裸抛成 500 内部错误误导排查。</p>
+     */
     @Override public AccountReference resolvePersonalAccount(String userId) {
         try {
 
@@ -23,8 +32,12 @@ public class AccountDirectoryHttpAdapter implements AccountDirectoryPort {
                     .retrieve().body(AccountReference.class);
             if (result == null) throw new BusinessException(BusinessErrorCode.PAYEE_NOT_FOUND);
             return result;
-        } catch (HttpClientErrorException.NotFound notFound) {
+        } catch (BusinessException exception) {
+            throw exception;
+        } catch (HttpClientErrorException clientError) {
             throw new BusinessException(BusinessErrorCode.PAYEE_NOT_FOUND);
+        } catch (RuntimeException exception) {
+            throw new BusinessException(CommonErrorCode.SERVICE_UNAVAILABLE);
         }
     }
 }

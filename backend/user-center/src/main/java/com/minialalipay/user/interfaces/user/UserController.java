@@ -104,7 +104,8 @@ public class UserController {
                         r.accountNumber(),
                         r.nickname(),
                         r.identityStatus(),
-                        r.phoneTail()
+                        r.phoneTail(),
+                        r.maskedPhone()
                 ))
                 .collect(Collectors.toList());
 

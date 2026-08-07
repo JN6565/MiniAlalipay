@@ -148,7 +148,7 @@ const ContactsPage: React.FC = () => {
                 onClick={() => handleContactClick(contact)}
               >
                 <div className="contact-name">
-                  {contact.alias || contact.payeeUserId.slice(0, 8)}
+                  {contact.alias || contact.payeeNickname || contact.payeeUserId.slice(0, 8)}
                 </div>
               </List.Item>
             </SwipeAction>

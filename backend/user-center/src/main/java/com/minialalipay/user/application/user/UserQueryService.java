@@ -63,14 +63,15 @@ public class UserQueryService {
         // 2. 规范化关键词
         String normalizedKeyword = keyword.trim();
 
-        // 3. 调用仓储搜索用户
+        // 3. 调用仓储搜索用户；对外只返回脱敏手机号，完整手机号不出服务边界
         return userRepository.searchByKeyword(normalizedKeyword, currentUserId, 20).stream()
                 .map(user -> new UserSearchResult(
                         user.getUserId(),
                         user.getAccountNumber(),
                         user.getNickname(),
                         user.getIdentityStatus(),
-                        user.getPhoneTail()
+                        user.getPhoneTail(),
+                        PhoneMasker.mask(user.getPhoneNumber())
                 ))
                 .collect(Collectors.toList());
     }

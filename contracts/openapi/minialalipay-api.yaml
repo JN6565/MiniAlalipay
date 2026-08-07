@@ -2575,6 +2575,7 @@ components:
         userId: { type: string, description: 用户 ID }
         nickname: { type: string, description: 用户昵称 }
         phoneTail: { type: string, description: 手机号后四位，脱敏展示 }
+        maskedPhone: { type: string, description: 脱敏手机号，保留前 3 位和后 4 位，中间以 **** 代替，如 138****9150 }
     AgentSessionSummary:
       type: object
       additionalProperties: false
@@ -2898,6 +2899,10 @@ components:
         successCount: { type: integer, format: int64, minimum: 0 }
         lastSuccessAt: { type: string, format: date-time, nullable: true }
         pinned: { type: boolean }
+        payeeNickname: { type: string, nullable: true, description: 收款人昵称；收款人不存在或非 ACTIVE 时为 null，前端自行降级展示 }
+        payeeAccountNumber: { type: string, nullable: true, description: 收款人系统账户号；收款人不存在或非 ACTIVE 时为 null }
+        maskedPhone: { type: string, nullable: true, description: 收款人脱敏手机号，保留前 3 位和后 4 位，中间以 **** 代替，如 138****9150 }
+        phoneTail: { type: string, nullable: true, description: 收款人手机尾号（4 位），脱敏手机号缺失时的降级展示 }
     UpdateContactRequest:
       type: object
       additionalProperties: false

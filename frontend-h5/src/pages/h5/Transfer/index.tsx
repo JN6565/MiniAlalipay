@@ -38,6 +38,23 @@ const TransferPage: React.FC = () => {
   // 手机号格式校验：仅支持 11 位手机号精确搜索收款人
   const isValidPayeePhone = (value: string) => /^1\d{10}$/.test(value.trim());
 
+  // 收款人手机号展示：优先后端脱敏手机号（如 138****9150），降级为尾号；完整手机号属于敏感信息，前端不得自行拼接
+  const formatPayeePhone = (payee: userService.PayeeInfo) => {
+    if (payee.maskedPhone) return payee.maskedPhone;
+    if (payee.phoneTail) return `尾号 ${payee.phoneTail}`;
+    return `尾号 ${payee.accountNumber.slice(-4)}`;
+  };
+
+  // 常用联系人（最近转账）展示：优先后端下发的昵称和脱敏手机号，
+  // 不得拿用户 ID 片段充当名字或尾号（旧 ULID 格式 ID 会误导用户认为是另一个收款人）
+  const formatContactName = (contact: userService.Contact) =>
+    contact.alias || contact.payeeNickname || contact.payeeUserId.slice(0, 8);
+  const formatContactPhone = (contact: userService.Contact) => {
+    if (contact.maskedPhone) return contact.maskedPhone;
+    if (contact.phoneTail) return `尾号 ${contact.phoneTail}`;
+    return `尾号 ${contact.payeeUserId.slice(-4)}`;
+  };
+
   // 非实时搜索：点击查询按钮触发
   const handleSearch = async () => {
     if (!isValidPayeePhone(payeeKeyword)) {
@@ -66,18 +83,18 @@ const TransferPage: React.FC = () => {
     setPayeeKeyword(payee.nickname);
   };
 
-  const handleSelectContact = async (contact: userService.Contact) => {
-    // 从联系人中选择收款人，需要查询用户详情
-    try {
-      const result = await userService.searchUsers(contact.payeeUserId, 1);
-      if (Array.isArray(result) && result.length > 0) {
-        setSelectedPayee(result[0]);
-        setPayeeKeyword(result[0].nickname);
-        setShowRecentTransfers(false);
-      }
-    } catch (error) {
-      console.error('查询用户失败', error);
-    }
+  const handleSelectContact = (contact: userService.Contact) => {
+    // 联系人接口已携带收款人昵称和账户号，直接构造收款人信息；
+    // 不能用 userId 作为关键词调 searchUsers（搜索只匹配手机号/昵称/姓名，必查空）
+    setSelectedPayee({
+      userId: contact.payeeUserId,
+      nickname: contact.alias || contact.payeeNickname || contact.payeeUserId.slice(0, 8),
+      accountNumber: contact.payeeAccountNumber || '',
+      maskedPhone: contact.maskedPhone,
+      phoneTail: contact.phoneTail,
+    });
+    setPayeeKeyword(contact.alias || contact.payeeNickname || '');
+    setShowRecentTransfers(false);
   };
 
   const handleSubmit = async () => {
@@ -160,11 +177,11 @@ const TransferPage: React.FC = () => {
                     <UserOutline />
                   </Avatar>
                 }
-                description={`尾号 ${contact.payeeUserId.slice(-4)}`}
+                description={formatContactPhone(contact)}
                 extra={<Button size="mini" fill="none" onClick={() => handleSelectContact(contact)}>选择</Button>}
                 arrow
               >
-                {contact.alias || contact.payeeUserId.slice(0, 8)}
+                {formatContactName(contact)}
               </List.Item>
             ))}
           </List>
@@ -186,7 +203,7 @@ const TransferPage: React.FC = () => {
                     <UserOutline />
                   </Avatar>
                 }
-                description={`尾号 ${payee.accountNumber.slice(-4)}`}
+                description={formatPayeePhone(payee)}
                 onClick={() => handleSelectPayee(payee)}
                 arrow
               >
@@ -205,7 +222,7 @@ const TransferPage: React.FC = () => {
           </Avatar>
           <div className="payee-info">
             <div className="payee-name">{selectedPayee.nickname}</div>
-            <div className="payee-account">尾号 {selectedPayee.accountNumber.slice(-4)}</div>
+            <div className="payee-account">{formatPayeePhone(selectedPayee)}</div>
           </div>
           <Button size="small" fill="none" onClick={() => setSelectedPayee(null)}>
             更换

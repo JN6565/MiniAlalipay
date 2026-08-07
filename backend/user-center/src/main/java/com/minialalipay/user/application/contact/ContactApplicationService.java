@@ -1,8 +1,12 @@
 package com.minialalipay.user.application.contact;
 
 import com.minialalipay.user.application.contact.dto.ContactDTO;
+import com.minialalipay.user.application.user.PhoneMasker;
 import com.minialalipay.user.domain.contact.Contact;
 import com.minialalipay.user.domain.contact.ContactRepository;
+import com.minialalipay.user.domain.user.User;
+import com.minialalipay.user.domain.user.UserRepository;
+import com.minialalipay.user.domain.user.UserStatus;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -23,16 +27,20 @@ public class ContactApplicationService {
     private static final int DEFAULT_CONTACT_LIMIT = 5;
 
     private final ContactRepository contactRepository;
+    private final UserRepository userRepository;
 
-    public ContactApplicationService(ContactRepository contactRepository) {
+    public ContactApplicationService(ContactRepository contactRepository, UserRepository userRepository) {
         this.contactRepository = contactRepository;
+        this.userRepository = userRepository;
     }
 
     /**
      * 查询当前用户的常用联系人列表。
      *
      * <p>按置顶优先、最近成功转账时间倒序排列，最多返回指定数量。
-     * 已隐藏的联系人不包含在结果中。</p>
+     * 已隐藏的联系人不包含在结果中。每条记录会按收款人用户 ID
+     * 补齐昵称、账户号和脱敏手机号等展示字段；收款人不存在或非
+     * ACTIVE 时展示字段置空，由前端自行降级，避免前端拿用户 ID 片段充当名字。</p>
      *
      * @param ownerUserId 当前用户 ID
      * @param limit       最大返回数量（为 null 时使用默认值 5）
@@ -43,13 +51,23 @@ public class ContactApplicationService {
         int effectiveLimit = limit != null && limit > 0 ? Math.min(limit, 20) : DEFAULT_CONTACT_LIMIT;
         List<Contact> contacts = contactRepository.listByOwner(ownerUserId, effectiveLimit);
         return contacts.stream()
-                .map(c -> new ContactDTO(
-                        c.getPayeeUserId(),
-                        c.getAlias(),
-                        c.getSuccessCount(),
-                        c.getLastSuccessAt(),
-                        c.isPinned()
-                ))
+                .map(c -> {
+                    // 仅 ACTIVE 收款人才下发展示信息，完整手机号不出服务边界，只输出脱敏结果
+                    User payee = userRepository.findById(c.getPayeeUserId())
+                            .filter(user -> user.getStatus() == UserStatus.ACTIVE)
+                            .orElse(null);
+                    return new ContactDTO(
+                            c.getPayeeUserId(),
+                            c.getAlias(),
+                            c.getSuccessCount(),
+                            c.getLastSuccessAt(),
+                            c.isPinned(),
+                            payee == null ? null : payee.getNickname(),
+                            payee == null ? null : payee.getAccountNumber(),
+                            payee == null ? null : PhoneMasker.mask(payee.getPhoneNumber()),
+                            payee == null ? null : payee.getPhoneTail()
+                    );
+                })
                 .collect(Collectors.toList());
     }
 
