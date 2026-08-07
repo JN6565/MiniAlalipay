@@ -135,6 +135,7 @@ class CollectionControllerTest {
         }
         @Override public boolean reserveRequestAndCreateOrder(CollectionRequest request, long expectedVersion, CollectionOrder order, String sessionId) { return false; }
         @Override public boolean updateOrder(CollectionOrder order, long expectedVersion) { return true; }
+        @Override public void clearSessionBinding(String orderId) { }
         @Override public boolean createRequest(CollectionRequest request, byte[] tokenDigest, String recordId, String userId, String idempotencyKey, byte[] requestDigest) { return false; }
         @Override public boolean updateRequest(CollectionRequest request, long expectedVersion) { return false; }
         @Override public Optional<IdempotencyRecord> findIdempotency(String principal, String operation, String key) { return Optional.empty(); }

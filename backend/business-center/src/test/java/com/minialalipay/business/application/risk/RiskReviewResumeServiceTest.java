@@ -99,6 +99,7 @@ class RiskReviewResumeServiceTest {
             this.dbVersion = order.getVersion();
             return true;
         }
+        @Override public void clearSessionBinding(String orderId) { }
         @Override public Optional<com.minialalipay.business.domain.collection.PersonalCollectionCode> findActiveCode(String userId) { return Optional.empty(); }
         @Override public Optional<com.minialalipay.business.domain.collection.PersonalCollectionCode> findCode(String codeId) { return Optional.empty(); }
         @Override public Optional<com.minialalipay.business.domain.collection.PersonalCollectionCode> findActiveCodeByTokenDigest(byte[] tokenDigest) { return Optional.empty(); }

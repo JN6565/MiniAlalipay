@@ -310,7 +310,8 @@ paths:
         '503': { $ref: '#/components/responses/ServiceUnavailable' }
   /api/v1/transfers/{id}:
     get:
-      summary: 查询本人普通转账权威状态
+      summary: 查询本人参与的普通转账详情与权威状态
+      description: 付款人和收款人均可查询；无关用户按交易不存在处理，避免泄露交易事实。
       operationId: getTransfer
       x-client-scope: C
       parameters:
@@ -321,7 +322,7 @@ paths:
           schema: { type: string, minLength: 1, maxLength: 26 }
       responses:
         '200':
-          description: 返回统一交易状态
+          description: 返回交易状态、付款人、收款人、备注和时间
           content:
             application/json:
               schema: { $ref: '#/components/schemas/TransferTransactionResponse' }
@@ -2727,13 +2728,19 @@ components:
     TransferTransaction:
       type: object
       additionalProperties: false
-      required: [transactionId, businessType, status, amountFen, statusUrl, updatedAt]
+      required: [transactionId, businessType, status, amountFen, payerUserId, payerDisplayName, payeeUserId, payeeDisplayName, remark, statusUrl, createdAt, updatedAt]
       properties:
         transactionId: { type: string, minLength: 1, maxLength: 26 }
         businessType: { type: string, enum: [TRANSFER] }
         status: { type: string, enum: [PROCESSING, COMPENSATING, MANUAL_REVIEW, SUCCESS, REVERSED, CANCELLED] }
         amountFen: { type: integer, format: int64, minimum: 1, maximum: 5000000 }
+        payerUserId: { type: string, minLength: 1, maxLength: 26, description: 付款用户 ID。 }
+        payerDisplayName: { type: [string, 'null'], maxLength: 64, description: 付款人展示名；用户中心暂不可用时为空。 }
+        payeeUserId: { type: string, minLength: 1, maxLength: 26, description: 收款用户 ID。 }
+        payeeDisplayName: { type: [string, 'null'], maxLength: 64, description: 收款人展示名；用户中心暂不可用时为空。 }
+        remark: { type: [string, 'null'], maxLength: 128, description: 转账受理时来源草稿中的备注。 }
         statusUrl: { type: string, pattern: '^/api/v1/transfers/' }
+        createdAt: { type: string, format: date-time, description: 交易受理时间。 }
         updatedAt: { type: string, format: date-time }
     TransferDraftResponse:
       allOf:
