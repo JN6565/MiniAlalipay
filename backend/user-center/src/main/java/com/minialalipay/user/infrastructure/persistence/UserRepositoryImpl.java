@@ -255,15 +255,16 @@ public class UserRepositoryImpl implements UserRepository {
     /**
      * B 端管理分页查询用户（只读投影）。
      *
-     * @param status 用户状态过滤，null 表示不限定
-     * @param cursor 上一页最后一条 {@code user_id}，null 表示第一页
-     * @param limit  每页最大返回条数
+     * @param status    用户状态过滤，null 表示不限定
+     * @param loginName 登录名关键词过滤（按账户号模糊匹配），null 表示不限定
+     * @param cursor    上一页最后一条 {@code user_id}，null 表示第一页
+     * @param limit     每页最大返回条数
      * @return 用户只读投影列表
      */
     @Override
-    public List<UserAdminView> findAdminPage(UserStatus status, String cursor, int limit) {
+    public List<UserAdminView> findAdminPage(UserStatus status, String loginName, String cursor, int limit) {
         String statusName = status == null ? null : status.name();
-        return userMapper.selectAdminPage(statusName, cursor, limit).stream()
+        return userMapper.selectAdminPage(statusName, loginName, cursor, limit).stream()
                 .map(po -> new UserAdminView(toDomain(po), po.getLoginLockedUntil()))
                 .collect(Collectors.toList());
     }

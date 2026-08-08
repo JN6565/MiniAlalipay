@@ -1,6 +1,6 @@
 import { SearchOutlined } from '@ant-design/icons';
 import { useQuery } from '@tanstack/react-query';
-import { Alert, Button, Empty, Input, Space, Switch, Tag, Timeline, Typography, App } from 'antd';
+import { Button, Empty, Input, Space, Switch, Tag, Timeline, Typography, App } from 'antd';
 import { useState } from 'react';
 import PageHeader from '@/components/PageHeader';
 import { getOpsTraceByTraceId, getOpsTransactionTrace, type TraceSpanItem } from '@/services/ops';
@@ -8,9 +8,11 @@ import pageStyles from '../page.less';
 
 /** 链路阶段状态标签；仅按业务中心可核验的资金事实着色，未知阶段不使用成功色。 */
 const spanStatusColor = (status: string): string => {
-  if (status === 'SUCCESS') return 'green';
-  if (status === 'PROCESSING' || status === 'PENDING') return 'blue';
-  if (status === 'MANUAL_REVIEW') return 'red';
+  if (status === 'SUCCESS' || status === 'PUBLISHED') return 'green';
+  if (status === 'PROCESSING' || status === 'PENDING' || status === 'COMPENSATING'
+    || status === 'COMMITTING' || status === 'ROLLING_BACK') return 'blue';
+  if (status === 'MANUAL_REVIEW' || status === 'ERROR' || status === 'DEAD') return 'red';
+  if (status === 'CANCELLED' || status === 'REVERSED') return 'orange';
   return 'orange';
 };
 
@@ -50,10 +52,24 @@ const technicalStatusLabel = (status: string): string => {
       return '处理中';
     case 'PENDING':
       return '待发布';
+    case 'COMMITTING':
+      return '提交中';
+    case 'ROLLING_BACK':
+      return '回滚中';
+    case 'COMPENSATING':
+      return '补偿中';
     case 'MANUAL_REVIEW':
       return '待人工处理';
     case 'ERROR':
       return '失败';
+    case 'DEAD':
+      return '投递失败';
+    case 'CANCELLED':
+      return '已取消';
+    case 'REVERSED':
+      return '已冲正';
+    case 'PUBLISHED':
+      return '已发布';
     default:
       return status;
   }
@@ -78,8 +94,15 @@ const spanStatusLabels: Record<string, string> = {
   SUCCESS: '成功',
   PROCESSING: '处理中',
   PENDING: '待发布',
+  COMMITTING: '提交中',
+  ROLLING_BACK: '回滚中',
+  COMPENSATING: '补偿中',
   MANUAL_REVIEW: '待人工处理',
   ERROR: '失败',
+  DEAD: '投递失败',
+  CANCELLED: '已取消',
+  REVERSED: '已冲正',
+  PUBLISHED: '已发布',
 };
 
 /** 把服务端 Span 翻译为业务步骤名；交易成败与是否待人工由交易/资金状态节点体现，事件投递状态归技术证据。 */
@@ -103,7 +126,7 @@ export default function Trace() {
   // 技术证据开关：默认关闭，打开后展示服务职责、事件与状态等跨服务链路明细。
   const [showTech, setShowTech] = useState(false);
 
-  const { data, isFetching, isError, error, refetch } = useQuery({
+  const { data, isFetching } = useQuery({
     queryKey: ['ops', 'trace', query?.mode, query?.id],
     queryFn: () => {
       if (!query) throw new Error('缺少查询编号');
@@ -187,7 +210,7 @@ export default function Trace() {
           onChange={(e) => setInput(e.target.value)}
           onPressEnter={submit}
         />
-        <Button type="primary" loading={isFetching} onClick={submit}>
+        <Button type="primary" className="admin-btn-query" loading={isFetching} onClick={submit}>
           查询链路
         </Button>
       </section>
@@ -203,16 +226,6 @@ export default function Trace() {
             <Typography.Text type="secondary">查看技术证据</Typography.Text>
           </Space>
         </div>
-        {isError && (
-          <Alert
-            type="error"
-            showIcon
-            message="链路查询失败"
-            description={(error as Error)?.message ?? '请确认输入后重试'}
-            action={<Button size="small" onClick={() => refetch()}>重试</Button>}
-            style={{ marginBottom: 16 }}
-          />
-        )}
         {spans.length > 0 ? (
           <Timeline items={timelineItems} />
         ) : (

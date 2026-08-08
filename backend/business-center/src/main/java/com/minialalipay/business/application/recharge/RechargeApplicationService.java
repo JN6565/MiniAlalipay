@@ -149,7 +149,10 @@ public class RechargeApplicationService {
         long expectedVersion = order.getVersion();
         Instant now = clock.instant();
         if (order.getStatus() == RechargeOrderStatus.PROCESSING
-                || order.getStatus() == RechargeOrderStatus.REJECTED) {
+                || order.getStatus() == RechargeOrderStatus.REJECTED
+                || order.getStatus() == RechargeOrderStatus.SUCCESS
+                || order.getStatus() == RechargeOrderStatus.CANCELLED
+                || order.getStatus() == RechargeOrderStatus.MANUAL_REVIEW) {
             return order;
         }
         if (!channelSuccess) {
@@ -160,6 +163,7 @@ public class RechargeApplicationService {
                         ? BusinessErrorCode.VERSION_CONFLICT : BusinessErrorCode.ORDER_STATE_INVALID);
             }
             if (!store.updateOrder(order, expectedVersion)) throw new BusinessException(BusinessErrorCode.VERSION_CONFLICT);
+            releaseDailyUsage(order, now);
             return order;
         }
         String transactionId = secure.newId();
@@ -177,6 +181,25 @@ public class RechargeApplicationService {
         businessStore.createTransaction(transaction, secure.digest(rechargeOrderId), secure.newId(), now);
         afterCommit(() -> coordinator.startOrResume(transaction));
         return order;
+    }
+
+    /**
+     * 渠道拒绝终态必须释放此前预占的当日额度；重复拒绝或已结算场景保持幂等。
+     *
+     * <p>同一 business_db 事务内按版本 CAS 更新日额度，避免并发重试绕过当日累计限额。</p>
+     */
+    private void releaseDailyUsage(RechargeOrder order, Instant now) {
+        RechargeDailyUsage usage = store.findDailyUsage(order.getUserId(), order.getBusinessDate()).orElse(null);
+        if (usage == null) return;
+        long expected = usage.getVersion();
+        try {
+            usage.release(expected, order.getAmountFen(), now);
+        } catch (IllegalStateException alreadyReleased) {
+            return;
+        }
+        if (!store.updateDailyUsage(usage, expected)) {
+            throw new BusinessException(BusinessErrorCode.VERSION_CONFLICT);
+        }
     }
 
     private String validTraceId(String traceId) {

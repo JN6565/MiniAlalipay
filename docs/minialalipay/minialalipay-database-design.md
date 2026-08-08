@@ -3,10 +3,10 @@
 | 项目 | 内容 |
 | --- | --- |
 | 产品 | MiniAlalipay |
-| 文档版本 | V2.9 |
-| 修订日期 | 2026-07-31 |
+| 文档版本 | V2.10 |
+| 修订日期 | 2026-08-07 |
 | 需求基线 | PRD V1.9 |
-| 系统分析基线 | 系统分析 V1.12 |
+| 系统分析基线 | 系统分析 V1.14 |
 | 数据库 | MySQL 8.0 / InnoDB |
 | 金额单位 | 人民币分，`BIGINT UNSIGNED` |
 | 时间标准 | UTC `DATETIME(3)`，API 转 ISO 8601 |
@@ -42,6 +42,7 @@
 20. 基于 PRD V1.8 和系统分析 V1.11 补充按逻辑库拆分的 ER 图，区分同库物理外键与跨库逻辑引用，并覆盖业务、信用、账本、事件和统计投影关系。
 21. 对齐 PRD V1.9 和系统分析 V1.12：不变更已部署物理结构；明确 `merchant_*` 与 `MERCHANT` 是兼容标识，业务统一解释为普通用户的扫码收款数据，禁止据此授予 B 端权限或创建第二账户。
 22. 补齐任务运行、充值日额度、通用可靠性、监控统计与 AI 会话 ER 图，使第 5 至 12 章定义的 59 类实体均在第 4 章展示；本次仅完善图示，不修改任何物理表结构。
+23. 对齐系统分析 V1.14 与实现：`fund_transaction.payer_account_id` 改为可空以承载充值发行权益付款；`recharge_order.status` 以 `PENDING_CHANNEL` 起步并由业务中心终态发布器收敛日额度（SUCCESS 转成功、Cancel/渠道拒绝释放、未知保持占用）；退款使用专用 `credit-refund`/`refund-ledger` TCC 分支并由终态发布器投影 `refund_order`。
 
 ## 1. 设计原则
 
@@ -1249,7 +1250,7 @@ MVP 退款仅支持单笔全额受控虚拟退款，不接入真实支付通道�
 | `channel` | `VARCHAR(16)` | `SIMULATED` | 固定模拟渠道 |
 | `policy_id` | `CHAR(26)` | 必填 | 受理时使用的策略 |
 | `policy_version` | `BIGINT UNSIGNED` | 必填 | 策略快照版本 |
-| `status` | `VARCHAR(16)` | `CREATED` | `CREATED/PROCESSING/SUCCESS/REJECTED/CANCELLED/MANUAL_REVIEW` |
+| `status` | `VARCHAR(16)` | `PENDING_CHANNEL` | `PENDING_CHANNEL/PROCESSING/SUCCESS/REJECTED/CANCELLED/MANUAL_REVIEW` |
 | `transaction_id` | `CHAR(26)` | 可空 | 受理后生成的充值交易 |
 | `reject_reason_code` | `VARCHAR(32)` | 可空 | 受理前拒绝原因 |
 | `version` | `BIGINT UNSIGNED` | `0` | 订单状态 CAS 版本 |
@@ -1359,7 +1360,7 @@ MVP 退款仅支持单笔全额受控虚拟退款，不接入真实支付通道�
 | `created_at` | `DATETIME(3)` | 必填 | 交易受理时间 |
 | `updated_at` | `DATETIME(3)` | 必填 | 最近状态更新时间 |
 
-**键与索引**：UK `(source_type,source_order_id)`、UK `(initiator_user_id,business_type,idempotency_key)`；索引 `(status,updated_at)`、`(payee_account_id,created_at)`、`(business_type,created_at)`。
+**键与索引**：UK `(source_type,source_order_id)`、UK `(initiator_user_id,business_type,idempotency_key)`；索引 `(status,updated_at)`、`(payee_account_id,created_at)`、`(created_at)`。`(created_at)` 由 `V202608071800` 新增，支撑运营交易列表「创建时间倒序」分页（交易 ID 为随机 base32 非时间有序，不作为排序依据）。
 
 **写入规则**：业务类型必须匹配来源类型。转账可来自转账草稿、个人收款码或固定金额收款请求，但资金来源只能是 `BALANCE`；普通动态扫码的 `QR_PAY` 只能来自动态扫码订单且使用余额；动态扫码、个人收款码和固定金额收款请求均可在用户明确选择 Mini 花呗时创建 `CREDIT_PAY`，资金来源必须为 `MINI_CREDIT`。充值强制 `SYSTEM_ISSUANCE` 且付款账户为空；其他业务双方账户非空且不同；退款必须关联原交易。
 
@@ -1773,7 +1774,7 @@ MVP 退款仅支持单笔全额受控虚拟退款，不接入真实支付通道�
 | `metrics_json` | `JSON` | 可空 | 扩展指标值 |
 | `trace_id` | `CHAR(32)` | 必填 | 链路追踪 ID |
 
-**键与索引**：索引 `(account_id,occurred_at)`、`(merchant_account_id,occurred_at)`、`(business_type,occurred_at)`。
+**键与索引**：索引 `(account_id,occurred_at)`、`(merchant_account_id,occurred_at)`、`(business_type,occurred_at)`、`(occurred_at)`。`(occurred_at)` 由 `V202608071800` 新增，支撑运营看板在未指定指标维度时按时间范围扫描实时指标，避免全表扫描。
 
 **写入规则**：正式金额只来自确定终态；生命周期事件只更新状态计数。原始账户 ID 仅用于授权投影，哈希 ID 用于脱敏聚合。
 
@@ -1846,7 +1847,7 @@ MVP 退款仅支持单笔全额受控虚拟退款，不接入真实支付通道�
 | `version` | `INT UNSIGNED` | 联合 PK，必填 | 指标口径版本 |
 | `dimensions_json` | `JSON` | 必填 | 脱敏维度值 |
 | `value_decimal` | `DECIMAL(24,6)` | 必填 | 日指标数值 |
-| `quality_status` | `VARCHAR(16)` | 必填 | `PENDING/PASSED/FAILED/UNKNOWN` |
+| `quality_status` | `VARCHAR(16)` | 必填 | `PENDING/PASSED/WARNING/FAILED/UNKNOWN` |
 
 **键与索引**：PK `(metric_date,metric_code,dimension_hash,version)`；索引 `(metric_code,metric_date)`。定义与迁移 `V202608051211`、`V202608070001` 一致。
 
@@ -1916,6 +1917,18 @@ MVP 退款仅支持单笔全额受控虚拟退款，不接入真实支付通道�
 **键与索引**：PK `(rule_code)`、索引 `(metric_code)`。
 
 **写入规则**：阈值更新必须携带读取版本，CAS 冲突拒绝；`updated_by` 记录操作者用于审计；种子规则对应系统分析 16.3 的 P0 告警，初始阈值为 0 表示出现即告警。
+
+### 11.8.2 `monitoring_stream_checkpoint`
+
+**功能与归属**：保存监控 Redis Stream 消费者已经和 `metrics_db` 投影一起提交的消息游标，不承载业务资金事实。迁移见 `V202608081002__create_monitoring_stream_checkpoint.sql`。
+
+| 字段 | 类型 | 必填/默认 | 功能 |
+| --- | --- | --- | --- |
+| `consumer_name` | `VARCHAR(64)` | PK，必填 | 稳定的监控消费者名称 |
+| `stream_cursor` | `VARCHAR(64)` | `0-0` | 已完成持久化的 Redis Stream 消息 ID |
+| `updated_at` | `DATETIME(3)` | 必填 | 最后一次成功推进时间 |
+
+**写入规则**：Inbox 投影、质量/告警投影和游标使用同一 `metrics_db` 本地事务提交；提交前故障会重读消息，由 Inbox 唯一键去重，禁止用游标推进代替事件投影。
 
 ### 11.9 `personal_cashflow_daily`
 
@@ -2188,8 +2201,10 @@ MANUAL_REVIEW -> SUCCESS/CANCELLED
 `business_db` 本地事务：校验幂等和策略 -> CAS `recharge_daily_usage` 预占额度 -> 插入 `recharge_order` -> 插入 `fund_transaction(RECHARGE)` -> 写业务 Outbox。账户和账本分支：
 
 - Try：预占用户入账并创建 `PREPARED` 充值凭证，不直接增加可用余额。
-- Confirm：增加用户可用余额，凭证按“借发行权益、贷用户余额负债”过账，将日额度从处理中转成功。
-- Cancel：撤销预占和预制凭证，释放日额度；任何结果未知场景保持占用并转人工。
+- Confirm：增加用户可用余额，凭证按”借发行权益、贷用户余额负债”过账。
+- Cancel：撤销预占和预制凭证。
+- 渠道拒绝在 `business_db` 内 CAS 释放预占额度并进入 `REJECTED`。
+- 日额度收敛由业务中心终态发布器执行（`recharge_daily_usage` 属 `business_db`，账户中心不得跨 Schema 更新）：SUCCESS 将处理中转成功并累计成功次数，完整 Cancel 释放处理中占用，任何结果未知场景保持占用并转人工。
 
 ### 14.7 受控虚拟退款
 
@@ -2291,3 +2306,7 @@ MANUAL_REVIEW -> SUCCESS/CANCELLED
 - [ ] 本人扫码收款统计按兼容字段 `merchant_account_id` 隔离，收款、支付方式、退款、净收款和对账恒等式成立，且该字段不得用于推导商户角色或 B 端权限。
 - [ ] Redis、事件投递或 SSE 不可用时，资金判断仍回源 MySQL 且不重复扣款。
 - [ ] 迁移、备份恢复、归档和 T+1 数据质量门禁均有自动化验证。
+
+### 12.11 监控事件失败回放字段补充
+
+`metrics_db.inbox_event` 通过向前迁移增加 `failure_reason`、`retry_count`、`next_retry_at` 和 `last_failed_at`。消费者失败时必须保存脱敏原因并按指数退避计算下一次重试时间；达到最大重试次数仍保持 `FAILED`，由运营人员根据原因处理，不得直接改写为 `DONE`。日报生成使用 Inbox 终态和隔离事件作为质量门禁，门禁失败时不发布指标。

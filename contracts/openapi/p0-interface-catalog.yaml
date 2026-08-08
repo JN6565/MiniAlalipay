@@ -84,6 +84,7 @@ operations:
   - {method: GET, path: '/api/v1/p2p-collections/orders/{id}', operationId: getCollectionOrder, owner: business-center, clientScope: C, idempotency: READ_ONLY}
   - {method: GET, path: '/api/v1/p2p-collections/requests/{id}/events', operationId: streamCollectionRequestEvents, owner: business-center, clientScope: C, idempotency: READ_ONLY}
   - {method: POST, path: /api/v1/agent/messages, operationId: sendAgentMessage, owner: ai-service, clientScope: C, idempotency: CLIENT_MESSAGE_ID}
+  - {method: GET, path: /api/v1/ops/dashboard-summary, operationId: getOpsDashboardSummary, owner: business-center, clientScope: B, idempotency: READ_ONLY}
   - {method: GET, path: /api/v1/ops/realtime-metrics, operationId: listRealtimeMetrics, owner: business-center, clientScope: B, idempotency: READ_ONLY}
   - {method: GET, path: /api/v1/ops/daily-reports, operationId: listDailyReports, owner: business-center, clientScope: B, idempotency: READ_ONLY}
   - {method: GET, path: /api/v1/ops/alerts, operationId: listAlerts, owner: business-center, clientScope: B, idempotency: READ_ONLY}

@@ -2,6 +2,7 @@ package com.minialalipay.business.application.qrpay;
 
 import com.minialalipay.business.application.port.AccountDirectoryPort;
 import com.minialalipay.business.application.port.BusinessStore;
+import com.minialalipay.business.application.port.CreditAccountDirectoryPort;
 import com.minialalipay.business.application.port.PaymentProofPort;
 import com.minialalipay.business.application.port.QrPayStore;
 import com.minialalipay.business.application.port.SecurityMaterialPort;
@@ -47,6 +48,7 @@ public class QrPayApplicationService {
 
     private final QrPayStore store;
     private final AccountDirectoryPort accounts;
+    private final CreditAccountDirectoryPort creditAccounts;
     private final SecurityMaterialPort security;
     private final IdempotencyKeyValidator keyValidator;
     private final Clock clock;
@@ -58,30 +60,32 @@ public class QrPayApplicationService {
 
     /** 创建二维码应用服务。 */
     @Autowired
-    public QrPayApplicationService(QrPayStore store, AccountDirectoryPort accounts, SecurityMaterialPort security,
-                                   IdempotencyKeyValidator keyValidator, BusinessStore businessStore,
+    public QrPayApplicationService(QrPayStore store, AccountDirectoryPort accounts, CreditAccountDirectoryPort creditAccounts,
+                                   SecurityMaterialPort security, IdempotencyKeyValidator keyValidator, BusinessStore businessStore,
                                    PaymentProofPort paymentProofs, TccCoordinatorPort coordinator,
                                    RiskEvaluationService risk, RiskReviewRouter riskRouter) {
-        this(store, accounts, security, keyValidator, businessStore, paymentProofs, coordinator, risk, riskRouter, Clock.systemUTC());
+        this(store, accounts, creditAccounts, security, keyValidator, businessStore, paymentProofs, coordinator,
+                risk, riskRouter, Clock.systemUTC());
     }
 
     /** 仅供无资金依赖的来源订单切片测试构造；生产环境必须使用完整构造器。 */
     public QrPayApplicationService(QrPayStore store, AccountDirectoryPort accounts, SecurityMaterialPort security,
                                    IdempotencyKeyValidator keyValidator) {
-        this(store, accounts, security, keyValidator, null, null, null, null, null, Clock.systemUTC());
+        this(store, accounts, null, security, keyValidator, null, null, null, null, null, Clock.systemUTC());
     }
 
     QrPayApplicationService(QrPayStore store, AccountDirectoryPort accounts, SecurityMaterialPort security,
                             IdempotencyKeyValidator keyValidator, Clock clock) {
-        this(store, accounts, security, keyValidator, null, null, null, null, null, clock);
+        this(store, accounts, null, security, keyValidator, null, null, null, null, null, clock);
     }
 
-    QrPayApplicationService(QrPayStore store, AccountDirectoryPort accounts, SecurityMaterialPort security,
-                            IdempotencyKeyValidator keyValidator, BusinessStore businessStore,
+    QrPayApplicationService(QrPayStore store, AccountDirectoryPort accounts, CreditAccountDirectoryPort creditAccounts,
+                            SecurityMaterialPort security, IdempotencyKeyValidator keyValidator, BusinessStore businessStore,
                             PaymentProofPort paymentProofs, TccCoordinatorPort coordinator,
                             RiskEvaluationService risk, RiskReviewRouter riskRouter, Clock clock) {
         this.store = store;
         this.accounts = accounts;
+        this.creditAccounts = creditAccounts;
         this.security = security;
         this.keyValidator = keyValidator;
         this.businessStore = businessStore;
@@ -226,25 +230,31 @@ public class QrPayApplicationService {
     /**
      * 校验支付证明并为绑定 H5 会话的付款人签发二维码确认令牌。
      *
-     * <p>订单 CAS、支付密码版本和资金来源全部进入摘要，因此任何一项变化都会使旧确认不可消费。</p>
+     * <p>余额支付锁定付款人普通账户；Mini 花呗信用支付锁定信用账户且要求账户 {@code ACTIVE}。
+     * 订单 CAS、支付密码版本和资金来源全部进入摘要，因此任何一项变化都会使旧确认不可消费；
+     * 资金来源随确认令牌持久化，付款受理时从确认事实派生统一交易类型，不信任客户端再次提交。</p>
      */
     @Transactional
     public IssuedConfirmation issueConfirmation(String userId, String orderId, String bootstrapSessionId,
                                                 long version, String paymentProof, FundingSource fundingSource) {
-        if (fundingSource == null) throw new BusinessException(BusinessErrorCode.FUNDING_SOURCE_NOT_ALLOWED);
         requirePaymentDependencies();
+        if (fundingSource != FundingSource.BALANCE && fundingSource != FundingSource.MINI_CREDIT) {
+            throw new BusinessException(BusinessErrorCode.FUNDING_SOURCE_NOT_ALLOWED);
+        }
         QrPayOrder order = requiredOrder(orderId);
         requireBoundSession(order, bootstrapSessionId);
-        var payer = accounts.resolvePersonalAccount(userId);
-        if (!"ACTIVE".equals(payer.status())) throw new BusinessException(BusinessErrorCode.ACCOUNT_UNAVAILABLE);
+        if (order.getPayeeUserId().equals(userId)) {
+            throw new BusinessException(BusinessErrorCode.SELF_PAYMENT_FORBIDDEN);
+        }
         if (fundingSource == FundingSource.MINI_CREDIT) {
             accounts.requireCreditPaymentEligible(userId, order.getAmountFen());
         }
+        String payerAccountId = resolvePayerAccountId(userId, fundingSource);
         PaymentProofPort.VerifiedProof proof = paymentProofs.verify(userId, paymentProof, "QR_PAY_CONFIRM");
         long expectedVersion = order.getVersion();
         if (expectedVersion != version) throw new BusinessException(BusinessErrorCode.VERSION_CONFLICT);
         try {
-            order.lockPayer(userId, payer.accountId(), version, clock.instant());
+            order.lockPayer(userId, payerAccountId, version, clock.instant());
         } catch (IllegalStateException invalid) {
             throw new BusinessException(invalid.getMessage().contains("本人")
                     ? BusinessErrorCode.SELF_PAYMENT_FORBIDDEN : BusinessErrorCode.ORDER_STATE_INVALID);
@@ -252,10 +262,28 @@ public class QrPayApplicationService {
         routeOnRiskVerdict(SubjectType.QR_PAY_ORDER.name(), order, expectedVersion);
         String rawToken = security.newConfirmationToken();
         Confirmation confirmation = Confirmation.issue(security.newId(), security.digest(rawToken), SubjectType.QR_PAY_ORDER,
-                orderId, subjectHash(order, fundingSource, proof.payPasswordVersion()), userId, proof.paymentProofId(), proof.payPasswordVersion(), clock.instant());
+                orderId, subjectHash(order, fundingSource, proof.payPasswordVersion()), userId, proof.paymentProofId(),
+                proof.payPasswordVersion(), fundingSource, clock.instant());
         businessStore.replaceQrPayConfirmation(confirmation, expectedVersion, order);
         return new IssuedConfirmation(rawToken, "sha256:" + java.util.HexFormat.of().formatHex(subjectHash(order, fundingSource, proof.payPasswordVersion())),
                 confirmation.getExpiresAt());
+    }
+
+    /**
+     * 按资金来源解析付款账户：余额为普通账户，Mini 花呗为信用账户。
+     *
+     * <p>信用账户不可用（冻结、挂起或不存在）时在确认前拒绝，不给额度不足的付款签发令牌。</p>
+     */
+    private String resolvePayerAccountId(String userId, FundingSource fundingSource) {
+        if (fundingSource == FundingSource.MINI_CREDIT) {
+            if (creditAccounts == null) throw new BusinessException(CommonErrorCode.SERVICE_UNAVAILABLE);
+            var credit = creditAccounts.resolveCreditAccount(userId);
+            if (!"ACTIVE".equals(credit.status())) throw new BusinessException(BusinessErrorCode.ACCOUNT_UNAVAILABLE);
+            return credit.creditAccountId();
+        }
+        var payer = accounts.resolvePersonalAccount(userId);
+        if (!"ACTIVE".equals(payer.status())) throw new BusinessException(BusinessErrorCode.ACCOUNT_UNAVAILABLE);
+        return payer.accountId();
     }
 
     /**
@@ -292,6 +320,7 @@ public class QrPayApplicationService {
         byte[] requestHash = security.digest(orderId + "\n" + Base64.getEncoder().encodeToString(tokenDigest));
         Confirmation confirmation = businessStore.findConfirmationForUpdate(tokenDigest)
                 .orElseThrow(() -> new BusinessException(BusinessErrorCode.CONFIRMATION_MISMATCH));
+        // 资金来源绑定在确认摘要中，付款受理据此反推统一交易类型，不接受客户端再次覆盖。
         FundingSource fundingSource = resolveFundingSource(order, confirmation);
         TransactionType transactionType = fundingSource == FundingSource.MINI_CREDIT
                 ? TransactionType.CREDIT_PAY : TransactionType.QR_PAY;

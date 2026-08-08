@@ -11,6 +11,7 @@ import java.sql.Timestamp;
 import java.time.Clock;
 import java.time.Instant;
 import java.util.Map;
+import java.util.List;
 
 /**
  * metrics_db 的监控 Inbox 与投影仓储实现。
@@ -23,6 +24,15 @@ public class JdbcMonitoringEventStore implements MonitoringEventStore {
     private static final ObjectMapper JSON = new ObjectMapper();
     /** 失败 Inbox 记录允许重新领取的最短等待时间。 */
     private static final long DEFAULT_RETRY_AFTER_SECONDS = 30;
+    /** 单次失败允许的最大重试次数，超过后仍保留 FAILED 供人工处置。 */
+    private static final int MAX_RETRY_COUNT = 8;
+    /**
+     * 当前分析事实绑定的指标口径版本。
+     *
+     * <p>事件 Schema 版本与指标口径版本分别演进，不能互相替代。当前 MVP 仅发布第一版指标口径，
+     * 因此分析事件固定写入版本 1；后续引入口径灰度时必须由发布策略选择对应版本。</p>
+     */
+    private static final int ANALYTICS_DEFINITION_VERSION = 1;
 
     private final JdbcTemplate jdbc;
     private final Clock clock;
@@ -41,18 +51,33 @@ public class JdbcMonitoringEventStore implements MonitoringEventStore {
     }
 
     @Override
-    public boolean claim(String consumerName, String eventId) {
+    public List<String> findRetryableEventIds(Instant now, int limit) {
+        return jdbc.query("SELECT event_id FROM metrics_db.inbox_event WHERE consumer_name='ops-projection' "
+                        + "AND status='FAILED' AND retry_count<? AND ((next_retry_at IS NULL AND updated_at<=?) OR next_retry_at<=?) "
+                        + "ORDER BY updated_at ASC LIMIT ?",
+                (rs, rowNum) -> rs.getString(1), MAX_RETRY_COUNT,
+                Timestamp.from(now.minusSeconds(retryAfterSeconds)), Timestamp.from(now), limit);
+    }
+
+    @Override
+    public InboxClaimResult claim(String consumerName, String eventId) {
         Instant now = clock.instant();
         // 新事件直接预占为 PROCESSING；已存在记录不能重复领取，失败达到重试时间的记录允许重新领取，
         // 避免一次临时异常造成永久投影缺口。
         int inserted = jdbc.update("INSERT IGNORE INTO metrics_db.inbox_event "
-                        + "(consumer_name,event_id,status,received_at,updated_at) VALUES (?,?,?,?,?)",
+                        + "(consumer_name,event_id,status,received_at,updated_at,next_retry_at) VALUES (?,?,?,?,?,NULL)",
                 consumerName, eventId, "PROCESSING", Timestamp.from(now), Timestamp.from(now));
-        if (inserted == 1) return true;
-        return jdbc.update("UPDATE metrics_db.inbox_event SET status='PROCESSING',updated_at=? "
-                        + "WHERE consumer_name=? AND event_id=? AND status='FAILED' AND updated_at<=?",
-                Timestamp.from(now), consumerName, eventId,
-                Timestamp.from(now.minusSeconds(retryAfterSeconds))) == 1;
+        if (inserted == 1) return InboxClaimResult.CLAIMED;
+        int retried = jdbc.update("UPDATE metrics_db.inbox_event SET status='PROCESSING',updated_at=?,next_retry_at=NULL "
+                        + "WHERE consumer_name=? AND event_id=? AND status='FAILED' "
+                        + "AND retry_count<? AND ((next_retry_at IS NULL AND updated_at<=?) OR next_retry_at<=?)",
+                Timestamp.from(now), consumerName, eventId, MAX_RETRY_COUNT,
+                Timestamp.from(now.minusSeconds(retryAfterSeconds)), Timestamp.from(now));
+        if (retried == 1) return InboxClaimResult.CLAIMED;
+        String status = jdbc.query("SELECT status FROM metrics_db.inbox_event WHERE consumer_name=? AND event_id=?",
+                rs -> rs.next() ? rs.getString(1) : null, consumerName, eventId);
+        // 只有 DONE 表示该消息已经形成终态投影；FAILED/PROCESSING 必须保留 Stream 游标等待恢复。
+        return "DONE".equals(status) ? InboxClaimResult.ALREADY_DONE : InboxClaimResult.RETRY_LATER;
     }
 
     @Override
@@ -99,10 +124,10 @@ public class JdbcMonitoringEventStore implements MonitoringEventStore {
             String dimensions = JSON.writeValueAsString(attributes);
             String businessType = attributes.get("businessType");
             jdbc.update("INSERT INTO metrics_db.analytics_event "
-                            + "(event_id,event_type,business_type,occurred_at,dimensions_json,metrics_json,trace_id) "
-                            + "VALUES (?,?,?,?,?,?,?)",
-                    event.eventId(), event.eventType(), businessType, Timestamp.from(event.occurredAt()),
-                    dimensions, dimensions, event.traceId());
+                            + "(event_id,event_type,event_version,business_type,occurred_at,definition_version,"
+                            + "dimensions_json,metrics_json,trace_id) VALUES (?,?,?,?,?,?,?,?,?)",
+                    event.eventId(), event.eventType(), event.version(), businessType, Timestamp.from(event.occurredAt()),
+                    ANALYTICS_DEFINITION_VERSION, dimensions, dimensions, event.traceId());
         } catch (com.fasterxml.jackson.core.JsonProcessingException impossible) {
             throw new IllegalStateException("监控事件属性无法序列化", impossible);
         }
@@ -117,9 +142,25 @@ public class JdbcMonitoringEventStore implements MonitoringEventStore {
 
     @Override
     public void fail(String consumerName, String eventId, String reason) {
-        jdbc.update("UPDATE metrics_db.inbox_event SET status='FAILED',updated_at=? "
-                + "WHERE consumer_name=? AND event_id=?",
-                Timestamp.from(clock.instant()), consumerName, eventId);
+        Instant now = clock.instant();
+        String safeReason = reason == null || reason.isBlank() ? "投影失败" : reason;
+        if (safeReason.length() > 512) safeReason = safeReason.substring(0, 512);
+        jdbc.update("UPDATE metrics_db.inbox_event SET status='FAILED',failure_reason=?,retry_count=retry_count+1,"
+                        + "last_failed_at=?,next_retry_at=?,updated_at=? "
+                        + "WHERE consumer_name=? AND event_id=?",
+                safeReason, Timestamp.from(now), Timestamp.from(now.plusSeconds(retryDelaySeconds(currentRetryCount(consumerName, eventId)))),
+                Timestamp.from(now), consumerName, eventId);
+    }
+
+    private int currentRetryCount(String consumerName, String eventId) {
+        Integer count = jdbc.query("SELECT retry_count FROM metrics_db.inbox_event WHERE consumer_name=? AND event_id=?",
+                rs -> rs.next() ? rs.getInt(1) : 0, consumerName, eventId);
+        return count == null ? 0 : count;
+    }
+
+    private long retryDelaySeconds(int retryCount) {
+        int exponent = Math.min(Math.max(retryCount, 0), 6);
+        return Math.min(300L, retryAfterSeconds * (1L << exponent));
     }
 
     @Override
@@ -136,6 +177,23 @@ public class JdbcMonitoringEventStore implements MonitoringEventStore {
         } catch (com.fasterxml.jackson.core.JsonProcessingException impossible) {
             throw new IllegalStateException("隔离事件载荷无法序列化", impossible);
         }
+    }
+
+    @Override
+    public String currentStreamCursor(String consumerName) {
+        Instant now = clock.instant();
+        jdbc.update("INSERT IGNORE INTO metrics_db.monitoring_stream_checkpoint "
+                        + "(consumer_name,stream_cursor,updated_at) VALUES (?,'0-0',?)",
+                consumerName, Timestamp.from(now));
+        return jdbc.query("SELECT stream_cursor FROM metrics_db.monitoring_stream_checkpoint WHERE consumer_name=?",
+                rs -> rs.next() ? rs.getString(1) : "0-0", consumerName);
+    }
+
+    @Override
+    public boolean advanceStreamCursor(String consumerName, String expectedCursor, String nextCursor) {
+        return jdbc.update("UPDATE metrics_db.monitoring_stream_checkpoint SET stream_cursor=?,updated_at=? "
+                        + "WHERE consumer_name=? AND stream_cursor=?",
+                nextCursor, Timestamp.from(clock.instant()), consumerName, expectedCursor) == 1;
     }
 
     private static long parseLong(String value) {

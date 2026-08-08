@@ -315,11 +315,13 @@
     <!--
       B 端管理分页查询用户（只读投影）。
 
-      按稳定 ID 游标分页（user_id > 上一页最后一条），可选按状态过滤，并 LEFT JOIN credential
-      带出登录锁定截止时间。只返回展示字段，不返回密码、支付密码或敏感原值。
+      按稳定 ID 游标分页（user_id > 上一页最后一条），可选按状态与登录名关键词过滤
+      （LOWER(account_number) LIKE %关键词%），并 LEFT JOIN credential 带出登录锁定截止时间。
+      只返回展示字段，不返回密码、支付密码或敏感原值。
 
       参数：
       - status: 用户状态过滤，为空表示不限定
+      - loginName: 登录名关键词（按账户号模糊匹配），为空表示不限定
       - cursor: 上一页最后一条 user_id，为空表示第一页
       - limit: 每页最大返回条数
 
@@ -350,6 +352,9 @@
         <where>
             <if test="status != null and status != ''">
                 u.status = #{status}
+            </if>
+            <if test="loginName != null and loginName != ''">
+                AND LOWER(u.account_number) LIKE CONCAT('%', LOWER(#{loginName}), '%')
             </if>
             <if test="cursor != null and cursor != ''">
                 AND u.user_id &gt; #{cursor}

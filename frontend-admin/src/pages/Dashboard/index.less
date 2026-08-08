@@ -1,132 +1,37 @@
-/* 可信运行看板页面样式。 */
-
-/* 看板标题区：标题与状态标签两端对齐。 */
-.heading {
-  display: flex;
-  align-items: flex-start;
-  justify-content: space-between;
-}
-
-.heading :global(.ant-typography) {
-  margin-top: 0;
-  margin-bottom: 4px;
-}
-
-/* 指标卡片：固定高度保证四张卡片视觉对齐，悬浮轻抬 2px 增强可交互感知。 */
-.metricCard {
-  overflow: hidden;
-  height: 144px;
-  border: 1px solid var(--admin-border-soft);
-  border-radius: 8px;
-  box-shadow: var(--admin-shadow-sm);
-  transition: transform var(--admin-transition-fast), box-shadow var(--admin-transition-normal);
-}
-
-.metricCard:hover {
-  transform: translateY(-2px);
-  box-shadow: var(--admin-shadow-md);
-}
-
-.metricCard:active {
-  transform: translateY(0);
-}
-
-.metricCard :global(.ant-card-body) {
-  display: flex;
-  height: 100%;
-  padding: 20px;
-  align-items: center;
-}
-
-/* 指标内容区：图标与数值横向排布，min-width 0 保证长文案可截断不撑破卡片。 */
-.metricBody {
-  display: flex;
-  min-width: 0;
-  flex: 1;
-  align-items: center;
-  gap: 14px;
-}
-
-.metricBody :global(.ant-statistic) {
-  min-width: 0;
-}
-
-.metricBody :global(.ant-statistic-title) {
-  color: var(--admin-text-secondary);
-  font-size: 13px;
-}
-
-.metricBody :global(.ant-statistic-content-value) {
-  font-weight: 620;
-  transition: color var(--admin-transition-normal);
-}
-
-/* 指标图标底座：四种语义色（蓝/青绿/琥珀/青）区分不同指标类型。 */
-.metricIcon {
-  display: grid;
-  flex: 0 0 42px;
-  width: 42px;
-  height: 42px;
-  place-items: center;
-  border-radius: 10px;
-  font-size: 20px;
-}
-
-.metricIconBlue {
-  color: var(--admin-primary-strong);
-  background: #e7eef9;
-}
-
-.metricIconTeal {
-  color: var(--admin-teal);
-  background: #e7f1ef;
-}
-
-.metricIconAmber {
-  color: var(--admin-amber);
-  background: #f6f0e4;
-}
-
-.metricIconCyan {
-  color: var(--admin-cyan);
-  background: #e6f0f5;
-}
-
-/* 运营能力接入状态区：左右分栏，左文案右能力标签。 */
-.readiness {
-  display: flex;
-  min-height: 160px;
-  padding: 24px;
-  align-items: flex-start;
-  justify-content: space-between;
-  gap: 24px;
-  border: 1px solid var(--admin-border-soft);
-  border-radius: 8px;
-  background: var(--admin-surface);
-  box-shadow: var(--admin-shadow-sm);
-  transition: box-shadow var(--admin-transition-normal);
-}
-
-.readiness:hover {
-  box-shadow: var(--admin-shadow-md);
-}
-
-.readiness :global(.ant-typography) {
-  max-width: 720px;
-  margin-top: 0;
-}
-
-/* 最近检查时间：小号次要文本，与说明段落拉开间距。 */
-.checkedAt {
-  display: block;
-  margin-top: 8px;
-  font-size: 12px;
-}
-
-/* 窄屏：标题区与接入状态区改为纵向堆叠。 */
-@media (max-width: 768px) {
-  .heading,
-  .readiness {
-    flex-direction: column;
-  }
-}
+/* 看板样式沿用既有紧凑单行声明；仅关闭该格式规则，其他样式检查仍保持启用。 */
+/* stylelint-disable declaration-block-single-line-max-declarations */
+.heading, .panelHeader, .serviceRow, .qualityRow { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
+.metricCard, .panel, .transactions { border: 1px solid var(--admin-border-soft); border-radius: 8px; background: var(--admin-surface); box-shadow: var(--admin-shadow-sm); }
+.metricCard { min-height: 178px; overflow: hidden; }
+.metricCard :global(.ant-card-body) { position: relative; display: flex; height: 100%; min-height: 176px; padding: 22px; flex-direction: column; align-items: flex-start; }
+.metricValue { margin-top: 10px; color: var(--admin-text-strong); font-size: 32px; font-weight: 700; line-height: 1.1; }
+.alertValue { color: #b35c60; }
+.metricFooter { margin-top: auto; color: var(--admin-text-secondary); font-size: 12px; }
+.activityBars { position: absolute; right: 20px; bottom: 19px; display: flex; width: 118px; height: 26px; align-items: end; gap: 3px; }
+.activityBars span { display: block; flex: 1; min-width: 0; border-radius: 2px 2px 0 0; background: #b8cbe5; }
+.panel, .transactions { min-height: 246px; overflow: hidden; }
+.panelHeader { min-height: 58px; padding: 0 20px; border-bottom: 1px solid var(--admin-border-soft); }
+.panelHeader :global(.ant-typography) { margin: 0; }
+.qualityList, .serviceList { padding: 8px 20px; }
+.qualityRow { min-height: 48px; border-bottom: 1px solid var(--admin-border-soft); }
+.qualityRow:last-child, .serviceRow:last-child { border-bottom: 0; }
+.qualityRow > div:first-child { display: flex; min-width: 0; flex: 0 1 180px; flex-direction: column; }
+.qualityRow strong, .qualityRow :global(.ant-typography) { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.qualityRow strong { color: var(--admin-text); font-size: 14px; font-weight: 600; }
+.qualityRow :global(.ant-typography) { font-size: 13px; }
+.qualityProgress { height: 6px; flex: 1; overflow: hidden; border-radius: 99px; background: #edf1f6; }
+.qualityProgress span { display: block; height: 100%; border-radius: inherit; background: var(--admin-teal); }
+.qualityProgress .progressFailure { background: #b35c60; }
+.serviceRow { min-height: 48px; border-bottom: 1px solid var(--admin-border-soft); }
+.transactions :global(.ant-table-wrapper) { overflow-x: auto; }
+.transactions :global(.ant-table-thead > tr > th) { color: var(--admin-text-secondary); font-size: 14px; font-weight: 600; }
+.transactions :global(.ant-table-tbody > tr > td) { color: var(--admin-text); font-size: 14px; white-space: nowrap; }
+.transactionId { color: var(--admin-primary-strong); }
+.compact { gap: 12px; }
+.compact .metricCard, .compact .panel, .compact .transactions { min-height: 0; }
+.compact .metricCard :global(.ant-card-body) { min-height: 142px; padding: 16px; }
+.compact .metricValue { font-size: 32px; }
+.compact .panelHeader { min-height: 46px; }
+.compact .panelHeader :global(.ant-typography) { font-size: 16px; }
+.compact .qualityRow, .compact .serviceRow { min-height: 40px; }
+@media (max-width: 768px) { .heading { align-items: flex-start; flex-direction: column; } .metricValue { font-size: 28px; } .panelHeader { padding: 0 14px; } .qualityList, .serviceList { padding: 8px 14px; } .qualityRow > div:first-child { flex-basis: 120px; } }

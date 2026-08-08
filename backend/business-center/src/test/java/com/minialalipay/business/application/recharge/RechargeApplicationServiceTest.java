@@ -103,9 +103,15 @@ class RechargeApplicationServiceTest {
 
         assertEquals(RechargeOrderStatus.REJECTED, rejected.getStatus());
         assertEquals("CHANNEL_TIMEOUT", rejected.getRejectReasonCode());
+        // 渠道拒绝终态必须释放此前预占的当日额度，避免同日内再次充值被限额误伤。
+        assertEquals(0L, store.usage.getProcessingFen());
+        assertEquals(0, store.usage.getProcessingCount());
         RechargeOrder replay = service.onChannelResult(created.getRechargeOrderId(), false, "CHANNEL_TIMEOUT", null);
         assertEquals(RechargeOrderStatus.REJECTED, replay.getStatus());
         assertEquals("CHANNEL_TIMEOUT", replay.getRejectReasonCode());
+        // 重复拒绝幂等，不重复释放额度
+        assertEquals(0L, store.usage.getProcessingFen());
+        assertEquals(0, store.usage.getProcessingCount());
     }
 
     @Test
@@ -130,7 +136,8 @@ class RechargeApplicationServiceTest {
 
         @Override public RechargePolicy getActivePolicy() { return policy; }
         @Override public Optional<RechargeDailyUsage> findDailyUsage(String userId, LocalDate businessDate) {
-            return Optional.ofNullable(usage);
+            // 模拟数据库快照：返回拷贝，避免服务层原地变更污染持久化版本比较。
+            return Optional.ofNullable(usage).map(MemoryStore::copyUsage);
         }
         @Override public Optional<IdempotencyRecord> findIdempotency(String userId, String idempotencyKey) {
             return Optional.ofNullable(idempotency.get(userId + ":" + idempotencyKey));
@@ -156,11 +163,21 @@ class RechargeApplicationServiceTest {
             orders.put(order.getRechargeOrderId(), order);
             return true;
         }
+        @Override public boolean updateDailyUsage(RechargeDailyUsage updated, long expectedVersion) {
+            if (usage == null || usage.getVersion() != expectedVersion) return false;
+            usage = updated;
+            return true;
+        }
         private static RechargeOrder copy(RechargeOrder order) {
             return new RechargeOrder(order.getRechargeOrderId(), order.getUserId(), order.getTargetAccountId(),
                     order.getAmountFen(), order.getBusinessDate(), order.getPolicyId(), order.getPolicyVersion(),
                     order.getStatus(), order.getTransactionId(), order.getRejectReasonCode(), order.getVersion(),
                     order.getCreatedAt(), order.getUpdatedAt());
+        }
+        private static RechargeDailyUsage copyUsage(RechargeDailyUsage usage) {
+            return new RechargeDailyUsage(usage.getUserId(), usage.getBusinessDate(), usage.getProcessingFen(),
+                    usage.getSuccessFen(), usage.getProcessingCount(), usage.getSuccessCount(),
+                    usage.getVersion(), usage.getUpdatedAt());
         }
     }
 

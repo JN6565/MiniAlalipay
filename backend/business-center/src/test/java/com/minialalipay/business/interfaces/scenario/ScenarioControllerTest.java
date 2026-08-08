@@ -109,7 +109,10 @@ class ScenarioControllerTest {
         private final Map<String, RechargeOrder> orders = new HashMap<>();
         private RechargeDailyUsage usage;
         @Override public RechargePolicy getActivePolicy() { return policy; }
-        @Override public Optional<RechargeDailyUsage> findDailyUsage(String userId, LocalDate date) { return Optional.ofNullable(usage); }
+        @Override public Optional<RechargeDailyUsage> findDailyUsage(String userId, LocalDate date) {
+            // 模拟数据库快照：返回拷贝，避免服务层原地变更污染持久化版本比较。
+            return Optional.ofNullable(usage).map(RechargeMemoryStore::copyUsage);
+        }
         @Override public Optional<IdempotencyRecord> findIdempotency(String userId, String key) { return Optional.ofNullable(idempotency.get(userId + key)); }
         @Override public boolean reserveIdempotency(String recordId, String userId, String key, byte[] hash, String orderId) {
             return idempotency.putIfAbsent(userId + key, new IdempotencyRecord(hash, orderId)) == null;
@@ -123,6 +126,16 @@ class ScenarioControllerTest {
             if (current == null || current.getVersion() != expectedVersion) return false;
             orders.put(order.getRechargeOrderId(), order);
             return true;
+        }
+        @Override public boolean updateDailyUsage(RechargeDailyUsage updated, long expectedVersion) {
+            if (usage == null || usage.getVersion() != expectedVersion) return false;
+            usage = updated;
+            return true;
+        }
+        private static RechargeDailyUsage copyUsage(RechargeDailyUsage usage) {
+            return new RechargeDailyUsage(usage.getUserId(), usage.getBusinessDate(), usage.getProcessingFen(),
+                    usage.getSuccessFen(), usage.getProcessingCount(), usage.getSuccessCount(),
+                    usage.getVersion(), usage.getUpdatedAt());
         }
     }
 

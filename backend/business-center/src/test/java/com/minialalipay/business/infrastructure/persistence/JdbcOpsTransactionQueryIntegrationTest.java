@@ -1,5 +1,6 @@
 package com.minialalipay.business.infrastructure.persistence;
 
+import com.minialalipay.business.application.port.OpsTransactionQueryPort;
 import com.minialalipay.business.application.port.OpsTransactionQueryPort.OpsTransactionQuery;
 import com.minialalipay.business.application.port.OpsTransactionQueryPort.OpsTransactionRow;
 import com.minialalipay.business.application.port.OpsTransactionQueryPort.TraceSpan;
@@ -32,29 +33,39 @@ class JdbcOpsTransactionQueryIntegrationTest {
     }
 
     @Test
-    void 运营交易列表按游标分页且发起人脱敏() {
-        insertTransaction("tx-2", "QR_PAY", "QR_PAY_ORDER", "order-2", "00000000000000000000002345");
-        insertTransaction("tx-1", "TRANSFER", "TRANSFER_DRAFT", "order-1", "00000000000000000000001234");
+    void 运营交易列表按创建时间倒序游标分页且发起人脱敏() {
+        insertTransaction("tx-2", "QR_PAY", "QR_PAY_ORDER", "order-2", "00000000000000000000002345", NOW);
+        insertTransaction("tx-1", "TRANSFER", "TRANSFER_DRAFT", "order-1", "00000000000000000000001234", NOW.minusSeconds(30));
 
-        List<OpsTransactionRow> rows = store.listTransactionsForOps(new OpsTransactionQuery(null, null, null, 10, null, null));
+        List<OpsTransactionRow> rows = store.listTransactionsForOps(new OpsTransactionQuery(null, null, null, null, 10, null, null));
         assertThat(rows).hasSize(2);
-        // 游标按交易 ID 倒序：最新交易在前。
+        // 默认创建时间倒序：创建时间较新的 tx-2 在前（交易 ID 为随机 base32，不作时间排序依据）。
         assertThat(rows.get(0).transactionId()).isEqualTo("tx-2");
         assertThat(rows.get(0).initiatorMasked()).isEqualTo("000000***2345");
         assertThat(rows.get(0).amountFen()).isEqualTo(5200L);
 
-        // 游标翻页：以最新交易 tx-2 为游标返回比它更旧的交易。
-        List<OpsTransactionRow> page = store.listTransactionsForOps(new OpsTransactionQuery(null, null, "tx-2", 10, null, null));
+        // 游标翻页：以边界行编码的复合游标，返回创建时间更旧的交易。
+        String cursor = OpsTransactionQueryPort.encodeCursor(NOW, "tx-2");
+        List<OpsTransactionRow> page = store.listTransactionsForOps(new OpsTransactionQuery(null, null, null, cursor, 10, null, null));
         assertThat(page).hasSize(1);
         assertThat(page.get(0).transactionId()).isEqualTo("tx-1");
+
+        // 发起人关键词按原始用户 ID 模糊过滤，空词不限定。
+        List<OpsTransactionRow> byInitiator = store.listTransactionsForOps(
+                new OpsTransactionQuery(null, null, "2345", null, 10, null, null));
+        assertThat(byInitiator).hasSize(1);
+        assertThat(byInitiator.get(0).transactionId()).isEqualTo("tx-2");
+        List<OpsTransactionRow> noInitiator = store.listTransactionsForOps(
+                new OpsTransactionQuery(null, null, "", null, 10, null, null));
+        assertThat(noInitiator).hasSize(2);
     }
 
     @Test
     void 交易详情关联TCC全局Outbox事件与活动工单() {
-        insertTransaction("tx-1", "TRANSFER", "TRANSFER_DRAFT", "order-1", "00000000000000000000001234");
+        insertTransaction("tx-1", "TRANSFER", "TRANSFER_DRAFT", "order-1", "00000000000000000000001234", NOW);
         jdbc.update("INSERT INTO business_db.tcc_global (transaction_id,xid,status,retry_count,started_at,updated_at) VALUES ('tx-1','xid-1','SUCCESS',1,?,?)",
                 Timestamp.from(NOW), Timestamp.from(NOW));
-        jdbc.update("INSERT INTO business_db.outbox_event (event_id,aggregate_type,aggregate_id,event_type,transaction_id,producer,trace_id,occurred_at,payload,status) VALUES ('evt-1','FUND_TRANSACTION','tx-1','transaction.status.changed','tx-1','business-center','abcdef0123456789abcdef0123456789',?,'{\"status\":\"SUCCESS\"}','COMPLETED')",
+        jdbc.update("INSERT INTO business_db.outbox_event (event_id,aggregate_type,aggregate_id,event_type,transaction_id,producer,trace_id,occurred_at,payload,status) VALUES ('evt-1','FUND_TRANSACTION','tx-1','transaction.status.changed','tx-1','business-center','abcdef0123456789abcdef0123456789',?,'{\"status\":\"SUCCESS\"}','PUBLISHED')",
                 Timestamp.from(NOW));
         jdbc.update("INSERT INTO business_db.manual_case (case_id,subject_type,subject_id,transaction_id,status,created_at,updated_at) VALUES ('case-1','FUND_TRANSACTION','tx-1','tx-1','OPEN',?,?)",
                 Timestamp.from(NOW), Timestamp.from(NOW));
@@ -65,18 +76,18 @@ class JdbcOpsTransactionQueryIntegrationTest {
         assertThat(detail.tccStatus()).isEqualTo("SUCCESS");
         assertThat(detail.tccRetryCount()).isEqualTo(1);
         assertThat(detail.latestOutboxEventType()).isEqualTo("transaction.status.changed");
-        assertThat(detail.outboxStatus()).isEqualTo("COMPLETED");
+        assertThat(detail.outboxStatus()).isEqualTo("PUBLISHED");
         assertThat(detail.activeManualCaseId()).isEqualTo("case-1");
     }
 
     @Test
     void 按链路编号聚合跨服务Span且交易归属明确() {
-        insertTransaction("tx-1", "TRANSFER", "TRANSFER_DRAFT", "order-1", "00000000000000000000001234");
+        insertTransaction("tx-1", "TRANSFER", "TRANSFER_DRAFT", "order-1", "00000000000000000000001234", NOW);
         jdbc.update("INSERT INTO business_db.tcc_global (transaction_id,xid,status,retry_count,started_at,updated_at) VALUES ('tx-1','xid-1','SUCCESS',0,?,?)",
                 Timestamp.from(NOW), Timestamp.from(NOW));
-        jdbc.update("INSERT INTO business_db.outbox_event (event_id,aggregate_type,aggregate_id,event_type,transaction_id,producer,trace_id,occurred_at,payload,status) VALUES ('evt-1','FUND_TRANSACTION','tx-1','transaction.status.changed','tx-1','business-center',?,?,'{\"status\":\"SUCCESS\"}','COMPLETED')",
+        jdbc.update("INSERT INTO business_db.outbox_event (event_id,aggregate_type,aggregate_id,event_type,transaction_id,producer,trace_id,occurred_at,payload,status) VALUES ('evt-1','FUND_TRANSACTION','tx-1','transaction.status.changed','tx-1','business-center',?,?,'{\"status\":\"SUCCESS\"}','PUBLISHED')",
                 TRACE, Timestamp.from(NOW));
-        jdbc.update("INSERT INTO ledger_db.outbox_event (event_id,aggregate_type,aggregate_id,event_type,transaction_id,producer,trace_id,occurred_at,payload,status) VALUES ('levt-1','LEDGER','tx-1','ledger.posted','tx-1','account-center',?,?,'{}','COMPLETED')",
+        jdbc.update("INSERT INTO ledger_db.outbox_event (event_id,aggregate_type,aggregate_id,event_type,transaction_id,producer,trace_id,occurred_at,payload,status) VALUES ('levt-1','LEDGER','tx-1','ledger.posted','tx-1','account-center',?,?,'{}','PUBLISHED')",
                 TRACE, Timestamp.from(NOW));
         jdbc.update("INSERT INTO user_db.audit_log (audit_id,actor_type,actor_id,action,target_type,target_id,result_code,trace_id,occurred_at) VALUES (1,'OPERATOR','ops-1','user.view','USER','u-1','SUCCESS',?,?)",
                 TRACE, Timestamp.from(NOW));
@@ -108,11 +119,11 @@ class JdbcOpsTransactionQueryIntegrationTest {
         assertThat(store.findTransactionForOps("missing")).isEmpty();
     }
 
-    private void insertTransaction(String id, String businessType, String sourceType, String sourceOrderId, String initiator) {
+    private void insertTransaction(String id, String businessType, String sourceType, String sourceOrderId, String initiator, Instant createdAt) {
         jdbc.update("INSERT INTO business_db.fund_transaction (transaction_id,business_type,source_type,source_order_id,initiator_user_id,payer_account_id,payee_account_id,funding_source,amount_fen,idempotency_key,status,risk_level,trace_id,version,created_at,updated_at) "
                         + "VALUES (?,?,?,?,?,?,?,'BALANCE',5200,'key-1','SUCCESS','LOW',?,0,?,?)",
                 id, businessType, sourceType, sourceOrderId, initiator, "payer-1", "payee-1",
-                "abcdef0123456789abcdef0123456789", Timestamp.from(NOW), Timestamp.from(NOW));
+                "abcdef0123456789abcdef0123456789", Timestamp.from(createdAt), Timestamp.from(createdAt));
     }
 
     private static JdbcDataSource dataSource() {

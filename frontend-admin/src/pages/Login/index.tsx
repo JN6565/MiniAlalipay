@@ -49,7 +49,7 @@ export default function Login() {
           MiniAlalipay 运营中心
         </Typography.Title>
         <Typography.Paragraph type="secondary">
-          仅允许运营人员与系统管理员访问。
+          仅允许运营人员与系统管理员访问
         </Typography.Paragraph>
         <Form layout="vertical" onFinish={onFinish}>
           <Form.Item
@@ -80,9 +80,6 @@ export default function Login() {
             登录
           </Button>
         </Form>
-        <Typography.Text className={styles.notice} type="secondary">
-          凭据仅通过网关提交，不写入日志或 URL；本地演示未配置登录口令时，网关 dev Stub 提供受控身份（系统分析 16.8）。
-        </Typography.Text>
       </section>
     </main>
   );

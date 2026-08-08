@@ -3,6 +3,7 @@ package com.minialalipay.business.infrastructure.persistence;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.minialalipay.business.application.port.MonitoringProjectionStore;
+import com.minialalipay.business.application.port.DailyReportStore;
 import com.minialalipay.business.domain.monitoring.Alert;
 import com.minialalipay.business.domain.monitoring.AlertRule;
 import com.minialalipay.business.domain.monitoring.AlertStatus;
@@ -20,6 +21,10 @@ import java.sql.Timestamp;
 import java.time.Clock;
 import java.time.Instant;
 import java.time.LocalDate;
+import java.time.ZoneId;
+import java.nio.charset.StandardCharsets;
+import java.security.MessageDigest;
+import java.security.NoSuchAlgorithmException;
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
@@ -32,7 +37,7 @@ import java.util.Optional;
  * <p>只读取或更新 metrics_db 投影，不修改业务资金事实。实时指标按分析事件的时间桶聚合为分钟级只读投影。</p>
  */
 @Repository
-public class JdbcMonitoringProjectionStore implements MonitoringProjectionStore {
+public class JdbcMonitoringProjectionStore implements MonitoringProjectionStore, DailyReportStore {
     private static final ObjectMapper JSON = new ObjectMapper();
 
     private final JdbcTemplate jdbc;
@@ -105,6 +110,134 @@ public class JdbcMonitoringProjectionStore implements MonitoringProjectionStore 
                     metricCode, Timestamp.from(from), Timestamp.from(to));
         }
         return bucketToMinuteMetrics(rows);
+    }
+
+    @Override
+    public long countMetric(String metricCode, Instant from, Instant to) {
+        String condition = switch (metricCode) {
+            case "duplicate_charge_count" -> "event_type='duplicate_charge.detected'";
+            case "ledger_imbalance_count" -> "event_type='reconciliation.diff.detected' "
+                    + "AND JSON_UNQUOTE(JSON_EXTRACT(metrics_json,'$.diffType')) IN ('LEDGER_IMBALANCE','DEBIT_CREDIT_IMBALANCE')";
+            case "saga_compensate_fail_count" -> "event_type='transaction.status.changed' "
+                    + "AND JSON_UNQUOTE(JSON_EXTRACT(metrics_json,'$.status')) IN ('COMPENSATE_FAILED','SAGA_COMPENSATE_FAILED')";
+            default -> "event_type=?";
+        };
+        if (condition.equals("event_type=?")) {
+            return jdbc.queryForObject("SELECT COUNT(*) FROM metrics_db.analytics_event WHERE " + condition
+                            + " AND occurred_at>=? AND occurred_at<?", Long.class, metricCode,
+                    Timestamp.from(from), Timestamp.from(to));
+        }
+        return jdbc.queryForObject("SELECT COUNT(*) FROM metrics_db.analytics_event WHERE " + condition
+                        + " AND occurred_at>=? AND occurred_at<?", Long.class,
+                Timestamp.from(from), Timestamp.from(to));
+    }
+
+    @Override
+    public long countOpenAlerts() {
+        Long count = jdbc.queryForObject("SELECT COUNT(*) FROM metrics_db.monitor_alert WHERE status='OPEN'", Long.class);
+        return count == null ? 0L : count;
+    }
+
+    @Override
+    public Optional<Alert> findActiveAlertByRule(String ruleCode) {
+        return jdbc.query("SELECT alert_id,rule_code,severity,status,assignee_id,last_reason,version,opened_at,updated_at "
+                        + "FROM metrics_db.monitor_alert WHERE rule_code=? AND status IN ('OPEN','ACKNOWLEDGED') "
+                        + "ORDER BY opened_at DESC LIMIT 1",
+                rs -> rs.next() ? Optional.of(mapAlert(rs)) : Optional.empty(), ruleCode);
+    }
+
+    @Override
+    public List<DailyMetricValue> aggregate(LocalDate reportDate, String zoneId) {
+        ZoneId zone = ZoneId.of(zoneId);
+        return aggregate(reportDate.atStartOfDay(zone).toInstant(), reportDate.plusDays(1).atStartOfDay(zone).toInstant());
+    }
+
+    @Override
+    public List<DailyMetricValue> aggregate(Instant from, Instant to) {
+        // T+1 报表按事件类型聚合为单指标行；当前口径不按业务类型拆分维度，避免同一指标码多行造成页面重复。
+        return jdbc.query("SELECT event_type,COUNT(*) FROM metrics_db.analytics_event "
+                        + "WHERE occurred_at>=? AND occurred_at<? GROUP BY event_type ORDER BY event_type",
+                (rs, rowNum) -> dailyMetricValue(rs.getString(1), rs.getLong(2)),
+                Timestamp.from(from), Timestamp.from(to));
+    }
+
+    @Override
+    public long countIncompleteInbox(LocalDate reportDate, String zoneId) {
+        ZoneId zone = ZoneId.of(zoneId);
+        return countIncompleteInbox(reportDate.atStartOfDay(zone).toInstant(), reportDate.plusDays(1).atStartOfDay(zone).toInstant());
+    }
+
+    @Override
+    public long countIncompleteInbox(Instant from, Instant to) {
+        Long count = jdbc.queryForObject("SELECT COUNT(*) FROM metrics_db.inbox_event WHERE status<>'DONE' AND received_at>=? AND received_at<?",
+                Long.class, Timestamp.from(from), Timestamp.from(to));
+        return count == null ? 0L : count;
+    }
+
+    @Override
+    public List<DailyReportStore.InboxFailure> listIncompleteInboxFailures(Instant from, Instant to) {
+        return jdbc.query("SELECT event_id,COALESCE(failure_reason,'未记录失败原因'),retry_count,status "
+                        + "FROM metrics_db.inbox_event WHERE status<>'DONE' AND received_at>=? AND received_at<? "
+                        + "ORDER BY received_at ASC LIMIT 1000",
+                (rs, rowNum) -> new DailyReportStore.InboxFailure(rs.getString("event_id"),
+                        rs.getString(2), rs.getInt("retry_count"), rs.getString("status")),
+                Timestamp.from(from), Timestamp.from(to));
+    }
+
+    @Override
+    public long countQuarantined(LocalDate reportDate, String zoneId) {
+        ZoneId zone = ZoneId.of(zoneId);
+        return countQuarantined(reportDate.atStartOfDay(zone).toInstant(), reportDate.plusDays(1).atStartOfDay(zone).toInstant());
+    }
+
+    @Override
+    public long countQuarantined(Instant from, Instant to) {
+        Long count = jdbc.queryForObject("SELECT COUNT(*) FROM metrics_db.quarantined_event WHERE quarantined_at>=? AND quarantined_at<?",
+                Long.class, Timestamp.from(from), Timestamp.from(to));
+        return count == null ? 0L : count;
+    }
+
+    @Override
+    @org.springframework.transaction.annotation.Transactional
+    public void publish(LocalDate reportDate, List<DailyMetricValue> metrics, List<QualityCheck> checks, Instant now) {
+        boolean passed = checks.stream().allMatch(check -> "PASSED".equals(check.status()));
+        for (QualityCheck check : checks) {
+            String resultId = stableId("TPLUS1:" + reportDate + ":" + check.ruleCode());
+            jdbc.update("INSERT INTO metrics_db.quality_result "
+                            + "(result_id,task_code,data_date,rule_code,status,expected_value,actual_value,evidence_json,checked_at) "
+                            + "VALUES (?,'TPLUS1',?,?,?,?,?,?,?) "
+                            + "ON DUPLICATE KEY UPDATE status=VALUES(status),actual_value=VALUES(actual_value),"
+                            + "evidence_json=VALUES(evidence_json),checked_at=VALUES(checked_at)",
+                    resultId, java.sql.Date.valueOf(reportDate), check.ruleCode(), check.status(), 0L,
+                    check.failedCount(), check.evidenceJson(), Timestamp.from(now));
+        }
+        // 失败重跑必须隐藏同日旧版本，防止页面继续展示已经失去质量门禁的数值。
+        jdbc.update("UPDATE metrics_db.daily_metric SET quality_status='FAILED' WHERE metric_date=?",
+                java.sql.Date.valueOf(reportDate));
+        if (!passed) return;
+        for (DailyMetricValue metric : metrics) {
+            jdbc.update("INSERT INTO metrics_db.daily_metric "
+                            + "(metric_date,metric_code,dimension_hash,dimensions_json,value_decimal,quality_status,version) "
+                            + "VALUES (?,?,?,?,?,'PASSED',?) "
+                            + "ON DUPLICATE KEY UPDATE dimensions_json=VALUES(dimensions_json),value_decimal=VALUES(value_decimal),"
+                            + "quality_status='PASSED'",
+                    java.sql.Date.valueOf(reportDate), metric.metricCode(), metric.dimensionHash(), metric.dimensionsJson(),
+                    metric.value(), metric.version());
+        }
+    }
+
+    private static DailyMetricValue dailyMetricValue(String eventType, long value) {
+        // 当前指标口径无维度，统一写入空维度 JSON，保证同一指标码单日仅一条聚合行。
+        return new DailyMetricValue(eventType, digest("{}"), "{}", value, 1);
+    }
+
+    private static byte[] digest(String value) {
+        try { return MessageDigest.getInstance("SHA-256").digest(value.getBytes(StandardCharsets.UTF_8)); }
+        catch (NoSuchAlgorithmException impossible) { throw new IllegalStateException("运行环境缺少 SHA-256", impossible); }
+    }
+
+    private static String stableId(String value) {
+        return java.util.HexFormat.of().formatHex(digest(value)).substring(0, 26).toUpperCase();
     }
 
     private static List<RealtimeMetric> bucketToMinuteMetrics(List<AnalyticsRow> rows) {

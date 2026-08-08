@@ -3,6 +3,7 @@ package com.minialalipay.business.application.qrpay;
 import com.minialalipay.business.application.manualcase.ManualCaseApplicationService;
 import com.minialalipay.business.application.port.AccountDirectoryPort;
 import com.minialalipay.business.application.port.BusinessStore;
+import com.minialalipay.business.application.port.CreditAccountDirectoryPort;
 import com.minialalipay.business.application.port.ManualCaseStore;
 import com.minialalipay.business.application.port.PaymentProofPort;
 import com.minialalipay.business.application.port.QrPayStore;
@@ -116,7 +117,7 @@ class QrPayApplicationServiceTest {
         PaymentProofPort proofs = mock(PaymentProofPort.class);
         TccCoordinatorPort coordinator = mock(TccCoordinatorPort.class);
         AccountDirectoryPort accounts = userId -> new AccountDirectoryPort.AccountReference("account-" + userId, userId, "ACTIVE");
-        QrPayApplicationService service = new QrPayApplicationService(store, accounts, security, new IdempotencyKeyValidator(),
+        QrPayApplicationService service = new QrPayApplicationService(store, accounts, null, security, new IdempotencyKeyValidator(),
                 businessStore, proofs, coordinator, null, null, Clock.fixed(NOW, ZoneOffset.UTC));
         QrPayApplicationService.CreatedOrder created = service.create("payee-1", 100, "午餐", KEY);
         service.exchange("session-a", created.rawToken());
@@ -155,7 +156,9 @@ class QrPayApplicationServiceTest {
         PaymentProofPort proofs = mock(PaymentProofPort.class);
         AccountDirectoryPort accounts = userId ->
                 new AccountDirectoryPort.AccountReference("account-" + userId, userId, "ACTIVE");
-        QrPayApplicationService service = new QrPayApplicationService(store, accounts, security,
+        CreditAccountDirectoryPort creditAccounts = userId ->
+                new CreditAccountDirectoryPort.CreditAccountReference("credit-" + userId, userId, "ACTIVE", 0);
+        QrPayApplicationService service = new QrPayApplicationService(store, accounts, creditAccounts, security,
                 new IdempotencyKeyValidator(), businessStore, proofs, mock(TccCoordinatorPort.class),
                 null, null, Clock.fixed(NOW, ZoneOffset.UTC));
         QrPayApplicationService.CreatedOrder created = service.create("payee-1", 100, "午餐", KEY);
@@ -190,7 +193,7 @@ class QrPayApplicationServiceTest {
         MemoryManualStore manualStore = new MemoryManualStore();
         RiskReviewRouter router = new RiskReviewRouter(store, null,
                 new ManualCaseApplicationService(manualStore, security));
-        QrPayApplicationService service = new QrPayApplicationService(store, accounts, security,
+        QrPayApplicationService service = new QrPayApplicationService(store, accounts, null, security,
                 new IdempotencyKeyValidator(), businessStore, proofs, mock(TccCoordinatorPort.class),
                 new RiskEvaluationService(riskStore, history, security), router, Clock.fixed(NOW, ZoneOffset.UTC));
         QrPayApplicationService.CreatedOrder created = service.create("payee-1", 100, "午餐", KEY);
@@ -215,7 +218,7 @@ class QrPayApplicationServiceTest {
         TestSecurity security = new TestSecurity();
         BusinessStore businessStore = mock(BusinessStore.class);
         AccountDirectoryPort accounts = userId -> new AccountDirectoryPort.AccountReference("account-" + userId, userId, "ACTIVE");
-        QrPayApplicationService service = new QrPayApplicationService(store, accounts, security, new IdempotencyKeyValidator(),
+        QrPayApplicationService service = new QrPayApplicationService(store, accounts, null, security, new IdempotencyKeyValidator(),
                 businessStore, mock(PaymentProofPort.class), mock(TccCoordinatorPort.class), null, null, Clock.fixed(NOW, ZoneOffset.UTC));
         QrPayApplicationService.CreatedOrder created = service.create("payee-1", 100, "午餐", KEY);
         service.exchange("session-a", created.rawToken());

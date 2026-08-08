@@ -55,17 +55,19 @@ public class AdminUserController {
         this.requestIdGenerator = requestIdGenerator;
     }
 
-    /** 用户只读分页列表；按状态过滤 + 稳定 ID 游标分页，登录名脱敏展示。 */
+    /** 用户只读分页列表；按状态与登录名关键词过滤 + 稳定 ID 游标分页，登录名脱敏展示。 */
     @GetMapping
     public ResponseEntity<ApiResponse<AdminUserPage>> list(
             @RequestHeader("X-User-Roles") String roles,
             @RequestParam(required = false) String status,
+            @RequestParam(required = false) String loginName,
             @RequestParam(required = false) String cursor,
             @RequestParam(defaultValue = "50") @Min(1) @Max(100) int limit,
             HttpServletRequest request) {
         access.requireAdmin(roles);
         UserStatus statusEnum = parseStatus(status);
-        List<UserAdminView> views = service.list(statusEnum, cursor, limit);
+        String keyword = normalizeKeyword(loginName);
+        List<UserAdminView> views = service.list(statusEnum, keyword, cursor, limit);
         List<AdminUserResponse> items = views.stream().map(AdminUserResponse::from).toList();
         String nextCursor = items.size() == limit ? views.getLast().user().getUserId() : null;
         return ResponseEntity.ok(success(new AdminUserPage(items, nextCursor), request));
@@ -104,6 +106,14 @@ public class AdminUserController {
         } catch (IllegalArgumentException e) {
             throw new BusinessException(CommonErrorCode.INVALID_REQUEST);
         }
+    }
+
+    /** 登录名关键词归一化：去除首尾空白，空值转 null；超长按无效请求拒绝，避免拖垮 LIKE 查询。 */
+    private String normalizeKeyword(String raw) {
+        if (raw == null || raw.isBlank()) return null;
+        String trimmed = raw.trim();
+        if (trimmed.length() > 64) throw new BusinessException(CommonErrorCode.INVALID_REQUEST);
+        return trimmed;
     }
 
     private <T> ApiResponse<T> success(T data, HttpServletRequest request) {

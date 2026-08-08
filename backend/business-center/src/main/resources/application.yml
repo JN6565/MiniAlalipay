@@ -8,6 +8,10 @@ spring:
     username: ${BUSINESS_DB_USERNAME:root}
     password: ${BUSINESS_DB_PASSWORD:teamuser2026}
     driver-class-name: com.mysql.cj.jdbc.Driver
+  data:
+    redis:
+      host: ${REDIS_HOST:localhost}
+      port: ${REDIS_PORT:6379}
   flyway:
     enabled: true
     locations: classpath:db/migration
@@ -26,6 +30,29 @@ minialalipay:
   tcc:
     # TCC 全局协调模式：seata 表示由 Seata TC 编排转账 TCC；http 回退为自研 HTTP 协调器。
     coordinator: ${TCC_COORDINATOR:seata}
+  monitoring:
+    enabled: ${MONITORING_ENABLED:true}
+    health:
+      gateway-url: ${GATEWAY_HEALTH_URL:http://localhost:8080/actuator/health}
+      account-center-url: ${ACCOUNT_CENTER_HEALTH_URL:http://localhost:8083/actuator/health}
+      ai-service-url: ${AI_SERVICE_HEALTH_URL:http://localhost:8084/actuator/health}
+      timeout-ms: ${MONITORING_HEALTH_TIMEOUT_MS:800}
+    outbox:
+      fixed-delay-ms: ${MONITORING_OUTBOX_FIXED_DELAY_MS:1000}
+      initial-delay-ms: ${MONITORING_OUTBOX_INITIAL_DELAY_MS:3000}
+      batch-size: ${MONITORING_OUTBOX_BATCH_SIZE:100}
+    consumer:
+      fixed-delay-ms: ${MONITORING_CONSUMER_FIXED_DELAY_MS:1000}
+      initial-delay-ms: ${MONITORING_CONSUMER_INITIAL_DELAY_MS:3000}
+      batch-size: ${MONITORING_CONSUMER_BATCH_SIZE:100}
+    alert:
+      fixed-delay-ms: ${MONITORING_ALERT_FIXED_DELAY_MS:10000}
+      initial-delay-ms: ${MONITORING_ALERT_INITIAL_DELAY_MS:5000}
+      window-seconds: ${MONITORING_ALERT_WINDOW_SECONDS:60}
+    report:
+      cron: ${MONITORING_REPORT_CRON:0 0 1 * * *}
+      zone: ${MONITORING_REPORT_ZONE:Asia/Shanghai}
+    stream-key: ${MONITORING_STREAM_KEY:minialalipay:monitoring-events}
 # Seata 分布式事务客户端（TM）：转账 TCC 全局事务发起方。
 # TC 通过 Nacos SEATA_GROUP 分组的 seata-server 服务发现；配置中心使用本地 file（即本文件属性）。
 seata:

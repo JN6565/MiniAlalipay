@@ -2,6 +2,8 @@ package com.minialalipay.business.interfaces.monitoring;
 
 import com.minialalipay.business.application.monitoring.MonitoringApplicationService;
 import com.minialalipay.business.application.monitoring.OpsTransactionQueryService;
+import com.minialalipay.business.application.monitoring.DashboardSummary;
+import com.minialalipay.business.application.monitoring.DashboardSummaryApplicationService;
 import com.minialalipay.business.application.port.OpsTransactionQueryPort;
 import com.minialalipay.business.application.port.OpsTransactionQueryPort.OpsTransactionDetail;
 import com.minialalipay.business.application.port.OpsTransactionQueryPort.OpsTransactionQuery;
@@ -30,6 +32,7 @@ import java.time.LocalDate;
 import java.util.List;
 import java.util.Optional;
 
+import static org.assertj.core.api.Assertions.assertThat;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
@@ -40,11 +43,15 @@ class OpsControllerTest {
     private static final Instant NOW = Instant.parse("2026-08-05T08:00:00Z");
 
     private MockMvc mvc;
+    private FakeOpsQueryPort opsQueryPort;
+    private FakeDashboardService dashboardService;
 
     @BeforeEach
     void setUp() {
         RequestIdGenerator requestIds = new RequestIdGenerator();
-        mvc = MockMvcBuilders.standaloneSetup(new OpsController(new FakeService(), new OpsTransactionQueryService(new FakeOpsQueryPort()),
+        opsQueryPort = new FakeOpsQueryPort();
+        dashboardService = new FakeDashboardService();
+        mvc = MockMvcBuilders.standaloneSetup(new OpsController(new FakeService(), new OpsTransactionQueryService(opsQueryPort), dashboardService,
                         new OpsAccessGuard(), requestIds, new IdempotencyKeyValidator()))
                 .setControllerAdvice(new BusinessCenterExceptionHandler(new CommonExceptionMapper(), requestIds)).build();
     }
@@ -76,6 +83,21 @@ class OpsControllerTest {
                 .andExpect(jsonPath("$.data[0].taskCode").value("交易完整性"))
                 .andExpect(jsonPath("$.data[0].ruleCode").value("rule-1"))
                 .andExpect(jsonPath("$.data[0].status").value("PASSED"));
+    }
+
+    @Test
+    void 可信运行看板只向运营角色返回聚合投影() throws Exception {
+        mvc.perform(get("/api/v1/ops/dashboard-summary").header("X-User-Roles", "OPERATOR")
+                        .header("X-Request-Id", "req-dashboard"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.requestId").value("req-dashboard"))
+                .andExpect(jsonPath("$.data.kpis.todayTransactionAmountFen").value(5200))
+                .andExpect(jsonPath("$.data.kpis.paymentSuccessRateBps").value(9998))
+                .andExpect(jsonPath("$.data.services[0].status").value("UP"))
+                .andExpect(jsonPath("$.data.recentTransactions[0].initiatorMasked").value("user01***1234"));
+
+        mvc.perform(get("/api/v1/ops/dashboard-summary").header("X-User-Roles", "USER"))
+                .andExpect(status().isForbidden()).andExpect(jsonPath("$.code").value("OPS_PERMISSION_REQUIRED"));
     }
 
     @Test
@@ -147,6 +169,30 @@ class OpsControllerTest {
     }
 
     @Test
+    void 交易列表支持按发起人关键词过滤且超长拒绝() throws Exception {
+        mvc.perform(get("/api/v1/ops/transactions").header("X-User-Roles", "OPERATOR")
+                        .param("initiator", "user01"))
+                .andExpect(status().isOk());
+        assertThat(opsQueryPort.lastQuery.initiator()).isEqualTo("user01");
+
+        // 发起人关键词去除首尾空白后透传。
+        mvc.perform(get("/api/v1/ops/transactions").header("X-User-Roles", "OPERATOR")
+                        .param("initiator", "  user01  "))
+                .andExpect(status().isOk());
+        assertThat(opsQueryPort.lastQuery.initiator()).isEqualTo("user01");
+
+        // 未携带发起人时保持不限定。
+        mvc.perform(get("/api/v1/ops/transactions").header("X-User-Roles", "OPERATOR"))
+                .andExpect(status().isOk());
+        assertThat(opsQueryPort.lastQuery.initiator()).isNull();
+
+        // 超长发起人关键词按无效请求拒绝，避免拖垮 LIKE 查询。
+        mvc.perform(get("/api/v1/ops/transactions").header("X-User-Roles", "OPERATOR")
+                        .param("initiator", "x".repeat(65)))
+                .andExpect(status().isBadRequest()).andExpect(jsonPath("$.code").value("COMMON_INVALID_REQUEST"));
+    }
+
+    @Test
     void 按链路编号查询跨服务链路片段() throws Exception {
         mvc.perform(get("/api/v1/ops/traces/abcdef0123456789abcdef0123456789").header("X-User-Roles", "OPERATOR"))
                 .andExpect(status().isOk())
@@ -193,9 +239,11 @@ class OpsControllerTest {
         return new Alert("alert-1", "TCC_TIMEOUT", "CRITICAL", AlertStatus.OPEN, null, null, 0L, NOW, NOW);
     }
 
-    /** 覆盖 B 端运营交易查询端口的瘦身替身，仅返回固定脱敏投影。 */
+    /** 覆盖 B 端运营交易查询端口的瘦身替身，仅返回固定脱敏投影；记录最近一次查询条件供断言透传。 */
     private static final class FakeOpsQueryPort implements OpsTransactionQueryPort {
+        OpsTransactionQuery lastQuery;
         @Override public List<OpsTransactionRow> listTransactionsForOps(OpsTransactionQuery query) {
+            this.lastQuery = query;
             return List.of(row());
         }
         @Override public Optional<OpsTransactionDetail> findTransactionForOps(String transactionId) {
@@ -255,6 +303,20 @@ class OpsControllerTest {
                                                            long version) {
             return new AlertRule(ruleCode, "重复扣款告警", "duplicate_charge_count", "CRITICAL",
                     "GT", thresholdValue, true, version + 1, operatorId, NOW.plusSeconds(1));
+        }
+    }
+
+    /** 看板汇总替身只返回脱敏只读数据，避免 Controller 切片测试依赖数据库或网络探针。 */
+    private static final class FakeDashboardService extends DashboardSummaryApplicationService {
+        FakeDashboardService() { super(null, null, null); }
+
+        @Override public DashboardSummary getSummary() {
+            return new DashboardSummary(NOW,
+                    new DashboardSummary.DashboardKpis(5200L, 9998L, 1L, 2L),
+                    List.of(new RealtimeMetric("transaction.status.changed", NOW, 1L, "v1", "PASSED")),
+                    List.of(new DataQualityResult("quality-1", "交易完整性", "rule-1", "PASSED", 100L, 0L, NOW)),
+                    List.of(new DashboardSummary.ServiceHealth("gateway", "网关 gateway", DashboardSummary.ServiceHealthStatus.UP, 12L, NOW)),
+                    List.of(FakeOpsQueryPort.row()));
         }
     }
 }

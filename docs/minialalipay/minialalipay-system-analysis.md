@@ -6,7 +6,7 @@
 |---|---|
 | 系统名称 | MiniAlalipay |
 | 文档类型 | 系统分析文档 |
-| 文档版本 | V1.14 |
+| 文档版本 | V1.16 |
 | 编制日期 | 2026-08-08 |
 | 需求基线 | MiniAlalipay PRD V1.9 |
 | PRD 文件 | `minialalipay-prd.md` |
@@ -33,8 +33,9 @@
 | V1.11 | 2026-07-30 | 项目组 | 明确文档权威层级，补齐注册开户中间状态和幂等恢复事实，专项实现改由派生文档引用 |
 | V1.12 | 2026-07-30 | 项目组 | 对齐 PRD V1.9 统一端侧与身份边界：C 端承载普通用户全部付款和收款能力，B 端仅承载运营维护；删除独立商户系统角色及商户 B 端页面 |
 | V1.13 | 2026-07-31 | 项目组 | 明确 REST 接口的 B/C 端调用边界、共享登录入口、角色与对象级授权规则，并标记 B 端尚未形成契约的能力 |
-| V1.14 | 2026-08-08 | 项目组 | 新增银行卡绑定管理能力（卡列表、绑卡、详情、设默认、解绑），状态流转 ACTIVE→UNBOUND |
-| V1.15 | 2026-08-08 | 项目组 | 银行卡注册与绑定流程重构：新增身份绑定、银行卡注册（自动生成卡号）、基于注册记录的绑卡流程，跨服务三要素校验 |
+| V1.14 | 2026-08-07 | 项目组 | 对齐实现：扫码信用支付接入 `credit-pay`/`credit-ledger` TCC；新增退款专用 `credit-refund`/`refund-ledger` 内部 TCC 端点与退款终态投影；`fund_transaction.payer_account_id` 改为可空以承载充值发行权益付款；充值订单以 `PENDING_CHANNEL` 起步并由终态发布器收敛日额度 |
+| V1.15 | 2026-08-08 | 项目组 | 新增银行卡绑定管理能力（卡列表、绑卡、详情、设默认、解绑），状态流转 ACTIVE→UNBOUND |
+| V1.16 | 2026-08-08 | 项目组 | 银行卡注册与绑定流程重构：新增身份绑定、银行卡注册（自动生成卡号）、基于注册记录的绑卡流程，跨服务三要素校验 |
 
 ## 1. 文档目的与范围
 
@@ -1496,6 +1497,8 @@ flowchart TD
 | `POST /internal/v1/tcc/credit-ledger/{action}` | `business-center` -> `account-center` | 仅用于 `CREDIT_PAY`；请求只传信用账户和收款余额账户，账户中心固定借记信用应收资产、贷记收款用户余额负债；按 `xid + CREDIT_PAY_LEDGER + voucher_id` 幂等，支持空回滚和防悬挂 |
 | `POST /internal/v1/tcc/credit-pay/{action}` | `business-center` -> `account-center` | `action` 为 `try/confirm/cancel`；Try 冻结额度，Confirm 占用额度并增加消费明细和信用应收，Cancel 释放冻结；按 `xid + CREDIT_PAY + credit_account_id` 幂等并持久化空回滚屏障 |
 | `POST /internal/v1/tcc/credit-repay/{action}` | `business-center` -> `account-center` | `action` 为 `try/confirm/cancel`；Try 冻结还款余额，Confirm 扣减余额、减少应收并恢复额度，Cancel 释放余额；按 `xid + CREDIT_REPAY + credit_account_id` 幂等并持久化空回滚屏障 |
+| `POST /internal/v1/tcc/credit-refund/{action}` | `business-center` -> `account-center` | 仅用于原 `CREDIT_PAY` 的全额且未还款信用退款冲正；请求只传原信用消费、原交易与收款账户，账户中心锁定 `credit_purchase` 并冻结收款用户余额，Confirm 冲销消费明细/应收/账单、恢复额度并将消费转 `REVERSED`；按 `xid + CREDIT_REFUND + original_transaction_id` 幂等并持久化空回滚屏障 |
+| `POST /internal/v1/tcc/refund-ledger/{action}` | `business-center` -> `account-center` | 退款专用账本分支；`payerAccountId` 与 `creditAccountId` 二选一指定贷方科目；Try 创建引用原凭证且 `reversal_reason=BUSINESS_REFUND` 的 `REFUND` 预记账凭证，Confirm 验平后过账并写 Outbox，Cancel 只取消未过账凭证；按 `xid + REFUND_LEDGER + voucher_id` 幂等 |
 | `GET /internal/v1/transaction-facts/{transactionId}` | `business-center` -> `account-center` | 返回余额、冻结、TCC 分支和账本的脱敏布尔事实，终态发布器不得根据超时猜测成功 |
 | `POST /internal/v1/reconciliation-diffs` | `business-center` -> `account-center` | 按业务日期、交易和差异类型幂等追加证据；只写 `ledger_db.reconciliation_diff`，不得直接改账 |
 
@@ -1966,7 +1969,7 @@ CREATE TABLE fund_transaction (
   source_type VARCHAR(32) NOT NULL,
   source_order_id CHAR(26) NOT NULL,
   idempotency_key VARCHAR(64) NOT NULL,
-  payer_account_id CHAR(26) NOT NULL,
+  payer_account_id CHAR(26) NULL, -- 充值交易付款对手为系统发行权益，无付款人账户，其余场景必填
   payee_account_id CHAR(26) NOT NULL,
   amount_fen BIGINT UNSIGNED NOT NULL,
   status VARCHAR(32) NOT NULL,
@@ -2386,7 +2389,7 @@ CREATE TABLE idempotency_record (
 | `ledger_db` | `ledger_voucher`、`ledger_entry`、`ledger_account` | 账户中心账本模块 | 每张凭证借贷相等；凭证和分录不可更新/删除；冲正关联原凭证 |
 | `business_db` | `transfer_draft`、`fund_transaction`、`qr_pay_order`、`qr_pay_token`、`personal_collection_code`、`collection_request`、`collection_order`、`confirmation`、`risk_decision`、`manual_case`、`tcc_global`、`idempotency_record`、`outbox_event` | 业务中心 | 来源唯一、状态版本 CAS、幂等键、令牌一次消费、Outbox 同事务提交 |
 | `agent_db` | `agent_session`、`agent_message`、`tool_call_log`、`preference` | AI 服务 | 会话归属、工具 Schema、敏感信息不入 Memory |
-| `metrics_db` | `inbox`、`metric_definition`、`minute_metric`、`daily_metric`、`quality_result`、`monitor_alert` | 监控模块 | 事件去重、指标口径版本、质量门禁后发布 |
+| `metrics_db` | `inbox`、`monitoring_stream_checkpoint`、`metric_definition`、`minute_metric`、`daily_metric`、`quality_result`、`monitor_alert` | 监控模块 | 事件去重、Stream 游标、指标口径版本、质量门禁后发布 |
 
 ```mermaid
 erDiagram
@@ -2461,7 +2464,7 @@ erDiagram
 
 接口路径不强制增加 `/b` 或 `/c` 前缀：C 端本人资源优先使用 `/me` 和对象级授权，B 端运营资源集中在 `/ops/**`、`/manual-cases/**` 及明确授权的脱敏 Trace 操作。OpenAPI 中每个操作必须标明 `C`、`B`、`SHARED` 或 `INTERNAL` 调用范围，并分别生成 `frontend-h5` 与 `frontend-admin` 客户端，禁止把全部操作生成到两个前端工程。
 
-当前 B 端全局交易列表与详情、全局电子回执查询只有页面和业务需求，尚未形成明确 REST path、DTO 和错误契约。它们属于接口设计缺口，不得由前端自行推断路径或使用 C 端本人接口拼接全局能力；补充时必须同步 OpenAPI、后端系分和对象级授权测试。用户管理已按 `/api/v1/admin/users/**` 落地（列表/冻结/解冻，系统管理员专属，登录名脱敏、冻结记录操作者与理由）。
+当前 B 端全局交易列表与详情、全局电子回执查询只有页面和业务需求，尚未形成明确 REST path、DTO 和错误契约。它们属于接口设计缺口，不得由前端自行推断路径或使用 C 端本人接口拼接全局能力；补充时必须同步 OpenAPI、后端系分和对象级授权测试。用户管理已按 `/api/v1/admin/users/**` 落地（列表/冻结/解冻，系统管理员专属，登录名脱敏、冻结记录操作者与理由）。用户列表支持按状态与登录名关键词过滤：`loginName` 对账户号做大小写不敏感模糊匹配（关键词最长 64 字符，超长按无效请求拒绝），仍按稳定 ID 游标分页，搜索结果只返回脱敏登录名。
 
 ### 12.3 关键错误码
 
@@ -2533,7 +2536,7 @@ erDiagram
 核心事件：
 
 - `user.registered`、`account.opened`、`virtual_fund.initialized`。
-- `transfer.draft.validated`、`transaction.status.changed`。
+- `transfer.draft.validated`、`transaction.accepted`、`transaction.status.changed`。
 - `qr_pay.order.created`、`qr_pay.order.scanned`、`qr_pay.order.status_changed`。
 - `credit.account.opened`、`credit.limit.changed`、`credit.purchase.posted`、`credit.bill.generated`、`credit.bill.overdue`、`credit.repayment.status_changed`。
 - `P2P_COLLECTION_CODE_CREATED`、`P2P_COLLECTION_CODE_REVOKED`、`P2P_COLLECTION_REQUEST_CREATED`、`P2P_COLLECTION_REQUEST_CANCELLED`、`P2P_COLLECTION_REQUEST_EXPIRED`、`P2P_COLLECTION_ORDER_ACCEPTED`、`P2P_COLLECTION_ORDER_SUCCEEDED`、`P2P_COLLECTION_ORDER_FAILED`。
@@ -2545,7 +2548,7 @@ erDiagram
 
 1. 各生产服务在写业务事实的同一本地事务内追加 `outbox_event`，不得在提交后直接依赖一次消息发送。
 2. 发布器按 `status + next_retry_at` 扫描，发送成功后标记 `PUBLISHED`；发送不确定时允许重发。
-3. 监控消费者在同一个 `metrics_db` 本地事务中插入 `PROCESSING` Inbox、写入 `analytics_event`/聚合指标并把 Inbox 标记为 `DONE`；三者整体提交或整体回滚。唯一冲突时只有 `DONE` 可直接返回成功，超时的 `PROCESSING` 由恢复任务重新接管，避免“已去重但未投影”的永久数据缺口。
+3. 监控消费者从 Redis Stream 读取消息，在同一个 `metrics_db` 本地事务中插入 `PROCESSING` Inbox、写入 `analytics_event`/聚合指标、把 Inbox 标记为 `DONE` 并推进 `monitoring_stream_checkpoint`；四者整体提交或整体回滚。唯一冲突时只有 `DONE` 可直接返回成功，超时的 `PROCESSING` 由恢复任务重新接管，避免“已去重但未投影”的永久数据缺口。
 4. Schema 或业务口径校验失败的事件进入 `quarantined_event`，告警后可修复并重放；不得静默丢弃。
 5. Outbox 积压、最大事件年龄、重试次数和隔离数量进入实时告警；恢复任务可从 Outbox 或原始事件日志重放。
 6. 事件版本升级需保持当前和前一版本兼容；资金关键事件只有在 Outbox 已持久化后才视为业务提交完成。
@@ -2675,7 +2678,9 @@ C2C 创建请求与个人码订单金额锁定共用以下 OpenAPI 字段约束�
 | PATCH | `/api/v1/agent/sessions/{id}/title` | 会话所有者 | 重命名会话标题 | `title` 最大 100 字符 |
 | DELETE | `/api/v1/agent/sessions/{id}/memory` | 会话所有者 | 清除可删除记忆 | 不删除资金审计日志 |
 | GET | `/api/v1/ops/realtime-metrics` | 运营/观察者 | 查询分钟级指标 | `metricCode` + 时间范围限制 |
+| GET | `/api/v1/ops/dashboard-summary` | 运营/观察者 | 查询可信运行看板汇总 | 上海业务日指标、服务受控探针、T+1 质量与最近脱敏交易 |
 | GET | `/api/v1/ops/daily-reports` | 运营/观察者 | 查询 T+1 报表 | 返回口径与质量版本 |
+| POST | `/api/v1/ops/daily-report-previews` | 系统管理员 | 生成昨日零点至当前时刻的临时报表预览 | 服务端确定上海时间窗；只读聚合，质量门禁失败不返回指标，不覆盖正式日报 |
 | GET | `/api/v1/ops/alerts` | 运营/观察者 | 查询告警 | 游标分页；观察者只读 |
 | POST | `/api/v1/ops/alerts/{id}/acknowledge` | 运营 | 确认告警 | 状态 CAS + 说明必填 |
 | POST | `/api/v1/ops/alerts/{id}/resolve` | 运营 | 标记已解决 | 证据必填 |
@@ -3305,6 +3310,8 @@ SSE 只在终态发布事务的 Outbox 事件投递后发送 `SUCCESS`。断线�
 | 信用额度（仅 `CREDIT_PAY`） | 冻结可用额度 | 冻结转已用 | 释放冻结额度 |
 | 信用应收（`CREDIT_PAY`/`CREDIT_REPAY`） | 预占增加/减少 | 增加消费应收或减少应收 | 取消预占 |
 | 还款分配（仅 `CREDIT_REPAY`） | 锁定逾期→已出账→未出账分配计划 | 更新账单/明细并恢复额度 | 取消分配预占 |
+| 信用退款冲正（仅退款原 `CREDIT_PAY`） | 锁定 `credit_purchase` 并冻结收款用户余额，确认未还款 | 扣减收款用户余额、冲销应收/账单/明细并恢复额度，消费转 `REVERSED` | 完整释放收款方冻结与冲正预占 |
+| 退款账本（仅 `REFUND`） | 创建引用原凭证的 `REFUND` 反向凭证预记账 | 验平后过账并写 Outbox | 只取消未过账凭证 |
 
 业务主单不是负责发布成功的普通 TCC 分支。六类交易受理时均已在 `business_db` 创建 `PROCESSING` 主单；TCC 完成后由独立终态发布器按业务类型验证余额、信用、发行权益、退款及账本事实和来源聚合，再更新主单和来源状态。
 
@@ -3316,7 +3323,7 @@ SSE 只在终态发布事务的 Outbox 事件投递后发送 `SUCCESS`。断线�
 2. Try 只做可撤销的冻结/预占，不提前展示成功。
 3. Confirm 和 Cancel 必须幂等，允许协调器无限安全重试。
 4. 任一分支 Confirm 不得直接把主单标记为 `SUCCESS`；业务侧最多记录不可对外展示的 `CONFIRMED_PENDING_FINALIZE` 协调结果。
-5. 全局事务完成回调触发终态发布器。余额交易验证双方余额/冻结，`CREDIT_PAY` 必须同时验证信用额度冻结已确认、信用应收与消费明细已增加、收款用户余额已入账、`CREDIT_PAY_LEDGER` 已过账且借贷平衡，`CREDIT_REPAY` 验证余额、应收、额度与还款分配；全部类型还必须验证全部 TCC 分支 `CONFIRMED` 和账本平衡，才在 `business_db` 本地事务中 CAS 主单和来源聚合为 `SUCCESS`，并写入 Outbox。
+5. 全局事务完成回调触发终态发布器。余额交易验证双方余额/冻结，`CREDIT_PAY` 必须同时验证信用额度冻结已确认、信用应收与消费明细已增加、收款用户余额已入账、`CREDIT_PAY_LEDGER` 已过账且借贷平衡，`CREDIT_REPAY` 验证余额、应收、额度与还款分配，`RECHARGE` 验证系统发行权益、目标余额和充值凭证，`REFUND` 验证收款用户余额已扣减、原付款方余额或信用应收/额度已恢复、`REFUND_LEDGER` 反向凭证已过账且借贷平衡；全部类型还必须验证全部 TCC 分支 `CONFIRMED` 和账本平衡，才在 `business_db` 本地事务中 CAS 主单和来源聚合为 `SUCCESS`，并写入 Outbox。
 6. 回调丢失或发布器崩溃时，恢复扫描依据 `PROCESSING + updated_at` 重跑相同校验；重复发布由 CAS 和 Outbox 事件唯一键消除。
 7. 分支状态不明时查询事实，不根据超时猜测结果；SSE、回执和监控均以终态发布后的主单状态为准。
 
@@ -3542,7 +3549,9 @@ flowchart LR
 
 ### 16.4 T+1 分析
 
-离线指标包括登录成功率、注册转化率、六类交易成功率与金额、余额不足/额度不足占比、AI 转账完成率、信用额度利用率/应收/逾期、TCC 补偿成功率、动态扫码成功率、个人码转化率、固定请求支付/过期率以及充值和退款金额。任务 01:00 启动、02:00 前完成，失败重试两次。
+离线指标包括登录成功率、注册转化率、六类交易成功率与金额、余额不足/额度不足占比、AI 转账完成率、信用额度利用率/应收/逾期、TCC 补偿成功率、动态扫码成功率、个人码转化率、固定请求支付/过期率以及充值和退款金额。任务按上海业务日 01:00 启动，先检查 Inbox 未完成数和隔离事件数；质量门禁通过后以指标版本 1 发布 `daily_metric`，失败结果保留在 `quality_result` 并隐藏当日指标，允许安全重跑。系统管理员可按需触发“昨日零点至当前时刻”的临时预览：时间窗必须由服务端时钟计算，复用 Inbox 与隔离事件质量检查；预览只读聚合，不写入 `daily_metric` 或 `quality_result`，门禁失败时不返回指标值，避免未结束业务日数据冒充正式 T+1 报表。B 端从临时报表跳转至数据质量页时，仅可通过当前应用路由状态携带该次响应中的检查结果，并必须将其标识为未持久化的临时预览检查；页面刷新或直接访问时只能查询 `quality_result` 中的正式结果。
+
+T+1 报表按事件类型聚合为单指标行，不按业务类型拆分维度；指标中文名称、计量单位和计算公式由 `metric_definition` 种子提供，B 端报表页通过 `metric-definitions` 接口加载后按指标码映射展示。
 
 个人收款生命周期事件固定为：`P2P_COLLECTION_CODE_CREATED`、`P2P_COLLECTION_CODE_REVOKED`、`P2P_COLLECTION_REQUEST_CREATED`、`P2P_COLLECTION_REQUEST_CANCELLED`、`P2P_COLLECTION_REQUEST_EXPIRED`、`P2P_COLLECTION_ORDER_ACCEPTED`、`P2P_COLLECTION_ORDER_SUCCEEDED`、`P2P_COLLECTION_ORDER_FAILED`。所有事件携带 `traceId`、`sourceType`、来源 ID、订单 ID 和可选交易 ID，不携带原始令牌或完整账户。
 
@@ -3562,9 +3571,20 @@ flowchart LR
 
 ### 16.6 B 端运营交易查询与链路追溯
 
+#### 16.6.1 可信运行看板汇总
+
+`GET /api/v1/ops/dashboard-summary` 是 B 端可信运行看板的唯一汇总入口，仅运营、管理员和观察者可读。业务中心在一次只读查询中组合其拥有的统一交易、人工工单、监控告警和数据质量投影，并返回最近五笔脱敏交易；前端不得从分页交易列表自行相加估算总额、成功率或待处理数。
+
+- 今日交易额仅统计上海业务日内状态为 `SUCCESS` 的统一交易，金额为整数 `amountFen`；`CANCELLED` 与 `REVERSED` 不计入金额。
+- 支付成功率为 `SUCCESS / (SUCCESS + REVERSED + CANCELLED)`，结果使用万分比 `paymentSuccessRateBps`；`PROCESSING`、`COMPENSATING` 与 `MANUAL_REVIEW` 尚未收敛，不得进入分母。
+- 待人工确认为状态 `OPEN` 或 `CLAIMED` 的人工工单数；活动告警仅统计状态 `OPEN` 的告警数。
+- 趋势仅返回最近 60 分钟 `transaction.status.changed` 的分钟级事件，用于展示活跃度，不能被表述为金额、成功率或 P99 延迟。
+- 数据质量返回上一上海自然日结果；`FAILED` 代表关联指标不可用，前端必须显示不可用而不是旧值、零值或正常状态。
+- 服务健康由业务中心受控探针查询 gateway、account-center、Redis 与 ai-service。Actuator 明确返回非 `UP` 时为 `DOWN`；网络、超时与非预期响应为 `UNKNOWN`。`probeLatencyMs` 仅表示本次探针耗时，不能标记为 P99。前端不得直连服务端口、Redis 或其他基础设施。
+
 B 端运营与观察者通过 `business-center` 的 `/api/v1/ops/transactions` 系列接口查看全平台脱敏交易与链路片段。该系列接口只读投影 `business_db` 中业务中心拥有的资金交易事实（统一交易、TCC 全局、Outbox 终态事件），不修改余额、账本或交易状态：
 
-- `GET /api/v1/ops/transactions`：按稳定交易 ID 游标分页返回脱敏交易摘要，可按状态、业务类型和时间范围过滤；发起用户 ID 只保留首尾片段，不暴露完整用户或账户标识，金额使用整数 `amountFen`。
+- `GET /api/v1/ops/transactions`：按稳定交易 ID 游标分页返回脱敏交易摘要，可按状态、业务类型、发起人关键词和时间范围过滤；发起人关键词按原始发起用户 ID 模糊匹配（B 端展示仍只保留首尾片段），不暴露完整用户或账户标识，金额使用整数 `amountFen`。
 - `GET /api/v1/ops/transactions/{id}`：返回单笔脱敏交易详情及关联的 TCC 全局状态、最新 Outbox 终态事件和活动人工工单。
 - `GET /api/v1/ops/transactions/{id}/trace`：返回业务中心可核验的链路片段（统一交易受理、TCC 全局事务、终态事件发布），按 `traceId` 关联；完整跨服务 Trace（网关、用户中心、账户中心、AI）归阶段七 OTel/Tempo 集成。
 
@@ -3581,7 +3601,7 @@ B 端管理员可通过 `business-center` 的 `/api/v1/ops/alert-rules` 系列�
 
 ### 16.8 B 端身份与用户管理边界
 
-B 端登录、当前身份、用户管理和角色管理依赖 `user-center`（负责人闫泽华）的身份与用户接口；`business-center` 与 `frontend-admin` 不持有用户身份与角色事实，只消费网关注入的可信 `X-User-Id`/`X-User-Roles`。
+B 端登录、当前身份、用户管理和角色管理依赖 `user-center`（负责人闫泽华）的身份与用户接口；`business-center` 与 `frontend-admin` 不持有用户身份与角色事实，只消费网关注入的可信 `X-User-Id`/`X-User-Roles`。账号被冻结后，登录服务仅在凭据验证通过时返回 `ACCOUNT_FROZEN`（“你的账号已冻结”）；凭据错误仍返回通用登录失败，避免通过提示枚举账号状态。
 
 B 端身份闭环已落地：`frontend-admin` 通过网关调用 `POST /api/v1/auth/login` 登录并持久化访问令牌，请求层统一注入 `Authorization: Bearer <token>`；`GET /api/v1/auth/me` 以网关注入的可信 `X-User-Id` 换取展示名与角色集合，填充前端权限模型；网关 `AuthenticationGlobalFilter` 一律用认证主体覆盖客户端身份头，普通用户角色（`USER`）无 B 端准入权限。
 
@@ -4016,3 +4036,11 @@ P2P Collection 验收映射：
 为避免支付等连续请求每次都远程回源校验会话，网关对校验通过的结果做 30 秒进程内缓存（缓存键为令牌 SHA-256 摘要，不保存令牌原文；无效令牌不缓存，401 语义保持实时）。副作用：登出后最长 30 秒内网关仍可能放行旧会话，属于可接受的生效延迟；单实例容量上限防止缓存膨胀。
 
 登录密码修改只允许作用于网关从有效会话解析出的真实用户 ID，不接受客户端指定目标账号。当前密码错误属于业务校验失败，不得清理会话；修改成功并提交数据库事务后，用户中心销毁该用户的全部设备会话。网关调用用户中心超时或不可用时返回 503，不得伪装成令牌失效。
+
+## 12.11 监控事件失败回放与正式日报重生成
+
+监控 Inbox 投影失败时，必须在 `inbox_event` 保存脱敏失败原因、重试次数、最近失败时间和下一次重试时间，消费者按指数退避重新领取，不能因流游标推进而永久跳过失败事件。达到最大重试次数的事件继续保持 `FAILED`，由人工确认或隔离流程处理，禁止直接改写为 `DONE`。
+
+服务同时运行失败事件回放任务：按退避窗口读取 `FAILED` Inbox，再按 `event_id` 从已发布 Outbox 读取原始脱敏载荷追加到监控 Stream。回放不修改业务事实，重复投递由 Inbox 唯一键和分析事件唯一键保证幂等。
+
+管理员可调用 `POST /api/v1/ops/daily-reports/{reportDate}/generate` 重新生成已结束业务日的正式日报。服务端先检查 Inbox 是否全部 `DONE` 以及是否存在隔离事件；任一门禁失败时返回 `BLOCKED`、检查证据和影响数量，不发布 `daily_metric`。门禁通过后才在同一事务中写入 `quality_result` 和 `daily_metric`，按业务日期与口径版本幂等执行。

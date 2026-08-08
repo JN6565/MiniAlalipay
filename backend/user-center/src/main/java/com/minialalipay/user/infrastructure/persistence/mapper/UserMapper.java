@@ -142,16 +142,18 @@ public interface UserMapper {
     /**
      * B 端管理分页查询用户（只读投影）。
      *
-     * <p>按稳定 ID 游标分页，可选按用户状态过滤，并 LEFT JOIN {@code credential}
+     * <p>按稳定 ID 游标分页，可选按用户状态与登录名关键词过滤，并 LEFT JOIN {@code credential}
      * 带出登录锁定截止时间。不返回密码、支付密码或手机号等敏感原值。</p>
      *
-     * @param status 用户状态过滤（PROVISIONING/ACTIVE/DISABLED），为空表示不限定
-     * @param cursor 上一页最后一条 {@code user_id}，为空表示第一页
-     * @param limit  每页最大返回条数
+     * @param status    用户状态过滤（PROVISIONING/ACTIVE/DISABLED），为空表示不限定
+     * @param loginName 登录名关键词过滤（按账户号模糊匹配），为空表示不限定
+     * @param cursor    上一页最后一条 {@code user_id}，为空表示第一页
+     * @param limit     每页最大返回条数
      * @return 用户只读投影列表
      */
     List<UserPO> selectAdminPage(
             @Param("status") String status,
+            @Param("loginName") String loginName,
             @Param("cursor") String cursor,
             @Param("limit") int limit
     );

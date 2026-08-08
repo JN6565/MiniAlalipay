@@ -64,6 +64,19 @@ public final class RechargeDailyUsage {
         advance(now);
     }
 
+    /** 充值成功终态把在途占用结算为当日成功，累加成功次数并释放处理中次数。 */
+    public void settleSuccess(long expectedVersion, long amountFen, Instant now) {
+        checkVersion(expectedVersion);
+        if (amountFen < 1 || processingFen < amountFen || processingCount < 1) {
+            throw new IllegalStateException("充值日额度不存在可结算的预占");
+        }
+        processingFen -= amountFen;
+        successFen += amountFen;
+        processingCount--;
+        successCount++;
+        advance(now);
+    }
+
     private boolean wouldExceedAmount(long amountFen, RechargePolicy policy) {
         return successFen > policy.getDailyLimitFen() - processingFen
                 || amountFen > policy.getDailyLimitFen() - successFen - processingFen;

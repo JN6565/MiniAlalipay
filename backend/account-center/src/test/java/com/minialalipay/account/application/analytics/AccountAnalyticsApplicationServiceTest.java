@@ -46,5 +46,6 @@ class AccountAnalyticsApplicationServiceTest {
         @Override public boolean postAndAppendOutbox(com.minialalipay.account.domain.ledger.LedgerVoucher v, String a, String b, Instant c) { return true; }
         @Override public java.util.List<LedgerEntry> findEntriesByUserId(String u, Instant c, long id, int limit) { return entries; }
         @Override public java.util.List<LedgerEntry> findPostedEntriesByUserId(String u, Instant since, Instant until) { return entries; }
+        @Override public java.util.List<LedgerEntry.WithCounterparty> findEntriesWithCounterparty(String u, Instant c, long id, int limit) { return java.util.List.of(); }
     }
 }

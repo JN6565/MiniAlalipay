@@ -7,6 +7,8 @@ spring:
   flyway:
     enabled: false
 minialalipay:
+  monitoring:
+    enabled: false
   internal:
     account-center-url: http://localhost:18083
     user-center-url: http://localhost:18081

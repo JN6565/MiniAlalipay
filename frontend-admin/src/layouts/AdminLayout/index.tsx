@@ -69,7 +69,7 @@ const menuItems: NonNullable<MenuProps['items']> = [
  * （形如「更新于刚刚 · 网关链路正常 · 本地演示骨架」）。
  */
 const routeMeta: Record<string, { title: string; meta: string }> = {
-  '/admin/dashboard': { title: '可信运行看板', meta: '网关健康 · 业务指标待接入' },
+  '/admin/dashboard': { title: '可信运行看板', meta: '网关健康 · 实时指标 · 告警与数据质量' },
   '/admin/manual-cases': { title: '人工确认台', meta: '异常上下文 · 风险工单处理' },
   '/admin/alerts': { title: '告警中心', meta: '资金一致性 · 事务健康 · 数据告警' },
   '/admin/data-quality': { title: '数据质量', meta: '完整性 · 唯一性 · 合法性 · 及时性' },
@@ -110,6 +110,9 @@ export default function AdminLayout() {
     : admin?.roles?.includes('OPERATOR')
       ? '运营人员'
       : '已登录';
+  // 演示账号的显示名称可能已经包含角色名称，重复展示会让身份信息显得冗余。
+  const showRoleText = roleText !== displayName;
+  const userAriaLabel = showRoleText ? `${displayName}，${roleText}` : displayName;
 
   /** 退出登录：销毁服务端会话并清除本地令牌，回到登录页。 */
   const handleLogout = async () => {
@@ -215,14 +218,14 @@ export default function AdminLayout() {
             >
               <span
                 className={styles.headerUserTrigger}
-                aria-label={`${displayName}，${roleText}`}
+                aria-label={userAriaLabel}
               >
                 <Avatar size="small" className={styles.headerUserAvatar}>
                   {displayName.slice(0, 1)}
                 </Avatar>
                 <span className={styles.headerUserText}>
                   <strong>{displayName}</strong>
-                  <span>{roleText}</span>
+                  {showRoleText && <span>{roleText}</span>}
                 </span>
               </span>
             </Dropdown>

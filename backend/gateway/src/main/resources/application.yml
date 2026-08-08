@@ -90,6 +90,18 @@ spring:
                 redis-rate-limiter.replenishRate: 1
                 redis-rate-limiter.burstCapacity: 30
                 redis-rate-limiter.requestedTokens: 1
+        # C2C 令牌交换与匿名落地页：IP 维度限流，防链接扫描与预取；必须位于 p2p-collections 通配路由之前
+        - id: business-center-p2p-collections-token
+          uri: ${BUSINESS_CENTER_URI:http://localhost:8082}
+          predicates:
+            - Path=/api/v1/p2p-collections/by-token,/api/v1/p2p-collections/token-exchanges
+          filters:
+            - name: RequestRateLimiter
+              args:
+                key-resolver: "#{@qrTokenKeyResolver}"
+                redis-rate-limiter.replenishRate: 1
+                redis-rate-limiter.burstCapacity: 10
+                redis-rate-limiter.requestedTokens: 1
         - id: business-center-p2p-collections
           uri: ${BUSINESS_CENTER_URI:http://localhost:8082}
           predicates:

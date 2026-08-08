@@ -8,7 +8,7 @@ import com.minialalipay.business.domain.collection.CollectionOrder;
 import com.minialalipay.business.domain.collection.PersonalCollectionCode;
 import com.minialalipay.business.domain.transaction.FundTransaction;
 import com.minialalipay.business.domain.transaction.FundingSource;
-import com.minialalipay.business.infrastructure.http.UserInfoHttpAdapter;
+import com.minialalipay.business.application.port.UserInfoPort;
 import com.minialalipay.common.api.ApiResponse;
 import com.minialalipay.common.error.BusinessException;
 import com.minialalipay.common.error.CommonErrorCode;
@@ -48,7 +48,7 @@ public class CollectionController {
     private final CollectionPaymentApplicationService paymentService;
     private final CollectionEventApplicationService eventService;
     private final RequestIdGenerator requestIds;
-    private final UserInfoHttpAdapter userInfoAdapter;
+    private final UserInfoPort userInfoPort;
 
     /** 创建个人收款接口。 */
     public CollectionController(CollectionApplicationService service, RequestIdGenerator requestIds) {
@@ -65,12 +65,12 @@ public class CollectionController {
     @Autowired
     public CollectionController(CollectionApplicationService service, CollectionPaymentApplicationService paymentService,
                                 CollectionEventApplicationService eventService, RequestIdGenerator requestIds,
-                                UserInfoHttpAdapter userInfoAdapter) {
+                                UserInfoPort userInfoPort) {
         this.service = service;
         this.paymentService = paymentService;
         this.eventService = eventService;
         this.requestIds = requestIds;
-        this.userInfoAdapter = userInfoAdapter;
+        this.userInfoPort = userInfoPort;
     }
 
     /** 查询本人当前有效个人码；尚未生成时 data 为 null。 */
@@ -175,8 +175,8 @@ public class CollectionController {
 
     /** 查询用户真实姓名并加密显示：只显示第一个字，后面用星号代替。 */
     private String lookupMaskedName(String userId) {
-        if (userId == null || userInfoAdapter == null) return "收款人";
-        String realName = userInfoAdapter.getRealName(userId);
+        if (userId == null || userInfoPort == null) return "收款人";
+        String realName = userInfoPort.findUserInfo(userId).realName();
         if (realName == null || realName.isBlank()) return "收款人";
         return maskName(realName);
     }

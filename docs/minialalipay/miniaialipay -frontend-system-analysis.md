@@ -1874,7 +1874,7 @@ sequenceDiagram
 
 | 字段名称 | 说明 | 交互 |
 | --- | --- | --- |
-| 交易编号 | transactionId | 只读展示 |
+| 交易编号 | transactionId | 只读展示，支持一键复制 |
 | 交易状态 | status | 只读展示，含 PROCESSING/SUCCESS/REVERSED/CANCELLED 等 |
 | 金额 | amountFen | 只读展示，元为单位 |
 | 业务类型 | businessType | 只读展示 |

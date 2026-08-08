@@ -2,6 +2,7 @@ package com.minialalipay.business.infrastructure.persistence;
 
 import com.minialalipay.business.application.port.BusinessStore;
 import com.minialalipay.business.application.port.OpsTransactionQueryPort;
+import com.minialalipay.business.application.port.OpsTransactionQueryPort.DashboardTransactionStats;
 import com.minialalipay.business.domain.confirmation.Confirmation;
 import com.minialalipay.business.domain.confirmation.ConfirmationStatus;
 import com.minialalipay.business.domain.confirmation.SubjectType;
@@ -19,6 +20,7 @@ import org.springframework.transaction.annotation.Transactional;
 
 import java.sql.ResultSet;
 import java.sql.SQLException;
+import java.sql.Timestamp;
 import java.time.Instant;
 import java.util.ArrayList;
 import java.util.List;
@@ -76,9 +78,9 @@ public class JdbcBusinessStore implements BusinessStore, OpsTransactionQueryPort
     public void replaceConfirmation(Confirmation c, long draftExpectedVersion, TransferDraft draft) {
         jdbc.update("UPDATE business_db.confirmation SET status='REVOKED' WHERE subject_type=? AND subject_id=? AND status='ACTIVE'",
                 c.getSubjectType().name(), c.getSubjectId());
-        jdbc.update("INSERT INTO business_db.confirmation (confirmation_id,token_digest,subject_type,subject_id,subject_hash,payer_user_id,payment_proof_id,pay_password_version,status,expires_at,consumed_at,created_at) VALUES (?,?,?,?,?,?,?,?,?,?,?,?)",
+        jdbc.update("INSERT INTO business_db.confirmation (confirmation_id,token_digest,subject_type,subject_id,subject_hash,payer_user_id,payment_proof_id,pay_password_version,funding_source,status,expires_at,consumed_at,created_at) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)",
                 c.getConfirmationId(), c.getTokenDigest(), c.getSubjectType().name(), c.getSubjectId(), c.getSubjectHash(),
-                c.getPayerUserId(), c.getPaymentProofId(), c.getPayPasswordVersion(), c.getStatus().name(),
+                c.getPayerUserId(), c.getPaymentProofId(), c.getPayPasswordVersion(), c.getFundingSource().name(), c.getStatus().name(),
                 c.getExpiresAt(), c.getConsumedAt(), c.getCreatedAt());
         jdbc.update("INSERT INTO business_db.confirmation_subject (subject_type,subject_id,current_confirmation_id,version,updated_at) VALUES (?,?,?,?,?) ON DUPLICATE KEY UPDATE current_confirmation_id=VALUES(current_confirmation_id),version=version+1,updated_at=VALUES(updated_at)",
                 c.getSubjectType().name(), c.getSubjectId(), c.getConfirmationId(), 0L, c.getCreatedAt());
@@ -89,9 +91,9 @@ public class JdbcBusinessStore implements BusinessStore, OpsTransactionQueryPort
     public void replaceQrPayConfirmation(Confirmation c, long orderExpectedVersion, QrPayOrder order) {
         jdbc.update("UPDATE business_db.confirmation SET status='REVOKED' WHERE subject_type=? AND subject_id=? AND status='ACTIVE'",
                 c.getSubjectType().name(), c.getSubjectId());
-        jdbc.update("INSERT INTO business_db.confirmation (confirmation_id,token_digest,subject_type,subject_id,subject_hash,payer_user_id,payment_proof_id,pay_password_version,status,expires_at,consumed_at,created_at) VALUES (?,?,?,?,?,?,?,?,?,?,?,?)",
+        jdbc.update("INSERT INTO business_db.confirmation (confirmation_id,token_digest,subject_type,subject_id,subject_hash,payer_user_id,payment_proof_id,pay_password_version,funding_source,status,expires_at,consumed_at,created_at) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)",
                 c.getConfirmationId(), c.getTokenDigest(), c.getSubjectType().name(), c.getSubjectId(), c.getSubjectHash(),
-                c.getPayerUserId(), c.getPaymentProofId(), c.getPayPasswordVersion(), c.getStatus().name(),
+                c.getPayerUserId(), c.getPaymentProofId(), c.getPayPasswordVersion(), c.getFundingSource().name(), c.getStatus().name(),
                 c.getExpiresAt(), c.getConsumedAt(), c.getCreatedAt());
         jdbc.update("INSERT INTO business_db.confirmation_subject (subject_type,subject_id,current_confirmation_id,version,updated_at) VALUES (?,?,?,?,?) ON DUPLICATE KEY UPDATE current_confirmation_id=VALUES(current_confirmation_id),version=version+1,updated_at=VALUES(updated_at)",
                 c.getSubjectType().name(), c.getSubjectId(), c.getConfirmationId(), 0L, c.getCreatedAt());
@@ -105,9 +107,9 @@ public class JdbcBusinessStore implements BusinessStore, OpsTransactionQueryPort
     public void replaceCollectionConfirmation(Confirmation c) {
         jdbc.update("UPDATE business_db.confirmation SET status='REVOKED' WHERE subject_type=? AND subject_id=? AND status='ACTIVE'",
                 c.getSubjectType().name(), c.getSubjectId());
-        jdbc.update("INSERT INTO business_db.confirmation (confirmation_id,token_digest,subject_type,subject_id,subject_hash,payer_user_id,payment_proof_id,pay_password_version,status,expires_at,consumed_at,created_at) VALUES (?,?,?,?,?,?,?,?,?,?,?,?)",
+        jdbc.update("INSERT INTO business_db.confirmation (confirmation_id,token_digest,subject_type,subject_id,subject_hash,payer_user_id,payment_proof_id,pay_password_version,funding_source,status,expires_at,consumed_at,created_at) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)",
                 c.getConfirmationId(), c.getTokenDigest(), c.getSubjectType().name(), c.getSubjectId(), c.getSubjectHash(),
-                c.getPayerUserId(), c.getPaymentProofId(), c.getPayPasswordVersion(), c.getStatus().name(),
+                c.getPayerUserId(), c.getPaymentProofId(), c.getPayPasswordVersion(), c.getFundingSource().name(), c.getStatus().name(),
                 c.getExpiresAt(), c.getConsumedAt(), c.getCreatedAt());
         jdbc.update("INSERT INTO business_db.confirmation_subject (subject_type,subject_id,current_confirmation_id,version,updated_at) VALUES (?,?,?,?,?) ON DUPLICATE KEY UPDATE current_confirmation_id=VALUES(current_confirmation_id),version=version+1,updated_at=VALUES(updated_at)",
                 c.getSubjectType().name(), c.getSubjectId(), c.getConfirmationId(), 0L, c.getCreatedAt());
@@ -136,9 +138,10 @@ public class JdbcBusinessStore implements BusinessStore, OpsTransactionQueryPort
 
     @Override
     public void createTransaction(FundTransaction t, byte[] requestHash, String eventId, Instant now) {
-        jdbc.update("INSERT INTO business_db.fund_transaction (transaction_id,business_type,source_type,source_order_id,initiator_user_id,payer_account_id,payee_account_id,funding_source,amount_fen,idempotency_key,status,risk_level,trace_id,version,created_at,updated_at) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
+        jdbc.update("INSERT INTO business_db.fund_transaction (transaction_id,business_type,source_type,source_order_id,initiator_user_id,payer_account_id,payee_account_id,funding_source,related_transaction_id,amount_fen,idempotency_key,status,risk_level,trace_id,version,created_at,updated_at) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
                 t.getTransactionId(), t.getBusinessType().name(), t.getSourceType().name(), t.getSourceOrderId(),
                 t.getInitiatorUserId(), t.getPayerAccountId(), t.getPayeeAccountId(), t.getFundingSource().name(),
+                t.getRelatedTransactionId(),
                 t.getAmountFen(), t.getIdempotencyKey(), t.getStatus().name(), t.getRiskLevel(),
                 t.getTraceId(), t.getVersion(), t.getCreatedAt(), t.getUpdatedAt());
         jdbc.update("INSERT INTO business_db.idempotency_record (record_id,principal_key,api_scope,idempotency_key,request_digest,resource_type,resource_id,status,expires_at,created_at,updated_at) VALUES (?,?,?,?,?,'FUND_TRANSACTION',?,'COMPLETED',?,?,?)",
@@ -178,6 +181,8 @@ public class JdbcBusinessStore implements BusinessStore, OpsTransactionQueryPort
         if (changed != 1) return false;
         projectQrPayTransactionState(transaction, eventId, now);
         projectCollectionTerminalState(transaction, eventId, now);
+        projectRechargeTerminalState(transaction, now);
+        projectRefundTerminalState(transaction, now);
         appendOutbox(transaction, eventId, "transaction.status.changed", now);
         jdbc.update("UPDATE business_db.tcc_global SET status=?,next_retry_at=NULL,updated_at=? WHERE xid=?",
                 globalStatus, now, xid);
@@ -194,6 +199,8 @@ public class JdbcBusinessStore implements BusinessStore, OpsTransactionQueryPort
         if (changed != 1) return false;
         projectQrPayTransactionState(transaction, eventId, now);
         projectCollectionTerminalState(transaction, eventId, now);
+        projectRechargeTerminalState(transaction, now);
+        projectRefundTerminalState(transaction, now);
         appendOutbox(transaction, eventId, "transaction.status.changed", now);
         jdbc.update("UPDATE business_db.tcc_global SET status='MANUAL_REVIEW',next_retry_at=NULL,updated_at=? WHERE xid=?",
                 now, xid);
@@ -215,7 +222,11 @@ public class JdbcBusinessStore implements BusinessStore, OpsTransactionQueryPort
     }
 
     private void appendOutbox(FundTransaction t, String eventId, String type, Instant now) {
-        String payload = "{\"transactionId\":\"" + t.getTransactionId() + "\",\"status\":\"" + t.getStatus().name() + "\"}";
+        // 监控只消费脱敏事件事实；金额仍以分传递，避免日报从订单表回扫导致重复统计。
+        String payload = "{\"transactionId\":\"" + t.getTransactionId() + "\",\"status\":\""
+                + t.getStatus().name() + "\",\"businessType\":\"" + t.getBusinessType().name()
+                + "\",\"sourceType\":\"" + t.getSourceType().name() + "\",\"fundingSource\":\""
+                + t.getFundingSource().name() + "\",\"amountFen\":" + t.getAmountFen() + "}";
         jdbc.update("INSERT INTO business_db.outbox_event (event_id,aggregate_type,aggregate_id,aggregate_version,event_type,event_version,transaction_id,producer,trace_id,occurred_at,payload,created_at) VALUES (?,'FUND_TRANSACTION',?,?,?,1,?,'business-center',?,?,?,?)",
                 eventId, t.getTransactionId(), t.getVersion(), type, t.getTransactionId(), t.getTraceId(), now, payload, now);
     }
@@ -277,6 +288,63 @@ public class JdbcBusinessStore implements BusinessStore, OpsTransactionQueryPort
                 eventId, transaction.getSourceOrderId(), transaction.getTransactionId(), projectedStatus, now,
                 now.plusSeconds(7 * 24 * 60 * 60));
     }
+
+    /**
+     * 将统一交易终态投影到充值来源订单，并同步结算单日充值额度。
+     *
+     * <p>只接受协调器完成资金事实核验后的 {@code SUCCESS}/{@code CANCELLED}/{@code MANUAL_REVIEW}：
+     * 成功时把在途占用结算为当日成功，完整取消时释放在途占用，人工复核必须保留占额等待处置。
+     * 订单状态 CAS 推进只发生一次，避免同一交易在恢复扫描重试下重复结算额度。</p>
+     */
+    private void projectRechargeTerminalState(FundTransaction transaction, Instant now) {
+        if (transaction.getSourceType() != SourceType.RECHARGE_ORDER) return;
+        String projectedStatus = switch (transaction.getStatus()) {
+            case SUCCESS -> "SUCCESS";
+            case CANCELLED -> "CANCELLED";
+            case MANUAL_REVIEW -> "MANUAL_REVIEW";
+            default -> throw new IllegalStateException("充值终态发布收到非终态交易");
+        };
+        java.sql.Date businessDate = jdbc.query("SELECT business_date FROM business_db.recharge_order WHERE recharge_order_id=?",
+                rs -> rs.next() ? rs.getDate(1) : null, transaction.getSourceOrderId());
+        int orderChanged = jdbc.update("UPDATE business_db.recharge_order SET status=?,version=version+1,updated_at=? "
+                        + "WHERE recharge_order_id=? AND transaction_id=? AND status IN ('PROCESSING','MANUAL_REVIEW')",
+                projectedStatus, now, transaction.getSourceOrderId(), transaction.getTransactionId());
+        if (orderChanged != 1 || businessDate == null) return;
+        if (transaction.getStatus() == TransactionStatus.SUCCESS) {
+            jdbc.update("UPDATE business_db.recharge_daily_usage SET processing_fen=processing_fen-?,success_fen=success_fen+?,processing_count=processing_count-1,success_count=success_count+1,version=version+1,updated_at=? "
+                            + "WHERE user_id=? AND business_date=? AND processing_fen>=? AND processing_count>=1",
+                    transaction.getAmountFen(), transaction.getAmountFen(), now,
+                    transaction.getInitiatorUserId(), businessDate, transaction.getAmountFen());
+        } else if (transaction.getStatus() == TransactionStatus.CANCELLED) {
+            jdbc.update("UPDATE business_db.recharge_daily_usage SET processing_fen=processing_fen-?,processing_count=processing_count-1,version=version+1,updated_at=? "
+                            + "WHERE user_id=? AND business_date=? AND processing_fen>=? AND processing_count>=1",
+                    transaction.getAmountFen(), now, transaction.getInitiatorUserId(), businessDate, transaction.getAmountFen());
+        }
+    }
+
+    /**
+     * 将统一 REFUND 交易终态投影到退款来源订单。
+     *
+     * <p>只接受协调器完成资金事实核验后的 {@code SUCCESS}/{@code CANCELLED}/{@code MANUAL_REVIEW}；
+     * 成功与完整取消都回填完成时间，人工复核保留订单等待处置。订单 CAS 推进只发生一次，
+     * 避免恢复扫描重试下重复投影。</p>
+     */
+    private void projectRefundTerminalState(FundTransaction transaction, Instant now) {
+        if (transaction.getSourceType() != SourceType.REFUND_ORDER) return;
+        String projectedStatus = switch (transaction.getStatus()) {
+            case SUCCESS -> "SUCCESS";
+            case CANCELLED -> "CANCELLED";
+            case MANUAL_REVIEW -> "MANUAL_REVIEW";
+            default -> throw new IllegalStateException("退款终态发布收到非终态交易");
+        };
+        boolean completed = transaction.getStatus() == TransactionStatus.SUCCESS
+                || transaction.getStatus() == TransactionStatus.CANCELLED;
+        jdbc.update("UPDATE business_db.refund_order SET status=?,version=version+1,completed_at=?,updated_at=? "
+                        + "WHERE refund_order_id=? AND transaction_id=? AND status IN ('PROCESSING','MANUAL_REVIEW')",
+                projectedStatus, completed ? now : null, now,
+                transaction.getSourceOrderId(), transaction.getTransactionId());
+    }
+
     private Optional<TransferDraft> firstDraft(ResultSet rs) throws SQLException { return rs.next() ? Optional.of(draft(rs)) : Optional.empty(); }
     private Optional<Confirmation> firstConfirmation(ResultSet rs) throws SQLException { return rs.next() ? Optional.of(confirmation(rs)) : Optional.empty(); }
     private Optional<FundTransactionRecord> firstTransaction(ResultSet rs) throws SQLException { return rs.next() ? Optional.of(transactionRecord(rs)) : Optional.empty(); }
@@ -289,7 +357,8 @@ public class JdbcBusinessStore implements BusinessStore, OpsTransactionQueryPort
         var consumed = r.getTimestamp("consumed_at");
         return new Confirmation(r.getString("confirmation_id"), r.getBytes("token_digest"), SubjectType.valueOf(r.getString("subject_type")),
                 r.getString("subject_id"), r.getBytes("subject_hash"), r.getString("payer_user_id"), r.getString("payment_proof_id"),
-                r.getLong("pay_password_version"), ConfirmationStatus.valueOf(r.getString("status")), instant(r,"expires_at"),
+                r.getLong("pay_password_version"), FundingSource.valueOf(r.getString("funding_source")),
+                ConfirmationStatus.valueOf(r.getString("status")), instant(r,"expires_at"),
                 consumed == null ? null : consumed.toInstant(), instant(r,"created_at"));
     }
     private FundTransactionRecord transactionRecord(ResultSet r) throws SQLException {
@@ -297,7 +366,8 @@ public class JdbcBusinessStore implements BusinessStore, OpsTransactionQueryPort
                 SourceType.valueOf(r.getString("source_type")), r.getString("source_order_id"), r.getString("initiator_user_id"),
                 r.getString("payer_account_id"), r.getString("payee_account_id"), FundingSource.valueOf(r.getString("funding_source")),
                 r.getLong("amount_fen"), r.getString("idempotency_key"), TransactionStatus.valueOf(r.getString("status")),
-                r.getString("risk_level"), r.getString("trace_id"), r.getLong("version"), instant(r,"created_at"), instant(r,"updated_at"));
+                r.getString("risk_level"), r.getString("trace_id"), r.getLong("version"), instant(r,"created_at"), instant(r,"updated_at"),
+                r.getString("related_transaction_id"));
         return new FundTransactionRecord(t, r.getBytes("request_hash"));
     }
 
@@ -311,12 +381,41 @@ public class JdbcBusinessStore implements BusinessStore, OpsTransactionQueryPort
         List<Object> args = new ArrayList<>();
         if (query.status() != null && !query.status().isBlank()) { sql.append("AND status=? "); args.add(query.status()); }
         if (query.businessType() != null && !query.businessType().isBlank()) { sql.append("AND business_type=? "); args.add(query.businessType()); }
+        if (query.initiator() != null && !query.initiator().isBlank()) { sql.append("AND initiator_user_id LIKE ? "); args.add("%" + query.initiator() + "%"); }
         if (query.from() != null) { sql.append("AND created_at>=? "); args.add(query.from()); }
         if (query.to() != null) { sql.append("AND created_at<? "); args.add(query.to()); }
-        if (query.cursor() != null && !query.cursor().isBlank()) { sql.append("AND transaction_id<? "); args.add(query.cursor()); }
-        sql.append("ORDER BY transaction_id DESC LIMIT ?");
+        OpsTransactionQueryPort.CursorKey cursorKey = OpsTransactionQueryPort.parseCursor(query.cursor()).orElse(null);
+        if (cursorKey != null) {
+            // 键集分页：创建时间倒序，交易 ID 裁决同毫秒平局；游标边界行本身不在结果内。
+            sql.append("AND (created_at < ? OR (created_at = ? AND transaction_id < ?)) ");
+            args.add(Timestamp.from(cursorKey.createdAt()));
+            args.add(Timestamp.from(cursorKey.createdAt()));
+            args.add(cursorKey.transactionId());
+        }
+        sql.append("ORDER BY created_at DESC, transaction_id DESC LIMIT ?");
         args.add(query.limit());
         return jdbc.query(sql.toString(), (rs, n) -> opsTransactionRow(rs), args.toArray());
+    }
+
+    @Override
+    public DashboardTransactionStats dashboardTransactionStats(Instant from, Instant to) {
+        // 只将最终成功交易计入交易额；已冲正与已取消不应继续表现为可用经营金额。
+        Long successAmount = jdbc.queryForObject("SELECT COALESCE(SUM(amount_fen),0) FROM business_db.fund_transaction "
+                        + "WHERE created_at>=? AND created_at<? AND status='SUCCESS'",
+                Long.class, Timestamp.from(from), Timestamp.from(to));
+        Long definitiveCount = jdbc.queryForObject("SELECT COUNT(*) FROM business_db.fund_transaction "
+                        + "WHERE created_at>=? AND created_at<? AND status IN ('SUCCESS','REVERSED','CANCELLED')",
+                Long.class, Timestamp.from(from), Timestamp.from(to));
+        Long successCount = jdbc.queryForObject("SELECT COUNT(*) FROM business_db.fund_transaction "
+                        + "WHERE created_at>=? AND created_at<? AND status='SUCCESS'",
+                Long.class, Timestamp.from(from), Timestamp.from(to));
+        Long pendingManual = jdbc.queryForObject("SELECT COUNT(*) FROM business_db.manual_case "
+                        + "WHERE status IN ('OPEN','CLAIMED')", Long.class);
+        long denominator = definitiveCount == null ? 0L : definitiveCount;
+        long numerator = successCount == null ? 0L : successCount;
+        long successRateBps = denominator == 0L ? 0L : numerator * 10_000L / denominator;
+        return new DashboardTransactionStats(successAmount == null ? 0L : successAmount, successRateBps,
+                pendingManual == null ? 0L : pendingManual, denominator);
     }
 
     @Override

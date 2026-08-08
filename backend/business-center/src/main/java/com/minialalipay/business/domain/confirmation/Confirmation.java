@@ -1,5 +1,7 @@
 package com.minialalipay.business.domain.confirmation;
 
+import com.minialalipay.business.domain.transaction.FundingSource;
+
 import java.time.Duration;
 import java.time.Instant;
 import java.util.Arrays;
@@ -18,24 +20,43 @@ public final class Confirmation {
     private final String payerUserId;
     private final String paymentProofId;
     private final long payPasswordVersion;
+    private final FundingSource fundingSource;
     private ConfirmationStatus status;
     private final Instant expiresAt;
     private Instant consumedAt;
     private final Instant createdAt;
 
-    /** 签发两分钟有效的确认上下文。 */
+    /** 签发两分钟有效的余额确认上下文。 */
     public static Confirmation issue(String confirmationId, byte[] tokenDigest, SubjectType subjectType,
                                      String subjectId, byte[] subjectHash, String payerUserId,
                                      String paymentProofId, long payPasswordVersion, Instant now) {
+        return issue(confirmationId, tokenDigest, subjectType, subjectId, subjectHash, payerUserId,
+                paymentProofId, payPasswordVersion, FundingSource.BALANCE, now);
+    }
+
+    /** 签发两分钟有效的确认上下文；资金来源与付款账户一起被绑定，付款受理时不得再覆盖。 */
+    public static Confirmation issue(String confirmationId, byte[] tokenDigest, SubjectType subjectType,
+                                     String subjectId, byte[] subjectHash, String payerUserId,
+                                     String paymentProofId, long payPasswordVersion, FundingSource fundingSource,
+                                     Instant now) {
         return new Confirmation(confirmationId, tokenDigest, subjectType, subjectId, subjectHash,
-                payerUserId, paymentProofId, payPasswordVersion, ConfirmationStatus.ACTIVE,
+                payerUserId, paymentProofId, payPasswordVersion, fundingSource, ConfirmationStatus.ACTIVE,
                 now.plus(VALIDITY), null, now);
+    }
+
+    /** 从持久化事实重建确认上下文；历史记录默认余额支付。 */
+    public Confirmation(String confirmationId, byte[] tokenDigest, SubjectType subjectType, String subjectId,
+                        byte[] subjectHash, String payerUserId, String paymentProofId, long payPasswordVersion,
+                        ConfirmationStatus status, Instant expiresAt, Instant consumedAt, Instant createdAt) {
+        this(confirmationId, tokenDigest, subjectType, subjectId, subjectHash, payerUserId, paymentProofId,
+                payPasswordVersion, FundingSource.BALANCE, status, expiresAt, consumedAt, createdAt);
     }
 
     /** 从持久化事实重建确认上下文。 */
     public Confirmation(String confirmationId, byte[] tokenDigest, SubjectType subjectType, String subjectId,
                         byte[] subjectHash, String payerUserId, String paymentProofId, long payPasswordVersion,
-                        ConfirmationStatus status, Instant expiresAt, Instant consumedAt, Instant createdAt) {
+                        FundingSource fundingSource, ConfirmationStatus status, Instant expiresAt,
+                        Instant consumedAt, Instant createdAt) {
         this.confirmationId = required(confirmationId);
         this.tokenDigest = digest(tokenDigest);
         this.subjectType = Objects.requireNonNull(subjectType);
@@ -45,6 +66,7 @@ public final class Confirmation {
         this.paymentProofId = required(paymentProofId);
         if (payPasswordVersion < 0) throw new IllegalArgumentException("支付密码版本不得为负");
         this.payPasswordVersion = payPasswordVersion;
+        this.fundingSource = Objects.requireNonNull(fundingSource);
         this.status = Objects.requireNonNull(status);
         this.expiresAt = Objects.requireNonNull(expiresAt);
         this.consumedAt = consumedAt;
@@ -82,6 +104,7 @@ public final class Confirmation {
     public String getPayerUserId() { return payerUserId; }
     public String getPaymentProofId() { return paymentProofId; }
     public long getPayPasswordVersion() { return payPasswordVersion; }
+    public FundingSource getFundingSource() { return fundingSource; }
     public ConfirmationStatus getStatus() { return status; }
     public Instant getExpiresAt() { return expiresAt; }
     public Instant getConsumedAt() { return consumedAt; }

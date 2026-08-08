@@ -37,13 +37,14 @@ public class AdminUserService {
     /**
      * B 端分页查询用户只读投影。
      *
-     * @param status 用户状态过滤，null 表示不限定
-     * @param cursor 上一页最后一条 {@code user_id}，null 表示第一页
-     * @param limit  每页最大返回条数
+     * @param status    用户状态过滤，null 表示不限定
+     * @param loginName 登录名关键词过滤（按账户号模糊匹配），null 表示不限定
+     * @param cursor    上一页最后一条 {@code user_id}，null 表示第一页
+     * @param limit     每页最大返回条数
      * @return 用户只读投影列表
      */
-    public List<UserAdminView> list(UserStatus status, String cursor, int limit) {
-        return userRepository.findAdminPage(status, cursor, limit);
+    public List<UserAdminView> list(UserStatus status, String loginName, String cursor, int limit) {
+        return userRepository.findAdminPage(status, loginName, cursor, limit);
     }
 
     /**

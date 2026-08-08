@@ -96,6 +96,15 @@ public class JdbcRechargeStore implements RechargeStore {
     }
 
     @Override
+    public boolean updateDailyUsage(RechargeDailyUsage usage, long expectedVersion) {
+        return jdbc.update("UPDATE business_db.recharge_daily_usage SET processing_fen=?,success_fen=?,processing_count=?,success_count=?,version=?,updated_at=? "
+                        + "WHERE user_id=? AND business_date=? AND version=?",
+                usage.getProcessingFen(), usage.getSuccessFen(), usage.getProcessingCount(), usage.getSuccessCount(),
+                usage.getVersion(), Timestamp.from(usage.getUpdatedAt()), usage.getUserId(),
+                Date.valueOf(usage.getBusinessDate()), expectedVersion) == 1;
+    }
+
+    @Override
     public boolean updateOrder(RechargeOrder order, long expectedVersion) {
         return jdbc.update("UPDATE business_db.recharge_order SET status=?,transaction_id=?,reject_reason_code=?,version=?,updated_at=? "
                         + "WHERE recharge_order_id=? AND version=?",

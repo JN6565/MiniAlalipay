@@ -1,5 +1,6 @@
+import { LeftOutlined, ReloadOutlined, RightOutlined, SearchOutlined } from '@ant-design/icons';
 import { useQuery } from '@tanstack/react-query';
-import { Button, Collapse, Drawer, Descriptions, Select, Space, Table, Tag, Typography } from 'antd';
+import { Button, Collapse, Drawer, Descriptions, Empty, Input, Select, Space, Table, Tag, Typography } from 'antd';
 import type { TableProps } from 'antd';
 import { useMemo, useState } from 'react';
 import PageHeader from '@/components/PageHeader';
@@ -43,19 +44,22 @@ const riskLevelLabels: Record<string, string> = {
   HIGH: '高',
 };
 
-/** 资金处理状态展示标签（TCC 全局状态的业务翻译）。 */
+/** 资金处理状态展示标签（TCC 全局状态的业务翻译，与 ck_tcc_global_status 约束一致）。 */
 const fundProcessLabels: Record<string, string> = {
   SUCCESS: '资金已处理',
   PROCESSING: '资金处理中',
+  COMMITTING: '资金提交中',
+  ROLLING_BACK: '资金回滚中',
   FAILED: '资金处理失败',
   CANCELLED: '资金已释放',
+  MANUAL_REVIEW: '资金待人工处理',
 };
 
-/** 终态发布状态展示标签（Outbox 投递状态的业务翻译）。 */
+/** 终态发布状态展示标签（Outbox 投递状态的业务翻译，与 ck_business_outbox_status 约束一致）。 */
 const terminalPublishLabels: Record<string, string> = {
-  COMPLETED: '终态已发布',
   PENDING: '终态待发布',
-  FAILED: '终态发布失败',
+  PUBLISHED: '终态已发布',
+  DEAD: '终态发布失败',
 };
 
 /** 状态与业务类型筛选项；与 OpenAPI 枚举一致。 */
@@ -73,14 +77,17 @@ const businessOptions = Object.keys(businessLabels);
 export default function Transactions() {
   const [status, setStatus] = useState<string | undefined>();
   const [businessType, setBusinessType] = useState<string | undefined>();
+  // 发起人关键词：提交的查询值与输入框值分离，避免输入即触发分页重置。
+  const [initiator, setInitiator] = useState<string | undefined>();
+  const [initiatorInput, setInitiatorInput] = useState<string | undefined>();
   // 游标栈用于上一页；nextCursor 为空表示已到最新一页。
   const [cursorStack, setCursorStack] = useState<string[]>([]);
   const [cursor, setCursor] = useState<string | undefined>(undefined);
   const [detailId, setDetailId] = useState<string | null>(null);
 
-  const { data, isFetching } = useQuery({
-    queryKey: ['ops-transactions', status, businessType, cursor],
-    queryFn: () => listOpsTransactions({ status, businessType, cursor }),
+  const { data, isFetching, isError } = useQuery({
+    queryKey: ['ops-transactions', status, businessType, initiator, cursor],
+    queryFn: () => listOpsTransactions({ status, businessType, initiator, cursor }),
   });
 
   const page = data?.data;
@@ -96,6 +103,11 @@ export default function Transactions() {
   const refresh = () => {
     setCursorStack([]);
     setCursor(undefined);
+  };
+
+  const submitSearch = () => {
+    setInitiator(initiatorInput?.trim() || undefined);
+    refresh();
   };
 
   const nextPage = () => {
@@ -118,20 +130,14 @@ export default function Transactions() {
       {
         title: '交易编号',
         dataIndex: 'transactionId',
-        ellipsis: true,
-        width: 200,
-      },
-      {
-        title: '业务类型',
-        dataIndex: 'businessType',
-        width: 110,
-        render: (value: string) => businessLabels[value] ?? value,
+        width: 280,
+        onCell: () => ({ style: { whiteSpace: 'nowrap' } }),
       },
       {
         title: '金额（元）',
         dataIndex: 'amountFen',
         width: 110,
-        align: 'right',
+        align: 'left',
         render: (value: number) => formatAmountFen(value),
       },
       {
@@ -142,6 +148,12 @@ export default function Transactions() {
           const label = statusLabels[value] ?? { text: value, color: 'default' };
           return <Tag color={label.color}>{label.text}</Tag>;
         },
+      },
+      {
+        title: '业务类型',
+        dataIndex: 'businessType',
+        width: 130,
+        render: (value: string) => businessLabels[value] ?? '其他交易',
       },
       {
         title: '发起人',
@@ -172,7 +184,7 @@ export default function Transactions() {
   const detailItem = detail?.data?.transaction;
   // 交易结果：只展示服务端确定的业务结果，不掺入实现细节。
   const resultItems = [
-    { key: 'transactionId', label: '交易编号', children: detailItem?.transactionId ?? '-' },
+    { key: 'transactionId', label: '交易编号', children: detailItem?.transactionId ? <Typography.Text copyable>{detailItem.transactionId}</Typography.Text> : '-' },
     { key: 'businessType', label: '业务类型', children: detailItem ? (businessLabels[detailItem.businessType] ?? detailItem.businessType) : '-' },
     { key: 'status', label: '交易状态', children: detailItem ? (statusLabels[detailItem.status]?.text ?? detailItem.status) : '-' },
     { key: 'amount', label: '金额（元）', children: detailItem ? formatAmountFen(detailItem.amountFen) : '-' },
@@ -198,7 +210,7 @@ export default function Transactions() {
     { key: 'tccRetry', label: 'TCC 重试次数', children: detail?.data?.tccRetryCount ?? '-' },
     { key: 'outbox', label: '最新终态事件', children: detail?.data?.latestOutboxEventType ?? '-' },
     { key: 'outboxStatus', label: '事件投递状态', children: detail?.data?.outboxStatus ?? '-' },
-    { key: 'traceId', label: '链路编号', children: detailItem?.traceId ?? '-' },
+    { key: 'traceId', label: '链路编号', children: detailItem?.traceId ? <Typography.Text copyable>{detailItem.traceId}</Typography.Text> : '-' },
   ];
 
   return (
@@ -222,7 +234,18 @@ export default function Transactions() {
             onChange={(value) => { setBusinessType(value); refresh(); }}
             options={businessOptions.map((value) => ({ value, label: businessLabels[value] }))}
           />
-          <Button type="primary" onClick={refresh}>刷新</Button>
+          <Input
+            allowClear
+            prefix={<SearchOutlined />}
+            placeholder="按发起人搜索"
+            style={{ width: 200 }}
+            value={initiatorInput}
+            onChange={(e) => setInitiatorInput(e.target.value)}
+            onPressEnter={submitSearch}
+          />
+          {/* 搜索与刷新均为筛选栏操作，统一使用白底描边按钮保持视觉一致。 */}
+          <Button type="primary" className="admin-btn-query" onClick={submitSearch}>搜索</Button>
+          <Button icon={<ReloadOutlined />} onClick={refresh}>刷新</Button>
         </Space>
       </section>
       <section className={pageStyles.panel} aria-label="交易列表">
@@ -237,12 +260,22 @@ export default function Transactions() {
             onClick: () => setDetailId(record.transactionId),
             style: { cursor: 'pointer' },
           })}
-          locale={{ emptyText: '暂无交易记录，请调整筛选条件' }}
+          locale={{
+            emptyText: (
+              <Empty
+                description={isError
+                  ? '加载失败，请确认网关已启动'
+                  : status || businessType || initiator
+                    ? '未查询到符合筛选条件的交易，请调整交易状态、业务类型或发起人'
+                    : '暂无交易记录'}
+              />
+            ),
+          }}
         />
         <Space style={{ marginTop: 16, justifyContent: 'flex-end', width: '100%' }}>
-          <Button disabled={cursorStack.length === 0} onClick={prevPage}>上一页</Button>
+          <Button ghost disabled={cursorStack.length === 0} icon={<LeftOutlined />} onClick={prevPage}>上一页</Button>
           <Typography.Text type="secondary">{rows.length} 条</Typography.Text>
-          <Button disabled={!page?.nextCursor} onClick={nextPage}>下一页</Button>
+          <Button ghost disabled={!page?.nextCursor} onClick={nextPage}>下一页 <RightOutlined /></Button>
         </Space>
       </section>
       <Drawer

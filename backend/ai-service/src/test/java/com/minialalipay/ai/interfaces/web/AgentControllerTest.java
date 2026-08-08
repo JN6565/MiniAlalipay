@@ -8,15 +8,18 @@ import com.minialalipay.ai.domain.agent.AgentMessageRepository;
 import com.minialalipay.ai.domain.agent.AgentSessionRepository;
 import com.minialalipay.ai.domain.agent.IntentType;
 import com.minialalipay.common.error.BusinessException;
+import com.minialalipay.common.error.CommonExceptionMapper;
 import com.minialalipay.common.trace.RequestIdGenerator;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.autoconfigure.web.servlet.WebMvcTest;
 import org.springframework.boot.test.mock.mockito.MockBean;
+import org.springframework.context.annotation.Import;
 import org.springframework.http.MediaType;
 import org.springframework.test.context.ActiveProfiles;
 import org.springframework.test.web.servlet.MockMvc;
 
+import java.time.Clock;
 import java.time.Instant;
 import java.util.Map;
 
@@ -26,6 +29,7 @@ import static org.springframework.test.web.servlet.request.MockMvcRequestBuilder
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.*;
 
 @WebMvcTest(AgentController.class)
+@Import(CommonExceptionMapper.class)
 @ActiveProfiles("test")
 class AgentControllerTest {
 
@@ -36,13 +40,15 @@ class AgentControllerTest {
     @MockBean private RequestIdGenerator requestIdGenerator;
     @MockBean private AgentSessionRepository sessionRepository;
     @MockBean private AgentMessageRepository messageRepository;
+    @MockBean private Clock clock;
 
     @Test
     void shouldReturn200ForValidRequest() throws Exception {
         when(injectionDetector.check(any())).thenReturn(
                 InjectionDetector.InjectionCheckResult.SAFE);
         when(sanitizer.sanitizeContent(any())).thenReturn("查询我的余额");
-        when(agentMessageService.processMessage(any(), any(), any(), any(), any(Instant.class)))
+        when(clock.instant()).thenReturn(Instant.parse("2026-08-04T06:00:00Z"));
+        when(agentMessageService.processMessage(any(), any(), any(), any(), any(), any(Instant.class)))
                 .thenReturn(new AgentMessageService.SendMessageResult(
                         "session-001", "msg-001", "您的余额为 10,000 元",
                         IntentType.BALANCE_QUERY, Map.of(), false, false));

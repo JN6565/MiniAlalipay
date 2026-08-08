@@ -131,6 +131,27 @@ class JdbcMonitoringProjectionStoreIntegrationTest {
         assertThat(definitions.get(0).unit()).isEqualTo("笔");
     }
 
+    @Test
+    void 聚合按事件类型合并且不拆分业务类型维度() {
+        jdbc.update("INSERT INTO metrics_db.analytics_event (event_id,event_type,business_type,occurred_at,trace_id) "
+                + "VALUES ('a','transaction.accepted','BALANCE',?,NULL)", Timestamp.from(NOW));
+        jdbc.update("INSERT INTO metrics_db.analytics_event (event_id,event_type,business_type,occurred_at,trace_id) "
+                + "VALUES ('b','transaction.accepted','CREDIT',?,NULL)", Timestamp.from(NOW.plusSeconds(40)));
+        jdbc.update("INSERT INTO metrics_db.analytics_event (event_id,event_type,business_type,occurred_at,trace_id) "
+                + "VALUES ('c','transaction.status.changed',NULL,?,NULL)", Timestamp.from(NOW.plusSeconds(70)));
+
+        var metrics = store.aggregate(NOW.minusSeconds(5), NOW.plusSeconds(120));
+
+        // 同码不同业务类型必须合并为一行，总计两个指标码。
+        assertThat(metrics).hasSize(2);
+        assertThat(metrics).filteredOn(m -> "transaction.accepted".equals(m.metricCode()))
+                .singleElement().satisfies(m -> assertThat(m.value()).isEqualTo(2L));
+        assertThat(metrics).filteredOn(m -> "transaction.status.changed".equals(m.metricCode()))
+                .singleElement().satisfies(m -> assertThat(m.value()).isEqualTo(1L));
+        // 当前口径无维度，统一写入空维度 JSON，保证单日每码单行。
+        assertThat(metrics).allSatisfy(m -> assertThat(m.dimensionsJson()).isEqualTo("{}"));
+    }
+
     private static JdbcDataSource dataSource() {
         JdbcDataSource dataSource = new JdbcDataSource();
         dataSource.setURL("jdbc:h2:mem:monitoring_projection_" + UUID.randomUUID() + ";MODE=MySQL;DB_CLOSE_DELAY=-1");

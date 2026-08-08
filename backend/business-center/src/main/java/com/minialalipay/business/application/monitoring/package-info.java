@@ -1,6 +1,2 @@
-/**
- * 运营事件消费与只读投影编排。
- *
- * <p>负责 Inbox 去重、契约校验、失败重试和隔离；不拥有账户、余额、账本或交易终态。</p>
- */
+/** 监控事件消费、Outbox 发布与实时投影的应用编排；不持有或修改资金事实。 */
 package com.minialalipay.business.application.monitoring;

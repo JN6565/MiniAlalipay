@@ -5,8 +5,12 @@ import com.minialalipay.account.domain.account.AccountErrorCode;
 import com.minialalipay.account.domain.account.AccountRepository;
 import com.minialalipay.account.domain.bankcard.BankCard;
 import com.minialalipay.account.domain.bankcard.BankCardErrorCode;
+import com.minialalipay.account.domain.bankcard.BankCardNumber;
 import com.minialalipay.account.domain.bankcard.BankCardRepository;
 import com.minialalipay.account.domain.bankcard.BankCardStatus;
+import com.minialalipay.account.domain.bankcard.RegisteredCard;
+import com.minialalipay.account.domain.bankcard.RegisteredCardRepository;
+import com.minialalipay.account.domain.bankcard.UserCenterIdentityPort;
 import com.minialalipay.account.domain.bankcard.BankCardType;
 import com.minialalipay.account.application.bankcard.dto.BankCardDTO;
 import com.minialalipay.common.error.BusinessException;
@@ -33,16 +37,22 @@ import static org.mockito.Mockito.when;
 class BankCardApplicationServiceTest {
 
     private static final String USER = "USER001";
+    private static final Instant NOW = Instant.parse("2026-08-08T00:00:00Z");
 
     private BankCardRepository cardRepository;
     private AccountRepository accountRepository;
+    private RegisteredCardRepository registeredCardRepository;
+    private UserCenterIdentityPort userCenterIdentityPort;
     private BankCardApplicationService service;
 
     @BeforeEach
     void setUp() {
         cardRepository = mock(BankCardRepository.class);
         accountRepository = mock(AccountRepository.class);
-        service = new BankCardApplicationService(cardRepository, accountRepository);
+        registeredCardRepository = mock(RegisteredCardRepository.class);
+        userCenterIdentityPort = mock(UserCenterIdentityPort.class);
+        service = new BankCardApplicationService(cardRepository, accountRepository,
+                registeredCardRepository, userCenterIdentityPort);
 
         Account account = mock(Account.class);
         when(account.getAccountId()).thenReturn("ACC001");
@@ -50,6 +60,10 @@ class BankCardApplicationServiceTest {
 
         // 默认 CAS 更新成功，个别用例单独覆写制造冲突
         when(cardRepository.updateByCas(any(), anyLong())).thenReturn(true);
+        when(registeredCardRepository.updateStatus(any())).thenReturn(true);
+
+        // 三要素与用户中心交叉校验默认通过，个别用例单独覆写
+        when(userCenterIdentityPort.verifyThreeElements(any(), any(), any(), any())).thenReturn(true);
     }
 
     /** 生成合法 Luhn 卡号；固定主体保证测试可复现。 */
@@ -58,9 +72,18 @@ class BankCardApplicationServiceTest {
                 .withLuhnCheckDigit(bin + "123456789");
     }
 
+    /** 为指定卡号构造归属当前用户、三要素匹配的 REGISTERED 注册记录（未知银行用人工 BIN 信息兜底）。 */
+    private static RegisteredCard registeredFor(String cardNumber) {
+        BankCardNumber.BankCardInfo info = BankCardNumber.identify(cardNumber)
+                .orElseGet(() -> new BankCardNumber.BankCardInfo("999999", "未知银行", BankCardType.DEBIT));
+        return RegisteredCard.register("REG001", USER, info, cardNumber,
+                "张三", "330106199001011234", "13812345678", NOW);
+    }
+
     @Test
     void firstCardAutomaticallyBecomesDefault() {
         when(cardRepository.countActiveByUserId(USER)).thenReturn(0L);
+        when(registeredCardRepository.findByCardNumber(any())).thenReturn(Optional.of(registeredFor(validCard("621226"))));
         when(cardRepository.existsActiveByUserAndCard(any(), any(), any())).thenReturn(false);
 
         BankCardDTO dto = service.bindCard(USER, validCard("621226"), "张三",
@@ -78,6 +101,7 @@ class BankCardApplicationServiceTest {
     @Test
     void secondCardIsNotDefault() {
         when(cardRepository.countActiveByUserId(USER)).thenReturn(1L);
+        when(registeredCardRepository.findByCardNumber(any())).thenReturn(Optional.of(registeredFor(validCard("621226"))));
         when(cardRepository.existsActiveByUserAndCard(any(), any(), any())).thenReturn(false);
 
         service.bindCard(USER, validCard("621226"), "张三",
@@ -91,6 +115,7 @@ class BankCardApplicationServiceTest {
     @Test
     void duplicateBindRejected() {
         when(cardRepository.countActiveByUserId(USER)).thenReturn(1L);
+        when(registeredCardRepository.findByCardNumber(any())).thenReturn(Optional.of(registeredFor(validCard("621226"))));
         when(cardRepository.existsActiveByUserAndCard(any(), any(), any())).thenReturn(true);
 
         assertThatThrownBy(() -> service.bindCard(USER, validCard("621226"), "张三",
@@ -122,6 +147,8 @@ class BankCardApplicationServiceTest {
 
     @Test
     void unknownBankRejected() {
+        when(registeredCardRepository.findByCardNumber(any())).thenReturn(Optional.of(registeredFor(validCard("999999"))));
+
         assertThatThrownBy(() -> service.bindCard(USER, validCard("999999"), "张三",
                 "330106199001011234", "13812345678"))
                 .isInstanceOf(BusinessException.class)
@@ -131,6 +158,8 @@ class BankCardApplicationServiceTest {
 
     @Test
     void invalidHolderRejected() {
+        when(registeredCardRepository.findByCardNumber(any())).thenReturn(Optional.of(registeredFor(validCard("621226"))));
+
         assertThatThrownBy(() -> service.bindCard(USER, validCard("621226"), "张三",
                 "123456", "13812345678"))
                 .isInstanceOf(BusinessException.class)

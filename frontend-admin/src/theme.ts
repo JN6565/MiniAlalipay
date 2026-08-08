@@ -18,6 +18,12 @@ export const adminTheme: ThemeConfig = {
     colorSuccess: '#2f8d7e',
     colorWarning: '#ae7f35',
     colorError: '#b35c60',
+    // 主按钮与危险按钮的 hover/active 态由全局别名令牌驱动（antd Button 组件令牌不含这三态色）。
+    colorPrimaryHover: '#1d6de3',
+    colorPrimaryActive: '#165ecb',
+    colorErrorHover: '#c15f64',
+    colorErrorActive: '#9c4d51',
+    colorErrorBorderHover: '#c15f64',
     colorText: '#202a38',
     colorTextSecondary: '#4e5c72',
     colorBgLayout: '#f6f8fb',
@@ -53,8 +59,28 @@ export const adminTheme: ThemeConfig = {
       activeBarBorderWidth: 0,
     },
     Button: {
+      // 与输入控件同高（36px），筛选栏内按钮与输入框对齐；操作列用小号紧凑版（32px）保持可点性。
+      controlHeight: 36,
+      controlHeightSM: 32,
+      // 主按钮中等字重，动作词更醒目。
+      fontWeight: 500,
+      // 默认按钮：淡蓝底 hover、边框加深，与「晴空」面板底色协调。
+      defaultColor: '#202a38',
+      defaultBorderColor: '#c9d9ee',
+      defaultHoverColor: '#1d6de3',
+      defaultHoverBg: '#f0f5fb',
+      defaultHoverBorderColor: '#bcd0e8',
+      defaultActiveBg: '#e7eef9',
+      defaultActiveBorderColor: '#bcd0e8',
+      // 主按钮文字色；hover/active 由全局 colorPrimaryHover/Active 驱动（见顶部 token）。
+      primaryColor: '#ffffff',
       primaryShadow: 'none',
       defaultShadow: 'none',
+      // 危险按钮描边式（文字与边框取全局 colorError，hover/active 由全局 colorError* 驱动）。
+      dangerColor: '#b35c60',
+      dangerShadow: 'none',
+      linkHoverBg: 'transparent',
+      textHoverBg: '#f0f5fb',
     },
     Card: {
       headerBg: 'transparent',

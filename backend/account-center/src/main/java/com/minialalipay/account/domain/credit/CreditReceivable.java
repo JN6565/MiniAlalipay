@@ -149,6 +149,30 @@ public class CreditReceivable {
         validateInvariants();
     }
 
+    /**
+     * 退款冲正减少应收。优先扣减已出账应收，再扣减未出账应收。
+     *
+     * @param amountFen 退款金额（分），必须为正且不超过应收总额
+     * @param now 冲正时间
+     */
+    public void decreaseByRefund(long amountFen, Instant now) {
+        if (amountFen <= 0) {
+            throw new IllegalArgumentException("退款金额必须为正");
+        }
+        long remaining = amountFen;
+        long billedDeduct = Math.min(remaining, this.billedFen);
+        this.billedFen -= billedDeduct;
+        remaining -= billedDeduct;
+        long unbilledDeduct = Math.min(remaining, this.unbilledFen);
+        this.unbilledFen -= unbilledDeduct;
+        remaining -= unbilledDeduct;
+        if (remaining > 0) {
+            throw new IllegalStateException("应收不足以冲正退款金额");
+        }
+        this.updatedAt = now;
+        validateInvariants();
+    }
+
     /** @return 未出账应收（分） */
     public long getUnbilledFen() { return unbilledFen; }
 

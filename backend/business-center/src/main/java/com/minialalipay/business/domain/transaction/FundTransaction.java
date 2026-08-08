@@ -13,6 +13,7 @@ public final class FundTransaction {
     private final String payerAccountId;
     private final String payeeAccountId;
     private final FundingSource fundingSource;
+    private final String relatedTransactionId;
     private final long amountFen;
     private final String idempotencyKey;
     private TransactionStatus status;
@@ -29,15 +30,37 @@ public final class FundTransaction {
                                          String idempotencyKey, String riskLevel, String traceId, Instant now) {
         return new FundTransaction(transactionId, businessType, sourceType, sourceOrderId, initiatorUserId,
                 payerAccountId, payeeAccountId, fundingSource, amountFen, idempotencyKey,
-                TransactionStatus.PROCESSING, riskLevel, traceId, 0L, now, now);
+                TransactionStatus.PROCESSING, riskLevel, traceId, 0L, now, now, null);
     }
 
-    /** 从持久化事实重建交易。 */
+    /** 受理一笔关联原支付交易的受控退款，初始状态固定为 PROCESSING。 */
+    public static FundTransaction acceptRefund(String transactionId, SourceType sourceType, String sourceOrderId,
+                                               String initiatorUserId, String payerAccountId, String payeeAccountId,
+                                               FundingSource fundingSource, long amountFen, String idempotencyKey,
+                                               String riskLevel, String traceId, String relatedTransactionId, Instant now) {
+        return new FundTransaction(transactionId, TransactionType.REFUND, sourceType, sourceOrderId, initiatorUserId,
+                payerAccountId, payeeAccountId, fundingSource, amountFen, idempotencyKey,
+                TransactionStatus.PROCESSING, riskLevel, traceId, 0L, now, now, relatedTransactionId);
+    }
+
+    /** 从持久化事实重建交易；退款等场景通过关联字段带回原支付交易号。 */
     public FundTransaction(String transactionId, TransactionType businessType, SourceType sourceType,
                            String sourceOrderId, String initiatorUserId, String payerAccountId,
                            String payeeAccountId, FundingSource fundingSource, long amountFen,
                            String idempotencyKey, TransactionStatus status, String riskLevel,
                            String traceId, long version, Instant createdAt, Instant updatedAt) {
+        this(transactionId, businessType, sourceType, sourceOrderId, initiatorUserId, payerAccountId,
+                payeeAccountId, fundingSource, amountFen, idempotencyKey, status, riskLevel,
+                traceId, version, createdAt, updatedAt, null);
+    }
+
+    /** 规范化全参数重建构造器，支持退款关联原支付交易。 */
+    public FundTransaction(String transactionId, TransactionType businessType, SourceType sourceType,
+                           String sourceOrderId, String initiatorUserId, String payerAccountId,
+                           String payeeAccountId, FundingSource fundingSource, long amountFen,
+                           String idempotencyKey, TransactionStatus status, String riskLevel,
+                           String traceId, long version, Instant createdAt, Instant updatedAt,
+                           String relatedTransactionId) {
         this.transactionId = required(transactionId); this.businessType = Objects.requireNonNull(businessType);
         this.sourceType = Objects.requireNonNull(sourceType); this.sourceOrderId = required(sourceOrderId);
         this.initiatorUserId = required(initiatorUserId);
@@ -62,6 +85,7 @@ public final class FundTransaction {
         if (version < 0) throw new IllegalArgumentException("交易版本不得为负");
         this.version = version; this.createdAt = Objects.requireNonNull(createdAt);
         this.updatedAt = Objects.requireNonNull(updatedAt);
+        this.relatedTransactionId = relatedTransactionId;
     }
 
     /** 开始取消或补偿。 */
@@ -99,6 +123,7 @@ public final class FundTransaction {
     public String getPayerAccountId() { return payerAccountId; }
     public String getPayeeAccountId() { return payeeAccountId; }
     public FundingSource getFundingSource() { return fundingSource; }
+    public String getRelatedTransactionId() { return relatedTransactionId; }
     public long getAmountFen() { return amountFen; }
     public String getIdempotencyKey() { return idempotencyKey; }
     public TransactionStatus getStatus() { return status; }

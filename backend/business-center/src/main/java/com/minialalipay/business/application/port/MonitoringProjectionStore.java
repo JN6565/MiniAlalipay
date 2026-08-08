@@ -31,6 +31,15 @@ public interface MonitoringProjectionStore {
     /** 查询指定时间窗口内分钟级实时指标；{@code metricCode} 为空时返回全部。 */
     List<RealtimeMetric> listRealtimeMetrics(String metricCode, Instant from, Instant to);
 
+    /** 统计告警规则对应指标在时间窗口内的事件数量；只读取监控分析投影。 */
+    default long countMetric(String metricCode, Instant from, Instant to) { return 0L; }
+
+    /** 统计仍处于 OPEN 的运营告警数量，供看板展示待处置风险，不以分页列表长度代替总数。 */
+    default long countOpenAlerts() { return 0L; }
+
+    /** 查询同一规则当前仍需运营处置的活动告警，防止定时判定重复开单。 */
+    default Optional<Alert> findActiveAlertByRule(String ruleCode) { return Optional.empty(); }
+
     /** 查询通过质量门禁的 T+1 日指标。 */
     List<DailyMetric> listDailyReports(LocalDate reportDate);
 
