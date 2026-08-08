@@ -653,6 +653,8 @@ public class AgentLoop {
      *   <li>validate_transfer_draft 已完成 → 自动调用 prepare_confirmation_card（需要 draftId）</li>
      * </ol>
      *
+     * <p>★ 关键改进：支持连续自动推进多步，避免 LLM 在每步后都返回 FinalReply 导致流程卡顿。</p>
+     *
      * @return true 表示自动推进成功，false 表示无法推进
      */
     private boolean tryAutoAdvanceFromFinalReply(
@@ -667,86 +669,104 @@ public class AgentLoop {
     ) {
         if (executedTools == null || executedTools.isEmpty()) return false;
 
-        boolean hasSearch = executedTools.contains("search_payees");
-        boolean hasDraft = executedTools.contains("create_transfer_draft");
-        boolean hasValidate = executedTools.contains("validate_transfer_draft");
-        boolean hasConfirm = executedTools.contains("prepare_confirmation_card");
+        // ★ 连续自动推进：循环执行直到无法继续
+        // 这解决了 LLM 在每步工具调用后都返回 FinalReply 的问题
+        int maxAutoSteps = 3; // 最多自动推进 3 步（search→draft→validate→confirm）
+        for (int step = 0; step < maxAutoSteps; step++) {
+            boolean hasSearch = executedTools.contains("search_payees");
+            boolean hasDraft = executedTools.contains("create_transfer_draft");
+            boolean hasValidate = executedTools.contains("validate_transfer_draft");
+            boolean hasConfirm = executedTools.contains("prepare_confirmation_card");
 
-        // 确定下一步工具名和参数
-        String nextToolName;
-        Map<String, Object> nextArgs;
+            // 确定下一步工具名和参数
+            String nextToolName;
+            Map<String, Object> nextArgs;
 
-        if (hasSearch && !hasDraft) {
-            // 第1步→第2步：需要 payeeId 和 amountFen
-            Object payeeId = accumulatedSlots.get("payeeId");
-            Object amountFen = accumulatedSlots.get("amountFen");
-            if (payeeId == null || amountFen == null) {
-                log.warn("FinalReply 自动推进失败: 缺少 payeeId 或 amountFen, slots={}", accumulatedSlots.keySet());
-                return false;
+            if (hasSearch && !hasDraft) {
+                // 第1步→第2步：需要 payeeId 和 amountFen
+                Object payeeId = accumulatedSlots.get("payeeId");
+                Object amountFen = accumulatedSlots.get("amountFen");
+                if (payeeId == null || amountFen == null) {
+                    log.warn("FinalReply 自动推进失败: 缺少 payeeId 或 amountFen, slots={}", accumulatedSlots.keySet());
+                    return step > 0; // 如果之前已成功推进过，返回 true
+                }
+                nextToolName = "create_transfer_draft";
+                nextArgs = Map.of("payeeId", payeeId.toString(), "amountFen", amountFen);
+            } else if (hasDraft && !hasValidate) {
+                // 第2步→第3步：需要 draftId
+                Object draftId = accumulatedSlots.get("draftId");
+                if (draftId == null || draftId.toString().isBlank()) {
+                    log.warn("FinalReply 自动推进失败: 缺少 draftId");
+                    return step > 0; // 如果之前已成功推进过，返回 true
+                }
+                nextToolName = "validate_transfer_draft";
+                nextArgs = Map.of("draftId", draftId.toString());
+            } else if (hasValidate && !hasConfirm) {
+                // 第3步→第4步：需要 draftId
+                Object draftId = accumulatedSlots.get("draftId");
+                if (draftId == null || draftId.toString().isBlank()) {
+                    log.warn("FinalReply 自动推进失败: 缺少 draftId");
+                    return step > 0; // 如果之前已成功推进过，返回 true
+                }
+                nextToolName = "prepare_confirmation_card";
+                nextArgs = Map.of("draftId", draftId.toString());
+            } else {
+                // 流程已完成或无法继续
+                return step > 0; // 如果之前已成功推进过，返回 true
             }
-            nextToolName = "create_transfer_draft";
-            nextArgs = Map.of("payeeId", payeeId.toString(), "amountFen", amountFen);
-        } else if (hasDraft && !hasValidate) {
-            // 第2步→第3步：需要 draftId
-            Object draftId = accumulatedSlots.get("draftId");
-            if (draftId == null || draftId.toString().isBlank()) {
-                log.warn("FinalReply 自动推进失败: 缺少 draftId");
-                return false;
+
+            log.info("FinalReply 自动推进 (step {}): 已执行={}, 下一步工具={}, args={}",
+                    step, executedTools, nextToolName, nextArgs);
+
+            // 构造工具调用并执行
+            AgentDecision.ToolCall nextCall = new AgentDecision.ToolCall(nextToolName, nextArgs, 0);
+            ToolExecutionResult result = executeToolCall(nextCall, context, accumulatedSlots);
+
+            // 记录到去重集合
+            String nextKey = nextToolName + ":" + serializeArgs(nextArgs);
+            executedToolKeys.add(nextKey);
+            previousToolResults.put(nextKey, result.toolResult());
+            executedTools.add(nextToolName);
+
+            // 通知前端回调
+            String status = result.toolResult().isSuccess() ? "success" : "failed";
+            String summary = result.toolResult().isSuccess()
+                    ? resultInterpreter.interpret(nextToolName, result.toolResult())
+                    : (result.toolResult().errorMessage() != null
+                        ? result.toolResult().errorMessage() : "工具执行失败");
+            Map<String, Object> resultData = result.toolResult().data() != null
+                    ? new HashMap<>(result.toolResult().data()) : Map.of();
+            if (context.callback() != null) {
+                context.callback().onToolCall(nextToolName, "running");
+                context.callback().onToolResult(nextToolName, status, summary, resultData);
             }
-            nextToolName = "validate_transfer_draft";
-            nextArgs = Map.of("draftId", draftId.toString());
-        } else if (hasValidate && !hasConfirm) {
-            // 第3步→第4步：需要 draftId
-            Object draftId = accumulatedSlots.get("draftId");
-            if (draftId == null || draftId.toString().isBlank()) {
-                log.warn("FinalReply 自动推进失败: 缺少 draftId");
-                return false;
+            // 记录工具结果摘要
+            toolResults.add(new ToolResultRecord(nextToolName, status, summary, resultData));
+
+            // 更新 accumulatedSlots
+            if (result.toolResult().data() != null) {
+                accumulatedSlots.putAll(result.toolResult().data());
             }
-            nextToolName = "prepare_confirmation_card";
-            nextArgs = Map.of("draftId", draftId.toString());
-        } else {
-            return false;
+
+            // 将工具结果追加到消息列表
+            String toolResultJson = formatToolResult(nextToolName, result.toolResult());
+            messages.add(new ChatMessage(MessageRole.SYSTEM, toolResultJson));
+
+            log.info("FinalReply 自动推进完成 (step {}): tool={}, resultCode={}, iteration={}",
+                    step, nextToolName, result.toolResult().resultCode(), iteration);
+
+            // 如果工具执行失败，停止自动推进
+            if (!result.toolResult().isSuccess()) {
+                log.warn("自动推进中断: 工具执行失败, tool={}, resultCode={}",
+                        nextToolName, result.toolResult().resultCode());
+                return true; // 已执行过至少一步，返回 true
+            }
+
+            // 继续下一轮自动推进
         }
 
-        log.info("FinalReply 自动推进: 已执行={}, 下一步工具={}, args={}",
-                executedTools, nextToolName, nextArgs);
-
-        // 构造工具调用并执行
-        AgentDecision.ToolCall nextCall = new AgentDecision.ToolCall(nextToolName, nextArgs, 0);
-        ToolExecutionResult result = executeToolCall(nextCall, context, accumulatedSlots);
-
-        // 记录到去重集合
-        String nextKey = nextToolName + ":" + serializeArgs(nextArgs);
-        executedToolKeys.add(nextKey);
-        previousToolResults.put(nextKey, result.toolResult());
-        executedTools.add(nextToolName);
-
-        // 通知前端回调
-        String status = result.toolResult().isSuccess() ? "success" : "failed";
-        String summary = result.toolResult().isSuccess()
-                ? resultInterpreter.interpret(nextToolName, result.toolResult())
-                : (result.toolResult().errorMessage() != null
-                    ? result.toolResult().errorMessage() : "工具执行失败");
-        Map<String, Object> resultData = result.toolResult().data() != null
-                ? new HashMap<>(result.toolResult().data()) : Map.of();
-        if (context.callback() != null) {
-            context.callback().onToolCall(nextToolName, "running");
-            context.callback().onToolResult(nextToolName, status, summary, resultData);
-        }
-        // 记录工具结果摘要
-        toolResults.add(new ToolResultRecord(nextToolName, status, summary, resultData));
-
-        // 更新 accumulatedSlots
-        if (result.toolResult().data() != null) {
-            accumulatedSlots.putAll(result.toolResult().data());
-        }
-
-        // 将工具结果追加到消息列表
-        String toolResultJson = formatToolResult(nextToolName, result.toolResult());
-        messages.add(new ChatMessage(MessageRole.SYSTEM, toolResultJson));
-
-        log.info("FinalReply 自动推进完成: tool={}, resultCode={}, iteration={}",
-                nextToolName, result.toolResult().resultCode(), iteration);
+        // 达到最大自动推进步数
+        log.warn("FinalReply 自动推进达到最大步数 {}", maxAutoSteps);
         return true;
     }
 
