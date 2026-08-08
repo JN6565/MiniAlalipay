@@ -1,4 +1,5 @@
 import axios from 'axios';
+import { friendlyNetworkError, isRetryableRequest, slowRequestTracker } from './networkFeedback';
 
 /** 前端统一 API 错误，页面根据业务错误码决定提示内容。 */
 export class ApiError extends Error {
@@ -15,6 +16,37 @@ export const clearSession = () => {
 };
 
 const request = axios.create({ timeout: 15000 });
+const SLOW_REQUEST_THRESHOLD_MS = 1200;
+
+interface SlowRequestState {
+  timer: ReturnType<typeof setTimeout>;
+  visible: boolean;
+}
+
+const startSlowRequestTracking = (config: any) => {
+  const state: SlowRequestState = {
+    visible: false,
+    timer: setTimeout(() => {
+      state.visible = true;
+      slowRequestTracker.start();
+    }, SLOW_REQUEST_THRESHOLD_MS),
+  };
+  config.slowRequestState = state;
+};
+
+const finishSlowRequestTracking = (config?: any) => {
+  const state = config?.slowRequestState as SlowRequestState | undefined;
+  if (!state) return;
+  clearTimeout(state.timer);
+  if (state.visible) slowRequestTracker.finish();
+};
+const hasIdempotencyKey = (config?: any) => {
+  const headers = config?.headers;
+  return Boolean(headers?.get?.('Idempotency-Key')
+    || headers?.['Idempotency-Key']
+    || headers?.['idempotency-key']);
+};
+const canRetry = (config?: any) => isRetryableRequest(config?.method, hasIdempotencyKey(config));
 const generateUUID = () => 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, (c) => {
   const r = (Math.random() * 16) | 0;
   return (c === 'x' ? r : (r & 0x3) | 0x8).toString(16);
@@ -30,6 +62,7 @@ const handleExpiredSession = (code?: string) => {
 };
 
 request.interceptors.request.use((config: any) => {
+  startSlowRequestTracking(config);
   config.headers = { ...config.headers, 'X-Request-Id': generateUUID() };
   // Idempotency-Key 由各服务自行管理，不在这里自动生成
   const url = config.url || '';
@@ -41,6 +74,7 @@ request.interceptors.request.use((config: any) => {
 });
 
 request.interceptors.response.use((response: any) => {
+  finishSlowRequestTracking(response.config);
   // 处理 204 No Content 响应（如 bootstrap 接口）
   if (response.status === 204) {
     return undefined;
@@ -52,9 +86,11 @@ request.interceptors.response.use((response: any) => {
   return Promise.reject(new ApiError(String(code), message || '请求失败', requestId, response.status));
 }, async (error: any) => {
   const config = error.config;
+  finishSlowRequestTracking(config);
+
   if (!error.response) {
-    // 网络错误：最多重试 3 次，指数退避
-    if (config) {
+    // 网络错误最多重试 3 次，并使用指数退避避免弱网时瞬间放大请求量。
+    if (config && canRetry(config)) {
       config.__retryCount = (config.__retryCount || 0) + 1;
       if (config.__retryCount <= 3) {
         const delay = Math.min(1000 * Math.pow(2, config.__retryCount - 1), 4000);
@@ -62,11 +98,16 @@ request.interceptors.response.use((response: any) => {
         return request(config);
       }
     }
-    return Promise.reject(new ApiError('NETWORK_ERROR', '网络异常，请检查网络连接'));
+    const code = error.code === 'ECONNABORTED' || error.code === 'ETIMEDOUT'
+      ? 'NETWORK_TIMEOUT'
+      : 'NETWORK_ERROR';
+    const message = friendlyNetworkError(error.code) || '当前网络连接异常，请检查网络后重试';
+    return Promise.reject(new ApiError(code, message));
   }
-  // 网关错误（502/503/504）也重试
+
   const { status, data } = error.response;
-  if (status >= 502 && status <= 504 && config) {
+  // 网关错误（502/503/504）最多重试 3 次，并使用指数退避。
+  if (status >= 502 && status <= 504 && config && canRetry(config)) {
     config.__retryCount = (config.__retryCount || 0) + 1;
     if (config.__retryCount <= 3) {
       const delay = Math.min(1000 * Math.pow(2, config.__retryCount - 1), 4000);
@@ -76,7 +117,8 @@ request.interceptors.response.use((response: any) => {
   }
   const code = data?.code || (status === 401 ? 'COMMON_UNAUTHORIZED' : `HTTP_${status}`);
   handleExpiredSession(code);
-  return Promise.reject(new ApiError(code, data?.message || '请求失败', data?.requestId, status));
+  const message = friendlyNetworkError(error.code, status) || data?.message || '请求失败';
+  return Promise.reject(new ApiError(code, message, data?.requestId, status));
 });
 
 export default request;

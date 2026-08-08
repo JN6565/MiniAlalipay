@@ -36,9 +36,9 @@ const CollectionPage: React.FC = () => {
       } else {
         setPersonalCode(data);
       }
-    } catch (error) {
+    } catch (error: any) {
       console.error('加载失败', error);
-      Toast.show({ content: '加载收款码失败', icon: 'fail' });
+      Toast.show({ content: error?.message || '当前网络环境较差，数据暂未返回，请稍后重试', icon: 'fail' });
     } finally {
       setLoading(false);
     }
