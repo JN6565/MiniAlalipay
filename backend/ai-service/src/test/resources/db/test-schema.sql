@@ -8,6 +8,7 @@ CREATE TABLE IF NOT EXISTS AGENT_DB.agent_session (
     session_id CHAR(26) NOT NULL,
     user_id CHAR(26) NOT NULL,
     summary TEXT NULL,
+    title VARCHAR(100) NULL,
     slots_json TEXT NULL,
     status VARCHAR(16) NOT NULL DEFAULT 'ACTIVE',
     version BIGINT NOT NULL DEFAULT 0,

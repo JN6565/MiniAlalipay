@@ -12,7 +12,12 @@ public interface UserInfoPort {
     UserInfo findUserInfo(String userId);
 
     /** 用户中心返回的最小展示投影，不包含手机号、证件号等敏感信息。 */
-    record UserInfo(String userId, String realName, String nickname) {
+    record UserInfo(String userId, String realName, String nickname, String accountNumber) {
+        /** 兼容旧构造：不携带系统账户号的降级投影。 */
+        public UserInfo(String userId, String realName, String nickname) {
+            this(userId, realName, nickname, null);
+        }
+
         /** 优先使用昵称，其次使用真实姓名；均缺失时为空。 */
         public String displayName() {
             if (nickname != null && !nickname.isBlank()) return nickname;

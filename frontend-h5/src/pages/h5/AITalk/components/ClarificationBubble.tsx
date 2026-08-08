@@ -11,7 +11,6 @@ interface Props {
 /** 澄清引导气泡：问题文本 + 可选的快捷回复词条（为空时仅展示问题，允许自由输入） */
 const ClarificationBubble: React.FC<Props> = ({ message, onSelect }) => (
   <div className="ai-message ai-message-assistant">
-    <div className="ai-avatar ai-avatar-assistant">🤖</div>
     <div className="ai-message-body">
       <div className="ai-message-content ai-clarification">
         <div className="ai-clarification-question">

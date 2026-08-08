@@ -11,6 +11,7 @@ import com.minialalipay.ai.domain.agent.AgentSessionRepository;
 import com.minialalipay.ai.domain.agent.MessageRole;
 import com.minialalipay.ai.infrastructure.client.RequestContext;
 import com.minialalipay.ai.interfaces.web.dto.MessageSummaryResponse;
+import com.minialalipay.ai.interfaces.web.dto.RenameSessionRequest;
 import com.minialalipay.ai.interfaces.web.dto.SendMessageRequest;
 import com.minialalipay.ai.interfaces.web.dto.SendMessageResponse;
 import com.minialalipay.ai.interfaces.web.dto.SessionSummaryResponse;
@@ -25,6 +26,7 @@ import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 
 import java.time.Clock;
+import java.time.format.DateTimeFormatter;
 import java.util.ArrayList;
 import java.util.List;
 
@@ -152,28 +154,45 @@ public class AgentController {
         String requestId = resolveRequestId(httpRequest);
         String traceId = MDC.get("traceId");
 
-        List<AgentSession> sessions = sessionRepository.findActiveByUserId(userId);
-        List<SessionSummaryResponse> result = new ArrayList<>(sessions.size());
-        for (AgentSession s : sessions) {
-            // 取该会话首条用户消息作为标题
-            List<AgentMessage> messages = messageRepository.findBySessionId(s.getSessionId(), 2);
-            String title = "新会话";
-            for (AgentMessage m : messages) {
-                if (m.getRole() == MessageRole.USER) {
-                    title = m.getContentRedacted();
-                    if (title.length() > 30) {
-                        title = title.substring(0, 30) + "…";
+        try {
+            log.info("查询会话列表: userId={}", userId);
+            List<AgentSession> sessions = sessionRepository.findActiveByUserId(userId);
+            log.info("查询到 {} 个活跃会话", sessions.size());
+            List<SessionSummaryResponse> result = new ArrayList<>(sessions.size());
+            for (AgentSession s : sessions) {
+                // 优先使用用户自定义标题，否则取首条用户消息作为标题
+                String title = s.getTitle();
+                if (title == null || title.isBlank()) {
+                    List<AgentMessage> messages = messageRepository.findBySessionId(s.getSessionId(), 2);
+                    title = "新会话";
+                    for (AgentMessage m : messages) {
+                        if (m.getRole() == MessageRole.USER) {
+                            title = m.getContentRedacted();
+                            if (title.length() > 30) {
+                                title = title.substring(0, 30) + "…";
+                            }
+                            break;
+                        }
                     }
-                    break;
+                    // 统计消息条数
+                    int messageCount = messages.size();
+                    result.add(new SessionSummaryResponse(
+                            s.getSessionId(), title,
+                            DateTimeFormatter.ISO_INSTANT.format(s.getLastActiveAt()),
+                            messageCount, s.getStatus().name()));
+                } else {
+                    List<AgentMessage> messages = messageRepository.findBySessionId(s.getSessionId(), 2);
+                    result.add(new SessionSummaryResponse(
+                            s.getSessionId(), title,
+                            DateTimeFormatter.ISO_INSTANT.format(s.getLastActiveAt()),
+                            messages.size(), s.getStatus().name()));
                 }
             }
-            // 统计消息条数
-            int messageCount = messages.size();
-            result.add(new SessionSummaryResponse(
-                    s.getSessionId(), title, s.getLastActiveAt(),
-                    messageCount, s.getStatus().name()));
+            return ResponseEntity.ok(ApiResponse.success(result, requestId, traceId));
+        } catch (Exception e) {
+            log.error("查询会话列表失败: userId={}, error={}", userId, e.getMessage(), e);
+            throw e;
         }
-        return ResponseEntity.ok(ApiResponse.success(result, requestId, traceId));
     }
 
     /**
@@ -207,7 +226,8 @@ public class AgentController {
         for (AgentMessage m : messages) {
             result.add(new MessageSummaryResponse(
                     m.getMessageId(), m.getRole().name(),
-                    m.getContentRedacted(), m.getCreatedAt()));
+                    m.getContentRedacted(),
+                    DateTimeFormatter.ISO_INSTANT.format(m.getCreatedAt())));
         }
         return ResponseEntity.ok(ApiResponse.success(result, requestId, traceId));
     }
@@ -218,5 +238,74 @@ public class AgentController {
             return headerValue;
         }
         return java.util.UUID.randomUUID().toString();
+    }
+
+    /**
+     * 软删除会话：将状态设为 CLOSED，不再出现在活跃会话列表中。
+     *
+     * <p>软删除而非物理删除，保留审计日志和消息历史的完整性。
+     * 会话归属校验：仅会话所有者可以删除。</p>
+     *
+     * @param userId 用户 ID（由网关注入）
+     * @param sessionId 会话 ID
+     * @param httpRequest 原始 HTTP 请求
+     * @return 删除结果
+     */
+    @DeleteMapping("/sessions/{sessionId}")
+    public ResponseEntity<ApiResponse<Void>> deleteSession(
+            @RequestHeader("X-User-Id") String userId,
+            @PathVariable String sessionId,
+            HttpServletRequest httpRequest
+    ) {
+        String requestId = resolveRequestId(httpRequest);
+        String traceId = MDC.get("traceId");
+
+        // 归属校验：仅会话所有者可以删除
+        AgentSession session = sessionRepository.findById(sessionId)
+                .orElseThrow(() -> new BusinessException(AgentErrorCode.SESSION_NOT_FOUND));
+        if (!session.getUserId().equals(userId)) {
+            throw new BusinessException(AgentErrorCode.SESSION_NOT_FOUND);
+        }
+
+        log.info("删除会话: userId={}, sessionId={}", userId, sessionId);
+        boolean closed = sessionRepository.closeSession(sessionId);
+        if (!closed) {
+            throw new BusinessException(AgentErrorCode.SESSION_NOT_FOUND);
+        }
+        return ResponseEntity.ok(ApiResponse.success(null, requestId, traceId));
+    }
+
+    /**
+     * 重命名会话：更新用户自定义标题。
+     *
+     * <p>标题为空字符串时清除自定义标题，前端回退到首条消息摘要。
+     * 会话归属校验：仅会话所有者可以重命名。</p>
+     *
+     * @param userId 用户 ID（由网关注入）
+     * @param sessionId 会话 ID
+     * @param request 重命名请求
+     * @param httpRequest 原始 HTTP 请求
+     * @return 更新结果
+     */
+    @PatchMapping("/sessions/{sessionId}/title")
+    public ResponseEntity<ApiResponse<Void>> renameSession(
+            @RequestHeader("X-User-Id") String userId,
+            @PathVariable String sessionId,
+            @Valid @RequestBody RenameSessionRequest request,
+            HttpServletRequest httpRequest
+    ) {
+        String requestId = resolveRequestId(httpRequest);
+        String traceId = MDC.get("traceId");
+
+        // 归属校验
+        AgentSession session = sessionRepository.findById(sessionId)
+                .orElseThrow(() -> new BusinessException(AgentErrorCode.SESSION_NOT_FOUND));
+        if (!session.getUserId().equals(userId)) {
+            throw new BusinessException(AgentErrorCode.SESSION_NOT_FOUND);
+        }
+
+        log.info("重命名会话: userId={}, sessionId={}, title={}", userId, sessionId, request.title());
+        sessionRepository.updateTitle(sessionId, request.title());
+        return ResponseEntity.ok(ApiResponse.success(null, requestId, traceId));
     }
 }

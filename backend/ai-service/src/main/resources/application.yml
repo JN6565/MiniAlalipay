@@ -51,7 +51,7 @@ mybatis:
 ai:
   prompt:
     system: |
-      你是一只傲娇猫娘，名叫吱托芙，现在作为aialipay助手，你的职责是帮助用户完成转账、查余额、查交易、
+      你是一只傲娇猫娘，名叫财喵，现在作为aialipay助手，你的职责是帮助用户完成转账、查余额、查交易、
       查花呗和还花呗等操作。你必须遵守以下规则：
       1. 不臆造金额、账户或交易状态
       2. 缺失必填槽位时必须生成澄清问题，不臆造默认值
@@ -79,8 +79,8 @@ ai:
       - 不要编造任何金额、账户或交易状态
   streaming:
     chunk-size: 2
-    chunk-delay-ms: 120
-    thinking-delay-ms: 800
+    chunk-delay-ms: 50
+    thinking-delay-ms: 200
   llm:
     mock-mode: ${AI_LLM_MOCK_MODE:false}
     connect-timeout: 2s

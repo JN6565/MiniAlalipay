@@ -110,7 +110,8 @@ class RiskReviewResumeServiceTest {
         @Override public Optional<com.minialalipay.business.domain.collection.CollectionRequest> findRequestByTokenDigest(byte[] tokenDigest) { return Optional.empty(); }
         @Override public Optional<CollectionOrder> findOrderByBootstrapSessionId(String bootstrapSessionId) { return Optional.empty(); }
         @Override public boolean createPersonalOrder(CollectionOrder order, String bootstrapSessionId) { return true; }
-        @Override public boolean reserveRequestAndCreateOrder(com.minialalipay.business.domain.collection.CollectionRequest request, long requestExpectedVersion, CollectionOrder order, String bootstrapSessionId) { return true; }
+                @Override public boolean createFixedOrder(CollectionOrder order, String bootstrapSessionId) { return true; }
+                @Override public java.util.List<CollectionOrder> findOrdersByRequestId(String requestId) { return java.util.List.of(); }
         @Override public boolean createRequest(com.minialalipay.business.domain.collection.CollectionRequest request, byte[] tokenDigest, String recordId, String userId, String idempotencyKey, byte[] requestDigest) { return true; }
         @Override public boolean updateRequest(com.minialalipay.business.domain.collection.CollectionRequest request, long expectedVersion) { return true; }
         @Override public Optional<IdempotencyRecord> findIdempotency(String principal, String operation, String idempotencyKey) { return Optional.empty(); }

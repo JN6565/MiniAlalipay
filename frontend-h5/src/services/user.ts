@@ -13,6 +13,7 @@ export interface PayeeInfo {
   userId: string;
   nickname: string;
   accountNumber: string;
+  maskedPhone?: string;
   identityStatus?: string; // 身份状态（如：VERIFIED）
 }
 
@@ -30,6 +31,7 @@ export interface Friend {
   friendUserId: string;
   friendName: string;
   accountNumber: string;
+  maskedPhone?: string;
   alias?: string;
   createdAt: string;
 }

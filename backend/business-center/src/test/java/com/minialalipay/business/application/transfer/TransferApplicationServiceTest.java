@@ -42,6 +42,7 @@ class TransferApplicationServiceTest {
         TransferApplicationService service = new TransferApplicationService(store, accounts,
                 mock(PaymentProofPort.class), mock(TccCoordinatorPort.class), secure,
                 new IdempotencyKeyValidator(), mock(ContactArchivePort.class), mock(UserInfoPort.class),
+                Runnable::run,
                 Clock.fixed(Instant.parse("2026-08-04T08:00:00Z"), ZoneOffset.UTC));
 
         assertThatThrownBy(() -> service.createDraft("user-1", "user-1", 100L, null, "idem-key-00000001"))
@@ -62,6 +63,7 @@ class TransferApplicationServiceTest {
         TransferApplicationService service = new TransferApplicationService(store, mock(AccountDirectoryPort.class),
                 mock(PaymentProofPort.class), mock(TccCoordinatorPort.class), secure,
                 new IdempotencyKeyValidator(), mock(ContactArchivePort.class), mock(UserInfoPort.class),
+                Runnable::run,
                 Clock.systemUTC());
 
         assertThatThrownBy(() -> service.createDraft("user-1", "user-2", 100L, null, "idem-key-00000001"))
@@ -116,15 +118,16 @@ class TransferApplicationServiceTest {
         when(userInfo.findUserInfo("payer-user"))
                 .thenReturn(new UserInfoPort.UserInfo("payer-user", "付款人实名", "小王"));
         when(userInfo.findUserInfo("payee-user"))
-                .thenReturn(new UserInfoPort.UserInfo("payee-user", "收款人实名", "小李"));
+                .thenReturn(new UserInfoPort.UserInfo("payee-user", "收款人实名", "老李"));
 
         var detail = service(store, accounts, userInfo)
                 .getTransactionDetail("payer-user", transaction.getTransactionId());
 
+        // 展示名在服务边界已脱敏：保留首字符，其余以星号遮蔽
         assertThat(detail.payerUserId()).isEqualTo("payer-user");
-        assertThat(detail.payerDisplayName()).isEqualTo("小王");
+        assertThat(detail.payerDisplayName()).isEqualTo("小*");
         assertThat(detail.payeeUserId()).isEqualTo("payee-user");
-        assertThat(detail.payeeDisplayName()).isEqualTo("小李");
+        assertThat(detail.payeeDisplayName()).isEqualTo("老*");
         assertThat(detail.remark()).isEqualTo("晚餐AA");
     }
 
@@ -133,6 +136,7 @@ class TransferApplicationServiceTest {
         return new TransferApplicationService(store, accounts, mock(PaymentProofPort.class),
                 mock(TccCoordinatorPort.class), mock(SecurityMaterialPort.class),
                 new IdempotencyKeyValidator(), mock(ContactArchivePort.class), userInfo,
+                Runnable::run,
                 Clock.fixed(NOW, ZoneOffset.UTC));
     }
 

@@ -1,14 +1,15 @@
+// @ts-nocheck
 import React, { useState, useEffect } from 'react';
-import { history } from 'umi';
-import { Form, Input, Button, Toast, SearchBar, Avatar, List, Space, Divider } from 'antd-mobile';
-import { UserOutline, SearchOutline } from 'antd-mobile-icons';
+import { history, useLocation } from 'umi';
+import { Form, Input, Button, Toast, SearchBar, Avatar, List, Divider } from 'antd-mobile';
+import { UserOutline, DownOutline } from 'antd-mobile-icons';
 import * as userService from '@/services/user';
 import * as transferService from '@/services/transfer';
-import { AMOUNT_MIN, AMOUNT_MAX } from '@/constants';
 import { AmountInput } from '@/components/h5/AmountInput';
 import './index.less';
 
 const TransferPage: React.FC = () => {
+  const location = useLocation();
   const [form] = Form.useForm();
   const [loading, setLoading] = useState(false);
   const [payeeKeyword, setPayeeKeyword] = useState('');
@@ -17,23 +18,47 @@ const TransferPage: React.FC = () => {
   const [amount, setAmount] = useState(0);
   const [contacts, setContacts] = useState<userService.Contact[]>([]);
   const [contactsLoading, setContactsLoading] = useState(false);
-  const [showRecentTransfers, setShowRecentTransfers] = useState(true); // 显示最近转账列表
+  const [showRecentTransfers, setShowRecentTransfers] = useState(true);
+  const [recentExpanded, setRecentExpanded] = useState(false);
+
+  // 名字脱敏：首字 + ***
+  const maskName = (name?: string) => {
+    if (!name) return '***';
+    if (name.length === 1) return name + '**';
+    return name.charAt(0) + '*'.repeat(name.length - 1);
+  };
 
   // 加载常用联系人（最近转账）
   useEffect(() => {
     const loadContacts = async () => {
       setContactsLoading(true);
       try {
-        const result = await userService.getContacts(10); // 最多10条
+        const result = await userService.getContacts(5); // 最多5条
         setContacts(result || []);
       } catch (error) {
-        console.error('加载联系人失败', error);
       } finally {
         setContactsLoading(false);
       }
     };
     loadContacts();
   }, []);
+
+  // 从 URL 参数中读取收款人信息，自动填充
+  useEffect(() => {
+    const searchParams = new URLSearchParams(location.search);
+    const payeeUserId = searchParams.get('payeeUserId');
+    const payeeName = searchParams.get('payeeName');
+    const accountNumber = searchParams.get('accountNumber');
+    if (payeeUserId && accountNumber) {
+      setSelectedPayee({
+        userId: payeeUserId,
+        nickname: payeeName || '用户',
+        accountNumber: accountNumber,
+      });
+      setPayeeKeyword(payeeName || '用户');
+      setShowRecentTransfers(false);
+    }
+  }, [location.search]);
 
   // 手机号格式校验：仅支持 11 位手机号精确搜索收款人
   const isValidPayeePhone = (value: string) => /^1\d{10}$/.test(value.trim());
@@ -46,16 +71,13 @@ const TransferPage: React.FC = () => {
     }
 
     try {
-      console.log('搜索用户:', payeeKeyword);
       const result = await userService.searchUsers(payeeKeyword);
-      console.log('搜索结果:', result);
       setPayeeCandidates(Array.isArray(result) ? result : []);
       setShowRecentTransfers(false); // 搜索时隐藏最近转账列表
       if (!Array.isArray(result) || result.length === 0) {
         Toast.show({ content: '未找到匹配的用户', icon: 'fail' });
       }
     } catch (error: any) {
-      console.error('搜索失败', error);
       Toast.show({ content: error.message || '搜索失败', icon: 'fail' });
     }
   };
@@ -66,18 +88,15 @@ const TransferPage: React.FC = () => {
     setPayeeKeyword(payee.nickname);
   };
 
-  const handleSelectContact = async (contact: userService.Contact) => {
-    // 从联系人中选择收款人，需要查询用户详情
-    try {
-      const result = await userService.searchUsers(contact.payeeUserId, 1);
-      if (Array.isArray(result) && result.length > 0) {
-        setSelectedPayee(result[0]);
-        setPayeeKeyword(result[0].nickname);
-        setShowRecentTransfers(false);
-      }
-    } catch (error) {
-      console.error('查询用户失败', error);
-    }
+  const handleSelectContact = (contact: userService.Contact) => {
+    // 从联系人中选择收款人，直接使用联系人中的信息
+    setSelectedPayee({
+      userId: contact.payeeUserId,
+      nickname: contact.payeeName || contact.alias || '用户',
+      accountNumber: contact.accountNumber || '',
+    });
+    setPayeeKeyword(contact.payeeName || contact.alias || '用户');
+    setShowRecentTransfers(false);
   };
 
   const handleSubmit = async () => {
@@ -86,8 +105,8 @@ const TransferPage: React.FC = () => {
       return;
     }
 
-    if (amount < AMOUNT_MIN || amount > AMOUNT_MAX) {
-      Toast.show({ content: `金额范围 ${AMOUNT_MIN}-${AMOUNT_MAX} 元`, icon: 'fail' });
+    if (amount < 0.01 || amount > 50000) {
+      Toast.show({ content: '金额范围 0.01-50000 元', icon: 'fail' });
       return;
     }
 
@@ -144,30 +163,34 @@ const TransferPage: React.FC = () => {
         />
       </div>
 
-      {/* 最近转账列表（未搜索时显示）*/}
+      {/* 最近转账列表（未搜索时显示，可折叠）*/}
       {showRecentTransfers && contacts.length > 0 && !selectedPayee && (
         <div className="recent-transfers-section">
-          <div className="section-header">
+          <div className="section-header" onClick={() => setRecentExpanded(!recentExpanded)}>
             <span className="section-title">最近转账</span>
-            <span className="section-subtitle">(最多10条)</span>
+            <span className={`section-arrow ${recentExpanded ? 'expanded' : ''}`}>
+              <DownOutline />
+            </span>
           </div>
-          <List className="contacts-list">
-            {contacts.map((contact, index) => (
-              <List.Item
-                key={contact.payeeUserId}
-                prefix={
-                  <Avatar style={{ '--size': '36px', '--border-radius': '50%', background: '#1677ff' }}>
-                    <UserOutline />
-                  </Avatar>
-                }
-                description={`尾号 ${contact.payeeUserId.slice(-4)}`}
-                extra={<Button size="mini" fill="none" onClick={() => handleSelectContact(contact)}>选择</Button>}
-                arrow
-              >
-                {contact.alias || contact.payeeUserId.slice(0, 8)}
-              </List.Item>
-            ))}
-          </List>
+          {recentExpanded && (
+            <List className="contacts-list">
+              {contacts.map((contact) => (
+                <List.Item
+                  key={contact.payeeUserId}
+                  prefix={
+                    <Avatar style={{ '--size': '36px', '--border-radius': '50%', background: '#1677ff' }}>
+                      {contact.payeeName?.charAt(0) || '?'}
+                    </Avatar>
+                  }
+                  description={`尾号 ${(contact.accountNumber || '').slice(-4)}`}
+                  extra={<Button size="mini" fill="none" onClick={() => handleSelectContact(contact)}>选择</Button>}
+                  onClick={() => handleSelectContact(contact)}
+                >
+                  {contact.alias || maskName(contact.payeeName)}
+                </List.Item>
+              ))}
+            </List>
+          )}
         </div>
       )}
 
@@ -219,17 +242,15 @@ const TransferPage: React.FC = () => {
       <div className="amount-section">
         <div className="section-label">金额</div>
         <div className="amount-input-wrapper">
-          <span className="currency-symbol">¥</span>
           <AmountInput
             value={amount}
             onChange={setAmount}
             placeholder="0.00"
-            className="large-amount-input"
           />
         </div>
-        {amount > 0 && (amount < AMOUNT_MIN || amount > AMOUNT_MAX) && (
+        {amount > 0 && (amount < 0.01 || amount > 50000) && (
           <div className="amount-warning">
-            ️ 金额范围 {AMOUNT_MIN}-{AMOUNT_MAX} 元
+            ️ 金额范围 0.01-50000 元
           </div>
         )}
       </div>

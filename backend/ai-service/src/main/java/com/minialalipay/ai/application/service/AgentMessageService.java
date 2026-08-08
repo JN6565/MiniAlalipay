@@ -74,7 +74,7 @@ public class AgentMessageService {
             UserPreferenceService userPreferenceService,
             @Value("${ai.session.timeout:30m}") String sessionTimeout,
             @Value("${ai.llm.mock-mode:true}") boolean mockMode,
-            @Value("${ai.prompt.system:你是一只傲娇猫娘，名叫吱托芙，现在作为aialipay助手，你的职责是帮助用户完成转账、查余额、查交易、查花呗和还花呗等操作。}") String systemPrompt
+            @Value("${ai.prompt.system:你是一只傲娇猫娘，名叫财喵，现在作为aialipay助手，你的职责是帮助用户完成转账、查余额、查交易、查花呗和还花呗等操作。}") String systemPrompt
     ) {
         this.sessionRepository = sessionRepository;
         this.messageRepository = messageRepository;
@@ -308,9 +308,12 @@ public class AgentMessageService {
                     } else {
                         String toolContext = formatToolResultsAsSystemMessage(toolResults);
                         context.add(new ChatMessage(MessageRole.SYSTEM, toolContext));
-                        ChatResponse secondResponse = languageModelPort.chat(
+                        // 安全边界：强制要求 LLM 严格基于工具结果回复，禁止编造工具未返回的数据
+                        // 使用纯自然语言调用：第二次 LLM 不需要结构化输出，避免 JSON 泄漏风险
+                        ChatResponse secondResponse = languageModelPort.streamNaturalLanguageChat(
                                 systemPrompt, context.subList(0, context.size() - 1),
-                                "请基于工具调用结果回复用户，使用自然语言。");
+                                "请严格基于以下工具调用结果回复用户。如果工具返回空列表或空数据，必须如实告知用户未找到匹配内容，绝对不得编造工具未返回的姓名、金额或状态。使用自然语言回复。",
+                                delta -> {});
                         finalContent = secondResponse.content();
                     }
                 } else {
@@ -364,12 +367,17 @@ public class AgentMessageService {
         if (sessionId != null && !sessionId.isBlank()) {
             AgentSession existing = sessionRepository.findById(sessionId)
                     .orElseThrow(() -> new BusinessException(AgentErrorCode.SESSION_NOT_FOUND));
-            // PRD 要求：会话超时 30 分钟后未提交草稿失效
+            boolean wasExpiredInDb = existing.getStatus() == AgentSessionStatus.EXPIRED;
+            // 会话超时后重新激活：保留 AI 上下文，清除过期草稿槽位
             if (existing.checkExpiry(now, sessionTimeoutMinutes)) {
-                sessionRepository.save(existing);
-                log.info("会话已超时失效: sessionId={}, lastActiveAt={}",
+                log.info("会话已超时，重新激活: sessionId={}, lastActiveAt={}",
                         existing.getSessionId(), existing.getLastActiveAt());
-                throw new BusinessException(AgentErrorCode.SESSION_NOT_FOUND);
+                existing.reactivate(now);
+                if (wasExpiredInDb) {
+                    sessionRepository.reactivateSession(existing);
+                } else {
+                    sessionRepository.save(existing);
+                }
             }
             if (!existing.isActive()) {
                 throw new BusinessException(AgentErrorCode.SESSION_NOT_FOUND);

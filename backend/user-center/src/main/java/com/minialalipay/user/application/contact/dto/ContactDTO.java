@@ -15,6 +15,8 @@ import java.time.Instant;
  */
 public record ContactDTO(
         String payeeUserId,
+        String payeeName,
+        String accountNumber,
         String alias,
         long successCount,
         Instant lastSuccessAt,

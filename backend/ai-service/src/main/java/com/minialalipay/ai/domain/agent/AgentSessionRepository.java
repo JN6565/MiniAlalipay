@@ -35,4 +35,33 @@ public interface AgentSessionRepository {
      * @param session 会话聚合根
      */
     void save(AgentSession session);
+
+    /**
+     * 软删除会话：将状态设为 CLOSED。
+     *
+     * <p>软删除而非物理删除，保留审计日志完整性。
+     * 已关闭的会话不再出现在活跃列表中。</p>
+     *
+     * @param sessionId 会话 ID
+     * @return 是否成功关闭（会话不存在或已关闭时返回 false）
+     */
+    boolean closeSession(String sessionId);
+
+    /**
+     * 更新会话标题（用户自定义名称）。
+     *
+     * @param sessionId 会话 ID
+     * @param title 新标题，最大 100 字符，空字符串表示清除自定义标题
+     */
+    void updateTitle(String sessionId, String title);
+
+    /**
+     * 重新激活已过期的会话，不受 status = 'ACTIVE' 条件限制。
+     *
+     * <p>当会话已被持久化为 EXPIRED 状态时，普通 CAS 更新无法匹配，
+     * 需使用此方法强制恢复为 ACTIVE。</p>
+     *
+     * @param session 已调用 reactivate() 的会话聚合根
+     */
+    void reactivateSession(AgentSession session);
 }

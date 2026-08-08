@@ -9,6 +9,7 @@ import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 
 import java.util.List;
+import java.util.function.Consumer;
 
 /**
  * 唯一可注入的 LLM 组合适配器。
@@ -50,6 +51,42 @@ public class ResilientLanguageModelAdapter implements LanguageModelPort {
         } catch (Exception e) {
             log.warn("LLM 调用失败，降级到预设中文回复: {}", e.getMessage());
             return fallback.chat(systemPrompt, history, userMessage);
+        }
+    }
+
+    @Override
+    public ChatResponse streamChat(String systemPrompt, List<ChatMessage> history,
+                                   String userMessage, Consumer<String> onContentDelta) {
+        if (useFallback) {
+            ChatResponse response = fallback.chat(systemPrompt, history, userMessage);
+            if (response.content() != null) onContentDelta.accept(response.content());
+            return response;
+        }
+        try {
+            return primary.streamChat(systemPrompt, history, userMessage, onContentDelta);
+        } catch (Exception e) {
+            log.warn("LLM 流式调用失败，降级到预设中文回复: {}", e.getMessage());
+            ChatResponse response = fallback.chat(systemPrompt, history, userMessage);
+            if (response.content() != null) onContentDelta.accept(response.content());
+            return response;
+        }
+    }
+
+    @Override
+    public ChatResponse streamNaturalLanguageChat(String systemPrompt, List<ChatMessage> history,
+                                                  String userMessage, Consumer<String> onContentDelta) {
+        if (useFallback) {
+            ChatResponse response = fallback.chat(systemPrompt, history, userMessage);
+            if (response.content() != null) onContentDelta.accept(response.content());
+            return response;
+        }
+        try {
+            return primary.streamNaturalLanguageChat(systemPrompt, history, userMessage, onContentDelta);
+        } catch (Exception e) {
+            log.warn("LLM 自然语言流式调用失败，降级到预设中文回复: {}", e.getMessage());
+            ChatResponse response = fallback.chat(systemPrompt, history, userMessage);
+            if (response.content() != null) onContentDelta.accept(response.content());
+            return response;
         }
     }
 }

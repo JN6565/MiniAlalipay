@@ -19,6 +19,9 @@ public class AgentSessionPO {
     /** 脱敏摘要，对应 TEXT */
     private String summary;
 
+    /** 用户自定义会话标题，对应 VARCHAR(100)，为 NULL 时前端回退到首条消息摘要 */
+    private String title;
+
     /** 结构化槽位 JSON，对应 JSON */
     private String slotsJson;
 
@@ -37,11 +40,13 @@ public class AgentSessionPO {
     public AgentSessionPO() {
     }
 
-    public AgentSessionPO(String sessionId, String userId, String summary, String slotsJson,
-                          String status, Long version, Instant lastActiveAt, Instant createdAt) {
+    public AgentSessionPO(String sessionId, String userId, String summary, String title,
+                          String slotsJson, String status, Long version,
+                          Instant lastActiveAt, Instant createdAt) {
         this.sessionId = sessionId;
         this.userId = userId;
         this.summary = summary;
+        this.title = title;
         this.slotsJson = slotsJson;
         this.status = status;
         this.version = version;
@@ -55,6 +60,8 @@ public class AgentSessionPO {
     public void setUserId(String userId) { this.userId = userId; }
     public String getSummary() { return summary; }
     public void setSummary(String summary) { this.summary = summary; }
+    public String getTitle() { return title; }
+    public void setTitle(String title) { this.title = title; }
     public String getSlotsJson() { return slotsJson; }
     public void setSlotsJson(String slotsJson) { this.slotsJson = slotsJson; }
     public String getStatus() { return status; }

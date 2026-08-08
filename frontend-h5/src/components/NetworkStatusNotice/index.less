@@ -1,0 +1,26 @@
+.notice {
+  position: fixed;
+  top: calc(env(safe-area-inset-top) + 12px);
+  left: 50%;
+  z-index: 1200;
+  display: flex;
+  width: max-content;
+  max-width: calc(100vw - 32px);
+  min-height: 36px;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 12px;
+  color: #5f3b00;
+  font-size: 13px;
+  line-height: 20px;
+  background: #fff7e6;
+  border: 1px solid #ffd591;
+  border-radius: 6px;
+  box-shadow: 0 4px 12px rgb(0 0 0 / 12%);
+  transform: translateX(-50%);
+}
+
+.notice span {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}

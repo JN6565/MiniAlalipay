@@ -72,6 +72,57 @@ class CollectionPaymentApplicationServiceTest {
         verify(fixture.coordinator).startOrResume(transaction);
     }
 
+    @Test
+    void 同一固定请求的两笔订单都可以独立受理支付() {
+        // 一码多收：支付受理不再单笔占用请求，同一请求下的不同付款人订单各自独立受理
+        CollectionStore collections = mock(CollectionStore.class);
+        BusinessStore business = mock(BusinessStore.class);
+        PaymentProofPort proofs = mock(PaymentProofPort.class);
+        TccCoordinatorPort coordinator = mock(TccCoordinatorPort.class);
+        TestSecurity security = new TestSecurity();
+        CollectionOrder first = CollectionOrder.forFixedRequest("order-1", "request-1", "payee-1", "account-payee-1",
+                "payer-1", "account-payer-1", 8800L, "聚餐", NOW);
+        CollectionOrder second = CollectionOrder.forFixedRequest("order-2", "request-1", "payee-1", "account-payee-1",
+                "payer-2", "account-payer-2", 8800L, "聚餐", NOW);
+        when(collections.findOrder("order-1")).thenReturn(Optional.of(first));
+        when(collections.findOrder("order-2")).thenReturn(Optional.of(second));
+        when(collections.findOrderByBootstrapSessionId("session-1")).thenReturn(Optional.of(first));
+        when(collections.findOrderByBootstrapSessionId("session-2")).thenReturn(Optional.of(second));
+        when(proofs.verify(anyString(), anyString(), anyString()))
+                .thenReturn(new PaymentProofPort.VerifiedProof("proof-1", 3L));
+        when(proofs.currentPayPasswordVersion(anyString())).thenReturn(3L);
+        when(business.findByIdempotency(anyString(), any(), anyString())).thenReturn(Optional.empty());
+        when(business.findBySource(anyString(), anyString())).thenReturn(Optional.empty());
+        when(business.updateConfirmation(any(), anyString())).thenReturn(true);
+        when(collections.acceptOrderForPayment(any(), anyLong(), any())).thenReturn(true);
+        CollectionPaymentApplicationService service = new CollectionPaymentApplicationService(collections, business, proofs,
+                security, coordinator, new IdempotencyKeyValidator(), null, null, Clock.fixed(NOW, ZoneOffset.UTC));
+
+        service.issueConfirmation("payer-1", "order-1", "session-1", 0L, "proof", FundingSource.BALANCE);
+        service.issueConfirmation("payer-2", "order-2", "session-2", 0L, "proof", FundingSource.BALANCE);
+        ArgumentCaptor<Confirmation> confirmationCaptor = ArgumentCaptor.forClass(Confirmation.class);
+        verify(business, org.mockito.Mockito.times(2)).replaceCollectionConfirmation(confirmationCaptor.capture());
+        java.util.List<Confirmation> confirmations = confirmationCaptor.getAllValues();
+        // 两笔确认快照分属不同订单；确认令牌相同摘要下按签发顺序依次消费
+        when(business.findConfirmationForUpdate(any()))
+                .thenReturn(Optional.of(confirmations.get(0)))
+                .thenReturn(Optional.of(confirmations.get(1)));
+
+        var firstTransaction = service.pay("payer-1", "order-1", "session-1", "confirmation-token-0123456789abcdef",
+                KEY, "0".repeat(32));
+        var secondTransaction = service.pay("payer-2", "order-2", "session-2", "confirmation-token-0123456789abcdef",
+                KEY, "0".repeat(32));
+
+        assertThat(firstTransaction.getSourceType()).isEqualTo(SourceType.COLLECTION_REQUEST_ORDER);
+        assertThat(secondTransaction.getSourceType()).isEqualTo(SourceType.COLLECTION_REQUEST_ORDER);
+        assertThat(firstTransaction.getStatus().name()).isEqualTo("PROCESSING");
+        assertThat(secondTransaction.getStatus().name()).isEqualTo("PROCESSING");
+        assertThat(first.getStatus().name()).isEqualTo("PROCESSING");
+        assertThat(second.getStatus().name()).isEqualTo("PROCESSING");
+        // 两笔各自写入 PROCESSING 事件，受理资格不再依赖单笔占用
+        verify(collections, org.mockito.Mockito.times(2)).acceptOrderForPayment(any(), anyLong(), any());
+    }
+
     private static Fixture fixture() {
         CollectionStore collections = mock(CollectionStore.class);
         BusinessStore business = mock(BusinessStore.class);

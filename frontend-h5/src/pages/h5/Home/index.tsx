@@ -4,6 +4,7 @@ import { Toast, SpinLoading } from 'antd-mobile';
 import { ScanCodeOutline } from 'antd-mobile-icons';
 import * as accountService from '@/services/account';
 import * as creditService from '@/services/credit';
+import { useTabActiveRefresh } from '@/utils/useTabActiveRefresh';
 import './index.less';
 
 const HomePage: React.FC = () => {
@@ -17,7 +18,15 @@ const HomePage: React.FC = () => {
     loadData();
   }, []);
 
-  const loadData = async () => {
+  // 首页保活常驻，转账/充值等业务完成后回切时静默重拉，
+  // 余额与最近交易始终以服务端最新事实为准。
+  useTabActiveRefresh('/h5/home', () => loadData(true));
+
+  const loadData = async (silent = false) => {
+    // 静默刷新不进入全屏加载态：保留旧内容直至新数据到达，避免回切时闪加载圈。
+    if (!silent) {
+      setLoading(true);
+    }
     try {
       const [accountResult, creditResult, txResult] = await Promise.allSettled([
         accountService.getMyAccount(),
@@ -170,26 +179,6 @@ const HomePage: React.FC = () => {
             </div>
           ))
         )}
-      </div>
-
-      {/* 底部导航栏 */}
-      <div className="tabbar">
-        <div className="tab on">
-          <span className="tab-icon">🏠</span>
-          <span className="tab-label">首页</span>
-        </div>
-        <div className="tab" onClick={() => history.push('/h5/ai-talk')}>
-          <span className="tab-icon">💬</span>
-          <span className="tab-label">AI助手</span>
-        </div>
-        <div className="tab" onClick={() => history.push('/h5/contacts')}>
-          <span className="tab-icon">👥</span>
-          <span className="tab-label">联系人</span>
-        </div>
-        <div className="tab" onClick={() => history.push('/h5/profile')}>
-          <span className="tab-icon">👤</span>
-          <span className="tab-label">我的</span>
-        </div>
       </div>
     </div>
   );

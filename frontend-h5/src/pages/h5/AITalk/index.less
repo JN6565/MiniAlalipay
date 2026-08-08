@@ -1,32 +1,30 @@
-/* AI 对话页：DeepSeek 风格深色主题 */
+/* AI 对话页：浅色主题，与首页/联系人/我的等页面统一 */
 
 /* ==================== 设计令牌 ==================== */
 :root {
-  --ai-bg: #1a1a1a;
-  --ai-bg-elev: #232323;
-  --ai-bg-message: #2a2a2a;
-  --ai-bg-message-hover: #2f2f2f;
-  --ai-bg-user: #2563eb;
-  --ai-text: #ececec;
-  --ai-text-secondary: #b8b8b8;
-  --ai-text-muted: #8a8a8a;
-  --ai-border: rgba(255, 255, 255, 0.08);
-  --ai-brand: #4d8cff;
-  --ai-brand-soft: rgba(77, 140, 255, 0.18);
-  --ai-danger: #ff5b5b;
-  --ai-success: #4ade80;
+  --ai-bg: #f5f5f5;
+  --ai-bg-elev: #ffffff;
+  --ai-bg-message: #f0f2f5;
+  --ai-bg-message-hover: #e8eaed;
+  --ai-bg-user: #1677ff;
+  --ai-text: #333333;
+  --ai-text-secondary: #666666;
+  --ai-text-muted: #999999;
+  --ai-border: rgba(0, 0, 0, 0.08);
+  --ai-brand: #1677ff;
+  --ai-brand-soft: rgba(22, 119, 255, 0.1);
+  --ai-danger: #ff4d4f;
+  --ai-success: #52c41a;
   --ai-radius-bubble: 18px;
   --ai-radius-card: 14px;
 }
 
 /* ==================== 页面骨架 ==================== */
 .ai-talk-page {
-  display: flex;
-  flex-direction: column;
-  height: 100vh;
-  height: 100dvh;
+  /* 聊天应用标准模式：页面自然滚动，输入区和 tabbar 用 fixed 固定在视口底部 */
   background: var(--ai-bg);
   color: var(--ai-text);
+  padding-bottom: calc(120px + env(safe-area-inset-bottom, 0px));
 }
 
 /* ==================== 顶部操作栏 ==================== */
@@ -39,7 +37,8 @@
   background: var(--ai-bg);
   border-bottom: 1px solid var(--ai-border);
   z-index: 98;
-  flex: none;
+  position: sticky;
+  top: 0;
 }
 
 .ai-top-icon-btn {
@@ -57,7 +56,7 @@
   transition: background 0.15s;
 
   &:active {
-    background: rgba(255, 255, 255, 0.08);
+    background: rgba(0, 0, 0, 0.04);
   }
 }
 
@@ -93,11 +92,7 @@
 
 /* ==================== 消息流 ==================== */
 .ai-messages {
-  flex: 1;
-  overflow-y: auto;
   padding: 16px 14px;
-  padding-bottom: 220px; /* 输入栏 + tabbar 留空间 */
-  -webkit-overflow-scrolling: touch;
 }
 
 /* ==================== 欢迎区 ==================== */
@@ -197,7 +192,7 @@
   font-size: 15px;
   line-height: 1.65;
   word-break: break-word;
-  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.2);
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.06);
 }
 
 .ai-message-user .ai-message-content {
@@ -251,7 +246,7 @@
   }
 
   code {
-    background: rgba(255, 255, 255, 0.08);
+    background: rgba(0, 0, 0, 0.04);
     border-radius: 4px;
     padding: 1px 5px;
     font-size: 13px;
@@ -259,7 +254,7 @@
   }
 
   pre {
-    background: rgba(0, 0, 0, 0.35);
+    background: #f6f8fa;
     border-radius: 8px;
     padding: 10px 12px;
     overflow-x: auto;
@@ -283,7 +278,7 @@
     }
 
     th {
-      background: rgba(255, 255, 255, 0.04);
+      background: #fafafa;
       font-weight: 600;
     }
   }
@@ -332,7 +327,7 @@
 .ai-thinking-body {
   margin-top: 6px;
   padding: 10px 12px;
-  background: rgba(255, 255, 255, 0.03);
+  background: rgba(0, 0, 0, 0.02);
   border-radius: 8px;
   font-size: 13px;
   color: var(--ai-text-secondary);
@@ -418,7 +413,7 @@
   transition: background 0.15s, color 0.15s;
 
   &:active:not(:disabled) {
-    background: rgba(255, 255, 255, 0.06);
+    background: rgba(0, 0, 0, 0.04);
   }
 
   &:disabled {
@@ -466,10 +461,10 @@
   display: flex;
   align-items: center;
   gap: 8px;
-  background: rgba(255, 91, 91, 0.12) !important;
+  background: rgba(255, 77, 79, 0.06) !important;
   color: var(--ai-danger);
   font-size: 13px;
-  border: 1px solid rgba(255, 91, 91, 0.25);
+  border: 1px solid rgba(255, 77, 79, 0.15);
 }
 
 .ai-error-icon {
@@ -490,16 +485,16 @@
   font-size: 12px;
 
   &:active {
-    background: rgba(255, 91, 91, 0.12);
+    background: rgba(255, 77, 79, 0.06);
   }
 }
 
 /* ==================== 输入区 ==================== */
 .ai-input-area {
   position: fixed;
-  bottom: calc(60px + env(safe-area-inset-bottom, 0px));
   left: 0;
   right: 0;
+  bottom: calc(60px + env(safe-area-inset-bottom, 0px));
   z-index: 99;
   background: var(--ai-bg);
   border-top: 1px solid var(--ai-border);
@@ -512,39 +507,17 @@
   gap: 8px;
 }
 
+/* ==================== 输入区功能按钮（已删除“深度思考/智能搜索”，保留样式以备后续扩展） ==================== */
 .ai-input-features {
-  display: flex;
-  gap: 8px;
-  padding: 0 2px;
+  display: none;
 }
 
 .ai-feature-chip {
-  display: inline-flex;
-  align-items: center;
-  gap: 4px;
-  padding: 5px 12px;
-  border: 1px solid var(--ai-brand);
-  border-radius: 9999px;
-  background: transparent;
-  color: var(--ai-brand);
-  font-size: 12px;
-  transition: background 0.15s;
-
-  &:active:not(:disabled) {
-    background: var(--ai-brand-soft);
-  }
-
-  &:disabled {
-    opacity: 0.5;
-  }
-
-  &--active {
-    background: var(--ai-brand-soft);
-  }
+  display: none;
 }
 
 .ai-feature-icon {
-  font-size: 13px;
+  display: none;
 }
 
 .ai-input-row {
@@ -553,29 +526,6 @@
   gap: 8px;
 }
 
-.ai-attach-btn {
-  flex: none;
-  width: 36px;
-  height: 36px;
-  border: none;
-  background: transparent;
-  color: var(--ai-text-secondary);
-  font-size: 20px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  cursor: pointer;
-  border-radius: 50%;
-  transition: background 0.15s;
-
-  &:active:not(:disabled) {
-    background: rgba(255, 255, 255, 0.06);
-  }
-
-  &:disabled {
-    opacity: 0.4;
-  }
-}
 
 .ai-input-wrapper {
   flex: 1;
@@ -614,7 +564,7 @@
   height: 36px;
   border: none;
   border-radius: 50%;
-  background: rgba(255, 255, 255, 0.08);
+  background: rgba(0, 0, 0, 0.06);
   color: var(--ai-text-muted);
   display: flex;
   align-items: center;
@@ -707,14 +657,14 @@
 
 .ai-card-bar {
   height: 6px;
-  background: rgba(255, 255, 255, 0.08);
+  background: rgba(0, 0, 0, 0.06);
   border-radius: 3px;
   margin: 8px 0;
   overflow: hidden;
 
   .ai-card-bar-fill {
     height: 100%;
-    background: linear-gradient(90deg, var(--ai-brand), #7aaaff);
+    background: linear-gradient(90deg, var(--ai-brand), #69b1ff);
     border-radius: 3px;
     transition: width 0.6s ease;
   }
@@ -777,9 +727,9 @@
 }
 
 .ai-card-failed {
-  background: rgba(255, 91, 91, 0.1);
+  background: rgba(255, 77, 79, 0.06);
   text-align: center;
-  border-color: rgba(255, 91, 91, 0.3);
+  border-color: rgba(255, 77, 79, 0.2);
 
   .ai-card-label {
     color: var(--ai-danger);
@@ -804,7 +754,7 @@
 .ai-card-spinner {
   width: 14px;
   height: 14px;
-  border: 2px solid rgba(77, 140, 255, 0.3);
+  border: 2px solid rgba(22, 119, 255, 0.2);
   border-top-color: var(--ai-brand);
   border-radius: 50%;
   animation: spin 0.8s linear infinite;
@@ -831,20 +781,20 @@
   }
 }
 
-/* ==================== 会话侧边抽屉（深色） ==================== */
+/* ==================== 会话侧边抽屉 ==================== */
 .session-list {
   display: flex;
   flex-direction: column;
   height: 100%;
   padding: 16px 12px;
-  background: #1f1f1f;
-  color: #e8e8e8;
+  background: #fff;
+  color: var(--ai-text);
 }
 
 .session-list-header {
   flex: none;
   padding-bottom: 12px;
-  border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+  border-bottom: 1px solid var(--ai-border);
 }
 
 .session-list-new {
@@ -862,7 +812,7 @@
   transition: background 0.15s;
 
   &:active {
-    background: rgba(77, 140, 255, 0.3);
+    background: rgba(22, 119, 255, 0.15);
   }
 }
 
@@ -883,7 +833,7 @@
 
 .session-list-group-title {
   font-size: 11px;
-  color: #777;
+  color: #999;
   margin-bottom: 4px;
   padding: 0 6px;
   text-transform: none;
@@ -894,7 +844,7 @@
   text-align: center;
   padding: 40px 0;
   font-size: 13px;
-  color: #777;
+  color: #999;
 }
 
 .session-list-item {
@@ -906,7 +856,7 @@
   transition: background 0.15s;
 
   &:active {
-    background: rgba(255, 255, 255, 0.06);
+    background: rgba(0, 0, 0, 0.04);
   }
 
   &--active {
@@ -921,26 +871,120 @@
 
 .session-list-item-title {
   font-size: 14px;
-  color: #e8e8e8;
+  color: var(--ai-text);
   flex: 1;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
 
-/* ==================== 底部导航栏（深色） ==================== */
+/* 会话项操作按钮区（移动端始终可见） */
+.session-list-item-actions {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  flex: none;
+  margin-left: 4px;
+}
+
+.session-action-btn {
+  width: 28px;
+  height: 28px;
+  border: none;
+  background: transparent;
+  border-radius: 6px;
+  font-size: 14px;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: background 0.15s;
+  color: #999;
+
+  &:active {
+    background: rgba(255, 255, 255, 0.1);
+  }
+
+  &.session-action-delete {
+    color: #ff4d4f;
+
+    &:active {
+      background: rgba(255, 77, 79, 0.12);
+    }
+  }
+}
+
+/* 编辑模式 */
+.session-list-item-edit {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  width: 100%;
+}
+
+.session-list-item-input {
+  flex: 1;
+  font-size: 14px;
+  background: rgba(255, 255, 255, 0.08);
+  border: 1px solid var(--ai-border);
+  border-radius: 6px;
+  padding: 4px 8px;
+  color: var(--ai-text);
+  outline: none;
+
+  &:focus {
+    border-color: var(--ai-brand);
+  }
+}
+
+.session-list-item-edit-actions {
+  display: flex;
+  gap: 2px;
+  flex: none;
+}
+
+.session-edit-btn {
+  width: 28px;
+  height: 28px;
+  border: none;
+  background: transparent;
+  border-radius: 6px;
+  font-size: 14px;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+
+  &.session-edit-confirm {
+    color: var(--ai-brand);
+
+    &:active {
+      background: var(--ai-brand-soft);
+    }
+  }
+
+  &.session-edit-cancel {
+    color: #999;
+
+    &:active {
+      background: rgba(255, 255, 255, 0.1);
+    }
+  }
+}
+
+/* ==================== 底部导航栏 ==================== */
 .tabbar {
   position: fixed;
-  bottom: 0;
   left: 0;
   right: 0;
-  height: calc(60px + env(safe-area-inset-bottom, 0px));
-  padding-bottom: env(safe-area-inset-bottom, 0px);
+  bottom: 0;
   background: var(--ai-bg);
   display: flex;
   align-items: center;
   justify-content: space-around;
   border-top: 1px solid var(--ai-border);
+  height: calc(60px + env(safe-area-inset-bottom, 0px));
+  padding-bottom: env(safe-area-inset-bottom, 0px);
   z-index: 100;
 
   .tab {

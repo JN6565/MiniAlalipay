@@ -24,8 +24,8 @@ const TransactionsPage: React.FC = () => {
       }
       const data = await accountService.getTransactions(params);
       setTransactions(data.items || []);
-    } catch (error) {
-      Toast.show({ content: '加载失败', icon: 'fail' });
+    } catch (error: any) {
+      Toast.show({ content: error?.message || '当前网络环境较差，数据暂未返回，请稍后重试', icon: 'fail' });
     } finally {
       setLoading(false);
     }

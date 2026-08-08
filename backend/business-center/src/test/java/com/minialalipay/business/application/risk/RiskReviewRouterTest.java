@@ -118,7 +118,8 @@ class RiskReviewRouterTest {
         @Override public Optional<CollectionOrder> findOrderByBootstrapSessionId(String bootstrapSessionId) { return Optional.empty(); }
         @Override public Optional<CollectionOrder> findOrder(String orderId) { return Optional.ofNullable(lastUpdated); }
         @Override public boolean createPersonalOrder(CollectionOrder order, String bootstrapSessionId) { return true; }
-        @Override public boolean reserveRequestAndCreateOrder(com.minialalipay.business.domain.collection.CollectionRequest request, long requestExpectedVersion, CollectionOrder order, String bootstrapSessionId) { return true; }
+                @Override public boolean createFixedOrder(CollectionOrder order, String bootstrapSessionId) { return true; }
+                @Override public java.util.List<CollectionOrder> findOrdersByRequestId(String requestId) { return java.util.List.of(); }
         @Override public boolean updateOrder(CollectionOrder order, long expectedVersion) { lastUpdated = order; return true; }
         // 内存 Mock 不维护 H5 会话绑定，清除为空操作。
         @Override public void clearSessionBinding(String orderId) { }

@@ -1,7 +1,9 @@
 .collection-request-page {
   min-height: 100vh;
   background: #f5f5f5;
-  padding: 16px;
+  padding: 12px;
+  display: flex;
+  flex-direction: column;
 }
 
 .loading-container {
@@ -19,15 +21,11 @@
   color: #999;
 }
 
-.request-card {
-  margin-bottom: 16px;
-}
-
-.request-header {
+.qr-header {
   display: flex;
   justify-content: space-between;
   align-items: center;
-  margin-bottom: 16px;
+  padding: 4px 4px 8px;
 }
 
 .request-status {
@@ -40,41 +38,115 @@
   color: #ff4d4f;
 }
 
-.request-amount {
-  text-align: center;
-  padding: 20px 0;
-  border-bottom: 1px solid #f0f0f0;
-  margin-bottom: 16px;
+.qr-main {
+  flex: 1;
+  background: #fff;
+  border-radius: 8px;
+  padding: 20px 16px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
 }
 
-.request-subject {
+.qr-frame {
+  padding: 8px;
+  border: 1px solid #eee;
+  border-radius: 8px;
+
+  svg {
+    display: block;
+  }
+}
+
+.qr-amount {
+  text-align: center;
+  margin-top: 16px;
+}
+
+.qr-amount-label {
+  font-size: 13px;
+  color: #999;
+  margin-bottom: 4px;
+}
+
+.qr-subject {
   font-size: 14px;
   color: #666;
-  margin-bottom: 16px;
+  margin-top: 8px;
 }
 
-.request-info {
-  margin-bottom: 16px;
-}
-
-.info-row {
+.qr-empty {
+  flex: 1;
+  background: #fff;
+  border-radius: 8px;
+  padding: 32px 16px;
   display: flex;
-  justify-content: space-between;
-  padding: 8px 0;
+  flex-direction: column;
+  justify-content: center;
+  gap: 20px;
 }
 
-.info-label {
+.qr-empty-text {
+  text-align: center;
   font-size: 14px;
   color: #999;
 }
 
-.info-value {
+.request-actions {
+  width: 100%;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  margin-top: 20px;
+}
+
+.order-records {
+  margin-top: 12px;
+  background: #fff;
+  border-radius: 8px;
+  padding: 12px 16px;
+}
+
+.order-records-title {
+  font-size: 14px;
+  font-weight: 600;
+  color: #333;
+  margin-bottom: 8px;
+}
+
+.order-record-item {
+  padding: 10px 0;
+  border-bottom: 1px solid #f0f0f0;
+
+  &:last-child {
+    border-bottom: none;
+  }
+}
+
+.order-record-main {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.order-record-payer {
   font-size: 14px;
   color: #333;
 }
 
-.request-actions {
+.order-record-status {
+  font-size: 13px;
+  color: #52c41a;
+}
+
+.order-record-sub {
   display: flex;
-  flex-direction: column;
-  gap: 12px;
+  justify-content: space-between;
+  font-size: 12px;
+  color: #999;
+  margin-top: 4px;
+}
+
+.order-record-amount {
+  margin-top: 4px;
 }

@@ -318,6 +318,38 @@ paths:
         '409': { $ref: '#/components/responses/Conflict' }
         '422': { $ref: '#/components/responses/UnprocessableEntity' }
         '503': { $ref: '#/components/responses/ServiceUnavailable' }
+  /api/v1/transfers/submit-with-password:
+    post:
+      summary: 验密即支付（普通转账合并提交）
+      description: |
+        H5 主动转账合并提交端点：一次请求在服务端内部完成支付密码验证与证明签发、
+        确认令牌签发与消费、转账受理，替代客户端 proof → confirmations → transfers
+        三次串行调用。确认令牌的签发与消费仍是受理前置条件，受理与 TCC 语义与
+        POST /api/v1/transfers 完全一致。paymentPassword 属敏感字段，只允许出现在请求体，
+        不得进入日志、URL、浏览器存储或埋点。
+      operationId: submitTransferWithPassword
+      x-client-scope: C
+      parameters:
+        - $ref: '#/components/parameters/RequestIdHeader'
+        - $ref: '#/components/parameters/IdempotencyKeyHeader'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/SubmitWithPasswordRequest' }
+      responses:
+        '202':
+          description: 交易已受理，客户端应按状态 URL 查询
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/TransferTransactionResponse' }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409': { $ref: '#/components/responses/Conflict' }
+        '422': { $ref: '#/components/responses/UnprocessableEntity' }
+        '429': { $ref: '#/components/responses/TooManyRequests' }
+        '503': { $ref: '#/components/responses/ServiceUnavailable' }
   /api/v1/transfers/{id}:
     get:
       summary: 查询本人参与的普通转账详情与权威状态
@@ -1469,6 +1501,19 @@ paths:
         '401': { $ref: '#/components/responses/Unauthorized' }
         '404': { $ref: '#/components/responses/NotFound' }
         '409': { $ref: '#/components/responses/Conflict' }
+  /api/v1/p2p-collections/requests/{id}/orders:
+    get:
+      summary: 查询固定收款请求的全部来源订单
+      description: 一码多收：仅请求创建者可读，返回该请求全部订单（创建时间倒序），付款人与收款人姓名已脱敏，用于收款方实时展示多笔收款记录。
+      operationId: listCollectionRequestOrders
+      x-client-scope: C
+      parameters:
+        - $ref: '#/components/parameters/RequestIdHeader'
+        - $ref: '#/components/parameters/ResourceId'
+      responses:
+        '200': { description: 请求全部来源订单，创建时间倒序, content: { application/json: { schema: { type: array, items: { $ref: '#/components/schemas/CollectionRequestOrderItem' } } } } }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '404': { $ref: '#/components/responses/NotFound' }
   /api/v1/p2p-collections/by-token:
     get:
       summary: 建立个人码或固定请求的匿名 H5 引导会话
@@ -1486,8 +1531,8 @@ paths:
         '404': { $ref: '#/components/responses/NotFound' }
   /api/v1/p2p-collections/token-exchanges:
     post:
-      summary: 登录付款人交换个人码或固定请求令牌并创建或恢复 H5 订单
-      description: 匿名 GET 仅建立不含业务数据的 bootstrap 会话；本操作必须在同一会话登录后调用，付款人和付款账户仅由服务端会话派生。
+      summary: 登录付款人交换个人码或固定请求令牌并创建新 H5 订单
+      description: 匿名 GET 仅建立不含业务数据的 bootstrap 会话；本操作必须在同一会话登录后调用，付款人和付款账户仅由服务端会话派生。每次交换都创建新订单，会话旧订单一律解绑不复用；固定请求扫码阶段不占用，有效期内可被多人多次支付。
       operationId: exchangeCollectionToken
       x-client-scope: C
       parameters:
@@ -1968,6 +2013,59 @@ paths:
                         items: { $ref: '#/components/schemas/AgentMessageSummary' }
         '401': { $ref: '#/components/responses/Unauthorized' }
         '404': { $ref: '#/components/responses/NotFound' }
+  /api/v1/agent/sessions/{sessionId}:
+    delete:
+      summary: 软删除 AI 会话（将状态设为 CLOSED）
+      operationId: deleteAgentSession
+      x-client-scope: C
+      parameters:
+        - $ref: '#/components/parameters/RequestIdHeader'
+        - name: sessionId
+          in: path
+          required: true
+          schema: { type: string, maxLength: 26 }
+      responses:
+        '200':
+          description: 会话已成功关闭
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiResponse'
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '404': { $ref: '#/components/responses/NotFound' }
+  /api/v1/agent/sessions/{sessionId}/title:
+    patch:
+      summary: 重命名 AI 会话（更新用户自定义标题）
+      operationId: renameAgentSession
+      x-client-scope: C
+      parameters:
+        - $ref: '#/components/parameters/RequestIdHeader'
+        - name: sessionId
+          in: path
+          required: true
+          schema: { type: string, maxLength: 26 }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [title]
+              properties:
+                title:
+                  type: string
+                  maxLength: 100
+                  description: 新会话标题，空字符串表示清除自定义标题
+      responses:
+        '200':
+          description: 会话标题已更新
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiResponse'
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '422': { $ref: '#/components/responses/ValidationError' }
 components:
   securitySchemes:
     bearerAuth:
@@ -2596,6 +2694,7 @@ components:
         userId: { type: string, description: 用户 ID }
         nickname: { type: string, description: 用户昵称 }
         phoneTail: { type: string, description: 手机号后四位，脱敏展示 }
+        maskedPhone: { type: string, description: 脱敏手机号，保留前 3 位和后 4 位，中间以 **** 代替，如 138****9150 }
     AgentSessionSummary:
       type: object
       additionalProperties: false
@@ -2829,6 +2928,14 @@ components:
       properties:
         draftId: { type: string, minLength: 1, maxLength: 26 }
         confirmationToken: { type: string, minLength: 1, maxLength: 256, description: 两分钟有效的一次性确认令牌，不得进入 URL 或日志。 }
+    SubmitWithPasswordRequest:
+      type: object
+      additionalProperties: false
+      required: [draftId, version, paymentPassword]
+      properties:
+        draftId: { type: string, minLength: 1, maxLength: 26 }
+        version: { type: integer, format: int64, minimum: 0, description: 风控预检返回的草稿 CAS 版本。 }
+        paymentPassword: { type: string, pattern: '^\d{6}$', description: 六位数字支付密码，属敏感字段，不得进入 URL、日志或浏览器存储。 }
     TransferDraft:
       type: object
       additionalProperties: false
@@ -2841,6 +2948,8 @@ components:
         status: { type: string, enum: [DRAFT, VALIDATED, PENDING_CONFIRMATION, SUBMITTED, EXPIRED] }
         version: { type: integer, format: int64, minimum: 0 }
         expiresAt: { type: string, format: date-time }
+        payeeMaskedName: { type: [string, 'null'], maxLength: 64, description: 收款人脱敏展示名（保留首字符，其余星号）；仅查询草稿详情时返回，用户中心不可用时为空。 }
+        payeeMaskedAccountNumber: { type: [string, 'null'], maxLength: 32, description: 收款人脱敏系统账户号（前 4 后 4，中间星号）；仅查询草稿详情时返回。 }
     TransferTransaction:
       type: object
       additionalProperties: false
@@ -2851,9 +2960,11 @@ components:
         status: { type: string, enum: [PROCESSING, COMPENSATING, MANUAL_REVIEW, SUCCESS, REVERSED, CANCELLED] }
         amountFen: { type: integer, format: int64, minimum: 1, maximum: 5000000 }
         payerUserId: { type: string, minLength: 1, maxLength: 26, description: 付款用户 ID。 }
-        payerDisplayName: { type: [string, 'null'], maxLength: 64, description: 付款人展示名；用户中心暂不可用时为空。 }
+        payerDisplayName: { type: [string, 'null'], maxLength: 64, description: 付款人脱敏展示名（保留首字符，其余星号）；用户中心暂不可用时为空。 }
+        payerMaskedAccountNumber: { type: [string, 'null'], maxLength: 32, description: 付款人脱敏系统账户号（前 4 后 4，中间星号）；用户中心暂不可用时为空。 }
         payeeUserId: { type: string, minLength: 1, maxLength: 26, description: 收款用户 ID。 }
-        payeeDisplayName: { type: [string, 'null'], maxLength: 64, description: 收款人展示名；用户中心暂不可用时为空。 }
+        payeeDisplayName: { type: [string, 'null'], maxLength: 64, description: 收款人脱敏展示名（保留首字符，其余星号）；用户中心暂不可用时为空。 }
+        payeeMaskedAccountNumber: { type: [string, 'null'], maxLength: 32, description: 收款人脱敏系统账户号（前 4 后 4，中间星号）；用户中心暂不可用时为空。 }
         remark: { type: [string, 'null'], maxLength: 128, description: 转账受理时来源草稿中的备注。 }
         statusUrl: { type: string, pattern: '^/api/v1/transfers/' }
         createdAt: { type: string, format: date-time, description: 交易受理时间。 }
@@ -2864,6 +2975,36 @@ components:
         - type: object
           required: [data]
           properties: { data: { $ref: '#/components/schemas/TransferDraft' } }
+    CollectionRequestResponse:
+      type: object
+      additionalProperties: false
+      required: [requestId, amountFen, status, expiresAt, version]
+      properties:
+        requestId: { type: string }
+        amountFen: { type: integer, format: int64, minimum: 1, maximum: 5000000 }
+        subject: { type: string, nullable: true, maxLength: 50 }
+        status: { type: string, enum: [OPEN, PROCESSING, SUCCESS, CANCELLED, MANUAL_REVIEW, EXPIRED] }
+        activeOrderId: { type: string, nullable: true }
+        transactionId: { type: string, nullable: true }
+        expiresAt: { type: string, format: date-time }
+        version: { type: integer, format: int64, minimum: 0 }
+        collectionUrl: { type: string, nullable: true, description: 收款二维码引导地址，仅创建响应携带；令牌服务端只存摘要不可重读 }
+    CollectionRequestOrderItem:
+      type: object
+      additionalProperties: false
+      required: [collectionOrderId, kind, status]
+      properties:
+        collectionOrderId: { type: string }
+        kind: { type: string, enum: [PERSONAL_QR, FIXED_REQUEST] }
+        amountFen: { type: integer, format: int64, nullable: true, minimum: 1, maximum: 5000000 }
+        subject: { type: string, nullable: true, maxLength: 50 }
+        status: { type: string, enum: [DRAFT, PENDING_CONFIRMATION, RISK_REVIEW, PROCESSING, SUCCESS, FAILED, CANCELLED, MANUAL_REVIEW, EXPIRED] }
+        transactionId: { type: string, nullable: true }
+        expiresAt: { type: string, format: date-time, nullable: true }
+        version: { type: integer, format: int64, minimum: 0 }
+        payeeName: { type: string, nullable: true, description: 收款人脱敏姓名 }
+        payerName: { type: string, nullable: true, description: 付款人脱敏姓名 }
+        createdAt: { type: string, format: date-time }
     TransferValidationResponse:
       allOf:
         - $ref: '#/components/schemas/ApiResponse'
@@ -2919,6 +3060,10 @@ components:
         successCount: { type: integer, format: int64, minimum: 0 }
         lastSuccessAt: { type: string, format: date-time, nullable: true }
         pinned: { type: boolean }
+        payeeNickname: { type: string, nullable: true, description: 收款人昵称；收款人不存在或非 ACTIVE 时为 null，前端自行降级展示 }
+        payeeAccountNumber: { type: string, nullable: true, description: 收款人系统账户号；收款人不存在或非 ACTIVE 时为 null }
+        maskedPhone: { type: string, nullable: true, description: 收款人脱敏手机号，保留前 3 位和后 4 位，中间以 **** 代替，如 138****9150 }
+        phoneTail: { type: string, nullable: true, description: 收款人手机尾号（4 位），脱敏手机号缺失时的降级展示 }
     UpdateContactRequest:
       type: object
       additionalProperties: false

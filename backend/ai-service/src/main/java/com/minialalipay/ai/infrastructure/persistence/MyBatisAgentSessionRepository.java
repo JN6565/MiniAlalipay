@@ -79,6 +79,7 @@ public class MyBatisAgentSessionRepository implements AgentSessionRepository {
                 po.getSessionId(),
                 po.getUserId(),
                 po.getSummary(),
+                po.getTitle(),
                 slots,
                 AgentSessionStatus.valueOf(po.getStatus()),
                 po.getVersion(),
@@ -95,6 +96,7 @@ public class MyBatisAgentSessionRepository implements AgentSessionRepository {
         po.setSessionId(session.getSessionId());
         po.setUserId(session.getUserId());
         po.setSummary(session.getSummary());
+        po.setTitle(session.getTitle());
         po.setSlotsJson(toSlotsJson(session.getSlots()));
         po.setStatus(session.getStatus().name());
         po.setVersion(session.getVersion());
@@ -131,5 +133,25 @@ public class MyBatisAgentSessionRepository implements AgentSessionRepository {
             log.warn("会话槽位 JSON 序列化失败: {}", e.getMessage());
             return "{}";
         }
+    }
+
+    @Override
+    public boolean closeSession(String sessionId) {
+        int affected = agentSessionMapper.closeSession(sessionId);
+        return affected > 0;
+    }
+
+    @Override
+    public void updateTitle(String sessionId, String title) {
+        agentSessionMapper.updateTitle(sessionId, title);
+    }
+
+    @Override
+    public void reactivateSession(AgentSession session) {
+        int updated = agentSessionMapper.reactivateSession(toPO(session));
+        if (updated == 0) {
+            throw new BusinessException(AgentErrorCode.VERSION_CONFLICT);
+        }
+        session.updateVersion(session.getVersion() + 1);
     }
 }

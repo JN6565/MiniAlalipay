@@ -4,33 +4,57 @@ import { Card, Button, Result, SpinLoading } from 'antd-mobile';
 import { CheckCircleFill, CloseCircleFill } from 'antd-mobile-icons';
 import * as transferService from '@/services/transfer';
 import { AmountDisplay } from '@/components/h5/AmountDisplay';
-import { formatTime } from '@/utils/format';
+import { formatTime, maskName } from '@/utils/format';
 import './index.less';
 
 const TransferResultPage: React.FC = () => {
   const { id } = useParams();
   const location = useLocation();
   // 路由 state 仅兼容提交后首次跳转；刷新和从明细进入时以后端详情为准。
-  const navState = (location.state || {}) as { payeeNickname?: string };
-  const [loading, setLoading] = useState(true);
-  const [result, setResult] = useState<transferService.TransferResult | null>(null);
+  const navState = (location.state || {}) as {
+    payeeNickname?: string;
+    /** 提交接口返回的初始交易数据，后端不可用时降级展示 */
+    initialResult?: transferService.TransferResult;
+  };
+  // 提交后跳转时路由 state 必带收款人昵称；此时直接展示”处理中”乐观首屏，不等首次轮询
+  const justSubmitted = !!navState.payeeNickname;
+  const [loading, setLoading] = useState(!justSubmitted);
+  const [result, setResult] = useState<transferService.TransferResult | null>(navState.initialResult ?? null);
 
   useEffect(() => {
-    if (id) {
-      loadResult(id);
-    }
-  }, [id]);
+    if (!id) return;
+    // TCC 协调异步执行，初次状态通常为 PROCESSING；轮询直到终态，避免用户手动刷新；
+    // 超时后按当前状态展示。提交后首次查询延迟 1 秒：受理瞬间必然还是 PROCESSING，
+    // 立即查询只会浪费一次请求；后续保持 2 秒间隔，最多 15 次。
+    let cancelled = false;
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    let attempts = 0;
 
-  const loadResult = async (transactionId: string) => {
-    try {
-      const data = await transferService.getTransferStatus(transactionId);
-      setResult(data);
-    } catch (error) {
-      console.error('加载失败', error);
-    } finally {
-      setLoading(false);
-    }
-  };
+    const load = async () => {
+      try {
+        const data = await transferService.getTransferStatus(id);
+        if (cancelled) return;
+        setResult(data);
+        if ((data.status === 'PROCESSING' || data.status === 'COMPENSATING') && attempts < 15) {
+          attempts += 1;
+          timer = setTimeout(load, 2000);
+          return; // 继续轮询，不设置 loading = false
+        }
+        // 终态或达到最大轮询次数，停止 loading
+        if (!cancelled) setLoading(false);
+      } catch (error) {
+        console.error('加载失败', error);
+        // 后端不可用时立即停止轮询，避免无限重试
+        if (!cancelled) setLoading(false);
+      }
+    };
+
+    timer = setTimeout(load, justSubmitted ? 1000 : 0);
+    return () => {
+      cancelled = true;
+      if (timer) clearTimeout(timer);
+    };
+  }, [id, justSubmitted]);
 
   if (loading) {
     return (
@@ -75,12 +99,16 @@ const TransferResultPage: React.FC = () => {
         </div>
         <div className="result-row">
           <span className="result-label">付款人</span>
-          <span className="result-value">{result?.payerDisplayName || result?.payerUserId || '-'}</span>
+          <span className="result-value">
+            {result?.payerDisplayName || result?.payerUserId || '-'}
+            {result?.payerMaskedAccountNumber && ` (${result.payerMaskedAccountNumber})`}
+          </span>
         </div>
         <div className="result-row">
           <span className="result-label">收款人</span>
           <span className="result-value">
-            {result?.payeeDisplayName || navState.payeeNickname || result?.payeeUserId || '-'}
+            {result?.payeeDisplayName || maskName(navState.payeeNickname) || result?.payeeUserId || '-'}
+            {result?.payeeMaskedAccountNumber && ` (${result.payeeMaskedAccountNumber})`}
           </span>
         </div>
         <div className="result-row">

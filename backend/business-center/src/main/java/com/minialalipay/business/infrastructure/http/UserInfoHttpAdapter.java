@@ -50,7 +50,8 @@ public class UserInfoHttpAdapter implements UserInfoPort {
                     .retrieve()
                     .body(UserInfoPayload.class);
             if (result == null) return new UserInfo(userId, null, null);
-            return new UserInfo(userId, result.realName(), result.nickname());
+            return new UserInfo(userId, result.realName(), result.nickname(),
+                    result.accountNumber() == null || result.accountNumber().isBlank() ? null : result.accountNumber());
         } catch (RestClientResponseException exception) {
             LOGGER.warn("获取用户信息失败：userId={}, status={}", userId, exception.getStatusCode());
             return new UserInfo(userId, null, null);
@@ -60,6 +61,6 @@ public class UserInfoHttpAdapter implements UserInfoPort {
         }
     }
 
-    /** 用户中心内部接口的最小响应结构。 */
-    private record UserInfoPayload(String userId, String realName, String nickname) { }
+    /** 用户中心内部接口的最小响应结构；accountNumber 供展示边界脱敏后使用。 */
+    private record UserInfoPayload(String userId, String realName, String nickname, String accountNumber) { }
 }

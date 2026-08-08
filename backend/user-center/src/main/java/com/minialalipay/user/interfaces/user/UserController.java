@@ -4,6 +4,7 @@ import com.minialalipay.common.api.ApiResponse;
 import com.minialalipay.common.trace.RequestIdGenerator;
 import com.minialalipay.user.application.user.UserQueryService;
 import com.minialalipay.user.application.user.dto.UserSearchResult;
+import com.minialalipay.user.interfaces.dto.user.UserMeDTO;
 import com.minialalipay.user.interfaces.dto.user.UserSearchResultDTO;
 import jakarta.servlet.http.HttpServletRequest;
 import org.springframework.http.ResponseEntity;
@@ -25,6 +26,7 @@ import java.util.stream.Collectors;
  * <p>接口清单：
  * <ul>
  *   <li>GET /api/v1/users/search - 按手机号搜索用户</li>
+ *   <li>GET /api/v1/users/me - 查询当前用户最小资料投影（真实姓名已脱敏）</li>
  * </ul>
  * </p>
  *
@@ -104,11 +106,35 @@ public class UserController {
                         r.accountNumber(),
                         r.nickname(),
                         r.identityStatus(),
-                        r.phoneTail()
+                        r.phoneTail(),
+                        r.maskedPhone()
                 ))
                 .collect(Collectors.toList());
 
         // 4. 返回搜索结果
         return ResponseEntity.ok(ApiResponse.success(results, requestId, traceId));
+    }
+
+    /**
+     * 查询当前登录用户的最小资料投影。
+     *
+     * <p>供转账确认页等展示付款方身份；真实姓名已在服务边界脱敏，
+     * 完整手机号等敏感字段不下发。只读查询，无幂等要求。</p>
+     *
+     * @param userId      当前用户 ID（由网关从会话令牌解析后透传）
+     * @param httpRequest HTTP 请求（用于提取 X-Request-Id 和 X-Trace-Id）
+     * @return 当前用户资料投影；用户不存在时返回 COMMON_NOT_FOUND
+     */
+    @GetMapping("/me")
+    public ResponseEntity<ApiResponse<UserMeDTO>> getMyProfile(
+            @RequestHeader("X-User-Id") String userId,
+            HttpServletRequest httpRequest
+    ) {
+        String requestId = requestIdGenerator.resolve(httpRequest.getHeader("X-Request-Id"));
+        String traceId = httpRequest.getHeader("X-Trace-Id");
+        UserQueryService.MyProfile profile = userQueryService.getMyProfile(userId);
+        UserMeDTO dto = new UserMeDTO(profile.userId(), profile.accountNumber(),
+                profile.nickname(), profile.maskedRealName(), profile.createdAt());
+        return ResponseEntity.ok(ApiResponse.success(dto, requestId, traceId));
     }
 }
