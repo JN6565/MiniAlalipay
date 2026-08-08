@@ -171,6 +171,32 @@ class HttpTccCoordinatorTest {
         server.verify();
     }
 
+    @Test
+    void 信用支付冻结额度并增加收款余额后发布成功() {
+        BusinessStore store = mock(BusinessStore.class);
+        FundTransaction transaction = creditTransaction();
+        when(store.findTransaction(transaction.getTransactionId()))
+                .thenReturn(Optional.of(new BusinessStore.FundTransactionRecord(transaction, null)));
+        RestClient.Builder builder = RestClient.builder();
+        MockRestServiceServer server = MockRestServiceServer.bindTo(builder).build();
+        server.expect(once(), requestTo("http://account/internal/v1/credit-accounts/by-user/payer-user"))
+                .andExpect(method(HttpMethod.GET))
+                .andRespond(withSuccess("{\"creditAccountId\":\"01K1CREDIT02GH3JK4MN5PQRST\",\"userId\":\"payer-user\",\"status\":\"ACTIVE\",\"version\":0}", MediaType.APPLICATION_JSON));
+        expectPost(server, "/internal/v1/tcc/credit-pay/try");
+        expectPost(server, "/internal/v1/tcc/balance/payee/try");
+        expectPost(server, "/internal/v1/tcc/credit-ledger/try");
+        expectPost(server, "/internal/v1/tcc/credit-pay/confirm");
+        expectPost(server, "/internal/v1/tcc/balance/payee/confirm");
+        expectPost(server, "/internal/v1/tcc/credit-ledger/confirm");
+        expectFacts(server, transaction, successFacts());
+
+        new HttpTccCoordinator(store, new SecureMaterialService(), builder, "http://account")
+                .startOrResume(transaction);
+
+        assertThat(transaction.getStatus()).isEqualTo(TransactionStatus.SUCCESS);
+        server.verify();
+    }
+
     private static void expectPost(MockRestServiceServer server, String path) {
         server.expect(once(), requestTo("http://account" + path)).andExpect(method(HttpMethod.POST))
                 .andRespond(withSuccess());
@@ -220,5 +246,13 @@ class HttpTccCoordinatorTest {
                 SourceType.TRANSFER_DRAFT, "01K1DRAFT02GH3JK4MN5PQRSTV", "payer-user",
                 "payer-account", "payee-account", FundingSource.BALANCE, 100L, "idem-key-00000001",
                 "LOW", "0123456789abcdef0123456789abcdef", Instant.parse("2026-08-04T08:00:00Z"));
+    }
+
+    private static FundTransaction creditTransaction() {
+        return FundTransaction.accept("01K1TXC002GH3JK4MN5PQRSTV", TransactionType.CREDIT_PAY,
+                SourceType.QR_PAY_ORDER, "01K1QR0002GH3JK4MN5PQRSTV", "payer-user",
+                "payer-account", "payee-account", FundingSource.MINI_CREDIT, 100L,
+                "idem-key-credit-0001", "LOW", "0123456789abcdef0123456789abcdef",
+                Instant.parse("2026-08-04T08:00:00Z"));
     }
 }

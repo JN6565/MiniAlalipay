@@ -1361,7 +1361,7 @@ MVP 退款仅支持单笔全额受控虚拟退款，不接入真实支付通道�
 
 **键与索引**：UK `(source_type,source_order_id)`、UK `(initiator_user_id,business_type,idempotency_key)`；索引 `(status,updated_at)`、`(payee_account_id,created_at)`、`(business_type,created_at)`。
 
-**写入规则**：业务类型必须匹配来源类型。充值强制 `SYSTEM_ISSUANCE` 且付款账户为空；其他业务双方账户非空且不同；退款必须关联原交易。
+**写入规则**：业务类型必须匹配来源类型。转账可来自转账草稿、个人收款码或固定金额收款请求，但资金来源只能是 `BALANCE`；普通动态扫码的 `QR_PAY` 只能来自动态扫码订单且使用余额；动态扫码、个人收款码和固定金额收款请求均可在用户明确选择 Mini 花呗时创建 `CREDIT_PAY`，资金来源必须为 `MINI_CREDIT`。充值强制 `SYSTEM_ISSUANCE` 且付款账户为空；其他业务双方账户非空且不同；退款必须关联原交易。
 
 ### 9.8 `qr_pay_order`
 

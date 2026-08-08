@@ -12,6 +12,8 @@ spring:
     enabled: true
     locations: classpath:db/migration
     baseline-on-migrate: true
+    # 线上数据库包含已部署但当前仓库缺失的历史迁移；忽略这类缺失记录，仍校验本地迁移并继续执行新增迁移。
+    ignore-migration-patterns: '*:missing'
     default-schema: ${BUSINESS_DB_SCHEMA:business_db}
     out-of-order: true
 minialalipay:

@@ -72,20 +72,20 @@ public class CollectionPaymentApplicationService {
     }
 
     /**
-     * 校验支付证明并签发仅绑定余额支付的确认令牌。
+     * 校验支付证明并签发绑定用户所选余额或 Mini 花呗的确认令牌。
      *
      * @param userId 服务端认证的付款人
      * @param orderId C2C 来源订单
      * @param sessionId 绑定 H5 会话
      * @param version 客户端读取到的订单版本
      * @param paymentProof 用户中心签发的一次性支付证明
-     * @param fundingSource 请求资金来源，C2C 只能为 BALANCE
+     * @param fundingSource 用户明确选择的资金来源
      * @return 原始确认令牌，仅该响应可见
      */
     @Transactional
     public IssuedConfirmation issueConfirmation(String userId, String orderId, String sessionId, long version,
                                                 String paymentProof, FundingSource fundingSource) {
-        if (fundingSource != FundingSource.BALANCE) throw new BusinessException(BusinessErrorCode.FUNDING_SOURCE_NOT_ALLOWED);
+        if (fundingSource == null) throw new BusinessException(BusinessErrorCode.FUNDING_SOURCE_NOT_ALLOWED);
         CollectionOrder order = payerOrder(userId, orderId, sessionId);
         if (order.getAmountFen() == null || order.getAmountFen() < 1) {
             throw new BusinessException(BusinessErrorCode.ORDER_NOT_FOUND);
@@ -96,9 +96,9 @@ public class CollectionPaymentApplicationService {
         String rawToken = security.newConfirmationToken();
         Instant now = clock.instant();
         Confirmation confirmation = Confirmation.issue(security.newId(), security.digest(rawToken), subjectType(order), orderId,
-                subjectHash(order), userId, proof.paymentProofId(), proof.payPasswordVersion(), now);
+                subjectHash(order, fundingSource), userId, proof.paymentProofId(), proof.payPasswordVersion(), now);
         business.replaceCollectionConfirmation(confirmation);
-        return new IssuedConfirmation(rawToken, "sha256:" + java.util.HexFormat.of().formatHex(subjectHash(order)), confirmation.getExpiresAt());
+        return new IssuedConfirmation(rawToken, "sha256:" + java.util.HexFormat.of().formatHex(subjectHash(order, fundingSource)), confirmation.getExpiresAt());
     }
 
     /**
@@ -135,7 +135,10 @@ public class CollectionPaymentApplicationService {
         byte[] requestHash = security.digest(orderId + "\n" + Base64.getEncoder().encodeToString(tokenDigest));
         Confirmation confirmation = business.findConfirmationForUpdate(tokenDigest)
                 .orElseThrow(() -> new BusinessException(BusinessErrorCode.CONFIRMATION_MISMATCH));
-        var repeated = business.findByIdempotency(userId, TransactionType.TRANSFER, idempotencyKey).orElse(null);
+        FundingSource fundingSource = resolveFundingSource(order, confirmation);
+        TransactionType transactionType = fundingSource == FundingSource.MINI_CREDIT
+                ? TransactionType.CREDIT_PAY : TransactionType.TRANSFER;
+        var repeated = business.findByIdempotency(userId, transactionType, idempotencyKey).orElse(null);
         if (repeated != null) {
             if (!Arrays.equals(repeated.requestHash(), requestHash)) throw new BusinessException(BusinessErrorCode.IDEMPOTENCY_CONFLICT);
             return repeated.transaction();
@@ -144,7 +147,7 @@ public class CollectionPaymentApplicationService {
         var sameSource = business.findBySource(sourceType.name(), orderId).orElse(null);
         if (sameSource != null) return sameSource.transaction();
         if (confirmation.getSubjectType() != subjectType(order) || !confirmation.getSubjectId().equals(orderId)
-                || !confirmation.getPayerUserId().equals(userId) || !Arrays.equals(confirmation.getSubjectHash(), subjectHash(order))) {
+                || !confirmation.getPayerUserId().equals(userId) || fundingSource == null) {
             throw new BusinessException(BusinessErrorCode.CONFIRMATION_STALE);
         }
         if (proofs.currentPayPasswordVersion(userId) != confirmation.getPayPasswordVersion()) {
@@ -168,8 +171,8 @@ public class CollectionPaymentApplicationService {
         if (!collections.acceptOrderForPayment(order, expectedVersion, processingEvent)) {
             throw new BusinessException(BusinessErrorCode.VERSION_CONFLICT);
         }
-        FundTransaction transaction = FundTransaction.accept(transactionId, TransactionType.TRANSFER, sourceType, orderId,
-                userId, order.getPayerAccountId(), order.getPayeeAccountId(), FundingSource.BALANCE, order.getAmountFen(),
+        FundTransaction transaction = FundTransaction.accept(transactionId, transactionType, sourceType, orderId,
+                userId, order.getPayerAccountId(), order.getPayeeAccountId(), fundingSource, order.getAmountFen(),
                 idempotencyKey, "LOW", validTraceId(traceId), now);
         business.createTransaction(transaction, requestHash, security.newId(), now);
         afterCommit(() -> coordinator.startOrResume(transaction));
@@ -194,10 +197,17 @@ public class CollectionPaymentApplicationService {
     private SourceType sourceType(CollectionOrder order) {
         return order.getPersonalCodeId() == null ? SourceType.COLLECTION_REQUEST_ORDER : SourceType.PERSONAL_QR_ORDER;
     }
-    private byte[] subjectHash(CollectionOrder order) {
+    private FundingSource resolveFundingSource(CollectionOrder order, Confirmation confirmation) {
+        for (FundingSource source : new FundingSource[] { FundingSource.BALANCE, FundingSource.MINI_CREDIT }) {
+            if (Arrays.equals(confirmation.getSubjectHash(), subjectHash(order, source))) return source;
+        }
+        return null;
+    }
+
+    private byte[] subjectHash(CollectionOrder order, FundingSource fundingSource) {
         return security.digest(order.getOrderId() + "\n" + order.getVersion() + "\n" + order.getPayerUserId() + "\n"
                 + order.getPayerAccountId() + "\n" + order.getPayeeUserId() + "\n" + order.getPayeeAccountId() + "\n"
-                + order.getAmountFen() + "\n" + FundingSource.BALANCE.name() + "\n" + (order.getRequestId() == null ? "" : order.getRequestId()));
+                + order.getAmountFen() + "\n" + fundingSource.name() + "\n" + (order.getRequestId() == null ? "" : order.getRequestId()));
     }
     private String validTraceId(String traceId) { return traceId != null && traceId.length() == 32 ? traceId : security.newTraceId(); }
     private static void afterCommit(Runnable action) {

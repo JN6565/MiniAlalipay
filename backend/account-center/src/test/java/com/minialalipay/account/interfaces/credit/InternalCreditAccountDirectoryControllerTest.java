@@ -12,6 +12,7 @@ import java.util.Optional;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.when;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
@@ -33,5 +34,23 @@ class InternalCreditAccountDirectoryControllerTest {
                 .andExpect(jsonPath("$.availableFen").doesNotExist())
                 .andExpect(jsonPath("$.usedFen").doesNotExist())
                 .andExpect(jsonPath("$.frozenFen").doesNotExist());
+    }
+
+    @Test
+    void 信用支付资格预检拒绝超过可用额度() throws Exception {
+        CreditAccountRepository repository = mock(CreditAccountRepository.class);
+        String userId = "01K1ABCDEFGHJKMNPQRSTVWXYZ";
+        CreditAccount account = new CreditAccount("01K1CREDITACCOUNT0000000000", userId,
+                500000L, 499900L, 0L, com.minialalipay.account.domain.credit.CreditAccountStatus.ACTIVE,
+                null, 2L, Instant.parse("2026-08-05T00:00:00Z"), Instant.parse("2026-08-05T00:00:00Z"));
+        when(repository.findById(account.getCreditAccountId())).thenReturn(Optional.of(account));
+        MockMvc mvc = MockMvcBuilders.standaloneSetup(new InternalCreditAccountDirectoryController(repository)).build();
+
+        mvc.perform(post("/internal/v1/credit-accounts/{id}/eligibility", account.getCreditAccountId())
+                        .contentType("application/json").content("{\"amountFen\":200}")
+                        .header("X-Internal-Caller", "business-center"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.eligible").value(false))
+                .andExpect(jsonPath("$.version").value(2));
     }
 }

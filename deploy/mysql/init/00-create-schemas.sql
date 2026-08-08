@@ -1290,7 +1290,10 @@ CREATE TABLE IF NOT EXISTS fund_transaction (
         (business_type = 'TRANSFER' AND
             source_type IN ('TRANSFER_DRAFT', 'PERSONAL_QR_ORDER',
                             'COLLECTION_REQUEST_ORDER')) OR
-        (business_type IN ('QR_PAY', 'CREDIT_PAY') AND source_type = 'QR_PAY_ORDER') OR
+        (business_type = 'QR_PAY' AND source_type = 'QR_PAY_ORDER') OR
+        (business_type = 'CREDIT_PAY' AND
+            source_type IN ('QR_PAY_ORDER', 'PERSONAL_QR_ORDER',
+                            'COLLECTION_REQUEST_ORDER')) OR
         (business_type = 'CREDIT_REPAY' AND source_type = 'CREDIT_REPAYMENT_DRAFT') OR
         (business_type = 'RECHARGE' AND source_type = 'RECHARGE_ORDER') OR
         (business_type = 'REFUND' AND source_type = 'REFUND_ORDER')

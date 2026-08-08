@@ -1,8 +1,10 @@
 import React, { useEffect, useState } from 'react';
 import { useParams, history } from 'umi';
-import { Card, Button, Input, Toast, SpinLoading } from 'antd-mobile';
+import { Card, Button, Input, Radio, Toast, SpinLoading } from 'antd-mobile';
 import * as collectionService from '@/services/collection';
 import * as paymentPasswordService from '@/services/paymentPassword';
+import * as accountService from '@/services/account';
+import * as creditService from '@/services/credit';
 import { AMOUNT_MIN, AMOUNT_MAX } from '@/constants';
 import { AmountInput } from '@/components/h5/AmountInput';
 import { PasswordInput } from '@/components/h5/PasswordInput';
@@ -19,6 +21,9 @@ const CollectionPayPage: React.FC = () => {
   const [amount, setAmount] = useState(0);
   const [subject, setSubject] = useState('');
   const [password, setPassword] = useState('');
+  const [fundingSource, setFundingSource] = useState<'BALANCE' | 'MINI_CREDIT' | null>(null);
+  const [account, setAccount] = useState<accountService.AccountInfo | null>(null);
+  const [credit, setCredit] = useState<creditService.CreditSummary | null>(null);
 
   useEffect(() => {
     if (token) {
@@ -38,6 +43,13 @@ const CollectionPayPage: React.FC = () => {
       await collectionService.bootstrapSession(t);
       const data = await collectionService.exchangeToken(t);
       setOrder(data);
+      setLoading(false);
+      const [accountResult, creditResult] = await Promise.allSettled([
+        accountService.getMyAccount(),
+        creditService.getCreditSummary(),
+      ]);
+      if (accountResult.status === 'fulfilled') setAccount(accountResult.value as unknown as accountService.AccountInfo);
+      if (creditResult.status === 'fulfilled') setCredit(creditResult.value as unknown as creditService.CreditSummary);
       if (data.amountFen) {
         setAmount(data.amountFen / 100);
       }
@@ -53,6 +65,10 @@ const CollectionPayPage: React.FC = () => {
 
   const handleLockAmount = async () => {
     if (!order) return;
+    if (!fundingSource) {
+      Toast.show({ content: '请选择支付方式', icon: 'fail' });
+      return;
+    }
     if (amount < AMOUNT_MIN || amount > AMOUNT_MAX) {
       Toast.show({ content: `金额范围 ${AMOUNT_MIN}-${AMOUNT_MAX} 元`, icon: 'fail' });
       return;
@@ -102,6 +118,7 @@ const CollectionPayPage: React.FC = () => {
         order.collectionOrderId,
         paymentProof,
         order.version || 0,
+        fundingSource,
       );
 
       // 3. 提交支付
@@ -139,6 +156,7 @@ const CollectionPayPage: React.FC = () => {
       </Card>
 
       {draftStage ? (
+        <>
         <Card className="amount-card">
           <div className="amount-title">填写金额</div>
           <AmountInput
@@ -162,6 +180,19 @@ const CollectionPayPage: React.FC = () => {
             确认信息
           </Button>
         </Card>
+        <Card className="funding-card">
+          <div className="funding-title">选择支付方式</div>
+          <Radio.Group value={fundingSource || undefined} onChange={(value) => {
+            setFundingSource(value as 'BALANCE' | 'MINI_CREDIT');
+            setPassword('');
+          }}>
+            <div className="funding-options">
+              <div className="funding-option"><Radio value="BALANCE">余额支付（可用 {((account?.availableFen || 0) / 100).toFixed(2)} 元）</Radio></div>
+              <div className="funding-option"><Radio value="MINI_CREDIT">Mini 花呗支付（可用 {((credit?.availableFen || 0) / 100).toFixed(2)} 元）</Radio></div>
+            </div>
+          </Radio.Group>
+        </Card>
+        </>
       ) : (
         <>
           <Card className="amount-card">
@@ -197,6 +228,16 @@ const CollectionPayPage: React.FC = () => {
           </Card>
 
           <Card className="password-card">
+            <div className="funding-title">选择支付方式</div>
+            <Radio.Group value={fundingSource || undefined} onChange={(value) => {
+              setFundingSource(value as 'BALANCE' | 'MINI_CREDIT');
+              setPassword('');
+            }}>
+              <div className="funding-options">
+                <div className="funding-option"><Radio value="BALANCE">余额支付（可用 {((account?.availableFen || 0) / 100).toFixed(2)} 元）</Radio></div>
+                <div className="funding-option"><Radio value="MINI_CREDIT">Mini 花呗支付（可用 {((credit?.availableFen || 0) / 100).toFixed(2)} 元）</Radio></div>
+              </div>
+            </Radio.Group>
             <div className="password-title">请输入支付密码</div>
             <PasswordInput value={password} onChange={setPassword} length={6} />
           </Card>
@@ -207,6 +248,7 @@ const CollectionPayPage: React.FC = () => {
               color="primary"
               size="large"
               loading={submitting}
+              disabled={!fundingSource}
               onClick={handlePay}
             >
               确认支付

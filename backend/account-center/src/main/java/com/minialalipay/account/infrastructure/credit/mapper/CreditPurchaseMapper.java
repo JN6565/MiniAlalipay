@@ -69,10 +69,10 @@ public interface CreditPurchaseMapper {
      */
     @Insert("INSERT INTO ledger_db.credit_purchase "
             + "(purchase_id, credit_transaction_id, credit_account_id, qr_order_id, "
-            + "merchant_account_id, amount_fen, repaid_fen, refunded_fen, outstanding_fen, "
+            + "merchant_account_id, amount_fen, repaid_fen, refunded_fen, "
             + "refund_transaction_id, billing_status, version, occurred_at, updated_at) "
             + "VALUES (#{purchaseId}, #{creditTransactionId}, #{creditAccountId}, #{qrOrderId}, "
-            + "#{merchantAccountId}, #{amountFen}, #{repaidFen}, #{refundedFen}, #{outstandingFen}, "
+            + "#{merchantAccountId}, #{amountFen}, #{repaidFen}, #{refundedFen}, "
             + "#{refundTransactionId}, #{billingStatus}, #{version}, #{occurredAt}, #{updatedAt})")
     int insert(CreditPurchasePO po);
 

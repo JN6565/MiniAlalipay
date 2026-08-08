@@ -188,7 +188,7 @@ public class CollectionController {
         return name.charAt(0) + "*".repeat(name.length() - 1);
     }
 
-    /** 为绑定 H5 会话的付款人签发仅限余额支付的 C2C 确认令牌。 */
+    /** 为绑定 H5 会话的付款人签发绑定余额或 Mini 花呗资金来源的 C2C 确认令牌。 */
     @PostMapping("/orders/{id}/confirmations")
     public ResponseEntity<ApiResponse<ConfirmationResponse>> confirmation(
             @RequestHeader(value = "X-User-Id", required = false) String userId, @PathVariable String id,

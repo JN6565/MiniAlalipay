@@ -8,6 +8,8 @@ import jakarta.validation.constraints.Size;
 import org.springframework.http.ResponseEntity;
 import org.springframework.validation.annotation.Validated;
 import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.PostMapping;
+import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
@@ -43,6 +45,37 @@ public class InternalCreditAccountDirectoryController {
                 account.getStatus().name(), account.getVersion()));
     }
 
+    /**
+     * 预检动态扫码信用支付资格。
+     *
+     * <p>只返回是否可受理和版本，不泄露额度明细；真正的额度冻结仍由信用 TCC Try 原子完成。</p>
+     */
+    @PostMapping("/{creditAccountId}/eligibility")
+    public ResponseEntity<CreditEligibility> checkEligibility(
+            @PathVariable @Size(min = 26, max = 26)
+            @Pattern(regexp = "^[0-9A-HJKMNP-TV-Z]{26}$") String creditAccountId,
+            @RequestBody EligibilityRequest request) {
+        var account = creditAccounts.findById(creditAccountId)
+                .orElseThrow(() -> new BusinessException(CommonErrorCode.NOT_FOUND));
+        long amountFen = request == null ? 0L : request.amountFen();
+        if (amountFen <= 0L) {
+            throw new BusinessException(CommonErrorCode.INVALID_REQUEST);
+        }
+        if (!account.allowsCreditPay()) {
+            return ResponseEntity.ok(new CreditEligibility(false, "CREDIT_NOT_AVAILABLE", account.getVersion()));
+        }
+        if (account.getAvailableFen() < amountFen) {
+            return ResponseEntity.ok(new CreditEligibility(false, "CREDIT_LIMIT_INSUFFICIENT", account.getVersion()));
+        }
+        return ResponseEntity.ok(new CreditEligibility(true, null, account.getVersion()));
+    }
+
     /** 信用账户只读引用，不携带可用额度、已用额度、冻结额度或账务数据。 */
     public record CreditAccountReference(String creditAccountId, String userId, String status, long version) { }
+
+    /** 信用支付资格预检请求，金额单位为分。 */
+    public record EligibilityRequest(long amountFen) { }
+
+    /** 信用支付资格预检结果，不携带额度明细。 */
+    public record CreditEligibility(boolean eligible, String reasonCode, long version) { }
 }

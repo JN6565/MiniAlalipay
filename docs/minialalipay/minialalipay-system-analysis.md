@@ -80,7 +80,7 @@
 - 所有前台主体均为普通用户并持有系统虚拟账户；现实生活中的商户身份不进入系统角色模型，不建设经营主体入驻或独立商户端。
 - C 端仅面向普通用户并承载本人付款、收款、动态码、订单和统计；B 端仅面向运营、管理员和观察者，禁止放置任何收银或本人经营功能。
 - Mini 花呗仅为演示虚拟授信：固定额度 500000 分，账单日为每月 1 日，到期日为每月 10 日，不计利息、罚息和手续费。
-- 个人收款不依赖好友关系，个人码和固定请求均只能使用 `BALANCE`，禁止 `MINI_CREDIT`。
+- 个人收款不依赖好友关系，个人码和固定请求由付款用户明确选择 `BALANCE` 或 `MINI_CREDIT`。
 - PRD 中的 P0 为两周必须交付，P1 可在 P0 稳定后实现。
 - 真实大模型、规则模型或演示兜底模型可以替换，但 Agent 输出必须经过同一 Schema 和策略校验。
 
@@ -132,7 +132,7 @@
 | 可追溯 | 请求、Agent、MCP、风控、事务和账本可关联 | 交易号/Trace ID 可查完整链路 |
 | 可恢复 | 超时、重启和部分失败可重试、补偿或转人工 | 故障注入后 60 秒内收敛或入人工 |
 | 可监控 | 实时、离线、告警和数据质量形成闭环 | 关键事件 2 分钟内可见，T+1 有发布门禁 |
-| 渠道统一 | 主动转账、个人码和固定请求均形成 `TRANSFER`，动态订单码按资金来源形成 `QR_PAY`/`CREDIT_PAY` | 同一核心按 `source_type` 区分且金额不重复统计 |
+| 渠道统一 | 主动转账形成 `TRANSFER`；个人码、固定请求和动态订单码按资金来源形成余额交易或 `CREDIT_PAY` | 同一核心按 `source_type` 区分且金额不重复统计 |
 | 信用闭环 | 额度、冻结、应收、账单和还款可独立对账 | 总额=可用+已用+冻结，已用=信用应收 |
 
 ### 2.2 核心质量属性优先级
@@ -179,7 +179,7 @@
 - AI 外部服务可能不稳定，需要超时、重试、熔断和演示兜底。
 - TCC 与账本是评分生命线，不能用单库本地事务替代。
 - 监控实时/离线链路不能直接扫描业务数据库生成指标。
-- C2C 不得使用信用额度；固定请求未知 `PROCESSING` 结果不得重新开放。
+- C2C 付款由用户明确选择余额或 Mini 花呗；Mini 花呗仅适用于他人创建的个人码、固定金额收款请求和动态扫码订单，固定请求未知 `PROCESSING` 结果不得重新开放。
 
 ## 4. 参与者与用例分析
 
@@ -239,7 +239,7 @@ flowchart LR
 | UC-14 | 生成 T+1 报表 | 定时任务 | 事件日志完整 | 质量通过后发布版本化指标 |
 | UC-15 | 管理长期个人收款码 | 普通用户 | 已登录、账户正常 | 获得唯一有效个人码，可停用或原子换码 |
 | UC-16 | 创建和取消固定金额收款请求 | 普通用户 | 已登录、金额有效 | 创建 30 分钟不可改金额请求，或在未受理时取消 |
-| UC-17 | 扫码或打开请求完成 C2C 余额付款 | 普通用户 | 非本人收款对象、余额充足 | 形成 `TRANSFER`，双方余额变化且账本平衡 |
+| UC-17 | 扫码或打开请求完成 C2C 付款 | 普通用户 | 非本人收款对象、余额或额度充足 | 按资金来源形成 `TRANSFER` 或 `CREDIT_PAY`，资金与账本平衡 |
 | UC-18 | 查看 C2C 跨端状态与回执 | 付款人/收款人 | 有对象级访问权 | SSE/轮询返回交易核心真实状态 |
 | UC-19 | Mini 花呗动态扫码支付 | 普通用户 | 额度账户正常、额度充足且非本人订单 | 形成 `CREDIT_PAY`，增加应收与收款用户余额 |
 | UC-20 | 查询账单并余额还款 | 普通用户 | 存在应收且余额充足 | 形成 `CREDIT_REPAY`，减少余额与应收并恢复额度 |
@@ -331,7 +331,7 @@ flowchart TB
 | 主动 C2C 转账 | Web 表单/AI Talk | 草稿版本、收款人解析、风控、确认令牌、`TRANSFER` 受理 | TCC 冻结付款方、增加收款方、写借贷分录 | `transfer_draft`、`confirmation`、`fund_transaction` | 交易状态、回执、明细 |
 | 动态扫码余额支付 | 收款用户 C 端 + 付款用户 H5 | `QrPayOrder`、令牌交换、订单 CAS、SSE | `QR_PAY` TCC 扣款和收款用户入账 | `qr_pay_order`、`qr_pay_token`、交易和账本 | 收款方 C 端实时结果、付款方回执 |
 | 动态扫码信用支付 | 付款用户 H5 | 同一扫码订单切换 `CREDIT_PAY`，重新确认 | 冻结/占用额度、增加信用应收、收款用户入账 | `credit_account`、`credit_purchase`、`credit_receivable` | 额度变化、账单明细、收款回执 |
-| 个人长期收款码 | C 端收款页 + H5 | 个人码生命周期、独立 `CollectionOrder`、余额 `TRANSFER` | 付款方余额减少、收款方余额增加、账本平衡 | `personal_collection_code`、`collection_order` | 收款明细、付款回执、可选 SSE |
+| 个人长期收款码 | C 端收款页 + H5 | 个人码生命周期、独立 `CollectionOrder`、资金来源选择 | 余额扣减或额度占用、收款方余额增加、账本平衡 | `personal_collection_code`、`collection_order` | 收款明细、付款回执、可选 SSE |
 | 固定金额收款请求 | C 端收款页 + H5 | 请求不可变、30 分钟过期、一码多收每次扫码新建独立订单 | 各笔订单独立受理并各自进入 TCC | `collection_request`、`collection_order`、交易和 Outbox | 请求状态、多笔收款记录与最终回执 |
 | Mini 花呗出账/还款 | C 端信用页 | 账期任务、应还分配、还款确认和 `CREDIT_REPAY` | 额度、应收、余额和账本 TCC | `credit_bill`、`credit_bill_item`、`credit_repayment` | 账单、还款结果和额度恢复 |
 | AI 助理 | AI Talk | 意图、槽位、草稿和工具编排，不直接执行资金 | 所有写操作回到确认 UI 和统一交易核心 | `agent_session`、`tool_call_log`、业务草稿 | 结构化卡片、解释和 Trace |
@@ -407,7 +407,7 @@ flowchart TB
 3. 任何资金执行必须持有未过期、未消费且字段完全匹配的确认令牌。
 4. AI、前端、运营后台都不能直接修改余额或账本。
 5. 交易状态未确定时只能展示处理中、补偿中或人工确认，不能提前显示成功。
-6. 六类业务都进入交易、账本、Trace 和对账；C2C 统一记为 `TRANSFER`，充值和退款分别记为 `RECHARGE`、`REFUND`，只按 `source_type` 拆渠道且不得重复统计金额。
+6. 六类业务都进入交易、账本、Trace 和对账；C2C 按资金来源记为 `TRANSFER` 或 `CREDIT_PAY`，充值和退款分别记为 `RECHARGE`、`REFUND`，只按 `source_type` 拆渠道且不得重复统计金额。
 7. 原始账本、审计、告警和人工处置记录不可物理删除。
 8. 只有终态发布器验证全局事务、全部 TCC 分支、余额版本和账本凭证后，才能原子发布 `SUCCESS`。
 9. 资金事实与关键事件使用本地事务 Outbox 同步提交，监控消费者使用 Inbox 去重，禁止提交数据库后直接“尽力而为”发送事件。
@@ -415,7 +415,7 @@ flowchart TB
 11. 长期个人码每用户最多一个 `ACTIVE`，换码原子撤销旧码；每次支付创建独立 `CollectionOrder`，允许并发多笔成功。
 12. 固定请求金额和备注创建后不可变且不绑定付款人；一码多收下每次扫码都新建独立订单，有效期内多人多次支付各自独立受理，令牌交换永不复用会话旧订单。
 13. 固定请求受理多笔后状态保持 `PROCESSING` 直至全部订单终态；单笔订单完整 Cancel 只回滚该笔事实，不得据此重新开放请求；未知结果必须保持 `PROCESSING`/`MANUAL_REVIEW`。
-14. Mini 花呗只允许支付另一普通用户创建的动态扫码订单，禁止自付、转账、C2C、提现或以信用偿还信用；额度不计入虚拟余额。
+14. Mini 花呗允许支付另一普通用户创建的动态扫码、个人码或固定金额收款订单，禁止自付、主动转账、提现或以信用偿还信用；额度不计入虚拟余额。
 15. 信用不变量为 `总额度 = 可用额度 + 已用额度 + 冻结额度`，且 `已用额度 = 信用应收余额 = 未出账剩余 + 账单剩余应还`。
 
 ### 7.4 UML 组件图
@@ -1375,7 +1375,7 @@ sequenceDiagram
     F->>B: 验证四方事实并发布 SUCCESS
 ```
 
-个人码长期复用，每个付款会话对应独立订单，因此两名付款人可并发成功。付款账户由登录会话确定，收款账户由个人码确定；自付、`MINI_CREDIT`、客户端收款账户和非正金额均拒绝。
+个人码长期复用，每个付款会话对应独立订单，因此两名付款人可并发成功。付款账户由登录会话确定，收款账户由个人码确定；自付、客户端收款账户和非正金额均拒绝，资金来源由付款用户明确选择。
 
 #### 9.4.4 固定金额请求的一码多收
 
@@ -1537,7 +1537,8 @@ flowchart TD
     Retry --> Confirm
     PasswordOk -->|是| Token[签发字段绑定的一次性令牌]
     Token --> Funding{资金来源与来源类型}
-    Funding -->|C2C: BALANCE only| Accept[本地事务消费令牌、CAS 来源、创建 TRANSFER]
+    Funding -->|C2C: BALANCE| Accept[本地事务消费令牌、CAS 来源、创建 TRANSFER]
+    Funding -->|C2C: MINI_CREDIT| AcceptC2C[本地事务消费令牌、CAS 来源、创建 CREDIT_PAY]
     Funding -->|收款用户余额| AcceptQr[创建 QR_PAY]
     Funding -->|动态码 Mini Credit| AcceptCredit[创建 CREDIT_PAY]
     Funding -->|余额还款| AcceptRepay[创建 CREDIT_REPAY]
@@ -2363,7 +2364,7 @@ CREATE TABLE idempotency_record (
 - Mini 花呗额度与余额分属不同资金资源：`CREDIT_PAY` 在 `account_db` 原子冻结/确认额度，在 `ledger_db` 原子写信用应收、信用消费、收款用户入账凭证和 Outbox；`CREDIT_REPAY` 原子冻结/扣减本人余额，并按分配快照减少应收、账单剩余和已用额度。任何分支不得直接跨 Schema 更新对方表。
 - 信用账单任务以 `(credit_account_id, period)` 防重，固定每月 1 日生成上月账单、每月 10 日 23:59:59 到期；逾期只把信用账户置为 `SUSPENDED`，不得阻止查询或 `CREDIT_REPAY`。
 - `personal_collection_code` 换码事务必须 CAS 当前 ACTIVE 码为 `REVOKED`、插入新 ACTIVE 码并写 Outbox；生成列唯一键保证并发换码最多提交一个新码。
-- 固定收款请求创建时锁定 `payee_account_id`、`amount_fen`、`subject` 与 `expires_at`，后续 API 不提供金额或收款账户修改路径；`collection_order` 只保存服务端解析的收付款账户，C2C `funding_source` 固定为 `BALANCE`。
+- 固定收款请求创建时锁定 `payee_account_id`、`amount_fen`、`subject` 与 `expires_at`，后续 API 不提供金额或收款账户修改路径；`collection_order` 只保存服务端解析的收付款账户，受理交易的 `funding_source` 取确认令牌绑定的 `BALANCE` 或 `MINI_CREDIT`。
 - 冲正使用同一 `transaction_id` 下的新 `REVERSAL` 凭证：原凭证键为 `(transaction_id, PAYMENT, 0)`，反向凭证键为 `(transaction_id, REVERSAL, 1)`，并通过 `original_voucher_id` 关联。凭证唯一键为 `(transaction_id, voucher_type, reversal_no)`，原凭证和反向凭证均不可修改或删除。
 - `ledger_voucher` 必须校验 `total_debit_fen = total_credit_fen`，`ledger_entry` 必须校验 `amount_fen > 0`、`direction IN ('DEBIT','CREDIT')`；终态发布器再次执行跨行借贷合计校验。
 - 活跃工单键使用生成列表达式 `CASE WHEN status IN ('OPEN','IN_PROGRESS') THEN CONCAT(subject_type, ':', subject_id) ELSE NULL END` 并建立唯一索引；终态工单生成 `NULL`，允许保留历史记录。
@@ -2486,7 +2487,7 @@ erDiagram
 | `COLLECTION_REQUEST_PAID` | 409 | 查询 | 固定请求已成功，不得再次付款 |
 | `SELF_PAYMENT_FORBIDDEN` | 422 | 否 | 付款账户与收款账户相同，拒绝且不改变资金 |
 | `AMOUNT_IMMUTABLE` | 422 | 否 | 固定请求金额不可修改，个人码订单金额锁定后不可修改 |
-| `FUNDING_SOURCE_NOT_ALLOWED` | 422 | 否 | C2C 只允许 `BALANCE`，不得占用 Mini 花呗额度 |
+| `FUNDING_SOURCE_NOT_ALLOWED` | 422 | 否 | 资金来源为空、超出 `BALANCE`/`MINI_CREDIT` 白名单或当前业务不允许该来源 |
 | `CONFIRMATION_STALE` | 409 | 重新确认 | 订单、请求版本或字段哈希已变化，旧确认失效 |
 | `TRANSACTION_PENDING` | 202 | 查询 | 资金结果未知，保持处理中并进入恢复流程 |
 | `CREDIT_NOT_AVAILABLE` | 422 | 否 | Mini 花呗未开通、关闭或暂停信用消费 |
@@ -2527,7 +2528,7 @@ erDiagram
 
 ### 12.5 事件接口
 
-统一事件至少包含：`eventId`、`eventType`、`eventVersion`、`occurredAt`、`producer`、`traceId`、`payload`；允许携带 `requestId` 关联入口请求。资金事件还应携带 `businessType`、`sourceType`、`sourceOrderId`、`fundingSource`、`transactionId` 和 `userIdHash`，非资金事件允许这些交易字段为空。C2C 成功金额只从 `businessType=TRANSFER` 的交易事实聚合一次，`sourceType=PERSONAL_QR_ORDER|COLLECTION_REQUEST_ORDER` 仅作渠道维度，不得重复累加生命周期事件金额。
+统一事件至少包含：`eventId`、`eventType`、`eventVersion`、`occurredAt`、`producer`、`traceId`、`payload`；允许携带 `requestId` 关联入口请求。资金事件还应携带 `businessType`、`sourceType`、`sourceOrderId`、`fundingSource`、`transactionId` 和 `userIdHash`，非资金事件允许这些交易字段为空。C2C 成功金额从 `TRANSFER` 或 `CREDIT_PAY` 交易事实聚合一次，`sourceType=PERSONAL_QR_ORDER|COLLECTION_REQUEST_ORDER` 仅作渠道维度，不得重复累加生命周期事件金额。
 
 核心事件：
 
@@ -2650,7 +2651,7 @@ Mini 花呗接口只能操作当前登录用户的信用账户。客户端不能
 | GET | `/api/v1/p2p-collections/orders/{id}` | 交易双方或绑定 H5 会话 | 查询订单和真实资金状态 | 进入处理中后回源交易核心 |
 | GET | `/api/v1/p2p-collections/requests/{id}/events` | 请求创建者 | SSE 订阅固定请求状态 | `Last-Event-ID` 续传；终态后结束 |
 
-所有 C2C 写接口从登录身份解析付款账户，从个人码或固定请求解析收款账户；请求体出现 `payerAccountId`、`payeeAccountId`、`payeeUserId` 或非 `BALANCE` 资金来源时直接拒绝。主动转账、个人码订单和固定请求订单分别使用 `TRANSFER_DRAFT`、`PERSONAL_QR_ORDER`、`COLLECTION_REQUEST_ORDER` 来源类型，但业务类型均为 `TRANSFER`。
+所有 C2C 写接口从登录身份解析付款账户，从个人码或固定请求解析收款账户；请求体出现 `payerAccountId`、`payeeAccountId` 或 `payeeUserId` 时直接拒绝。主动转账、个人码订单和固定请求订单分别使用 `TRANSFER_DRAFT`、`PERSONAL_QR_ORDER`、`COLLECTION_REQUEST_ORDER` 来源类型；个人码和固定请求按确认令牌绑定的资金来源创建 `TRANSFER` 或 `CREDIT_PAY`。
 
 C2C 创建请求与个人码订单金额锁定共用以下 OpenAPI 字段约束；实现生成的 Schema 必须设置 `additionalProperties: false`：
 
@@ -3232,7 +3233,7 @@ Content-Type: application/json
 }
 ```
 
-`requestVersion` 仅固定请求模式必填。个人码订单的 `sourceType` 为 `PERSONAL_QR_ORDER` 且不提交/返回 `requestVersion`、`requestId`。传入 `MINI_CREDIT` 返回 `FUNDING_SOURCE_NOT_ALLOWED`，不得创建交易、额度冻结、信用应收或账本凭证。
+`requestVersion` 仅固定请求模式必填。个人码订单的 `sourceType` 为 `PERSONAL_QR_ORDER` 且不提交/返回 `requestVersion`、`requestId`。传入 `MINI_CREDIT` 时创建 `CREDIT_PAY`，额度冻结、信用应收、收款入账和账本凭证均复用信用支付 TCC 分支。
 
 #### 12.9.13 固定请求 SSE
 
@@ -3283,7 +3284,7 @@ SSE 只在终态发布事务的 Outbox 事件投递后发送 `SUCCESS`。断线�
 - 对象级授权：所有 `{id}` 查询先按当前主体过滤，不通过时统一返回 404，避免枚举资源。
 - C2C 对象授权：个人码管理只认 `owner_user_id`；固定请求创建者可看请求与全部状态，付款人只能看本人关联订单；H5 会话必须同时匹配 `h5_session_id` 和订单，不因持有可复用分享 token 获得历史交易权限。
 - 服务端派生：C2C 付款账户来自登录身份，收款账户来自个人码/固定请求；Mini 花呗信用账户和还款分配也由服务端派生。上述字段进入请求时按越权参数拒绝，而不是忽略后继续执行。
-- 资金来源白名单：个人码、固定请求和主动 C2C 转账只允许 `BALANCE`；动态扫码才允许 `BALANCE`/`MINI_CREDIT`，资金来源变化使旧确认令牌失效。
+- 资金来源白名单：主动 C2C 转账只允许 `BALANCE`；动态扫码、个人码和固定请求允许 `BALANCE`/`MINI_CREDIT`，资金来源变化使旧确认令牌失效。
 - 参数边界：通用金额技术上限为 `1..100000000` 分，但转账、动态扫码和 C2C 收款按产品规则收紧为 `1..5000000` 分；C2C 备注最多 50 个字符并落实到 API Schema 与 `VARCHAR(50)`，其他备注/商品说明仍须按各自 PRD 上限校验；分页 `limit` 最大 100。
 - 幂等快照：服务端保存幂等键对应的请求摘要、资源 ID 和响应摘要；同键不同摘要返回 409。
 - 乐观并发：更新请求携带 `version`，SQL 使用 `WHERE id=? AND version=?`，影响行数为 0 返回 `VERSION_CONFLICT`。
@@ -3328,8 +3329,8 @@ SSE 只在终态发布事务的 Outbox 事件投递后发送 `SUCCESS`。断线�
 - 防悬挂：Try 发现取消屏障后拒绝冻结，防止晚到请求重新占用资金。
 - 有效令牌槽位：签发确认令牌时锁定 `confirmation_subject`，原子撤销旧令牌、插入新令牌并更新 `current_confirmation_id`；因此同一主体最多一个 `ACTIVE` 令牌。
 - 动态扫码受理原子性：在单个 `business_db` 本地事务内条件消费当前 `ACTIVE` 令牌、CAS 订单、插入 `QR_PAY` 或 `CREDIT_PAY` 交易并回填关联；资金来源切换后旧令牌失效。
-- 长期个人码受理原子性：权威余额/账户/自付检查通过后，在一个 `business_db` 本地事务内依次执行：条件消费当前 `ACTIVE` 确认令牌；CAS `CollectionOrder PENDING_CONFIRMATION→PROCESSING` 并校验版本、H5 会话、金额与 `funding_source=BALANCE`；插入 `business_type=TRANSFER, source_type=PERSONAL_QR_ORDER, source_order_id=order_id` 的主单；回填订单 `transaction_id`；写受理 Outbox。任一步失败整体回滚，个人码保持 ACTIVE，其他独立订单不受影响。
-- 固定请求受理原子性：权威余额/账户/自付检查通过后，在一个 `business_db` 本地事务内依次执行：条件消费当前 `ACTIVE` 确认令牌；CAS `CollectionRequest OPEN→PROCESSING`，条件同时包含请求版本、未过期、`active_order_id IS NULL`，并写入当前订单；CAS 当前 `CollectionOrder PENDING_CONFIRMATION→PROCESSING` 并校验订单/请求版本和 `BALANCE`；插入 `business_type=TRANSFER, source_type=COLLECTION_REQUEST_ORDER, source_order_id=order_id` 的主单；回填订单和请求的 `transaction_id`；写订单已受理与请求状态 Outbox。任一步失败整体回滚，竞争失败返回请求当前状态。预检后的余额竞态若在 Try 暴露，按 Cancel 收敛，不能删除已受理交易。
+- 长期个人码受理原子性：权威账户/自付检查通过后，在一个 `business_db` 本地事务内依次执行：条件消费当前 `ACTIVE` 确认令牌；CAS `CollectionOrder PENDING_CONFIRMATION→PROCESSING` 并校验版本、H5 会话、金额与确认令牌绑定的资金来源；按 `BALANCE`/`MINI_CREDIT` 插入 `TRANSFER`/`CREDIT_PAY` 主单；回填订单 `transaction_id`；写受理 Outbox。任一步失败整体回滚，个人码保持 ACTIVE，其他独立订单不受影响。
+- 固定请求受理原子性：权威账户/自付检查通过后，在一个 `business_db` 本地事务内依次执行：条件消费当前 `ACTIVE` 确认令牌；CAS 当前 `CollectionOrder PENDING_CONFIRMATION→PROCESSING` 并校验订单/请求版本和确认令牌绑定的资金来源；按 `BALANCE`/`MINI_CREDIT` 插入 `TRANSFER`/`CREDIT_PAY` 主单；回填订单和请求的 `transaction_id`；写订单已受理与请求状态 Outbox。任一步失败整体回滚，资金 Try 竞态按 Cancel 收敛，不能删除已受理交易。
 - 固定请求安全重开：只有协调器已持久化全局 `CANCELLED`，全部分支均为 `CANCELLED`，且终态发布器验证付款冻结为 0、收款未入账、信用额度/应收无变化、账本无已过账残片后，才在单个 `business_db` 事务中把当前订单置为 `FAILED`、清除请求 `active_order_id/transaction_id`，再按 `cancel_requested_at`、过期时间决定请求回到 `OPEN`、`CANCELLED` 或 `EXPIRED` 并写 Outbox。任何未知或部分完成状态进入 `MANUAL_REVIEW`，不得清槽或接受第二笔付款。
 - 受理结果恢复：唯一键冲突时读取并返回原交易；若进程在本地事务提交后、启动 TCC 前崩溃，恢复扫描根据 `PROCESSING` 主单启动或接管全局事务。
 
@@ -3418,7 +3419,7 @@ flowchart LR
 
 - 系统规则与工具权限不由用户消息修改。
 - 用户要求“忽略规则直接转账”时拒绝并回到确认流程。
-- 用户要求“无需确认直接还款/用花呗转账或付个人码”时拒绝；C2C 请求中的 `MINI_CREDIT` 在服务端硬拒绝。
+- 用户要求“无需确认直接还款/用花呗主动转账或自付”时拒绝；扫码收款订单中的 `MINI_CREDIT` 必须来自可信 UI 的明确选择。
 - MCP 返回内容视为不可信数据，不能改变系统指令。
 - 策略校验、身份和对象权限在服务端重复执行，Prompt 只改善体验，不承担安全职责。
 - 模型输出和工具调用均记录脱敏摘要、Schema 版本、耗时和结果码。
@@ -3545,7 +3546,7 @@ flowchart LR
 
 个人收款生命周期事件固定为：`P2P_COLLECTION_CODE_CREATED`、`P2P_COLLECTION_CODE_REVOKED`、`P2P_COLLECTION_REQUEST_CREATED`、`P2P_COLLECTION_REQUEST_CANCELLED`、`P2P_COLLECTION_REQUEST_EXPIRED`、`P2P_COLLECTION_ORDER_ACCEPTED`、`P2P_COLLECTION_ORDER_SUCCEEDED`、`P2P_COLLECTION_ORDER_FAILED`。所有事件携带 `traceId`、`sourceType`、来源 ID、订单 ID 和可选交易 ID，不携带原始令牌或完整账户。
 
-个人收款指标口径：个人码扫码数/确认率/成功率按 `source_type=PERSONAL_QR_ORDER` 统计；固定请求创建数/支付率/过期率/并发冲突按 `COLLECTION_REQUEST_ORDER` 统计；成功金额从底层 `TRANSFER` 交易只聚合一次，渠道事件只作维度关联，不能再次累加金额。
+个人收款指标口径：个人码扫码数/确认率/成功率按 `source_type=PERSONAL_QR_ORDER` 统计；固定请求创建数/支付率/过期率/并发冲突按 `COLLECTION_REQUEST_ORDER` 统计；成功金额从底层 `TRANSFER`/`CREDIT_PAY` 交易只聚合一次，渠道事件只作维度关联，不能再次累加金额。
 
 ### 16.5 数据质量
 
@@ -3619,7 +3620,7 @@ B 端身份闭环已落地：`frontend-admin` 通过网关调用 `POST /api/v1/a
 - 支付密码不进入日志、Agent、MCP 或监控事件。
 - 访问令牌、确认令牌和二维码令牌用途隔离，不可互换。
 - 确认令牌绑定主体、付款账户、收款账户、金额、业务类型、源订单哈希、有效期和消费状态。
-- 动态扫码确认令牌额外绑定 `fundingSource`；C2C 确认令牌强制绑定 `BALANCE`，传入 `MINI_CREDIT` 即使 Schema 合法也拒绝。
+- 动态扫码和 C2C 收款确认令牌均额外绑定 `fundingSource`；资金来源切换后旧确认令牌失效。
 - 长期个人码与固定请求的公开令牌使用独立命名空间和摘要，不能兑换登录态、支付确认或另一类型收款对象。
 
 ### 17.4 威胁模型
@@ -3945,7 +3946,7 @@ P2P Collection 验收映射：
 
 ### 23.1 两周内必须保持的边界
 
-- 只实现 `TRANSFER`、`QR_PAY`、`CREDIT_PAY`、`CREDIT_REPAY` 四种资金业务；个人码和固定请求只作为 `TRANSFER` 来源，不增加第五类交易。
+- 只实现 `TRANSFER`、`QR_PAY`、`CREDIT_PAY`、`CREDIT_REPAY` 四种资金业务；个人码和固定请求作为 `TRANSFER` 或 `CREDIT_PAY` 的来源，不增加第五类交易。
 - 不建设商户系统身份、经营主体入驻、独立商户端或收单结算；演示中的经营者仍使用普通用户身份和本人账户。
 - Mini 花呗固定 5000 元额度，只做动态扫码支付、轻量账单和余额还款，不做真实征信、计息、分期、最低还款或额度运营平台。
 - P0 包含长期个人码、30 分钟固定请求、H5 余额付款、请求 CAS、TCC/账本、回执、核心监控和 15 个 C2C 验收场景，不新增部署进程。
