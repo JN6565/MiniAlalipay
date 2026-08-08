@@ -1,5 +1,6 @@
 package com.minialalipay.user.application.identity;
 
+import com.minialalipay.user.domain.user.IdCardValidator;
 import com.minialalipay.user.domain.user.User;
 import com.minialalipay.user.domain.user.UserRepository;
 import com.minialalipay.user.domain.auth.UserErrorCode;
@@ -31,15 +32,25 @@ public class IdentityApplicationService {
     /**
      * 绑定身份信息：设置真实姓名和身份证号，计算哈希，更新身份状态为 VERIFIED。
      *
+     * <p>身份证号执行项目统一校验口径（{@link IdCardValidator}：格式 + 出生日期），
+     * 不合规直接拒绝，防止非法身份证号进入系统后被绑卡三要素比对引用。</p>
+     *
      * @param userId 用户 ID
      * @param realName 真实姓名
      * @param idCard 身份证号明文
      * @return 身份信息响应
+     * @throws BusinessException 用户不存在、身份证号不合规或身份证号已被其他账户绑定
      */
     @Transactional
     public IdentityDTO bindIdentity(String userId, String realName, String idCard) {
         User user = userRepository.findById(userId)
                 .orElseThrow(() -> new BusinessException(CommonErrorCode.NOT_FOUND));
+
+        // 项目统一身份证校验口径：与银行卡注册、前端 validateIdCard 保持一致
+        String idCardError = IdCardValidator.validate(idCard);
+        if (idCardError != null) {
+            throw new BusinessException(CommonErrorCode.INVALID_REQUEST);
+        }
 
         byte[] hash = sha256(idCard.trim());
         String masked = maskIdCard(idCard.trim());
@@ -69,27 +80,40 @@ public class IdentityApplicationService {
     }
 
     /**
+     * 三要素交叉校验结果。
+     *
+     * @param matched 姓名、身份证哈希、手机号是否全部与用户存储信息一致
+     * @param identityBound 用户是否已绑定身份信息（realName 与 idCardHash 均已设置）；
+     *                      供调用方区分「未绑定身份」（IDENTITY_NOT_BOUND）与
+     *                      「已绑定但不匹配」（IDENTITY_MISMATCH）两类失败
+     */
+    public record VerifyResult(boolean matched, boolean identityBound) {
+    }
+
+    /**
      * 三要素交叉校验：比对持卡人姓名、身份证号、手机号与用户存储信息是否完全一致。
      *
      * @param userId 用户 ID
      * @param holderName 持卡人姓名
      * @param idCard 身份证号明文
      * @param phone 手机号明文
-     * @return 是否全部匹配
+     * @return 校验结果，包含是否匹配与是否已绑定身份两个维度
      */
     @Transactional(readOnly = true)
-    public boolean verifyThreeElements(String userId, String holderName, String idCard, String phone) {
+    public VerifyResult verifyThreeElements(String userId, String holderName, String idCard, String phone) {
         return userRepository.findById(userId)
                 .map(user -> {
+                    boolean identityBound = user.getRealName() != null && user.getIdCardHash() != null;
                     boolean nameMatch = user.getRealName() != null
                             && user.getRealName().equals(holderName.trim());
                     boolean idCardMatch = user.getIdCardHash() != null
                             && MessageDigest.isEqual(user.getIdCardHash(), sha256(idCard.trim()));
                     boolean phoneMatch = user.getPhoneNumber() != null
                             && user.getPhoneNumber().equals(phone.trim());
-                    return nameMatch && idCardMatch && phoneMatch;
+                    return new VerifyResult(nameMatch && idCardMatch && phoneMatch, identityBound);
                 })
-                .orElse(false);
+                // 用户不存在时按未绑定身份处理，避免泄露账号是否存在
+                .orElse(new VerifyResult(false, false));
     }
 
     /** 计算 SHA-256 哈希。 */

@@ -37,7 +37,7 @@ export interface BindBankCardPayload {
   phone: string;
 }
 
-/** 银行卡注册状态：REGISTERED 已注册未绑定，BOUND 已绑定。 */
+/** 银行卡注册状态：REGISTERED 已注册可绑定（含解绑后释放回的状态），BOUND 已绑定。 */
 export type RegisteredCardStatus = 'REGISTERED' | 'BOUND';
 
 /** 银行卡注册响应：注册时返回生成的完整卡号。 */

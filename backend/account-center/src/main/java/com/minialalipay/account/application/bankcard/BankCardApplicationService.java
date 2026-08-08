@@ -8,6 +8,7 @@ import com.minialalipay.account.domain.bankcard.BankCard;
 import com.minialalipay.account.domain.bankcard.BankCardErrorCode;
 import com.minialalipay.account.domain.bankcard.BankCardNumber;
 import com.minialalipay.account.domain.bankcard.BankCardRepository;
+import com.minialalipay.account.domain.bankcard.IdCardValidator;
 import com.minialalipay.account.domain.bankcard.RegisteredCard;
 import com.minialalipay.account.domain.bankcard.RegisteredCardRepository;
 import com.minialalipay.account.domain.bankcard.UserCenterIdentityPort;
@@ -35,8 +36,6 @@ public class BankCardApplicationService {
 
     /** 单用户 ACTIVE 绑定上限，超过后拒绝继续绑卡。 */
     private static final int MAX_ACTIVE_CARDS = 10;
-    /** 身份证号格式：17 位数字加 1 位数字或 X/x。 */
-    private static final Pattern ID_CARD_PATTERN = Pattern.compile("^\\d{17}[\\dXx]$");
     /** 中国大陆手机号格式：1 开头的 11 位数字。 */
     private static final Pattern PHONE_PATTERN = Pattern.compile("^1\\d{10}$");
 
@@ -120,11 +119,15 @@ public class BankCardApplicationService {
             throw new BusinessException(BankCardErrorCode.IDENTITY_MISMATCH);
         }
 
-        // 调用 user-center 交叉校验三要素与用户存储身份完全匹配
-        boolean identityVerified = userCenterIdentityPort.verifyThreeElements(
+        // 调用 user-center 交叉校验三要素与用户绑定身份完全匹配；
+        // 未绑定身份与不匹配分别返回对应错误码，校验服务不可用时拒绝绑卡
+        UserCenterIdentityPort.VerifyResult verifyResult = userCenterIdentityPort.verifyThreeElements(
                 userId, holderName.trim(), idCard.trim(), phone.trim());
-        if (!identityVerified) {
-            throw new BusinessException(BankCardErrorCode.IDENTITY_MISMATCH);
+        switch (verifyResult) {
+            case MATCHED -> { /* 校验通过，继续绑卡流程 */ }
+            case IDENTITY_NOT_BOUND -> throw new BusinessException(BankCardErrorCode.IDENTITY_NOT_BOUND);
+            case MISMATCH -> throw new BusinessException(BankCardErrorCode.IDENTITY_MISMATCH);
+            case SERVICE_UNAVAILABLE -> throw new BusinessException(CommonErrorCode.SERVICE_UNAVAILABLE);
         }
 
         // 识别银行信息
@@ -211,7 +214,8 @@ public class BankCardApplicationService {
     }
 
     /**
-     * 解绑银行卡（软删：状态置为 UNBOUND 终态）；
+     * 解绑银行卡（软删：状态置为 UNBOUND 终态），并同步释放对应的注册记录
+     * （BOUND → REGISTERED），使该卡可重新走绑卡流程；
      * 解绑默认卡后自动把最早绑定的活动卡递补为默认。
      *
      * @param userId 网关会话用户 ID
@@ -226,6 +230,16 @@ public class BankCardApplicationService {
         long expected = card.getVersion();
         card.unbind(now);
         updateOrConflict(card, expected);
+
+        // 同步释放注册记录，支持解绑后重绑；无注册记录的旧绑定数据静默跳过。
+        // 释放 CAS 失败视为并发修改，抛版本冲突整体回滚，避免出现
+        // “卡已解绑但注册记录仍为 BOUND”的中间态导致永远无法重绑
+        registeredCardRepository.findBoundByUserAndCard(userId, card.getCardBin(), card.getCardLast4())
+                .ifPresent(registration -> {
+                    if (!registeredCardRepository.releaseStatus(registration.getRegistrationId())) {
+                        throw new BusinessException(AccountErrorCode.VERSION_CONFLICT);
+                    }
+                });
 
         if (wasDefault) {
             // 递补最早绑定的活动卡为默认，维持「至多且尽量有一张默认卡」的体验
@@ -244,10 +258,10 @@ public class BankCardApplicationService {
                 .orElseThrow(() -> new BusinessException(BankCardErrorCode.BANK_CARD_NOT_FOUND));
     }
 
-    /** 四要素格式校验（模拟）：不发起真实银行通道校验，格式不合法即拒绝。 */
+    /** 四要素格式校验（模拟）：不发起真实银行通道校验，格式不合法即拒绝；身份证执行项目统一校验口径。 */
     private void validateHolder(String holderName, String idCard, String phone) {
         boolean holderValid = holderName != null && !holderName.isBlank() && holderName.trim().length() <= 32;
-        boolean idCardValid = idCard != null && ID_CARD_PATTERN.matcher(idCard.trim()).matches();
+        boolean idCardValid = IdCardValidator.validate(idCard) == null;
         boolean phoneValid = phone != null && PHONE_PATTERN.matcher(phone.trim()).matches();
         if (!holderValid || !idCardValid || !phoneValid) {
             throw new BusinessException(BankCardErrorCode.BANK_CARD_HOLDER_INVALID);

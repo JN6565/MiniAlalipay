@@ -60,7 +60,7 @@ const BankCardDetailPage = () => {
 
   const handleUnbind = async () => {
     if (!card || busy) return;
-    // 解绑不可逆，必须二次确认
+    // 解绑会移除卡片并释放注册记录，二次确认防误操作；解绑后可凭完整卡号重新绑定
     const confirmed = await Dialog.confirm({
       title: '解除绑定',
       content: `确定解绑 ${card.bankName}（尾号 ${card.cardLast4}）吗？解绑后如需使用请重新绑定。`,
@@ -70,7 +70,7 @@ const BankCardDetailPage = () => {
     setBusy(true);
     try {
       await unbindBankCard(card.cardId);
-      Toast.show({ icon: 'success', content: '已解绑' });
+      Toast.show({ icon: 'success', content: '解绑成功，可随时重新绑定该卡' });
       history.push('/h5/bank-cards');
     } catch (error: any) {
       Toast.show({ icon: 'fail', content: error?.message || '解绑失败，请重试' });

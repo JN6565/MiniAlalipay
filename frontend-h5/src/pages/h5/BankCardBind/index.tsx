@@ -11,7 +11,7 @@ const PHONE_PATTERN = /^1\d{10}$/;
 
 /**
  * 银行卡绑定页：输入注册时获得的卡号 + 三要素 → 绑定到用户账户。
- * 页面加载时同时获取已注册但未绑定的卡列表，供用户参考。
+ * 页面加载时同时获取已注册但未绑定的卡列表（含解绑后释放回可绑定状态的卡），供用户参考。
  */
 const BankCardBindPage = () => {
   const [cardNumber, setCardNumber] = useState('');
@@ -74,13 +74,15 @@ const BankCardBindPage = () => {
             <div
               key={card.registrationId}
               className="registered-card-item"
-              onClick={() => setCardNumber(card.cardBin + '****' + card.cardLast4)}
+              onClick={() =>
+                Toast.show({ content: '完整卡号仅在注册时返回一次，请手动输入' })
+              }
             >
               <span className="bank-name">{card.bankName}</span>
               <span className="card-last4">尾号 {card.cardLast4}</span>
             </div>
           ))}
-          <div className="registered-tip">注：上方仅显示尾号，完整卡号请在注册时记录</div>
+          <div className="registered-tip">注：上方仅显示尾号，完整卡号仅在注册时返回一次</div>
         </div>
       )}
 
