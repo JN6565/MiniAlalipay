@@ -23,7 +23,7 @@ public class UserInfoHttpAdapter implements UserInfoPort {
 
     public UserInfoHttpAdapter(
             RestClient.Builder builder,
-            @Value("${minialalipay.internal.user-center-url}") String baseUrl,
+            @Value("${minialalipay.internal.user-center-url:http://localhost:8081}") String baseUrl,
             @Value("${minialalipay.internal.service-token:}") String serviceToken
     ) {
         this.client = builder.baseUrl(baseUrl).build();

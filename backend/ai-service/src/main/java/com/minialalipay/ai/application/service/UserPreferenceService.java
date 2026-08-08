@@ -3,6 +3,8 @@ package com.minialalipay.ai.application.service;
 import com.minialalipay.ai.application.AiServiceUtils;
 import com.minialalipay.ai.domain.agent.UserPreference;
 import com.minialalipay.ai.domain.agent.UserPreferenceRepository;
+import com.fasterxml.jackson.core.type.TypeReference;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Service;
@@ -30,9 +32,12 @@ public class UserPreferenceService {
     private static final Logger log = LoggerFactory.getLogger(UserPreferenceService.class);
 
     private final UserPreferenceRepository preferenceRepository;
+    private final ObjectMapper objectMapper;
 
-    public UserPreferenceService(UserPreferenceRepository preferenceRepository) {
+    public UserPreferenceService(UserPreferenceRepository preferenceRepository,
+                                 ObjectMapper objectMapper) {
         this.preferenceRepository = preferenceRepository;
+        this.objectMapper = objectMapper;
     }
 
     /**
@@ -46,9 +51,14 @@ public class UserPreferenceService {
      */
     public void rememberLastPayee(String userId, String payeeId, String nickname, Instant now) {
         if (payeeId == null || payeeId.isBlank()) return;
-        String value = "{\"payeeId\":\"" + payeeId + "\",\"nickname\":\""
-                + (nickname != null ? nickname.replace("\"", "\\\"") : "") + "\"}";
-        savePreference(userId, UserPreference.TYPE_LAST_PAYEE, value, now);
+        try {
+            String value = objectMapper.writeValueAsString(
+                    Map.of("payeeId", payeeId,
+                           "nickname", nickname != null ? nickname : ""));
+            savePreference(userId, UserPreference.TYPE_LAST_PAYEE, value, now);
+        } catch (Exception e) {
+            log.warn("序列化用户偏好失败，跳过记忆: userId={}, error={}", userId, e.getMessage());
+        }
         log.info("已记忆用户最近收款人: userId={}, payeeId={}", userId, payeeId);
     }
 
@@ -89,14 +99,12 @@ public class UserPreferenceService {
 
     /**
      * 简单 JSON 解析（仅支持 {"key":"value"} 格式）。
-     * 避免引入额外 JSON 库依赖。
+     * 使用注入的 ObjectMapper 保证序列化/反序列化一致性。
      */
-    @SuppressWarnings("unchecked")
-    private static Map<String, String> parseSimpleJson(String json) {
+    private Map<String, String> parseSimpleJson(String json) {
         if (json == null || json.isBlank()) return Map.of();
         try {
-            var mapper = new com.fasterxml.jackson.databind.ObjectMapper();
-            return mapper.readValue(json, Map.class);
+            return objectMapper.readValue(json, new TypeReference<Map<String, String>>() {});
         } catch (Exception e) {
             log.warn("偏好值 JSON 解析失败: {}", json);
             return Map.of();

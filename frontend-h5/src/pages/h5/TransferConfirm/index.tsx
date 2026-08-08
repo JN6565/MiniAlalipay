@@ -3,6 +3,7 @@ import { history, useSearchParams, useLocation } from 'umi';
 import { Card, Button, Toast, SpinLoading, Dialog } from 'antd-mobile';
 import * as transferService from '@/services/transfer';
 import * as userService from '@/services/user';
+import * as paymentPasswordService from '@/services/paymentPassword';
 import { generateIdempotencyKey } from '@/services/utils';
 import { AmountDisplay } from '@/components/h5/AmountDisplay';
 import { PasswordInput } from '@/components/h5/PasswordInput';

@@ -3,6 +3,7 @@ import React, { useEffect, useState, useRef, useCallback } from 'react';
 import { history } from 'umi';
 import { Button, Toast, Empty, SearchBar } from 'antd-mobile';
 import * as userService from '@/services/user';
+import { useTabActiveRefresh } from '@/utils/useTabActiveRefresh';
 import './index.less';
 
 const ContactsPage: React.FC = () => {
@@ -17,6 +18,13 @@ const ContactsPage: React.FC = () => {
     loadFriends();
     loadPendingCount();
   }, []);
+
+  // 联系人页保活常驻，好友请求在二级页接受/对方同意后，
+  // 回切本页时必须静默重拉好友列表与待处理角标，否则展示的是旧数据。
+  useTabActiveRefresh('/h5/contacts', () => {
+    loadFriends();
+    loadPendingCount();
+  });
 
   const loadFriends = async () => {
     try {

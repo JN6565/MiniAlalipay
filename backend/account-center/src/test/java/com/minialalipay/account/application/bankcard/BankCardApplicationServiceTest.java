@@ -8,10 +8,10 @@ import com.minialalipay.account.domain.bankcard.BankCardErrorCode;
 import com.minialalipay.account.domain.bankcard.BankCardNumber;
 import com.minialalipay.account.domain.bankcard.BankCardRepository;
 import com.minialalipay.account.domain.bankcard.BankCardStatus;
+import com.minialalipay.account.domain.bankcard.BankCardType;
 import com.minialalipay.account.domain.bankcard.RegisteredCard;
 import com.minialalipay.account.domain.bankcard.RegisteredCardRepository;
 import com.minialalipay.account.domain.bankcard.UserCenterIdentityPort;
-import com.minialalipay.account.domain.bankcard.BankCardType;
 import com.minialalipay.account.application.bankcard.dto.BankCardDTO;
 import com.minialalipay.common.error.BusinessException;
 import org.junit.jupiter.api.BeforeEach;
@@ -26,7 +26,10 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyLong;
+import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.never;
+import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
@@ -37,12 +40,16 @@ import static org.mockito.Mockito.when;
 class BankCardApplicationServiceTest {
 
     private static final String USER = "USER001";
-    private static final Instant NOW = Instant.parse("2026-08-08T00:00:00Z");
+
+    /** 统一测试三要素，与注册记录构造保持一致。 */
+    private static final String HOLDER = "张三";
+    private static final String ID_CARD = "330106199001011234";
+    private static final String PHONE = "13812345678";
 
     private BankCardRepository cardRepository;
     private AccountRepository accountRepository;
     private RegisteredCardRepository registeredCardRepository;
-    private UserCenterIdentityPort userCenterIdentityPort;
+    private UserCenterIdentityPort identityPort;
     private BankCardApplicationService service;
 
     @BeforeEach
@@ -50,20 +57,40 @@ class BankCardApplicationServiceTest {
         cardRepository = mock(BankCardRepository.class);
         accountRepository = mock(AccountRepository.class);
         registeredCardRepository = mock(RegisteredCardRepository.class);
-        userCenterIdentityPort = mock(UserCenterIdentityPort.class);
+        identityPort = mock(UserCenterIdentityPort.class);
         service = new BankCardApplicationService(cardRepository, accountRepository,
-                registeredCardRepository, userCenterIdentityPort);
+                registeredCardRepository, identityPort);
 
         Account account = mock(Account.class);
         when(account.getAccountId()).thenReturn("ACC001");
         when(accountRepository.findByUserId(USER)).thenReturn(Optional.of(account));
 
-        // 默认 CAS 更新成功，个别用例单独覆写制造冲突
-        when(cardRepository.updateByCas(any(), anyLong())).thenReturn(true);
+        // 任意卡号都能命中本人 REGISTERED 状态的注册记录（三要素与测试入参一致）
+        when(registeredCardRepository.findByCardNumber(anyString()))
+                .thenAnswer(inv -> Optional.of(registrationFor(inv.getArgument(0))));
         when(registeredCardRepository.updateStatus(any())).thenReturn(true);
 
-        // 三要素与用户中心交叉校验默认通过，个别用例单独覆写
-        when(userCenterIdentityPort.verifyThreeElements(any(), any(), any(), any())).thenReturn(true);
+        // 默认三要素与用户绑定身份匹配，个别用例单独覆写
+        when(identityPort.verifyThreeElements(any(), any(), any(), any()))
+                .thenReturn(UserCenterIdentityPort.VerifyResult.MATCHED);
+
+        // 默认 CAS 更新成功，个别用例单独覆写制造冲突
+        when(cardRepository.updateByCas(any(), anyLong())).thenReturn(true);
+    }
+
+    /** 用给定卡号构造本人 REGISTERED 注册记录；未知 BIN 时兜底用字典首项银行信息。 */
+    private static RegisteredCard registrationFor(String cardNumber) {
+        BankCardNumber.BankCardInfo info = BankCardNumber.identify(cardNumber)
+                .orElseGet(() -> BankCardNumber.getAllBinEntries().stream().findFirst().orElseThrow());
+        return RegisteredCard.register("REG_TEST", USER, info, cardNumber,
+                HOLDER, ID_CARD, PHONE, Instant.now());
+    }
+
+    /** 用给定卡号构造本人 BOUND 注册记录，模拟已绑定状态，供解绑释放用例使用。 */
+    private static RegisteredCard boundRegistrationFor(String cardNumber) {
+        RegisteredCard registration = registrationFor(cardNumber);
+        registration.markBound();
+        return registration;
     }
 
     /** 生成合法 Luhn 卡号；固定主体保证测试可复现。 */
@@ -72,18 +99,9 @@ class BankCardApplicationServiceTest {
                 .withLuhnCheckDigit(bin + "123456789");
     }
 
-    /** 为指定卡号构造归属当前用户、三要素匹配的 REGISTERED 注册记录（未知银行用人工 BIN 信息兜底）。 */
-    private static RegisteredCard registeredFor(String cardNumber) {
-        BankCardNumber.BankCardInfo info = BankCardNumber.identify(cardNumber)
-                .orElseGet(() -> new BankCardNumber.BankCardInfo("999999", "未知银行", BankCardType.DEBIT));
-        return RegisteredCard.register("REG001", USER, info, cardNumber,
-                "张三", "330106199001011234", "13812345678", NOW);
-    }
-
     @Test
     void firstCardAutomaticallyBecomesDefault() {
         when(cardRepository.countActiveByUserId(USER)).thenReturn(0L);
-        when(registeredCardRepository.findByCardNumber(any())).thenReturn(Optional.of(registeredFor(validCard("621226"))));
         when(cardRepository.existsActiveByUserAndCard(any(), any(), any())).thenReturn(false);
 
         BankCardDTO dto = service.bindCard(USER, validCard("621226"), "张三",
@@ -101,7 +119,6 @@ class BankCardApplicationServiceTest {
     @Test
     void secondCardIsNotDefault() {
         when(cardRepository.countActiveByUserId(USER)).thenReturn(1L);
-        when(registeredCardRepository.findByCardNumber(any())).thenReturn(Optional.of(registeredFor(validCard("621226"))));
         when(cardRepository.existsActiveByUserAndCard(any(), any(), any())).thenReturn(false);
 
         service.bindCard(USER, validCard("621226"), "张三",
@@ -115,7 +132,6 @@ class BankCardApplicationServiceTest {
     @Test
     void duplicateBindRejected() {
         when(cardRepository.countActiveByUserId(USER)).thenReturn(1L);
-        when(registeredCardRepository.findByCardNumber(any())).thenReturn(Optional.of(registeredFor(validCard("621226"))));
         when(cardRepository.existsActiveByUserAndCard(any(), any(), any())).thenReturn(true);
 
         assertThatThrownBy(() -> service.bindCard(USER, validCard("621226"), "张三",
@@ -147,8 +163,6 @@ class BankCardApplicationServiceTest {
 
     @Test
     void unknownBankRejected() {
-        when(registeredCardRepository.findByCardNumber(any())).thenReturn(Optional.of(registeredFor(validCard("999999"))));
-
         assertThatThrownBy(() -> service.bindCard(USER, validCard("999999"), "张三",
                 "330106199001011234", "13812345678"))
                 .isInstanceOf(BusinessException.class)
@@ -158,8 +172,6 @@ class BankCardApplicationServiceTest {
 
     @Test
     void invalidHolderRejected() {
-        when(registeredCardRepository.findByCardNumber(any())).thenReturn(Optional.of(registeredFor(validCard("621226"))));
-
         assertThatThrownBy(() -> service.bindCard(USER, validCard("621226"), "张三",
                 "123456", "13812345678"))
                 .isInstanceOf(BusinessException.class)
@@ -239,5 +251,77 @@ class BankCardApplicationServiceTest {
                 .isInstanceOf(BusinessException.class)
                 .extracting(e -> ((BusinessException) e).errorCode())
                 .isEqualTo(AccountErrorCode.VERSION_CONFLICT);
+    }
+
+    @Test
+    void unbindReleasesBoundRegistration() {
+        // 解绑必须同步释放 BOUND 注册记录，否则该卡永远无法重绑
+        BankCard current = card("CARD_A", false, Instant.now());
+        when(cardRepository.findById("CARD_A")).thenReturn(Optional.of(current));
+        when(registeredCardRepository.findBoundByUserAndCard(USER, "621226", "1234"))
+                .thenReturn(Optional.of(boundRegistrationFor(validCard("621226"))));
+        when(registeredCardRepository.releaseStatus("REG_TEST")).thenReturn(true);
+
+        service.unbind(USER, "CARD_A");
+
+        assertThat(current.getStatus()).isEqualTo(BankCardStatus.UNBOUND);
+        verify(registeredCardRepository).releaseStatus("REG_TEST");
+    }
+
+    @Test
+    void unbindWithoutRegistrationSkipsSilently() {
+        // 无注册记录的旧绑定数据解绑时静默跳过释放，不报错
+        BankCard current = card("CARD_A", false, Instant.now());
+        when(cardRepository.findById("CARD_A")).thenReturn(Optional.of(current));
+        when(registeredCardRepository.findBoundByUserAndCard(any(), any(), any()))
+                .thenReturn(Optional.empty());
+
+        service.unbind(USER, "CARD_A");
+
+        assertThat(current.getStatus()).isEqualTo(BankCardStatus.UNBOUND);
+        verify(registeredCardRepository, never()).releaseStatus(anyString());
+    }
+
+    @Test
+    void unbindReleaseConflictThrowsVersionConflict() {
+        // 释放 CAS 失败必须整体回滚，禁止出现“卡已解绑但注册记录仍 BOUND”的中间态
+        BankCard current = card("CARD_A", false, Instant.now());
+        when(cardRepository.findById("CARD_A")).thenReturn(Optional.of(current));
+        when(registeredCardRepository.findBoundByUserAndCard(USER, "621226", "1234"))
+                .thenReturn(Optional.of(boundRegistrationFor(validCard("621226"))));
+        when(registeredCardRepository.releaseStatus("REG_TEST")).thenReturn(false);
+
+        assertThatThrownBy(() -> service.unbind(USER, "CARD_A"))
+                .isInstanceOf(BusinessException.class)
+                .extracting(e -> ((BusinessException) e).errorCode())
+                .isEqualTo(AccountErrorCode.VERSION_CONFLICT);
+    }
+
+    @Test
+    void rebindAfterUnbindSucceeds() {
+        // 全链路：绑定 → 解绑（注册记录释放回 REGISTERED）→ 重绑成功
+        String cardNumber = validCard("621226");
+        when(cardRepository.countActiveByUserId(USER)).thenReturn(0L);
+        when(cardRepository.existsActiveByUserAndCard(any(), any(), any())).thenReturn(false);
+        when(cardRepository.findById("CARD_A")).thenAnswer(inv -> {
+            // 重绑前解绑：返回已绑定的卡供 unbind 使用
+            return Optional.of(card("CARD_A", true, Instant.now()));
+        });
+        when(registeredCardRepository.findBoundByUserAndCard(any(), any(), any()))
+                .thenReturn(Optional.of(boundRegistrationFor(cardNumber)));
+        when(registeredCardRepository.releaseStatus("REG_TEST")).thenReturn(true);
+
+        // 首次绑定
+        service.bindCard(USER, cardNumber, HOLDER, ID_CARD, PHONE);
+        verify(registeredCardRepository).updateStatus(any());
+
+        // 解绑并释放注册记录（打桩模拟释放后注册记录回到 REGISTERED，
+        // findByCardNumber 兜底返回的即 REGISTERED 记录）
+        service.unbind(USER, "CARD_A");
+        verify(registeredCardRepository).releaseStatus("REG_TEST");
+
+        // 重绑：注册记录已回到 REGISTERED，校验链路与新绑一致，生成新绑定记录
+        service.bindCard(USER, cardNumber, HOLDER, ID_CARD, PHONE);
+        verify(cardRepository, times(2)).save(any());
     }
 }

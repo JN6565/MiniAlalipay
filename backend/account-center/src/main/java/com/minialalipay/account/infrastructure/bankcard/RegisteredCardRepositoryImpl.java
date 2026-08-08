@@ -65,10 +65,30 @@ public class RegisteredCardRepositoryImpl implements RegisteredCardRepository {
     }
 
     @Override
+    public Optional<RegisteredCard> findBoundByUserAndCard(String userId, String cardBin, String cardLast4) {
+        // 解绑时按用户+BIN+尾号定位 BOUND 注册记录；碰撞时取第一条（模拟系统可接受）
+        return jdbcTemplate.query("SELECT * FROM account_db.bank_card_registration "
+                        + "WHERE user_id = ? AND card_bin = ? AND card_last4 = ? "
+                        + "AND status = 'BOUND' ORDER BY created_at ASC",
+                this::mapCard, userId, cardBin, cardLast4)
+                .stream().findFirst();
+    }
+
+    @Override
     public boolean updateStatus(RegisteredCard card) {
         int updated = jdbcTemplate.update("UPDATE account_db.bank_card_registration "
                         + "SET status = ? WHERE registration_id = ? AND status = 'REGISTERED'",
                 card.getStatus(), card.getRegistrationId());
+        return updated == 1;
+    }
+
+    @Override
+    public boolean releaseStatus(String registrationId) {
+        // 条件更新：仅 BOUND → REGISTERED，与 updateStatus 的 REGISTERED → BOUND 对称，
+        // 防止并发解绑重复释放
+        int updated = jdbcTemplate.update("UPDATE account_db.bank_card_registration "
+                        + "SET status = 'REGISTERED' WHERE registration_id = ? AND status = 'BOUND'",
+                registrationId);
         return updated == 1;
     }
 

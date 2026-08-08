@@ -52,8 +52,14 @@
 ### 2.5 状态流转
 
 ```
+绑定记录（bank_card）：
 绑卡成功 → ACTIVE（已绑定，可设默认、可解绑）
-解绑     → UNBOUND（终态，不可重激活；同一张卡可重新走绑卡流程生成新记录）
+解绑     → UNBOUND（绑定记录终态，不可重激活；重绑生成新绑定记录）
+
+注册记录（bank_card_registration）：
+注册成功     → REGISTERED（可绑定）
+绑卡成功     → BOUND
+解绑时释放   → REGISTERED（重新回到可绑定状态，支持重绑）
 ```
 
 ## 3. 数据库设计（account_db）
@@ -158,7 +164,74 @@ CREATE TABLE IF NOT EXISTS account_db.bank_card (
 7. **解绑递补**：解绑的是默认卡且用户还有其他 ACTIVE 卡时，最早绑定的一张递补为默认。
 8. **终态保护**：UNBOUND 卡不可再设默认、不可再次解绑，返回 `BANK_CARD_ALREADY_UNBOUND`；卡不存在或不属于当前用户返回 `BANK_CARD_NOT_FOUND`。
 
-## 6. 错误码
+## 6. 注册流程（三要素交叉校验）
+
+银行卡注册（`POST /api/v1/bank-card-registrations`）不再是单纯的格式校验：须先绑定身份且三要素与已绑定身份一致，才能生成卡号。
+
+### 校验顺序
+
+```
+1. 格式校验：姓名 2-32 位、身份证按项目统一口径、手机号 11 位
+   不通过 → BANK_CARD_HOLDER_INVALID (422)
+2. 三要素交叉比对（调用 user-center /internal/v1/identity/verify）：
+   - 用户未绑定身份 → IDENTITY_NOT_BOUND (422)，前端引导跳转身份绑定页
+   - 姓名/身份证哈希/手机号任一不符 → IDENTITY_MISMATCH (422)
+   - 校验服务不可用 → 系统类异常 (503)，不落库
+3. 校验通过 → 查 BIN → 生成卡号 → 落库 bank_card_registration → 返回完整卡号
+```
+
+### 统一身份证校验口径
+
+全系统身份证号校验唯一标准（user-center `IdCardValidator`、account-center 同规则实现、前端 `validateIdCard` 三者同源）：
+
+- 18 位格式：17 位数字 + 1 位数字或 X（末位不区分大小写）；
+- 第 7-14 位出生日期必须真实存在且介于 1900-01-01 至今；
+- 按产品决策不做 GB 11643 MOD 11-2 校验位验证（演示环境允许编造号码）；
+- account-center 因仓库边界约束维护同规则独立实现，两侧口径变更时必须同步。
+
+### 错误码（均已在 error-codes.yaml 定义，无需新增）
+
+| code | httpStatus | 触发场景 |
+|---|---|---|
+| BANK_CARD_HOLDER_INVALID | 422 | 姓名/身份证/手机号格式不合规 |
+| IDENTITY_NOT_BOUND | 422 | 用户尚未绑定身份信息 |
+| IDENTITY_MISMATCH | 422 | 三要素与已绑定身份不一致（统一提示，不区分具体字段） |
+
+### 前端交互
+
+- `BankCardAdd` 页身份证校验复用 `validateIdCard`（与身份绑定页同函数）；
+- 收到 `IDENTITY_NOT_BOUND` 时用 `Dialog.confirm` 引导跳转 `/h5/identity-bind`；
+- 其他错误直接展示后端中文 message。
+
+## 7. 解绑与重新绑定流程
+
+解绑不是“删了就没了”：绑定记录软删的同时必须释放注册记录，否则该卡永远无法重绑（历史缺陷，V1.17 修复）。
+
+### 解绑处理（DELETE /api/v1/bank-cards/{cardId}，同一事务）
+
+```
+1. bank_card CAS 置为 UNBOUND（终态，保留历史作审计）
+2. 按 用户+BIN+尾号 定位 BOUND 状态的注册记录：
+   - 找到 → 条件更新释放回 REGISTERED（仅 BOUND → REGISTERED，防并发重复释放）
+   - 未找到 → 静默跳过（兼容无注册记录的旧绑定数据）
+   - 释放失败 → 版本冲突整体回滚，禁止出现“卡已解绑但注册记录仍 BOUND”的中间态
+3. 解绑的是默认卡 → 递补最早绑定的活动卡为默认
+```
+
+### 重新绑定
+
+- 交互复用现有绑卡流程（`POST /api/v1/bank-cards`）：用户凭注册时获得的完整卡号与三要素重新提交，无一键重绑接口；
+- 校验链路与新绑完全一致（注册记录存在且 REGISTERED、三要素哈希匹配、user-center 交叉比对）；
+- 每次重绑生成新的 ACTIVE 绑定记录，历史 UNBOUND 记录保留；
+- 绑卡上限、首张卡自动默认、重复绑卡拦截（仅查 ACTIVE）均不受历史解绑记录影响。
+
+### 兼容性与边界
+
+- `status` 列为 VARCHAR 无 CHECK 约束，取值复用 REGISTERED/BOUND，无需数据库迁移；
+- 按 BIN+尾号定位注册记录存在理论碰撞可能，取第一条 BOUND 记录（模拟系统可接受）；
+- 完整卡号仅在注册响应中返回一次，重绑同样需要用户自行持有完整卡号。
+
+## 8. 错误码
 
 新增错误码需三处同步（error-codes.yaml、account-center 错误码枚举、OpenAPI 错误响应）并补充契约一致性测试：
 
@@ -171,7 +244,7 @@ CREATE TABLE IF NOT EXISTS account_db.bank_card (
 | BANK_CARD_ALREADY_UNBOUND | 409 | 银行卡已解绑 |
 | BANK_CARD_LIMIT_EXCEEDED | 422 | 绑定银行卡数量已达上限 |
 
-## 7. 前端设计（frontend-h5）
+## 9. 前端设计（frontend-h5）
 
 | 文件 | 说明 |
 |---|---|
@@ -197,11 +270,11 @@ CREATE TABLE IF NOT EXISTS account_db.bank_card (
 
 卡类型判断：BIN 字典标注优先，未标注时按卡号长度启发式判断（16 位倾向信用卡，17-19 位倾向借记卡），最终以服务端识别结果为准。
 
-## 8. 网关配置
+## 10. 网关配置
 
 `backend/gateway/src/main/resources/application.yml` 中 account-center 路由的 predicate 追加 `/api/v1/bank-cards/**`，沿用用户维度限流（userKeyResolver，60 令牌/桶）。
 
-## 9. 测试要求
+## 11. 测试要求
 
 ### 后端单测（account-center）
 
@@ -221,7 +294,7 @@ CREATE TABLE IF NOT EXISTS account_db.bank_card (
 
 - `npm run type-check` 不新增类型错误。
 
-## 10. 文档同步清单（AGENTS.md 强制项）
+## 12. 文档同步清单（AGENTS.md 强制项）
 
 | 文档 | 更新内容 |
 |---|---|
@@ -231,7 +304,7 @@ CREATE TABLE IF NOT EXISTS account_db.bank_card (
 | `contracts/error-codes/error-codes.yaml` | 新增 6 个银行卡错误码 |
 | `AGENTS.md` | 网关路由表追加 `/api/v1/bank-cards/**` → account-center |
 
-## 11. 验证方式
+## 13. 验证方式
 
 1. `mvn -pl account-center test` 全部通过。
 2. 启动服务后联调全链路：绑卡 → 列表 → 详情 → 设默认 → 解绑。

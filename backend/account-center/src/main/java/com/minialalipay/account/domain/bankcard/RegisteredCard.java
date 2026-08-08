@@ -10,7 +10,9 @@ import java.util.concurrent.ThreadLocalRandom;
  * 银行卡注册聚合根。
  *
  * <p>注册时自动生成卡号并保存三要素哈希，绑定时与用户存储身份交叉比对。
- * 状态流转：REGISTERED → BOUND（终态），注册记录一旦绑定不可逆转。</p>
+ * 状态流转：REGISTERED → BOUND（绑卡成功）；BOUND → REGISTERED（解绑时释放，
+ * 支持同一张卡重新走绑卡流程）。BOUND 不再是永久终态，但释放只能由
+ * 解绑用例在事务内触发，禁止直接修改状态。</p>
  */
 public class RegisteredCard {
 
@@ -61,12 +63,25 @@ public class RegisteredCard {
         this.createdAt = createdAt;
     }
 
-    /** 标记为已绑定（终态）。 */
+    /** 标记为已绑定；只有 REGISTERED 状态允许绑定。 */
     public void markBound() {
         if (!"REGISTERED".equals(status)) {
             throw new IllegalStateException("只有 REGISTERED 状态的注册卡可以标记为绑定");
         }
         this.status = "BOUND";
+    }
+
+    /**
+     * 解绑时释放注册记录：BOUND → REGISTERED，使该卡可重新绑卡。
+     *
+     * <p>只有 BOUND 状态允许释放；REGISTERED 状态重复释放属于状态机违规，
+     * 直接抛异常阻断，防止并发解绑或错误调用破坏状态一致性。</p>
+     */
+    public void release() {
+        if (!"BOUND".equals(status)) {
+            throw new IllegalStateException("只有 BOUND 状态的注册卡可以释放回 REGISTERED");
+        }
+        this.status = "REGISTERED";
     }
 
     /**

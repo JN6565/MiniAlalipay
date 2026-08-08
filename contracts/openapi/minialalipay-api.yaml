@@ -218,7 +218,11 @@ paths:
   /api/v1/bank-card-registrations:
     post:
       summary: 注册银行卡（选银行 + 三要素 → 自动生成卡号）
-      description: 根据用户选择的银行自动生成合法卡号（BIN + 随机数字 + Luhn 校验位），完整卡号仅在注册响应中返回一次。
+      description: |
+        根据用户选择的银行自动生成合法卡号（BIN + 随机数字 + Luhn 校验位），完整卡号仅在注册响应中返回一次。
+        须先绑定身份且三要素（姓名、身份证号、银行预留手机号）与已绑定身份一致：
+        校验顺序为格式校验（姓名 2-32 位、身份证按项目统一口径、手机号 11 位）→ 三要素交叉比对。
+        422 业务错误码：BANK_CARD_HOLDER_INVALID（格式不合规）、IDENTITY_NOT_BOUND（未绑定身份）、IDENTITY_MISMATCH（三要素不一致）；校验服务不可用时返回 503。
       operationId: registerBankCard
       x-client-scope: C
       parameters:
@@ -264,7 +268,7 @@ paths:
         '500': { $ref: '#/components/responses/InternalError' }
     post:
       summary: 绑定银行卡（基于注册记录的绑卡流程，需先完成身份绑定和银行卡注册）
-      description: 请求体包含注册时获得的完整卡号与三要素明文，服务端校验注册记录、三要素匹配及用户存储身份后完成绑定；重复绑定同一张卡返回 409。
+      description: 请求体包含注册时获得的完整卡号与三要素明文，服务端校验注册记录、三要素匹配及用户存储身份后完成绑定；重复绑定同一张卡返回 409。解绑后的卡其注册记录会释放回可绑定状态，可凭注册时的完整卡号与三要素重新绑定，每次重绑生成新的绑定记录。
       operationId: bindBankCard
       x-client-scope: C
       parameters:
@@ -301,7 +305,7 @@ paths:
         '401': { $ref: '#/components/responses/Unauthorized' }
         '404': { $ref: '#/components/responses/NotFound' }
     delete:
-      summary: 解绑银行卡（软删为 UNBOUND 终态，解绑默认卡后递补最早活动卡）
+      summary: 解绑银行卡（软删为 UNBOUND 终态，同步释放注册记录支持重绑，解绑默认卡后递补最早活动卡）
       operationId: unbindBankCard
       x-client-scope: C
       parameters:
@@ -312,7 +316,7 @@ paths:
           schema: { type: string, minLength: 1, maxLength: 26 }
       responses:
         '200':
-          description: 解绑成功
+          description: 解绑成功，对应注册记录已释放回 REGISTERED，该卡可重新绑定
           content:
             application/json:
               schema: { $ref: '#/components/schemas/ApiResponse' }

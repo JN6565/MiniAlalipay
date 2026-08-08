@@ -47,6 +47,7 @@ public class AgentLoop {
     private final ToolAuditService toolAudit;
     private final InjectionDetector injectionDetector;
     private final ResultInterpreter resultInterpreter;
+    private final TransferFlowAutoAdvance flowAutoAdvance;
 
     public AgentLoop(
             LanguageModelPort languageModelPort,
@@ -64,6 +65,7 @@ public class AgentLoop {
         this.toolAudit = toolAudit;
         this.injectionDetector = injectionDetector;
         this.resultInterpreter = resultInterpreter;
+        this.flowAutoAdvance = new TransferFlowAutoAdvance(resultInterpreter);
     }
 
     /**
@@ -198,30 +200,25 @@ public class AgentLoop {
                             executedTools, finalReply.content() != null ? finalReply.content().length() : 0);
 
                     String llmText = finalReply.content();
-                    String flowHint = detectIncompleteFlow(executedTools, accumulatedSlots);
+                    String flowHint = flowAutoAdvance.detectIncompleteFlow(executedTools);
 
                     if (flowHint != null) {
-                        // ★ 流程未完成：自动推进下一步工具
-                        // 关键：不立即推送 LLM 文本（避免多轮自动推进时文本重复），
-                        // 仅累积到 pendingTextBuilder，由 AgentStreamService 在循环结束后统一推送。
                         log.info("检测到未完成流程，自动执行下一步工具: hint={}", flowHint);
 
                         if (llmText != null && !llmText.isBlank()) {
                             if (pendingTextBuilder.length() > 0) pendingTextBuilder.append("\n");
                             pendingTextBuilder.append(llmText);
-                            // 作为 Assistant 消息加入历史，让 LLM 在下一轮知道已经说过这些话
                             messages.add(new ChatMessage(MessageRole.ASSISTANT, llmText));
                         }
 
-                        boolean advanced = tryAutoAdvanceFromFinalReply(
+                        boolean advanced = flowAutoAdvance.tryAutoAdvanceFromFinalReply(
                                 executedTools, accumulatedSlots,
                                 messages, executedToolKeys, previousToolResults, context, iteration,
-                                toolResults);
+                                toolResults, new AgentLoopToolHandler());
                         if (advanced) {
                             log.info("FinalReply 自动推进成功，继续循环等待最终回复");
                             continue;
                         }
-                        // 无法自动推进时，回退到注入提示
                         log.warn("自动推进失败，回退到注入提示");
                         messages.add(new ChatMessage(MessageRole.SYSTEM,
                                 "【流程推进】" + flowHint + "请立即调用下一步工具，不要生成文本回复。"));
@@ -263,11 +260,11 @@ public class AgentLoop {
                     String toolResultJson = formatToolResult(toolCall.toolName(), previousResult);
 
                     // ★ 转账流程自动推进：LLM 重复调用中间步骤时，
-                    //   自动执行下一步而非仅注入提示（DeepSeek 经常不遵循提示）。
-                    if (tryAutoAdvanceTransferFlow(
+                    //   自动执行下一步而非仅注入提示。
+                    if (flowAutoAdvance.tryAutoAdvanceTransferFlow(
                             toolCall.toolName(), executedTools, accumulatedSlots,
                             messages, executedToolKeys, previousToolResults, context, iteration,
-                            toolResults)) {
+                            toolResults, new AgentLoopToolHandler())) {
                         log.info("转账流程自动推进成功，跳过 LLM 重复调用");
                         // 自动推进已完成（prepare_confirmation_card 已执行），
                         // 注入简短提示让 LLM 生成最终回复
@@ -277,7 +274,7 @@ public class AgentLoop {
                     }
 
                     // 非转账流程或无法自动推进时，注入纠正提示
-                    String flowHint = detectIncompleteFlow(executedTools, accumulatedSlots);
+                    String flowHint = flowAutoAdvance.detectIncompleteFlow(executedTools);
                     if (flowHint != null) {
                         messages.add(new ChatMessage(MessageRole.SYSTEM,
                                 "【重复调用纠正】" + toolCall.toolName() + " 已经调用过了，不要重复调用。" + flowHint));
@@ -545,275 +542,41 @@ public class AgentLoop {
     }
 
     /**
-     * 转账流程自动推进：当 LLM 重复调用中间步骤工具时，
-     * 自动执行下一步（prepare_confirmation_card），避免死循环。
+     * 检查字符串是否包含任意关键词。
      *
-     * <p>仅在以下条件全部满足时执行：
-     * <ol>
-     *   <li>重复的工具是转账中间步骤（create_transfer_draft 或 validate_transfer_draft）</li>
-     *   <li>流程已完成到 validate_transfer_draft</li>
-     *   <li>prepare_confirmation_card 尚未执行</li>
-     *   <li>accumulatedSlots 中有 draftId</li>
-     * </ol>
-     *
-     * @return true 表示自动推进成功，false 表示不适用或执行失败
+     * @param text 待检查文本
+     * @param keywords 关键词列表
+     * @return 包含任一关键词时返回 true
      */
-    private boolean tryAutoAdvanceTransferFlow(
-            String repeatedToolName,
-            List<String> executedTools,
-            Map<String, Object> accumulatedSlots,
-            List<ChatMessage> messages,
-            Set<String> executedToolKeys,
-            Map<String, ToolResult> previousToolResults,
-            AgentContext context,
-            int iteration,
-            List<ToolResultRecord> toolResults
-    ) {
-        // 仅处理转账中间步骤的重复调用
-        if (!"create_transfer_draft".equals(repeatedToolName)
-                && !"validate_transfer_draft".equals(repeatedToolName)) {
-            return false;
-        }
-
-        // 检查流程状态：必须已完成 validate，未完成 confirm
-        boolean hasValidate = executedTools.contains("validate_transfer_draft");
-        boolean hasConfirm = executedTools.contains("prepare_confirmation_card");
-        if (!hasValidate || hasConfirm) {
-            return false;
-        }
-
-        // 从 accumulatedSlots 提取 draftId
-        Object draftIdObj = accumulatedSlots.get("draftId");
-        if (draftIdObj == null || draftIdObj.toString().isBlank()) {
-            log.warn("自动推进失败: accumulatedSlots 中无 draftId");
-            return false;
-        }
-        String draftId = draftIdObj.toString();
-
-        log.info("转账流程自动推进: 重复工具={}, 自动执行 prepare_confirmation_card, draftId={}",
-                repeatedToolName, draftId);
-
-        // 构造 prepare_confirmation_card 的参数
-        Map<String, Object> confirmArgs = Map.of("draftId", draftId);
-        AgentDecision.ToolCall confirmCall = new AgentDecision.ToolCall(
-                "prepare_confirmation_card", confirmArgs, 0);
-
-        // 执行工具
-        ToolExecutionResult result = executeToolCall(confirmCall, context, accumulatedSlots);
-
-        // 记录到去重集合
-        String confirmKey = "prepare_confirmation_card:" + serializeArgs(confirmArgs);
-        executedToolKeys.add(confirmKey);
-        previousToolResults.put(confirmKey, result.toolResult());
-        executedTools.add("prepare_confirmation_card");
-
-        // 通知前端回调
-        String status = result.toolResult().isSuccess() ? "success" : "failed";
-        String summary = result.toolResult().isSuccess()
-                ? resultInterpreter.interpret("prepare_confirmation_card", result.toolResult())
-                : (result.toolResult().errorMessage() != null
-                    ? result.toolResult().errorMessage() : "工具执行失败");
-        Map<String, Object> resultData = result.toolResult().data() != null
-                ? new HashMap<>(result.toolResult().data()) : Map.of();
-        if (context.callback() != null) {
-            context.callback().onToolCall("prepare_confirmation_card", "running");
-            context.callback().onToolResult("prepare_confirmation_card", status, summary, resultData);
-        }
-        // 记录工具结果摘要
-        toolResults.add(new ToolResultRecord("prepare_confirmation_card", status, summary, resultData));
-
-        // 更新 accumulatedSlots
-        if (result.toolResult().data() != null) {
-            accumulatedSlots.putAll(result.toolResult().data());
-        }
-
-        // 将工具结果追加到消息列表
-        String toolResultJson = formatToolResult("prepare_confirmation_card", result.toolResult());
-        messages.add(new ChatMessage(MessageRole.SYSTEM, toolResultJson));
-
-        log.info("自动推进完成: prepare_confirmation_card, resultCode={}, iteration={}",
-                result.toolResult().resultCode(), iteration);
-        return true;
-    }
-
-    /**
-     * FinalReply 自动推进：当 LLM 返回文本回复但转账流程未完成时，
-     * 直接执行下一步工具，而非依赖 LLM 遵循提示。
-     *
-     * <p>与 {@link #tryAutoAdvanceTransferFlow} 的区别：
-     * <ul>
-     *   <li>本方法处理 FinalReply 场景（LLM 生成文本而非工具调用）</li>
-     *   <li>覆盖转账流程的所有中间步骤，而非仅最后一步</li>
-     * </ul>
-     *
-     * <p>推进逻辑：
-     * <ol>
-     *   <li>search_payees 已完成 → 自动调用 create_transfer_draft（需要 payeeId + amountFen）</li>
-     *   <li>create_transfer_draft 已完成 → 自动调用 validate_transfer_draft（需要 draftId）</li>
-     *   <li>validate_transfer_draft 已完成 → 自动调用 prepare_confirmation_card（需要 draftId）</li>
-     * </ol>
-     *
-     * <p>★ 关键改进：支持连续自动推进多步，避免 LLM 在每步后都返回 FinalReply 导致流程卡顿。</p>
-     *
-     * @return true 表示自动推进成功，false 表示无法推进
-     */
-    private boolean tryAutoAdvanceFromFinalReply(
-            List<String> executedTools,
-            Map<String, Object> accumulatedSlots,
-            List<ChatMessage> messages,
-            Set<String> executedToolKeys,
-            Map<String, ToolResult> previousToolResults,
-            AgentContext context,
-            int iteration,
-            List<ToolResultRecord> toolResults
-    ) {
-        if (executedTools == null || executedTools.isEmpty()) return false;
-
-        // ★ 连续自动推进：循环执行直到无法继续
-        // 这解决了 LLM 在每步工具调用后都返回 FinalReply 的问题
-        int maxAutoSteps = 3; // 最多自动推进 3 步（search→draft→validate→confirm）
-        for (int step = 0; step < maxAutoSteps; step++) {
-            boolean hasSearch = executedTools.contains("search_payees");
-            boolean hasDraft = executedTools.contains("create_transfer_draft");
-            boolean hasValidate = executedTools.contains("validate_transfer_draft");
-            boolean hasConfirm = executedTools.contains("prepare_confirmation_card");
-
-            // 确定下一步工具名和参数
-            String nextToolName;
-            Map<String, Object> nextArgs;
-
-            if (hasSearch && !hasDraft) {
-                // 第1步→第2步：需要 payeeId 和 amountFen
-                Object payeeId = accumulatedSlots.get("payeeId");
-                Object amountFen = accumulatedSlots.get("amountFen");
-                if (payeeId == null || amountFen == null) {
-                    log.warn("FinalReply 自动推进失败: 缺少 payeeId 或 amountFen, slots={}", accumulatedSlots.keySet());
-                    return step > 0; // 如果之前已成功推进过，返回 true
-                }
-                nextToolName = "create_transfer_draft";
-                nextArgs = Map.of("payeeId", payeeId.toString(), "amountFen", amountFen);
-            } else if (hasDraft && !hasValidate) {
-                // 第2步→第3步：需要 draftId
-                Object draftId = accumulatedSlots.get("draftId");
-                if (draftId == null || draftId.toString().isBlank()) {
-                    log.warn("FinalReply 自动推进失败: 缺少 draftId");
-                    return step > 0; // 如果之前已成功推进过，返回 true
-                }
-                nextToolName = "validate_transfer_draft";
-                nextArgs = Map.of("draftId", draftId.toString());
-            } else if (hasValidate && !hasConfirm) {
-                // 第3步→第4步：需要 draftId
-                Object draftId = accumulatedSlots.get("draftId");
-                if (draftId == null || draftId.toString().isBlank()) {
-                    log.warn("FinalReply 自动推进失败: 缺少 draftId");
-                    return step > 0; // 如果之前已成功推进过，返回 true
-                }
-                nextToolName = "prepare_confirmation_card";
-                nextArgs = Map.of("draftId", draftId.toString());
-            } else {
-                // 流程已完成或无法继续
-                return step > 0; // 如果之前已成功推进过，返回 true
-            }
-
-            log.info("FinalReply 自动推进 (step {}): 已执行={}, 下一步工具={}, args={}",
-                    step, executedTools, nextToolName, nextArgs);
-
-            // 构造工具调用并执行
-            AgentDecision.ToolCall nextCall = new AgentDecision.ToolCall(nextToolName, nextArgs, 0);
-            ToolExecutionResult result = executeToolCall(nextCall, context, accumulatedSlots);
-
-            // 记录到去重集合
-            String nextKey = nextToolName + ":" + serializeArgs(nextArgs);
-            executedToolKeys.add(nextKey);
-            previousToolResults.put(nextKey, result.toolResult());
-            executedTools.add(nextToolName);
-
-            // 通知前端回调
-            String status = result.toolResult().isSuccess() ? "success" : "failed";
-            String summary = result.toolResult().isSuccess()
-                    ? resultInterpreter.interpret(nextToolName, result.toolResult())
-                    : (result.toolResult().errorMessage() != null
-                        ? result.toolResult().errorMessage() : "工具执行失败");
-            Map<String, Object> resultData = result.toolResult().data() != null
-                    ? new HashMap<>(result.toolResult().data()) : Map.of();
-            if (context.callback() != null) {
-                context.callback().onToolCall(nextToolName, "running");
-                context.callback().onToolResult(nextToolName, status, summary, resultData);
-            }
-            // 记录工具结果摘要
-            toolResults.add(new ToolResultRecord(nextToolName, status, summary, resultData));
-
-            // 更新 accumulatedSlots
-            if (result.toolResult().data() != null) {
-                accumulatedSlots.putAll(result.toolResult().data());
-            }
-
-            // 将工具结果追加到消息列表
-            String toolResultJson = formatToolResult(nextToolName, result.toolResult());
-            messages.add(new ChatMessage(MessageRole.SYSTEM, toolResultJson));
-
-            log.info("FinalReply 自动推进完成 (step {}): tool={}, resultCode={}, iteration={}",
-                    step, nextToolName, result.toolResult().resultCode(), iteration);
-
-            // 如果工具执行失败，停止自动推进
-            if (!result.toolResult().isSuccess()) {
-                log.warn("自动推进中断: 工具执行失败, tool={}, resultCode={}",
-                        nextToolName, result.toolResult().resultCode());
-                return true; // 已执行过至少一步，返回 true
-            }
-
-            // 继续下一轮自动推进
-        }
-
-        // 达到最大自动推进步数
-        log.warn("FinalReply 自动推进达到最大步数 {}", maxAutoSteps);
-        return true;
-    }
-
-    /**
-     * 检测多步流程是否未完成。
-     *
-     * <p>当 LLM 提前生成文本回复（FinalReply）但工具执行链不完整时，
-     * 返回推进提示让 LLM 继续调用下一步工具。返回 null 表示流程已完成或无需推进。</p>
-     *
-     * <p>当前支持的流程：
-     * <ul>
-     *   <li>转账：search_payees → create_transfer_draft → validate_transfer_draft → prepare_confirmation_card</li>
-     * </ul>
-     *
-     * @param executedTools 已执行的工具名列表
-     * @param slots 累积的工具返回数据，用于在推进提示中携带实际参数
-     */
-    private String detectIncompleteFlow(List<String> executedTools, Map<String, Object> slots) {
-        if (executedTools == null || executedTools.isEmpty()) return null;
-
-        boolean hasSearch = executedTools.contains("search_payees");
-        boolean hasDraft = executedTools.contains("create_transfer_draft");
-        boolean hasValidate = executedTools.contains("validate_transfer_draft");
-        boolean hasConfirm = executedTools.contains("prepare_confirmation_card");
-
-        // 转账流程第1步→第2步：收款人已搜索但未创建草稿
-        if (hasSearch && !hasDraft) {
-            return "已找到收款人，下一步必须调用 create_transfer_draft 创建转账草稿。" +
-                    "请从工具结果中提取 payeeId，结合用户消息中的金额（元转分）作为参数。";
-        }
-        // 转账流程第2步→第3步：草稿已创建但未校验
-        if (hasDraft && !hasValidate) {
-            return "转账草稿已创建，下一步必须调用 validate_transfer_draft 进行校验。" +
-                    "请从工具结果中提取 draftId 作为参数。";
-        }
-        // 转账流程第3步→第4步：草稿已校验但未生成确认卡片
-        if (hasValidate && !hasConfirm) {
-            return "转账草稿已校验通过，下一步必须调用 prepare_confirmation_card 生成确认卡片。" +
-                    "请从工具结果中提取 draftId 作为参数。";
-        }
-
-        return null;
-    }
-
     private boolean containsAny(String text, String... keywords) {
-        for (String kw : keywords) { if (text.contains(kw)) return true; }
+        if (text == null || text.isBlank()) return false;
+        for (String kw : keywords) {
+            if (text.contains(kw)) return true;
+        }
         return false;
+    }
+
+    /**
+     * AgentLoop 实现的工具执行处理器，委托给内部私有方法。
+     * 将 AgentLoop 的工具执行能力（含安全检查、审计）暴露给自动推进策略。
+     */
+    private class AgentLoopToolHandler implements TransferFlowAutoAdvance.ToolExecutionHandler {
+        @Override
+        public ToolResult executeTool(AgentDecision.ToolCall toolCall,
+                                      AgentContext context,
+                                      Map<String, Object> accumulatedSlots) {
+            return executeToolCall(toolCall, context, accumulatedSlots).toolResult();
+        }
+
+        @Override
+        public String formatToolResult(String toolName, ToolResult result) {
+            return AgentLoop.this.formatToolResult(toolName, result);
+        }
+
+        @Override
+        public String serializeArgs(Map<String, Object> args) {
+            return AgentLoop.this.serializeArgs(args);
+        }
     }
 
     /**
