@@ -5,13 +5,12 @@ import { register } from '@/services/auth';
 import { ApiError } from '@/services/request';
 import './index.less';
 
-type FieldName = 'phoneNumber' | 'realName' | 'nickname' | 'loginPassword' |
+type FieldName = 'phoneNumber' | 'nickname' | 'loginPassword' |
   'confirmPassword' | 'paymentPassword' | 'confirmPaymentPassword';
 
 const RegisterPage: React.FC = () => {
   const [step, setStep] = useState(0);
   const [phoneNumber, setPhoneNumber] = useState('');
-  const [realName, setRealName] = useState('');
   const [nickname, setNickname] = useState('');
   const [loginPassword, setLoginPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
@@ -21,12 +20,6 @@ const RegisterPage: React.FC = () => {
   const [errors, setErrors] = useState<Partial<Record<FieldName, string>>>({});
 
   const validatePhone = (value: string) => !value ? '请输入手机号' : /^1[3-9]\d{9}$/.test(value) ? '' : '请输入正确的11位手机号';
-  const validateRealName = (value: string) => {
-    const trimmed = value.trim();
-    if (!trimmed) return '请输入真实姓名';
-    if (trimmed.length < 2 || trimmed.length > 32) return '真实姓名长度必须为2-32位';
-    return /^[\p{L}·•. ]+$/u.test(trimmed) ? '' : '真实姓名只能包含中英文、空格或中间点';
-  };
   const validateLoginPassword = (value: string) => {
     if (!value) return '请输入登录密码';
     if (value.length < 8 || value.length > 32) return '登录密码长度必须为8-32位';
@@ -45,7 +38,6 @@ const RegisterPage: React.FC = () => {
   const handleNext = () => {
     const nextErrors = {
       phoneNumber: validatePhone(phoneNumber),
-      realName: validateRealName(realName),
       nickname: nickname.trim().length <= 20 ? '' : '昵称不能超过20位',
       loginPassword: validateLoginPassword(loginPassword),
       confirmPassword: !confirmPassword ? '请再次输入登录密码' : loginPassword === confirmPassword ? '' : '两次登录密码不一致',
@@ -62,7 +54,7 @@ const RegisterPage: React.FC = () => {
 
     setLoading(true);
     try {
-      const result = await register({ phoneNumber, realName: realName.trim(), nickname: nickname.trim() || undefined, loginPassword, paymentPassword });
+      const result = await register({ phoneNumber, nickname: nickname.trim() || undefined, loginPassword, paymentPassword });
       localStorage.setItem('accessToken', result.accessToken);
       localStorage.setItem('userId', result.userId);
       localStorage.setItem('accountNumber', result.accountNumber);
@@ -96,8 +88,7 @@ const RegisterPage: React.FC = () => {
 
         {step === 0 ? <>
           <div className={`field ${errors.phoneNumber ? 'has-error' : ''}`}><label>手机号</label><input type="tel" inputMode="numeric" maxLength={11} placeholder="请输入11位手机号" value={phoneNumber} aria-invalid={Boolean(errors.phoneNumber)} onBlur={() => setFieldError('phoneNumber', validatePhone(phoneNumber))} onChange={(e) => { const value = e.target.value.replace(/\D/g, ''); setPhoneNumber(value); if (errors.phoneNumber) setFieldError('phoneNumber', validatePhone(value)); }} /><FieldError field="phoneNumber" /></div>
-          <div className={`field ${errors.realName ? 'has-error' : ''}`}><label>真实姓名</label><input type="text" maxLength={32} placeholder="请输入真实姓名" value={realName} aria-invalid={Boolean(errors.realName)} onBlur={() => setFieldError('realName', validateRealName(realName))} onChange={(e) => { setRealName(e.target.value); if (errors.realName) setFieldError('realName', validateRealName(e.target.value)); }} /><FieldError field="realName" /></div>
-          <div className={`field ${errors.nickname ? 'has-error' : ''}`}><label>昵称（选填）</label><input type="text" maxLength={20} placeholder="不填写时默认使用真实姓名" value={nickname} aria-invalid={Boolean(errors.nickname)} onBlur={() => setFieldError('nickname', nickname.trim().length <= 20 ? '' : '昵称不能超过20位')} onChange={(e) => { setNickname(e.target.value); if (errors.nickname) setFieldError('nickname', e.target.value.trim().length <= 20 ? '' : '昵称不能超过20位'); }} /><FieldError field="nickname" /></div>
+          <div className={`field ${errors.nickname ? 'has-error' : ''}`}><label>昵称（选填）</label><input type="text" maxLength={20} placeholder="不填写时默认使用手机号脱敏值" value={nickname} aria-invalid={Boolean(errors.nickname)} onBlur={() => setFieldError('nickname', nickname.trim().length <= 20 ? '' : '昵称不能超过20位')} onChange={(e) => { setNickname(e.target.value); if (errors.nickname) setFieldError('nickname', e.target.value.trim().length <= 20 ? '' : '昵称不能超过20位'); }} /><FieldError field="nickname" /></div>
           <div className={`field ${errors.loginPassword ? 'has-error' : ''}`}><label>登录密码</label><input type="password" maxLength={32} placeholder="8-32位，包含大小写字母和数字" value={loginPassword} aria-invalid={Boolean(errors.loginPassword)} onBlur={() => setFieldError('loginPassword', validateLoginPassword(loginPassword))} onChange={(e) => { setLoginPassword(e.target.value); if (errors.loginPassword) setFieldError('loginPassword', validateLoginPassword(e.target.value)); if (confirmPassword) setFieldError('confirmPassword', e.target.value === confirmPassword ? '' : '两次登录密码不一致'); }} /><FieldError field="loginPassword" /></div>
           <div className={`field ${errors.confirmPassword ? 'has-error' : ''}`}><label>确认密码</label><input type="password" maxLength={32} placeholder="请再次输入登录密码" value={confirmPassword} aria-invalid={Boolean(errors.confirmPassword)} onBlur={() => setFieldError('confirmPassword', !confirmPassword ? '请再次输入登录密码' : loginPassword === confirmPassword ? '' : '两次登录密码不一致')} onChange={(e) => { setConfirmPassword(e.target.value); if (errors.confirmPassword) setFieldError('confirmPassword', !e.target.value ? '请再次输入登录密码' : loginPassword === e.target.value ? '' : '两次登录密码不一致'); }} /><FieldError field="confirmPassword" /></div>
           <button className="register-btn" onClick={handleNext}>下一步</button>

@@ -14,7 +14,10 @@
     "sourceMap": true,
     "baseUrl": ".",
     "paths": {
-      "@/*": ["src/*"]
+      "@/*": ["src/*"],
+      "@@/*": ["src/.umi/*"],
+      "umi": ["src/.umi/exports.ts"],
+      "@umijs/max": ["src/.umi/exports.ts"]
     }
   },
   "include": ["src/**/*", "config/**/*", "typings/**/*"],

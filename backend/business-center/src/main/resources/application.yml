@@ -13,6 +13,7 @@ spring:
     locations: classpath:db/migration
     baseline-on-migrate: true
     default-schema: ${BUSINESS_DB_SCHEMA:business_db}
+    out-of-order: true
 minialalipay:
   internal:
     account-center-url: ${ACCOUNT_CENTER_INTERNAL_URL:http://localhost:8083}
@@ -51,3 +52,7 @@ management:
     web:
       exposure:
         include: health,info
+logging:
+  level:
+    # 抑制 Flyway 幂等迁移中 SELECT 1 的冗余 INFO 日志
+    org.flywaydb.core.internal.sqlscript: WARN

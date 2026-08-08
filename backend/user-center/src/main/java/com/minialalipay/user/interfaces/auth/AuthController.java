@@ -128,7 +128,6 @@ public class AuthController {
         // 3. 调用应用服务完成注册
         RegisterRequest request = new RegisterRequest(
                 requestDTO.phoneNumber(),
-                requestDTO.realName(),
                 requestDTO.nickname(),
                 requestDTO.loginPassword(),
                 requestDTO.paymentPassword()

@@ -50,7 +50,7 @@ q
 |---|---|---|
 | `/api/v1/auth/**`、`/api/v1/users/**`、`/api/v1/contacts/**` | `user-center` | 身份、用户、联系人 |
 | `/api/v1/transfers/**`、`/api/v1/qr-pay/**`、`/api/v1/p2p-collections/**`、`/api/v1/transactions/**`、`/api/v1/monitoring/**` | `business-center` | 转账、扫码、C2C、交易、监控 |
-| `/api/v1/accounts/**`、`/api/v1/credit/**`、`/api/v1/bills/**` | `account-center` | 账户、信用、账单 |
+| `/api/v1/accounts/**`、`/api/v1/credit/**`、`/api/v1/bills/**`、`/api/v1/bank-cards/**` | `account-center` | 账户、信用、账单、银行卡 |
 | `/api/v1/agent/**` | `ai-service` | AI Agent 能力 |
 
 ## 后端代码规范

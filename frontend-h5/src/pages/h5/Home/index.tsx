@@ -146,9 +146,9 @@ const HomePage: React.FC = () => {
           <div className="func-icon" style={{ background: '#f5f5f5' }}>🏦</div>
           <span>充值</span>
         </div>
-        <div className="func-item">
-          <div className="func-icon" style={{ background: '#f5f5f5' }}>❓</div>
-          <span>帮助</span>
+        <div className="func-item" onClick={() => history.push('/h5/bank-cards')}>
+          <div className="func-icon" style={{ background: '#f5f5f5' }}>💳</div>
+          <span>银行卡</span>
         </div>
       </div>
 

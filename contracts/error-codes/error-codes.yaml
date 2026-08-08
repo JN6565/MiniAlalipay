@@ -1,4 +1,4 @@
-version: 1.2.0
+version: 1.3.0
 status: FROZEN
 codes:
   OK: {httpStatus: 200, message: 成功}
@@ -68,6 +68,15 @@ codes:
   REQUEST_NOT_CANCELLABLE: {httpStatus: 409, message: 收款请求当前不可取消}
   AMOUNT_IMMUTABLE: {httpStatus: 422, message: 金额已经锁定，不允许修改}
   FUNDING_SOURCE_NOT_ALLOWED: {httpStatus: 422, message: 当前场景不允许该资金来源}
+  BANK_CARD_INVALID: {httpStatus: 422, message: 银行卡号无效或暂不支持}
+  BANK_CARD_HOLDER_INVALID: {httpStatus: 422, message: 持卡人信息校验未通过}
+  BANK_CARD_ALREADY_BOUND: {httpStatus: 409, message: 该银行卡已绑定}
+  BANK_CARD_NOT_FOUND: {httpStatus: 404, message: 银行卡不存在}
+  BANK_CARD_ALREADY_UNBOUND: {httpStatus: 409, message: 银行卡已解绑}
+  BANK_CARD_LIMIT_EXCEEDED: {httpStatus: 422, message: 绑定银行卡数量已达上限}
+  IDENTITY_NOT_BOUND: {httpStatus: 422, message: 请先绑定身份信息}
+  REGISTRATION_NOT_FOUND: {httpStatus: 404, message: 银行卡注册记录不存在或卡号不匹配}
+  IDENTITY_MISMATCH: {httpStatus: 422, message: 持卡人信息与注册记录或用户身份不匹配}
   CREDIT_ACCOUNT_NOT_FOUND: {httpStatus: 404, message: 信用账户不存在}
   CREDIT_NOT_AVAILABLE: {httpStatus: 422, message: Mini 花呗当前不可用}
   CREDIT_LIMIT_INSUFFICIENT: {httpStatus: 422, message: 可用信用额度不足}
