@@ -11,6 +11,7 @@ import java.time.ZoneId;
 import java.util.Map;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 class ToolPolicyServiceTest {
 
@@ -120,12 +121,12 @@ class ToolPolicyServiceTest {
                 Map.of("draftId", "draft-001"), 5);
         policyService.registerConfirmation(ctx);
 
-        // 受保护字段的篡改会被拒绝
-        try {
-            policyService.evaluateWithConfirmation(
-                    "submit_confirmed_transfer", session, params, ctx.getConfirmationHandle());
-        } catch (Exception e) {
-            assertThat(e.getMessage()).contains("不安全");
-        }
+        // 受保护字段的篡改会被拒绝（越权拦截抛出 BusinessException）
+        assertThatThrownBy(() -> policyService.evaluateWithConfirmation(
+                "submit_confirmed_transfer", session, params, ctx.getConfirmationHandle()))
+                .isInstanceOf(com.minialalipay.common.error.BusinessException.class)
+                .satisfies(e -> assertThat(
+                        ((com.minialalipay.common.error.BusinessException) e).errorCode().code())
+                        .isEqualTo("PROMPT_INJECTION_REJECTED"));
     }
 }
