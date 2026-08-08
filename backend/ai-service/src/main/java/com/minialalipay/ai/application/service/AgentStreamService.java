@@ -25,7 +25,8 @@ import java.util.concurrent.locks.ReentrantLock;
  *
  * <p>与 {@link AgentMessageService} 共享相同的会话管理逻辑，
  * 但通过 {@link StreamCallback} 发射 SSE 事件实现流式输出。
- * 核心推理和工具调用委托给 {@link AgentLoop}（ReAct 主循环）。</p>
+ * 核心推理和工具调用委托给 {@link AgentLoop}（ReAct 主循环）。
+ * 会话解析、上下文构建等公共逻辑委托给 {@link SessionContextHelper}。</p>
  *
  * <h3>与同步端点的关系</h3>
  * <ul>
@@ -51,13 +52,10 @@ public class AgentStreamService {
 
     private final AgentSessionRepository sessionRepository;
     private final AgentMessageRepository messageRepository;
-    private final LanguageModelPort languageModelPort;
     private final InjectionDetector injectionDetector;
     private final AgentLoop agentLoop;
     private final TaskExecutor taskExecutor;
-    private final int sessionTimeoutMinutes;
-    private final UserPreferenceService userPreferenceService;
-    private final ObjectMapper objectMapper;
+    private final SessionContextHelper contextHelper;
 
     /** 会话级锁，保证同一会话串行处理 */
     private final ConcurrentHashMap<String, ReentrantLock> sessionLocks = new ConcurrentHashMap<>();
@@ -79,17 +77,17 @@ public class AgentStreamService {
     ) {
         this.sessionRepository = sessionRepository;
         this.messageRepository = messageRepository;
-        this.languageModelPort = languageModelPort;
         this.injectionDetector = injectionDetector;
         this.agentLoop = agentLoop;
         this.taskExecutor = taskExecutor;
-        this.userPreferenceService = userPreferenceService;
-        this.objectMapper = objectMapper;
-        this.sessionTimeoutMinutes = (int) parseDurationMinutes(sessionTimeout);
         this.systemPrompt = systemPrompt;
         this.chunkSize = chunkSize;
         this.chunkDelayMs = chunkDelayMs;
         this.thinkingDelayMs = thinkingDelayMs;
+        this.contextHelper = new SessionContextHelper(
+                sessionRepository, messageRepository, languageModelPort,
+                userPreferenceService, objectMapper,
+                (int) SessionContextHelper.parseDurationMinutes(sessionTimeout));
     }
 
     /**
@@ -139,7 +137,7 @@ public class AgentStreamService {
         Instant now = Instant.now();
 
         // 1. 获取或创建会话
-        AgentSession session = resolveSession(userId, sessionId, now);
+        AgentSession session = contextHelper.resolveSession(userId, sessionId, now);
 
         // 2. 获取会话锁
         ReentrantLock lock = sessionLocks.computeIfAbsent(
@@ -197,7 +195,7 @@ public class AgentStreamService {
             session.touch(now);
 
             // 7. 构建上下文并调用 AgentLoop（使用原始内容，LLM 需要真实参数调用工具）
-            List<ChatMessage> context = buildContext(session, rawContent);
+            List<ChatMessage> context = contextHelper.buildContext(session, rawContent);
             List<ChatMessage> history = context.subList(0, context.size() - 1);
 
             AgentLoop.AgentContext agentContext = new AgentLoop.AgentContext(
@@ -214,20 +212,18 @@ public class AgentStreamService {
             if (finalSlots == null) {
                 finalSlots = new HashMap<>();
             }
-            String completedAction = inferCompletedAction(agentResult.executedTools());
+            String completedAction = contextHelper.inferCompletedAction(agentResult.executedTools());
             if (completedAction != null) {
                 finalSlots.put("lastCompletedAction", completedAction);
             }
 
-            // 8. 流式推送内容：先推送过渡文本（LLM 在工具调用前生成的回复），再推送最终内容
+            // 8. 流式推送内容：先推送过渡文本，再推送最终内容
             callback.onStatus("GENERATING", "正在生成回复…");
             try {
                 Thread.sleep(thinkingDelayMs);
             } catch (InterruptedException e) {
                 Thread.currentThread().interrupt();
             }
-            // 推送过渡文本（如"好的，我来为您向东东转账100元..."）
-            // 与 finalContent 相同，pendingText 也需要清理，防止 LLM 输出中残留 JSON 片段
             if (pendingText != null && !pendingText.isBlank()) {
                 emitContentDeltas(AiServiceUtils.sanitizeContent(pendingText), callback);
             }
@@ -243,7 +239,7 @@ public class AgentStreamService {
             messageRepository.insert(assistantMessage);
 
             // 9.5 保存工具结果消息（用于历史消息恢复时重建卡片）
-            saveToolResultMessages(agentResult.toolResults(), session.getSessionId(),
+            contextHelper.saveToolResultMessages(agentResult.toolResults(), session.getSessionId(),
                     clientMessageId, assistantMessage.getCreatedAt());
 
             // 10. 更新会话状态
@@ -252,9 +248,9 @@ public class AgentStreamService {
             }
 
             // 11. 上下文压缩
-            long totalTokens = estimateContextTokens(context, agentResult.totalTokens());
+            long totalTokens = contextHelper.estimateContextTokens(context, agentResult.totalTokens());
             if (totalTokens > AiServiceUtils.MAX_CONTEXT_TOKENS) {
-                String summary = compressContext(session, context);
+                String summary = contextHelper.compressContext(context);
                 session.updateSummary(summary);
             }
 
@@ -262,7 +258,7 @@ public class AgentStreamService {
             sessionRepository.save(session);
 
             // 12. 推导意图并完成
-            IntentType inferredIntent = inferIntent(agentResult.executedTools());
+            IntentType inferredIntent = contextHelper.inferIntent(agentResult.executedTools());
             callback.onDone(assistantMessageId, session.getSessionId(),
                     inferredIntent.name());
 
@@ -276,32 +272,9 @@ public class AgentStreamService {
             if (acquired) {
                 lock.unlock();
             }
-            cleanUpLock(session.getSessionId());
+            // 不清理锁：cleanUpLock 存在 check-then-act 竞态条件，
+            // 锁数量等于会话数量，内存开销可控。
         }
-    }
-
-    // ---- 私有方法 ----
-
-    /**
-     * 根据 AgentLoop 执行的工具列表推导用户意图。
-     */
-    private IntentType inferIntent(List<String> executedTools) {
-        if (executedTools == null || executedTools.isEmpty()) {
-            return IntentType.UNKNOWN;
-        }
-        String firstTool = executedTools.get(0);
-        return switch (firstTool) {
-            case "search_payees" ->
-                    executedTools.size() > 1 ? IntentType.TRANSFER : IntentType.USER_SEARCH;
-            case "get_balance" -> IntentType.BALANCE_QUERY;
-            case "list_transactions" -> IntentType.TRANSACTION_LIST;
-            case "get_transaction_status" -> IntentType.TRANSACTION_STATUS;
-            case "get_credit_summary" -> IntentType.CREDIT_SUMMARY;
-            case "list_credit_bills" -> IntentType.CREDIT_BILL;
-            case "create_credit_repayment_draft" -> IntentType.CREDIT_REPAYMENT;
-            case "create_transfer_draft" -> IntentType.TRANSFER;
-            default -> IntentType.UNKNOWN;
-        };
     }
 
     // ---- 流式文本分块推送 ----
@@ -323,192 +296,10 @@ public class AgentStreamService {
         }
     }
 
-    // ---- 会话管理 ----
-
-    private AgentSession resolveSession(String userId, String sessionId, Instant now) {
-        if (sessionId != null && !sessionId.isBlank()) {
-            AgentSession existing = sessionRepository.findById(sessionId)
-                    .orElseThrow(() -> new BusinessException(AgentErrorCode.SESSION_NOT_FOUND));
-            boolean wasExpiredInDb = existing.getStatus() == AgentSessionStatus.EXPIRED;
-            if (existing.checkExpiry(now, sessionTimeoutMinutes)) {
-                log.info("会话已超时，重新激活: sessionId={}, lastActiveAt={}",
-                        existing.getSessionId(), existing.getLastActiveAt());
-                existing.reactivate(now);
-                if (wasExpiredInDb) {
-                    sessionRepository.reactivateSession(existing);
-                } else {
-                    sessionRepository.save(existing);
-                }
-            }
-            if (!existing.isActive()) {
-                throw new BusinessException(AgentErrorCode.SESSION_NOT_FOUND);
-            }
-            if (!existing.getUserId().equals(userId)) {
-                throw new BusinessException(AgentErrorCode.SESSION_NOT_FOUND);
-            }
-            return existing;
-        }
-        AgentSession newSession = new AgentSession(AiServiceUtils.generateUlid(), userId, now);
-        sessionRepository.save(newSession);
-        return newSession;
-    }
-
-    private List<ChatMessage> buildContext(AgentSession session, String currentMessage) {
-        List<ChatMessage> context = new ArrayList<>();
-        if (session.getSummary() != null && !session.getSummary().isBlank()) {
-            context.add(new ChatMessage(MessageRole.SYSTEM,
-                    "【对话摘要】" + session.getSummary()));
-        }
-        if (!session.getSlots().isEmpty()) {
-            context.add(new ChatMessage(MessageRole.SYSTEM,
-                    "【当前槽位】" + session.getSlots()));
-        }
-        try {
-            userPreferenceService.getLastPayee(session.getUserId()).ifPresent(payee -> {
-                String nickname = payee.getOrDefault("nickname", "");
-                if (!nickname.isBlank()) {
-                    context.add(new ChatMessage(MessageRole.SYSTEM,
-                            "【用户偏好】最近转账收款人：" + nickname));
-                }
-            });
-        } catch (Exception e) {
-            log.debug("加载用户偏好失败，跳过：{}", e.getMessage());
-        }
-        // 操作完成感知：如果用户刚完成了某个操作，明确告知 LLM 不要重复
-        Object lastAction = session.getSlots().get("lastCompletedAction");
-        if (lastAction != null) {
-            String actionDesc = describeCompletedAction(lastAction.toString());
-            context.add(new ChatMessage(MessageRole.SYSTEM,
-                    "【注意】" + actionDesc + "，请勿重复执行相同操作或重复展示相同结果。"));
-        }
-        // 增强防重复提示：更具体的指令
-        context.add(new ChatMessage(MessageRole.SYSTEM,
-                "【重要】请仅针对用户最新消息回复。"
-                + "如果用户之前的请求已经完成（如转账已完成、余额已展示），"
-                + "不要重复执行相同操作或重复展示相同结果。"
-                + "对于新的请求，直接执行对应操作。"));
-        List<AgentMessage> history = messageRepository.findRecentBySessionId(
-                session.getSessionId(), AiServiceUtils.CONTEXT_MESSAGE_LIMIT);
-        for (AgentMessage msg : history) {
-            if (msg.getContentRedacted().equals(currentMessage)
-                    && msg.getRole() == MessageRole.USER) {
-                continue;
-            }
-            context.add(new ChatMessage(msg.getRole(), msg.getContentRedacted()));
-        }
-        context.add(new ChatMessage(MessageRole.USER, currentMessage));
-        return context;
-    }
-
-    /**
-     * 根据 AgentLoop 执行的工具列表推断用户刚完成的操作。
-     *
-     * @return 操作名称（如 "transfer"、"repay"），无完成操作时返回 null
-     */
-    private String inferCompletedAction(List<String> executedTools) {
-        if (executedTools == null || executedTools.isEmpty()) return null;
-        // 转账流程完成标志：执行了 submit_confirmed_transfer
-        if (executedTools.contains("submit_confirmed_transfer")) return "transfer";
-        // 还款流程完成标志：执行了 create_credit_repayment_draft
-        if (executedTools.contains("create_credit_repayment_draft")) return "repay";
-        // 查询类操作完成标志：执行了查询工具且没有后续转账操作
-        if (executedTools.contains("prepare_confirmation_card")) return "transfer_confirm_pending";
-        return null;
-    }
-
-    /**
-     * 将操作名称转换为可读的中文描述，用于上下文注入。
-     */
-    private String describeCompletedAction(String action) {
-        return switch (action) {
-            case "transfer" -> "用户刚刚完成了转账操作";
-            case "repay" -> "用户刚刚完成了花呗还款操作";
-            case "transfer_confirm_pending" -> "用户已确认转账待提交";
-            default -> "用户刚刚完成了" + action + "操作";
-        };
-    }
-
-    /**
-     * 将工具执行结果保存为独立消息，用于历史对话恢复时重建卡片。
-     *
-     * <p>每个工具结果使用唯一的 {@code client_message_id}（格式：{@code {原始ID}_tr_{工具名}_{序号}}）
-     * 以避免唯一约束冲突。时间戳在 AI 回复时间基础上逐条递增 1 毫秒，保证排序在文本回复之前。</p>
-     *
-     * @param toolResults 工具结果摘要列表
-     * @param sessionId 会话 ID
-     * @param clientMessageId 原始客户端消息幂等键
-     * @param baseTime AI 回复的创建时间（工具结果消息时间从此开始递增）
-     */
-    private void saveToolResultMessages(List<AgentLoop.ToolResultRecord> toolResults,
-                                         String sessionId, String clientMessageId,
-                                         Instant baseTime) {
-        if (toolResults == null || toolResults.isEmpty()) return;
-        for (int i = 0; i < toolResults.size(); i++) {
-            AgentLoop.ToolResultRecord tr = toolResults.get(i);
-            try {
-                String json = objectMapper.writeValueAsString(Map.of(
-                        "tool", tr.toolName(),
-                        "status", tr.status(),
-                        "summary", tr.summary(),
-                        "data", tr.data() != null ? tr.data() : Map.of()
-                ));
-                // 唯一 client_message_id：原始ID + 工具名 + 序号
-                String trClientId = clientMessageId + "_tr_" + tr.toolName() + "_" + i;
-                // 时间戳逐条递增 1 毫秒，保证排序在 AI 文本回复之前
-                Instant trTime = baseTime.plusMillis(i + 1);
-                AgentMessage trMessage = new AgentMessage(
-                        AiServiceUtils.generateUlid(), sessionId, trClientId,
-                        MessageRole.ASSISTANT, json, 0, trTime,
-                        MessageKind.TOOL_RESULT, tr.toolName());
-                messageRepository.insert(trMessage);
-            } catch (Exception e) {
-                log.warn("保存工具结果消息失败: tool={}, error={}", tr.toolName(), e.getMessage());
-            }
-        }
-    }
-
-    private String compressContext(AgentSession session, List<ChatMessage> context) {
-        StringBuilder compressPrompt = new StringBuilder();
-        compressPrompt.append("请将以下对话上下文压缩为四部分总结：\n");
-        compressPrompt.append("1. 已确认事实\n2. 待确认信息\n3. 已废弃信息\n4. 最近工具结果\n\n");
-        for (ChatMessage msg : context) {
-            compressPrompt.append("[").append(msg.role()).append("] ")
-                    .append(msg.content()).append("\n");
-        }
-        ChatResponse summary = languageModelPort.chat(
-                "你是上下文压缩器。只输出结构化摘要，不添加额外建议。",
-                List.of(), compressPrompt.toString());
-        return summary.content();
-    }
-
-    private long estimateContextTokens(List<ChatMessage> context, int responseTokens) {
-        long total = responseTokens;
-        for (ChatMessage msg : context) {
-            total += AiServiceUtils.estimateTokens(msg.content());
-        }
-        return total;
-    }
-
     private void safeEmitError(StreamCallback callback, String code, String message) {
         try {
             callback.onError(code, message);
         } catch (Exception ignored) {
         }
-    }
-
-    private void cleanUpLock(String sessionId) {
-        ReentrantLock lock = sessionLocks.get(sessionId);
-        if (lock != null && !lock.isLocked() && !lock.hasQueuedThreads()) {
-            sessionLocks.remove(sessionId);
-        }
-    }
-
-    private static long parseDurationMinutes(String duration) {
-        String trimmed = duration.trim().toLowerCase();
-        if (trimmed.endsWith("ms")) return Long.parseLong(trimmed.replace("ms", "")) / 60000;
-        if (trimmed.endsWith("s")) return Long.parseLong(trimmed.replace("s", "")) / 60;
-        if (trimmed.endsWith("m")) return Long.parseLong(trimmed.replace("m", ""));
-        if (trimmed.endsWith("h")) return Long.parseLong(trimmed.replace("h", "")) * 60;
-        return Long.parseLong(trimmed);
     }
 }
