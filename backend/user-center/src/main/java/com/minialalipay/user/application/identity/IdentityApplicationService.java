@@ -2,7 +2,8 @@ package com.minialalipay.user.application.identity;
 
 import com.minialalipay.user.domain.user.User;
 import com.minialalipay.user.domain.user.UserRepository;
-import com.minialalipay.user.interfaces.dto.identity.IdentityDTO;
+import com.minialalipay.user.domain.auth.UserErrorCode;
+import com.minialalipay.user.application.identity.dto.IdentityDTO;
 import com.minialalipay.common.error.BusinessException;
 import com.minialalipay.common.error.CommonErrorCode;
 import org.springframework.stereotype.Service;
@@ -42,6 +43,11 @@ public class IdentityApplicationService {
 
         byte[] hash = sha256(idCard.trim());
         String masked = maskIdCard(idCard.trim());
+
+        // 身份证号全系统唯一：同一身份证不得被多个账户绑定（本人重复提交允许）
+        if (userRepository.existsByIdCardHashExcluding(hash, userId)) {
+            throw new BusinessException(UserErrorCode.ID_CARD_ALREADY_BOUND);
+        }
 
         user.bindIdentity(realName.trim(), hash, masked);
         userRepository.update(user);

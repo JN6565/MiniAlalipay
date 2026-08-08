@@ -33,7 +33,7 @@ public class User {
     /**
      * 用户 ID（26 位字符，格式：{@code USR} + 9 位随机大写字母 + {@code YYYYMMDD} + 6 位日序列号）。
      * <p>跨模块引用用户的稳定标识，在整个系统生命周期内不变。注册时由
-     * {@link com.minialalipay.user.infrastructure.id.UserIdGenerator} 与 {@code registrationId} 成对生成。</p>
+     * {@link UserIdGeneratorPort} 实现与 {@code registrationId} 成对生成。</p>
      */
     private final String userId;
 

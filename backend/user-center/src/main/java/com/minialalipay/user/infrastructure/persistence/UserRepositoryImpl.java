@@ -165,6 +165,11 @@ public class UserRepositoryImpl implements UserRepository {
         return userMapper.existsByPhoneNumber(phoneNumber);
     }
 
+    @Override
+    public boolean existsByIdCardHashExcluding(byte[] idCardHash, String excludeUserId) {
+        return userMapper.existsByIdCardHashExcluding(idCardHash, excludeUserId);
+    }
+
     /**
      * 按手机号搜索用户。
      *
