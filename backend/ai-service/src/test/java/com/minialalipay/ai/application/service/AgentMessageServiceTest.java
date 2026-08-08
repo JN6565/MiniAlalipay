@@ -148,7 +148,7 @@ class AgentMessageServiceTest {
         when(sessionRepository.findById("01J5Q000000000000000000001"))
                 .thenReturn(Optional.of(session));
         when(injectionDetector.check(any()))
-                .thenReturn(new InjectionDetector.InjectionCheckResult(false, "ignore_instructions"));
+                .thenReturn(new InjectionDetector.InjectionCheckResult(false, "ignore_instructions", null));
 
         assertThatThrownBy(() -> service.processMessage(
                 USER_ID, "client-msg-001", "01J5Q000000000000000000001",
@@ -167,7 +167,7 @@ class AgentMessageServiceTest {
         when(sessionRepository.findById("01J5Q000000000000000000001"))
                 .thenReturn(Optional.of(session));
 
-        Map<String, Object> slots = Map.of("payeeId", "payee-001", "amountFen", 10000L);
+        Map<String, Object> slots = new HashMap<>(Map.of("payeeId", "payee-001", "amountFen", 10000L));
         when(agentLoop.execute(any(AgentLoop.AgentContext.class)))
                 .thenReturn(new AgentLoop.AgentResult(
                         "请核对以下信息后完成支付：\n收款人: 张三\n金额: 100.00 元",
