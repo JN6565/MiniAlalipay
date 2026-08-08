@@ -55,7 +55,12 @@
         opacity: 0.85;
         margin-bottom: 6px;
 
-        .eye { cursor: pointer; margin-left: 4px; }
+        .eye {
+          cursor: pointer;
+          margin-left: 4px;
+          transition: transform 0.2s ease;
+          &:active { transform: scale(0.85); }
+        }
       }
 
       .asset-num {

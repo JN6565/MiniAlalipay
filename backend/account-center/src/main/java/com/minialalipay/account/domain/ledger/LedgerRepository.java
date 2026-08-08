@@ -47,6 +47,17 @@ public interface LedgerRepository {
         return findEntriesByUserId(userId, null, 0L, 10000);
     }
 
+    /**
+     * 查询用户分录并携带交易对方用户 ID。
+     *
+     * @param userId 用户 ID
+     * @param cursorCreatedAt 上一页末尾分录时间，首页为空
+     * @param cursorEntryId 上一页末尾分录 ID，首页为 0
+     * @param limit 返回上限，不超过 100
+     */
+    List<LedgerEntry.WithCounterparty> findEntriesWithCounterparty(String userId, Instant cursorCreatedAt,
+                                                                    long cursorEntryId, int limit);
+
     /** 数据库实际分录的借贷汇总。 */
     record LedgerTotals(long debitFen, long creditFen) {
     }

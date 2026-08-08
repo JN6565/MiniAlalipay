@@ -10,8 +10,9 @@ import java.time.Instant;
  * @param direction 借贷方向
  * @param amountFen 金额，单位分
  * @param memo 脱敏摘要，可为空
+ * @param counterpartyName 交易对方显示名称（昵称或脱敏手机号），可为空
  * @param createdAt 分录时间
  */
 public record LedgerEntryDTO(long entryId, String transactionId, String direction, long amountFen,
-                             String memo, Instant createdAt) {
+                             String memo, String counterpartyName, Instant createdAt) {
 }

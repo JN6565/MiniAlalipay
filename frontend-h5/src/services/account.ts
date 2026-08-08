@@ -14,6 +14,7 @@ export interface Transaction {
   amountFen: number;
   direction: 'IN' | 'OUT';
   memo: string | null;
+  counterpartyName: string;
   createdAt: string;
 }
 
@@ -23,6 +24,7 @@ interface LedgerEntryResponse {
   direction: 'DEBIT' | 'CREDIT';
   amountFen: number;
   memo: string | null;
+  counterpartyName: string;
   createdAt: string;
 }
 

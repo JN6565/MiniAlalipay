@@ -73,7 +73,9 @@ const TransactionsPage: React.FC = () => {
             >
               <div className="tx-info">
                 <div className="tx-counterparty">
-                  {accountService.getLedgerEntryTitle(tx)}
+                  {tx.counterpartyName
+                    ? (tx.direction === 'IN' ? `来自 ${tx.counterpartyName}` : `转给 ${tx.counterpartyName}`)
+                    : accountService.getLedgerEntryTitle(tx)}
                 </div>
                 <div className="tx-type">{tx.memo?.includes('充值') ? '充值' : '资金变动'}</div>
               </div>

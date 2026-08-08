@@ -118,6 +118,27 @@ public class LedgerRepositoryImpl implements LedgerRepository {
                 this::mapEntry, userId, since, until);
     }
 
+    @Override
+    public List<LedgerEntry.WithCounterparty> findEntriesWithCounterparty(String userId,
+                                                                           Instant cursorCreatedAt,
+                                                                           long cursorEntryId, int limit) {
+        return jdbcTemplate.query(
+                "SELECT e.*, cp_a.owner_id AS counterparty_user_id "
+                        + "FROM ledger_db.ledger_entry e "
+                        + "JOIN ledger_db.ledger_account a ON a.ledger_account_id=e.ledger_account_id "
+                        + "LEFT JOIN ledger_db.ledger_entry cp_e "
+                        + "  ON cp_e.transaction_id=e.transaction_id "
+                        + "  AND cp_e.entry_id<>e.entry_id "
+                        + "LEFT JOIN ledger_db.ledger_account cp_a "
+                        + "  ON cp_a.ledger_account_id=cp_e.ledger_account_id "
+                        + "  AND cp_a.owner_type='USER' "
+                        + "WHERE a.owner_type='USER' AND a.owner_id=? "
+                        + "AND (? IS NULL OR e.created_at<? OR (e.created_at=? AND e.entry_id<?)) "
+                        + "ORDER BY e.created_at DESC, e.entry_id DESC LIMIT ?",
+                this::mapEntryWithCounterparty, userId, cursorCreatedAt, cursorCreatedAt,
+                cursorCreatedAt, cursorEntryId, limit);
+    }
+
     private LedgerVoucher mapVoucher(ResultSet rs) throws SQLException {
         String voucherId = rs.getString("voucher_id");
         List<LedgerEntry> entries = jdbcTemplate.query("SELECT * FROM ledger_db.ledger_entry "
@@ -138,5 +159,11 @@ public class LedgerRepositoryImpl implements LedgerRepository {
                 rs.getString("transaction_id"), rs.getString("ledger_account_id"),
                 LedgerDirection.valueOf(rs.getString("direction")), rs.getLong("amount_fen"),
                 rs.getInt("sequence_no"), rs.getString("memo"), rs.getTimestamp("created_at").toInstant());
+    }
+
+    private LedgerEntry.WithCounterparty mapEntryWithCounterparty(ResultSet rs, int rowNum) throws SQLException {
+        LedgerEntry entry = mapEntry(rs, rowNum);
+        String counterpartyUserId = rs.getString("counterparty_user_id");
+        return new LedgerEntry.WithCounterparty(entry, counterpartyUserId);
     }
 }

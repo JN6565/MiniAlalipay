@@ -1,6 +1,7 @@
 package com.minialalipay.user.interfaces.user;
 
 import com.minialalipay.user.application.user.UserQueryService;
+import com.minialalipay.user.application.user.PhoneMasker;
 import com.minialalipay.user.domain.user.User;
 import com.minialalipay.user.domain.user.UserRepository;
 import org.springframework.beans.factory.annotation.Value;
@@ -53,11 +54,13 @@ public class InternalUserController {
 
         User u = user.get();
         // accountNumber 供转账展示页脱敏后展示，与 realName 属同级内部展示字段
+        // maskedPhone 供账本分录展示交易对方信息
         return ResponseEntity.ok(Map.of(
                 "userId", u.getUserId(),
                 "realName", u.getRealName() != null ? u.getRealName() : "",
                 "nickname", u.getNickname() != null ? u.getNickname() : "",
-                "accountNumber", u.getAccountNumber() != null ? u.getAccountNumber() : ""
+                "accountNumber", u.getAccountNumber() != null ? u.getAccountNumber() : "",
+                "maskedPhone", PhoneMasker.mask(u.getPhoneNumber())
         ));
     }
 }
