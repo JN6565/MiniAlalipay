@@ -36,6 +36,7 @@ public class AgentSession {
     private final String sessionId;
     private final String userId;
     private String summary;
+    private String title;
     private Map<String, Object> slots;
     private AgentSessionStatus status;
     private long version;
@@ -53,6 +54,7 @@ public class AgentSession {
         this.sessionId = Objects.requireNonNull(sessionId, "会话 ID 不能为空");
         this.userId = Objects.requireNonNull(userId, "用户 ID 不能为空");
         this.summary = null;
+        this.title = null;
         this.slots = new HashMap<>();
         this.status = AgentSessionStatus.ACTIVE;
         this.version = 0L;
@@ -64,13 +66,14 @@ public class AgentSession {
      * 从持久化重建会话。
      */
     public AgentSession(
-            String sessionId, String userId, String summary,
+            String sessionId, String userId, String summary, String title,
             Map<String, Object> slots, AgentSessionStatus status,
             long version, Instant lastActiveAt, Instant createdAt
     ) {
         this.sessionId = sessionId;
         this.userId = userId;
         this.summary = summary;
+        this.title = title;
         this.slots = slots != null ? new HashMap<>(slots) : new HashMap<>();
         this.status = status;
         this.version = version;
@@ -101,6 +104,16 @@ public class AgentSession {
     }
 
     /**
+     * 更新用户自定义会话标题。
+     * 标题为空字符串时表示清除自定义标题，回退到首条消息摘要。
+     *
+     * @param title 新标题，最大 100 字符
+     */
+    public void updateTitle(String title) {
+        this.title = (title != null && !title.isBlank()) ? title.trim() : null;
+    }
+
+    /**
      * 更新当前意图的结构化槽位。
      * 槽位只用于草稿编排，不能替代业务库的金额、账户或交易状态。
      *
@@ -120,6 +133,24 @@ public class AgentSession {
     public void setSlot(String key, Object value) {
         assertActive();
         this.slots.put(key, value);
+    }
+
+    /**
+     * 重新激活已过期的会话。
+     *
+     * <p>当用户从历史会话继续对话时，将 EXPIRED 状态恢复为 ACTIVE，
+     * 重置活跃时间并清除过期的草稿槽位。AI 上下文（摘要和消息历史）保留不变。</p>
+     *
+     * @param now 当前时间
+     */
+    public void reactivate(Instant now) {
+        if (this.status != AgentSessionStatus.EXPIRED) {
+            throw new IllegalStateException(
+                    "仅 EXPIRED 状态的会话可重新激活，当前状态: " + this.status);
+        }
+        this.status = AgentSessionStatus.ACTIVE;
+        this.lastActiveAt = Objects.requireNonNull(now, "当前时间不能为空");
+        this.slots = new HashMap<>();
     }
 
     /**
@@ -172,6 +203,7 @@ public class AgentSession {
     public String getSessionId() { return sessionId; }
     public String getUserId() { return userId; }
     public String getSummary() { return summary; }
+    public String getTitle() { return title; }
 
     /** @return 槽位的不可变视图 */
     public Map<String, Object> getSlots() { return Collections.unmodifiableMap(slots); }

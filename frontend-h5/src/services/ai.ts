@@ -172,3 +172,17 @@ export async function getSessions(): Promise<SessionInfo[]> {
 export async function getSessionMessages(sessionId: string): Promise<HistoryMessage[]> {
   return request.get(`/api/v1/agent/sessions/${sessionId}/messages`);
 }
+
+/**
+ * 软删除会话：将状态设为 CLOSED，不再出现在活跃列表中。
+ */
+export async function deleteSession(sessionId: string): Promise<void> {
+  return request.delete(`/api/v1/agent/sessions/${sessionId}`);
+}
+
+/**
+ * 重命名会话：更新用户自定义标题。传空字符串清除自定义标题。
+ */
+export async function renameSession(sessionId: string, title: string): Promise<void> {
+  return request.patch(`/api/v1/agent/sessions/${sessionId}/title`, { title });
+}

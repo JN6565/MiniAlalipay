@@ -36,7 +36,7 @@ class AgentSessionMapperIntegrationTest {
     void setUp() {
         // 每个测试前插入一条基准会话
         AgentSessionPO po = new AgentSessionPO(
-                SESSION_ID, USER_ID, null, null,
+                SESSION_ID, USER_ID, null, null, null,
                 "ACTIVE", 0L, NOW, NOW);
         mapper.insert(po);
     }
@@ -62,7 +62,7 @@ class AgentSessionMapperIntegrationTest {
     void shouldFindActiveSessionsByUserId() {
         // 插入第二活跃会话
         AgentSessionPO po2 = new AgentSessionPO(
-                "01J5Q000000000000000000003", USER_ID, null, null,
+                "01J5Q000000000000000000003", USER_ID, null, null, null,
                 "ACTIVE", 0L, NOW.plusSeconds(60), NOW);
         mapper.insert(po2);
 
@@ -76,7 +76,7 @@ class AgentSessionMapperIntegrationTest {
     void shouldExcludeNonActiveSessionsFromActiveQuery() {
         // 插入已关闭会话
         AgentSessionPO closed = new AgentSessionPO(
-                "01J5Q000000000000000000004", USER_ID, null, null,
+                "01J5Q000000000000000000004", USER_ID, null, null, null,
                 "CLOSED", 0L, NOW, NOW);
         mapper.insert(closed);
 
@@ -88,7 +88,7 @@ class AgentSessionMapperIntegrationTest {
     @Test
     void shouldUpdateSessionByCas() {
         AgentSessionPO update = new AgentSessionPO(
-                SESSION_ID, USER_ID, "压缩摘要", "{}",
+                SESSION_ID, USER_ID, "压缩摘要", null, "{}",
                 "ACTIVE", 0L, NOW.plusSeconds(120), NOW);
 
         int rows = mapper.updateByCas(update);
@@ -102,7 +102,7 @@ class AgentSessionMapperIntegrationTest {
     @Test
     void shouldFailCasUpdateOnVersionMismatch() {
         AgentSessionPO update = new AgentSessionPO(
-                SESSION_ID, USER_ID, "过期版本", null,
+                SESSION_ID, USER_ID, "过期版本", null, null,
                 "ACTIVE", 999L, NOW, NOW); // 版本号不匹配
 
         int rows = mapper.updateByCas(update);

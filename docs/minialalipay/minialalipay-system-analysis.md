@@ -2614,7 +2614,10 @@ C2C 创建请求与个人码订单金额锁定共用以下 OpenAPI 字段约束�
 |---|---|---|---|---|
 | POST | `/api/v1/agent/messages` | 登录用户 | 发送消息并获得 Agent 回复 | `sessionId` 隔离；同会话串行 |
 | POST | `/api/v1/agent/messages/stream` | 登录用户 | SSE 流式 AI 对话 | `clientMessageId` 幂等 |
+| GET | `/api/v1/agent/sessions` | 登录用户 | 查询当前用户活跃会话列表 | 按最后活跃时间倒序 |
 | GET | `/api/v1/agent/sessions/{id}` | 会话所有者 | 查询脱敏对话与工具轨迹 | 不返回内部推理和确认句柄 |
+| DELETE | `/api/v1/agent/sessions/{id}` | 会话所有者 | 软删除会话（状态设为 CLOSED） | 保留审计日志，不物理删除 |
+| PATCH | `/api/v1/agent/sessions/{id}/title` | 会话所有者 | 重命名会话标题 | `title` 最大 100 字符 |
 | DELETE | `/api/v1/agent/sessions/{id}/memory` | 会话所有者 | 清除可删除记忆 | 不删除资金审计日志 |
 | GET | `/api/v1/ops/realtime-metrics` | 运营/观察者 | 查询分钟级指标 | `metricCode` + 时间范围限制 |
 | GET | `/api/v1/ops/daily-reports` | 运营/观察者 | 查询 T+1 报表 | 返回口径与质量版本 |

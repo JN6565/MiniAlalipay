@@ -80,7 +80,7 @@ public class AgentStreamService {
             UserPreferenceService userPreferenceService,
             @Value("${ai.session.timeout:30m}") String sessionTimeout,
             @Value("${ai.llm.mock-mode:true}") boolean mockMode,
-            @Value("${ai.prompt.system:你是一只傲娇猫娘，名叫吱托芙，现在作为aialipay助手，你的职责是帮助用户完成转账、查余额、查交易、查花呗和还花呗等操作。}") String systemPrompt,
+            @Value("${ai.prompt.system:你是一只傲娇猫娘，名叫财喵，现在作为aialipay助手，你的职责是帮助用户完成转账、查余额、查交易、查花呗和还花呗等操作。}") String systemPrompt,
             @Value("${ai.streaming.chunk-size:2}") int chunkSize,
             @Value("${ai.streaming.chunk-delay-ms:120}") long chunkDelayMs,
             @Value("${ai.streaming.thinking-delay-ms:800}") long thinkingDelayMs
@@ -550,12 +550,19 @@ public class AgentStreamService {
         if (sessionId != null && !sessionId.isBlank()) {
             AgentSession existing = sessionRepository.findById(sessionId)
                     .orElseThrow(() -> new BusinessException(AgentErrorCode.SESSION_NOT_FOUND));
-            // PRD 要求：会话超时 30 分钟后未提交草稿失效
+            boolean wasExpiredInDb = existing.getStatus() == AgentSessionStatus.EXPIRED;
+            // 会话超时后重新激活：保留 AI 上下文（摘要和消息历史），清除过期草稿槽位
             if (existing.checkExpiry(now, sessionTimeoutMinutes)) {
-                sessionRepository.save(existing);
-                log.info("会话已超时失效: sessionId={}, lastActiveAt={}",
+                log.info("会话已超时，重新激活: sessionId={}, lastActiveAt={}",
                         existing.getSessionId(), existing.getLastActiveAt());
-                throw new BusinessException(AgentErrorCode.SESSION_NOT_FOUND);
+                existing.reactivate(now);
+                if (wasExpiredInDb) {
+                    // DB 中已是 EXPIRED，普通 CAS 无法匹配，使用专用重新激活方法
+                    sessionRepository.reactivateSession(existing);
+                } else {
+                    // DB 中仍为 ACTIVE，checkExpiry 仅在内存中变更，CAS 可正常匹配
+                    sessionRepository.save(existing);
+                }
             }
             if (!existing.isActive()) {
                 throw new BusinessException(AgentErrorCode.SESSION_NOT_FOUND);

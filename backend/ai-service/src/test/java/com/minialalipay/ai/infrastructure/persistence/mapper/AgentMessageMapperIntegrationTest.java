@@ -41,7 +41,7 @@ class AgentMessageMapperIntegrationTest {
     @BeforeEach
     void setUp() {
         AgentSessionPO session = new AgentSessionPO(
-                SESSION_ID, USER_ID, null, null, "ACTIVE", 0L, NOW, NOW);
+                SESSION_ID, USER_ID, null, null, null, "ACTIVE", 0L, NOW, NOW);
         sessionMapper.insert(session);
     }
 

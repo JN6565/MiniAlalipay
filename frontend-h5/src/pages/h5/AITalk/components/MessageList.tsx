@@ -41,8 +41,8 @@ const MessageList: React.FC<Props> = ({ messages, renderMessage, onSuggestionCli
     <div className="ai-messages" ref={containerRef} onScroll={handleScroll}>
       {messages.length === 0 && (
         <div className="ai-welcome">
-          <div className="ai-welcome-avatar">🤖</div>
-          <div className="ai-welcome-title">你好，我是吱托芙</div>
+          <div className="ai-welcome-avatar">🐱</div>
+          <div className="ai-welcome-title">你好，我是财喵</div>
           <div className="ai-welcome-desc">
             转账、查余额、查账单、花呗还款
             <br />

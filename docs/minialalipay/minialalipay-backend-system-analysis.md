@@ -538,7 +538,10 @@ B 端页面中以下能力已由 PRD 和前端系分提出，但当前总体端�
 | `POST /api/v1/p2p-collections/requests/{id}/cancel` | `CancelCollectionRequest(version)` | `CollectionRequestView` | `REQUEST_NOT_CANCELLABLE` |
 | `GET /api/v1/p2p-collections/by-token` | 查询参数 `t`，只建立 bootstrap 会话 | `BootstrapView` | `COLLECTION_TOKEN_INVALID` |
 | `GET /api/v1/p2p-collections/orders/{id}` | 订单 ID | `CollectionOrderView`，处理中后包含真实 `transactionId/status` | `ORDER_NOT_FOUND` |
+| `GET /api/v1/agent/sessions` | 用户 ID（网关注入） | `List<SessionSummaryResponse>` | — |
 | `GET /api/v1/agent/sessions/{id}` | 会话 ID | `AgentSessionView(sessionId,status,messages[],toolTraces[])`，不返回内部推理 | `SESSION_NOT_FOUND` |
+| `DELETE /api/v1/agent/sessions/{id}` | 会话 ID | `OperationResult(success=true)`，软删除（状态设为 CLOSED） | `SESSION_NOT_FOUND` |
+| `PATCH /api/v1/agent/sessions/{id}/title` | 会话 ID + `RenameSessionRequest(title)` | `OperationResult(success=true)` | `SESSION_NOT_FOUND` |
 | `DELETE /api/v1/agent/sessions/{id}/memory` | 会话 ID | `OperationResult(success=true)` | `SESSION_NOT_FOUND` |
 | `GET /api/v1/ops/daily-reports` | `businessDate,metricCode,cursor` | `DailyReportPage(items,definitionVersion,qualityStatus,nextCursor)` | `REPORT_NOT_PUBLISHED` |
 | `GET /api/v1/ops/data-quality` | `dataDate`、`jobCode`、`ruleCode` | `DataQualityResult[]` | `OPS_PERMISSION_REQUIRED` |

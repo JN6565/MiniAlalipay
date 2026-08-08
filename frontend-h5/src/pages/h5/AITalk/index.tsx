@@ -1,4 +1,4 @@
-import React, { useState, useCallback, useRef } from 'react';
+import React, { useState, useCallback, useRef, useEffect } from 'react';
 import { history } from 'umi';
 import dayjs from 'dayjs';
 import { useSession } from './hooks/useSession';
@@ -59,12 +59,35 @@ const AITalkPage: React.FC = () => {
     clearSession,
     loadSessions,
     switchSession,
+    removeSession,
+    renameSessionTitle,
   } = useSession();
 
   const streamingMsgIdRef = useRef<string | null>(null);
   const streamBufferRef = useRef('');
   /** 记录最后一条用户消息内容，用于错误重试时恢复 */
   const lastUserContentRef = useRef('');
+
+  /**
+   * 组件挂载时恢复会话：如果 localStorage 中有 sessionId，
+   * 自动加载历史消息，避免页面切换后丢失对话上下文。
+   */
+  useEffect(() => {
+    if (sessionId) {
+      switchSession(sessionId).then((historyMessages) => {
+        if (historyMessages.length > 0) {
+          setMessages(historyMessages);
+          // 用首条用户消息作为会话标题
+          const firstUser = historyMessages.find((m) => m.role === 'user');
+          if (firstUser && firstUser.role === 'user') {
+            setSessionTitle(deriveSessionTitle(firstUser.content));
+          }
+        }
+      });
+    }
+    // 仅在挂载时执行一次
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   /** 流式回调：文本增量 */
   const handleContentDelta = useCallback((delta: string) => {
@@ -438,6 +461,32 @@ const AITalkPage: React.FC = () => {
     [switchSession],
   );
 
+  /** 删除会话 */
+  const handleDeleteSession = useCallback(
+    async (targetSessionId: string) => {
+      await removeSession(targetSessionId);
+      // 如果删除的是当前会话，清空并回到新对话状态
+      if (targetSessionId === sessionId) {
+        clearSession();
+        setMessages([]);
+        setSessionTitle('新对话');
+      }
+    },
+    [removeSession, sessionId, clearSession],
+  );
+
+  /** 重命名会话 */
+  const handleRenameSession = useCallback(
+    async (targetSessionId: string, newTitle: string) => {
+      await renameSessionTitle(targetSessionId, newTitle);
+      // 如果重命名的是当前会话，更新顶部标题
+      if (targetSessionId === sessionId) {
+        setSessionTitle(newTitle);
+      }
+    },
+    [renameSessionTitle, sessionId],
+  );
+
   /** 渲染分发 */
   const renderMessage = useCallback(
     (msg: Message) => {
@@ -534,9 +583,6 @@ const AITalkPage: React.FC = () => {
         </button>
         <div className="ai-top-title-block">
           <div className="ai-top-title">{sessionTitle}</div>
-          <div className="ai-top-subtitle">
-            快速模式
-          </div>
         </div>
         <button
           type="button"
@@ -546,16 +592,7 @@ const AITalkPage: React.FC = () => {
         >
           ✚
         </button>
-        {/* GAP-4：一键切换到传统表单模式，AI 与表单共享底层接口 */}
-        <button
-          type="button"
-          className="ai-top-icon-btn ai-form-switch-btn"
-          onClick={() => history.push('/h5/transfer')}
-          aria-label="切换到表单模式"
-          title="使用传统表单操作"
-        >
-          ✎
-        </button>
+
       </div>
 
       <MessageList
@@ -583,10 +620,8 @@ const AITalkPage: React.FC = () => {
         currentSessionId={sessionId}
         loading={sessionsLoading}
         onSelect={handleSelectSession}
-        onNewSession={() => {
-          handleNewSession();
-          setSessionDrawerOpen(false);
-        }}
+        onDelete={handleDeleteSession}
+        onRename={handleRenameSession}
       />
 
       {/* 底部导航栏 */}

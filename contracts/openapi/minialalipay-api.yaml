@@ -1981,6 +1981,59 @@ paths:
                         items: { $ref: '#/components/schemas/AgentMessageSummary' }
         '401': { $ref: '#/components/responses/Unauthorized' }
         '404': { $ref: '#/components/responses/NotFound' }
+  /api/v1/agent/sessions/{sessionId}:
+    delete:
+      summary: 软删除 AI 会话（将状态设为 CLOSED）
+      operationId: deleteAgentSession
+      x-client-scope: C
+      parameters:
+        - $ref: '#/components/parameters/RequestIdHeader'
+        - name: sessionId
+          in: path
+          required: true
+          schema: { type: string, maxLength: 26 }
+      responses:
+        '200':
+          description: 会话已成功关闭
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiResponse'
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '404': { $ref: '#/components/responses/NotFound' }
+  /api/v1/agent/sessions/{sessionId}/title:
+    patch:
+      summary: 重命名 AI 会话（更新用户自定义标题）
+      operationId: renameAgentSession
+      x-client-scope: C
+      parameters:
+        - $ref: '#/components/parameters/RequestIdHeader'
+        - name: sessionId
+          in: path
+          required: true
+          schema: { type: string, maxLength: 26 }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [title]
+              properties:
+                title:
+                  type: string
+                  maxLength: 100
+                  description: 新会话标题，空字符串表示清除自定义标题
+      responses:
+        '200':
+          description: 会话标题已更新
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiResponse'
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '422': { $ref: '#/components/responses/ValidationError' }
 components:
   securitySchemes:
     bearerAuth:

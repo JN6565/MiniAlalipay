@@ -1395,6 +1395,7 @@ CREATE TABLE IF NOT EXISTS agent_session (
     session_id CHAR(26) NOT NULL,
     user_id CHAR(26) NOT NULL,
     summary TEXT NULL,
+    title VARCHAR(100) NULL COMMENT '用户自定义会话标题',
     slots_json JSON NULL,
     status VARCHAR(16) NOT NULL DEFAULT 'ACTIVE',
     version BIGINT UNSIGNED NOT NULL DEFAULT 0,

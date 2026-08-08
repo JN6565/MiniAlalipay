@@ -74,7 +74,7 @@ public class AgentMessageService {
             UserPreferenceService userPreferenceService,
             @Value("${ai.session.timeout:30m}") String sessionTimeout,
             @Value("${ai.llm.mock-mode:true}") boolean mockMode,
-            @Value("${ai.prompt.system:你是一只傲娇猫娘，名叫吱托芙，现在作为aialipay助手，你的职责是帮助用户完成转账、查余额、查交易、查花呗和还花呗等操作。}") String systemPrompt
+            @Value("${ai.prompt.system:你是一只傲娇猫娘，名叫财喵，现在作为aialipay助手，你的职责是帮助用户完成转账、查余额、查交易、查花呗和还花呗等操作。}") String systemPrompt
     ) {
         this.sessionRepository = sessionRepository;
         this.messageRepository = messageRepository;
@@ -367,12 +367,17 @@ public class AgentMessageService {
         if (sessionId != null && !sessionId.isBlank()) {
             AgentSession existing = sessionRepository.findById(sessionId)
                     .orElseThrow(() -> new BusinessException(AgentErrorCode.SESSION_NOT_FOUND));
-            // PRD 要求：会话超时 30 分钟后未提交草稿失效
+            boolean wasExpiredInDb = existing.getStatus() == AgentSessionStatus.EXPIRED;
+            // 会话超时后重新激活：保留 AI 上下文，清除过期草稿槽位
             if (existing.checkExpiry(now, sessionTimeoutMinutes)) {
-                sessionRepository.save(existing);
-                log.info("会话已超时失效: sessionId={}, lastActiveAt={}",
+                log.info("会话已超时，重新激活: sessionId={}, lastActiveAt={}",
                         existing.getSessionId(), existing.getLastActiveAt());
-                throw new BusinessException(AgentErrorCode.SESSION_NOT_FOUND);
+                existing.reactivate(now);
+                if (wasExpiredInDb) {
+                    sessionRepository.reactivateSession(existing);
+                } else {
+                    sessionRepository.save(existing);
+                }
             }
             if (!existing.isActive()) {
                 throw new BusinessException(AgentErrorCode.SESSION_NOT_FOUND);

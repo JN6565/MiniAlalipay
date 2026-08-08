@@ -1,5 +1,5 @@
 import React, { KeyboardEvent } from 'react';
-import { SendOutline, FileOutline } from 'antd-mobile-icons';
+import { SendOutline } from 'antd-mobile-icons';
 
 interface Props {
   value: string;
@@ -7,8 +7,6 @@ interface Props {
   onSend: () => void;
   loading: boolean;
   disabled: boolean;
-  /** 附件点击回调（当前未接入文件上传，UI 占位） */
-  onAttach?: () => void;
 }
 
 /**
@@ -22,7 +20,6 @@ const InputBar: React.FC<Props> = ({
   onSend,
   loading,
   disabled,
-  onAttach,
 }) => {
 
   /** 回车发送；Shift+回车换行（textarea 时生效） */
@@ -39,21 +36,10 @@ const InputBar: React.FC<Props> = ({
     <div className="ai-input-bar">
       {/* 输入区：附件 + 输入框 + 发送按钮 */}
       <div className="ai-input-row">
-        <button
-          type="button"
-          className="ai-attach-btn"
-          onClick={onAttach}
-          disabled={loading}
-          title="添加附件"
-          aria-label="添加附件"
-        >
-          <FileOutline />
-        </button>
-
         <div className="ai-input-wrapper">
           <textarea
             className="ai-input"
-            placeholder="发送消息给吱托芙…"
+            placeholder="发送消息给财喵…"
             value={value}
             onChange={(e) => onChange(e.target.value)}
             onKeyDown={handleKeyDown}

@@ -87,7 +87,7 @@ class AgentMessageServiceTest {
     @Test
     void shouldRejectInactiveSession() {
         AgentSession closedSession = new AgentSession(
-                "01J5Q000000000000000000001", USER_ID,"", Map.of(),
+                "01J5Q000000000000000000001", USER_ID,"", null, Map.of(),
                 AgentSessionStatus.CLOSED, 0L, NOW, NOW);
         when(sessionRepository.findById("01J5Q000000000000000000001"))
                 .thenReturn(Optional.of(closedSession));
@@ -103,7 +103,7 @@ class AgentMessageServiceTest {
     @Test
     void shouldRejectWrongUserId() {
         AgentSession otherSession = new AgentSession(
-                "01J5Q000000000000000000001", "DIFFERENT_USER", "", Map.of(),
+                "01J5Q000000000000000000001", "DIFFERENT_USER", "", null, Map.of(),
                 AgentSessionStatus.ACTIVE, 0L, NOW, NOW);
         when(sessionRepository.findById("01J5Q000000000000000000001"))
                 .thenReturn(Optional.of(otherSession));
