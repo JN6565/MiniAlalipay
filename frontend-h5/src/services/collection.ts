@@ -136,10 +136,11 @@ export const createOrderConfirmation = (
   orderId: string,
   proofToken: string,
   version: number,
+  fundingSource: 'BALANCE' | 'MINI_CREDIT',
 ) => {
   return request.post<{ confirmationToken: string; expiresAt: string }>(
     `/api/v1/p2p-collections/orders/${orderId}/confirmations`,
-    { version, paymentProof: proofToken, fundingSource: 'BALANCE' },
+    { version, paymentProof: proofToken, fundingSource },
   );
 };
 

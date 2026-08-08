@@ -36,14 +36,27 @@ class CollectionPaymentApplicationServiceTest {
     private static final String KEY = "123e4567-e89b-12d3-a456-426614174000";
 
     @Test
-    void C2C拒绝MiniCredit且不签发确认() {
+    void C2C支持用户明确选择MiniCredit并签发确认() {
         Fixture fixture = fixture();
 
-        assertThatThrownBy(() -> fixture.service.issueConfirmation("payer-1", "order-1", "session-1", 0L,
-                "proof", FundingSource.MINI_CREDIT))
-                .isInstanceOfSatisfying(BusinessException.class,
-                        error -> assertThat(error.errorCode().code()).isEqualTo("FUNDING_SOURCE_NOT_ALLOWED"));
-        verify(fixture.business, never()).replaceCollectionConfirmation(any());
+        var issued = fixture.service.issueConfirmation("payer-1", "order-1", "session-1", 1L,
+                "proof", FundingSource.MINI_CREDIT);
+        ArgumentCaptor<Confirmation> captor = ArgumentCaptor.forClass(Confirmation.class);
+        verify(fixture.business).replaceCollectionConfirmation(captor.capture());
+        when(fixture.business.findConfirmationForUpdate(any())).thenReturn(Optional.of(captor.getValue()));
+        when(fixture.business.findByIdempotency("payer-1",
+                com.minialalipay.business.domain.transaction.TransactionType.CREDIT_PAY, KEY)).thenReturn(Optional.empty());
+        when(fixture.business.findBySource(SourceType.PERSONAL_QR_ORDER.name(), "order-1")).thenReturn(Optional.empty());
+        when(fixture.business.updateConfirmation(any(), anyString())).thenReturn(true);
+        when(fixture.collections.acceptOrderForPayment(any(), anyLong(), any())).thenReturn(true);
+
+        var transaction = fixture.service.pay("payer-1", "order-1", "session-1",
+                issued.confirmationToken(), KEY, "0".repeat(32));
+
+        assertThat(transaction.getBusinessType()).isEqualTo(
+                com.minialalipay.business.domain.transaction.TransactionType.CREDIT_PAY);
+        assertThat(transaction.getFundingSource()).isEqualTo(FundingSource.MINI_CREDIT);
+        verify(fixture.coordinator).startOrResume(transaction);
     }
 
     @Test

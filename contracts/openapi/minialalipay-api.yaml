@@ -1574,8 +1574,8 @@ paths:
         '404': { $ref: '#/components/responses/NotFound' }
   /api/v1/p2p-collections/orders/{id}/confirmations:
     post:
-      summary: 为 C2C 订单签发余额支付确认令牌
-      description: 服务端绑定双方、订单或请求版本、金额和 BALANCE；拒绝 MINI_CREDIT。
+      summary: 为 C2C 订单签发余额或 Mini 花呗支付确认令牌
+      description: 服务端绑定双方、订单或请求版本、金额和用户明确选择的 fundingSource；切换资金来源后旧确认令牌失效。
       operationId: issueCollectionConfirmation
       x-client-scope: C
       parameters:
@@ -1593,8 +1593,8 @@ paths:
         '422': { $ref: '#/components/responses/UnprocessableEntity' }
   /api/v1/p2p-collections/orders/{id}/pay:
     post:
-      summary: 受理 C2C 余额支付
-      description: 仅接受 BALANCE，消费确认令牌、使用来源唯一约束并启动统一 TRANSFER TCC；未知结果不得显示成功。
+      summary: 受理 C2C 余额或 Mini 花呗支付
+      description: 消费绑定资金来源的确认令牌并使用来源唯一约束；BALANCE 创建 TRANSFER，MINI_CREDIT 创建 CREDIT_PAY，未知结果不得显示成功。
       operationId: payCollectionOrder
       x-client-scope: C
       parameters:
@@ -2900,6 +2900,14 @@ components:
         subjectId: { type: string, minLength: 1, maxLength: 26 }
         subjectVersion: { type: integer, format: int64, minimum: 0 }
         paymentProof: { type: string, minLength: 1, maxLength: 256, description: 用户中心签发的一次性短期支付密码证明，不得记录日志。 }
+    IssueCollectionConfirmationRequest:
+      type: object
+      additionalProperties: false
+      required: [version, paymentProof, fundingSource]
+      properties:
+        version: { type: integer, format: int64, minimum: 0, description: C2C 订单的 CAS 版本。 }
+        paymentProof: { type: string, minLength: 1, maxLength: 256, description: 用户中心签发的一次性支付密码证明，不得记录日志。 }
+        fundingSource: { type: string, enum: [BALANCE, MINI_CREDIT], description: 用户在付款页明确选择的资金来源。 }
     SubmitTransferRequest:
       type: object
       additionalProperties: false
