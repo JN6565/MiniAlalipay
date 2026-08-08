@@ -39,6 +39,19 @@ if (-not (Test-Path $java -ErrorAction SilentlyContinue)) {
     $java = 'java'
 }
 
+# 单文件源码启动（java Xxx.java）需要 JDK 11+；若当前会话 JAVA_HOME 未生效
+# 而 PATH 中是 JDK 8，java 会把 .java 当类名报“找不到或无法打开主类”。
+# 这里优先读 JDK 自带的 release 文件判断主版本（Windows PowerShell 5.1 下
+# 直接执行 java -version 会因 stderr 触发 NativeCommandError，不适合用）
+$javaExe = Get-Command $java -ErrorAction SilentlyContinue
+$releaseFile = if ($javaExe) { Join-Path (Split-Path (Split-Path $javaExe.Source -Parent) -Parent) 'release' } else { $null }
+if ($releaseFile -and (Test-Path $releaseFile)) {
+    $releaseLine = Select-String -Path $releaseFile -Pattern '^JAVA_VERSION=' | Select-Object -First 1
+    if ($releaseLine -match '="?1\.(\d+)') {
+        Write-Error "当前 java 主版本过低（JAVA_VERSION=1.$($Matches[1])），FlywayValidate.java 需要 JDK 11+ 的单文件源码启动能力。请设置 JAVA_HOME 指向 JDK 21 后重试，例如：`$env:JAVA_HOME='D:\develop\Java\jdk-21'"
+    }
+}
+
 # 与各服务 application.yml 保持一致的 Flyway 依赖（版本来自本地 Maven 仓库）
 $jars = @(
     "$MvnRepo\org\flywaydb\flyway-core\10.10.0\flyway-core-10.10.0.jar",
