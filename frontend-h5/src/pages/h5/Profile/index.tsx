@@ -3,15 +3,21 @@ import { history } from '@umijs/max';
 import { Toast, Dialog } from 'antd-mobile';
 import { clearSession } from '@/services/request';
 import * as userService from '@/services/user';
+import { getIdentity } from '@/services/identity';
 import './index.less';
 
 const ProfilePage: React.FC = () => {
   const nickname = localStorage.getItem('nickname') || '用户';
   const [maskedPhone, setMaskedPhone] = useState<string>('');
+  /** 是否已绑定身份（identityStatus 为 VERIFIED），接口失败时保持未绑定展示。 */
+  const [identityBound, setIdentityBound] = useState(false);
 
   useEffect(() => {
     userService.getMyInfo().then(info => {
       setMaskedPhone(info.maskedPhone || '');
+    }).catch(() => {});
+    getIdentity().then(info => {
+      setIdentityBound(info.identityStatus === 'VERIFIED');
     }).catch(() => {});
   }, []);
 
@@ -34,6 +40,7 @@ const ProfilePage: React.FC = () => {
         <div className="avatar">👤</div>
         <div className="user-info">
           <div className="name">{nickname}</div>
+          {identityBound && <div className="identity-status">已绑定身份</div>}
           <div className="id">{maskedPhone || '加载中...'}</div>
         </div>
         <span className="arrow">›</span>
@@ -43,6 +50,14 @@ const ProfilePage: React.FC = () => {
       <div className="profile-section">
         <div className="section-title">账号与安全</div>
         <div className="profile-list">
+          <div className="profile-item" onClick={() => history.push('/h5/identity-bind')}>
+            <div className="item-icon" style={{ background: '#f0f5ff' }}>🪪</div>
+            <div className="item-content">
+              <div className="item-title">身份绑定</div>
+              <div className="item-desc">{identityBound ? '已绑定' : '未绑定'}</div>
+            </div>
+            <span className="item-arrow">›</span>
+          </div>
           <div className="profile-item" onClick={() => history.push('/h5/settings/change-login-password')}>
             <div className="item-icon" style={{ background: '#e6f7ff' }}>🔒</div>
             <div className="item-content">

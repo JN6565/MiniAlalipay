@@ -4,7 +4,7 @@ import com.minialalipay.common.api.ApiResponse;
 import com.minialalipay.common.trace.RequestIdGenerator;
 import com.minialalipay.user.application.identity.IdentityApplicationService;
 import com.minialalipay.user.interfaces.dto.identity.BindIdentityRequest;
-import com.minialalipay.user.interfaces.dto.identity.IdentityDTO;
+import com.minialalipay.user.application.identity.dto.IdentityDTO;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.validation.Valid;
 import org.springframework.http.ResponseEntity;

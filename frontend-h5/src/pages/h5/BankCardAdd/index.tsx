@@ -32,11 +32,11 @@ const BankCardAddPage = () => {
     cardLast4: string;
   } | null>(null);
 
-  const handleBankSelect = (value: (string | null)[]) => {
+  const handleBankSelect = (value: (string | number | null)[]) => {
     const code = value[0];
-    if (code) {
-      setBankCode(code as string);
-      const option = BANK_OPTIONS.find((opt) => opt.value === code);
+    if (code != null) {
+      setBankCode(String(code));
+      const option = BANK_OPTIONS.find((opt) => opt.value === String(code));
       if (option) setBankName(option.label);
     }
   };

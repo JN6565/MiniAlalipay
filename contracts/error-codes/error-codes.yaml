@@ -19,6 +19,7 @@ codes:
   LOGIN_LOCKED: {httpStatus: 429, message: 登录已被临时锁定}
   ACCOUNT_NUMBER_EXISTS: {httpStatus: 409, message: 账户号已存在}
   PHONE_NUMBER_EXISTS: {httpStatus: 409, message: 手机号已注册}
+  ID_CARD_ALREADY_BOUND: {httpStatus: 409, message: 该身份证号已被其他账户绑定}
   PASSWORD_POLICY_VIOLATION: {httpStatus: 422, message: 密码不符合安全规则}
   REGISTRATION_PROCESSING: {httpStatus: 202, message: 注册开户处理中}
   PAYMENT_PASSWORD_ALREADY_SET: {httpStatus: 409, message: 支付密码已经设置}

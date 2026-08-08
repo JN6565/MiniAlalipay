@@ -198,6 +198,7 @@ paths:
             application/json:
               schema: { $ref: '#/components/schemas/IdentityResponse' }
         '401': { $ref: '#/components/responses/Unauthorized' }
+        '409': { $ref: '#/components/responses/Conflict' }
         '422': { $ref: '#/components/responses/UnprocessableEntity' }
   /api/v1/identity:
     get:

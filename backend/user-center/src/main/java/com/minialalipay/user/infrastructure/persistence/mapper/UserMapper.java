@@ -103,6 +103,20 @@ public interface UserMapper {
     boolean existsByPhoneNumber(@Param("phoneNumber") String phoneNumber);
 
     /**
+     * 检查身份证号哈希是否已被其他用户绑定。
+     *
+     * <p>身份证号全系统唯一，排除本人以支持重复提交相同身份证号。</p>
+     *
+     * @param idCardHash    身份证号 SHA-256 哈希
+     * @param excludeUserId 排除的用户 ID（当前用户本人）
+     * @return 如果其他用户已绑定该身份证号则返回 true
+     */
+    boolean existsByIdCardHashExcluding(
+            @Param("idCardHash") byte[] idCardHash,
+            @Param("excludeUserId") String excludeUserId
+    );
+
+    /**
      * 按手机号搜索用户。
      *
      * <p>搜索规则：

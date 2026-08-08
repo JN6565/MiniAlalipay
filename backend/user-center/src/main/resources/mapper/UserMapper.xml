@@ -255,6 +255,12 @@
         SELECT COUNT(*) &gt; 0 FROM app_user WHERE phone_number = #{phoneNumber}
     </select>
 
+    <!-- 身份证号哈希查重：同一身份证号全系统只允许绑定一个账户，排除本人支持幂等重绑 -->
+    <select id="existsByIdCardHashExcluding" resultType="boolean">
+        SELECT COUNT(*) &gt; 0 FROM app_user
+        WHERE id_card_hash = #{idCardHash} AND user_id != #{excludeUserId}
+    </select>
+
     <!--
       搜索用户（支持手机号精确匹配、昵称/真实姓名前缀匹配）。
 
