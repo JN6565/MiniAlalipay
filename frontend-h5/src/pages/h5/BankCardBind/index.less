@@ -1,0 +1,71 @@
+.bank-card-bind-page {
+  padding: 16px;
+  background: #f5f5f9;
+  min-height: 100vh;
+
+  .registered-cards-section {
+    background: #fff;
+    border-radius: 8px;
+    padding: 12px 16px;
+    margin-bottom: 16px;
+
+    .section-label {
+      font-size: 14px;
+      color: #666;
+      margin-bottom: 8px;
+    }
+
+    .registered-card-item {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      padding: 10px 0;
+      border-bottom: 1px solid #f0f0f0;
+      cursor: pointer;
+
+      &:last-of-type {
+        border-bottom: none;
+      }
+
+      .bank-name {
+        font-size: 15px;
+        color: #333;
+      }
+
+      .card-last4 {
+        font-size: 14px;
+        color: #888;
+      }
+    }
+
+    .registered-tip {
+      font-size: 12px;
+      color: #999;
+      margin-top: 8px;
+    }
+  }
+
+  .bind-section {
+    background: #fff;
+    border-radius: 8px;
+    padding: 12px 16px;
+    margin-bottom: 16px;
+
+    .section-label {
+      font-size: 14px;
+      color: #666;
+      margin: 12px 0 6px;
+
+      &:first-child {
+        margin-top: 0;
+      }
+    }
+  }
+
+  .bind-tip {
+    font-size: 12px;
+    color: #999;
+    margin-bottom: 16px;
+    line-height: 1.5;
+  }
+}

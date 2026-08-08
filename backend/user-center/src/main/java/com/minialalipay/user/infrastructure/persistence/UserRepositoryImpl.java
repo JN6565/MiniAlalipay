@@ -212,7 +212,9 @@ public class UserRepositoryImpl implements UserRepository {
                 user.getCreatedAt(),
                 user.getUpdatedAt(),
                 user.getDisabledBy(),
-                user.getDisabledReason()
+                user.getDisabledReason(),
+                user.getIdCard(),
+                user.getIdCardHash()
         );
     }
 
@@ -239,7 +241,9 @@ public class UserRepositoryImpl implements UserRepository {
                 userPO.getCreatedAt(),
                 userPO.getUpdatedAt(),
                 userPO.getDisabledBy(),
-                userPO.getDisabledReason()
+                userPO.getDisabledReason(),
+                userPO.getIdCard(),
+                userPO.getIdCardHash()
         );
     }
 

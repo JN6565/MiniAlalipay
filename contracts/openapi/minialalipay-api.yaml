@@ -180,6 +180,163 @@ paths:
         '400': { $ref: '#/components/responses/BadRequest' }
         '401': { $ref: '#/components/responses/Unauthorized' }
         '500': { $ref: '#/components/responses/InternalError' }
+  /api/v1/identity/bind:
+    post:
+      summary: 绑定身份信息（真实姓名 + 身份证号）
+      description: 用户注册后需先完成身份绑定，才能进行银行卡注册和绑定。身份证号格式必须为 18 位，末位允许 X。
+      operationId: bindIdentity
+      x-client-scope: C
+      parameters:
+        - $ref: '#/components/parameters/RequestIdHeader'
+      requestBody:
+        required: true
+        content: { application/json: { schema: { $ref: '#/components/schemas/BindIdentityRequest' } } }
+      responses:
+        '200':
+          description: 绑定成功，返回身份信息
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/IdentityResponse' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '422': { $ref: '#/components/responses/UnprocessableEntity' }
+  /api/v1/identity:
+    get:
+      summary: 查询当前用户身份绑定状态
+      operationId: getIdentity
+      x-client-scope: C
+      parameters:
+        - $ref: '#/components/parameters/RequestIdHeader'
+      responses:
+        '200':
+          description: 返回身份信息
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/IdentityResponse' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+  /api/v1/bank-card-registrations:
+    post:
+      summary: 注册银行卡（选银行 + 三要素 → 自动生成卡号）
+      description: 根据用户选择的银行自动生成合法卡号（BIN + 随机数字 + Luhn 校验位），完整卡号仅在注册响应中返回一次。
+      operationId: registerBankCard
+      x-client-scope: C
+      parameters:
+        - $ref: '#/components/parameters/RequestIdHeader'
+      requestBody:
+        required: true
+        content: { application/json: { schema: { $ref: '#/components/schemas/RegisterBankCardRequest' } } }
+      responses:
+        '200':
+          description: 注册成功，返回生成的完整卡号与银行信息
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/RegisteredCardResponse' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '422': { $ref: '#/components/responses/UnprocessableEntity' }
+    get:
+      summary: 查询本人已注册但未绑定的卡列表
+      operationId: listRegisteredCards
+      x-client-scope: C
+      parameters:
+        - $ref: '#/components/parameters/RequestIdHeader'
+      responses:
+        '200':
+          description: 返回已注册卡列表（不返回完整卡号）
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/RegisteredCardListResponse' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+  /api/v1/bank-cards:
+    get:
+      summary: 查询本人银行卡列表（仅已绑定，默认卡在前）
+      operationId: listMyBankCards
+      x-client-scope: C
+      parameters:
+        - $ref: '#/components/parameters/RequestIdHeader'
+      responses:
+        '200':
+          description: 返回银行卡掩码列表
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/BankCardListResponse' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '500': { $ref: '#/components/responses/InternalError' }
+    post:
+      summary: 绑定银行卡（基于注册记录的绑卡流程，需先完成身份绑定和银行卡注册）
+      description: 请求体包含注册时获得的完整卡号与三要素明文，服务端校验注册记录、三要素匹配及用户存储身份后完成绑定；重复绑定同一张卡返回 409。
+      operationId: bindBankCard
+      x-client-scope: C
+      parameters:
+        - $ref: '#/components/parameters/RequestIdHeader'
+      requestBody:
+        required: true
+        content: { application/json: { schema: { $ref: '#/components/schemas/BindBankCardRequest' } } }
+      responses:
+        '200':
+          description: 绑定成功，返回掩码卡片
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/BankCardResponse' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '409': { $ref: '#/components/responses/Conflict' }
+        '422': { $ref: '#/components/responses/UnprocessableEntity' }
+  /api/v1/bank-cards/{cardId}:
+    get:
+      summary: 查询银行卡详情（全掩码字段）
+      operationId: getBankCard
+      x-client-scope: C
+      parameters:
+        - $ref: '#/components/parameters/RequestIdHeader'
+        - name: cardId
+          in: path
+          required: true
+          schema: { type: string, minLength: 1, maxLength: 26 }
+      responses:
+        '200':
+          description: 返回掩码卡片详情
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/BankCardResponse' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '404': { $ref: '#/components/responses/NotFound' }
+    delete:
+      summary: 解绑银行卡（软删为 UNBOUND 终态，解绑默认卡后递补最早活动卡）
+      operationId: unbindBankCard
+      x-client-scope: C
+      parameters:
+        - $ref: '#/components/parameters/RequestIdHeader'
+        - name: cardId
+          in: path
+          required: true
+          schema: { type: string, minLength: 1, maxLength: 26 }
+      responses:
+        '200':
+          description: 解绑成功
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ApiResponse' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409': { $ref: '#/components/responses/Conflict' }
+  /api/v1/bank-cards/{cardId}/default:
+    put:
+      summary: 设为默认卡（事务内先清旧默认再置新，已是默认卡时幂等返回）
+      operationId: setDefaultBankCard
+      x-client-scope: C
+      parameters:
+        - $ref: '#/components/parameters/RequestIdHeader'
+        - name: cardId
+          in: path
+          required: true
+          schema: { type: string, minLength: 1, maxLength: 26 }
+      responses:
+        '200':
+          description: 设置成功，返回更新后的掩码卡片
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/BankCardResponse' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409': { $ref: '#/components/responses/Conflict' }
   /api/v1/transfer-drafts:
     post:
       summary: 创建主动转账草稿
@@ -2772,6 +2929,105 @@ components:
           format: int64
           minimum: 0
           description: 余额 CAS 版本。
+    BindIdentityRequest:
+      type: object
+      required: [realName, idCard]
+      properties:
+        realName: { type: string, minLength: 1, maxLength: 32, description: 真实姓名 }
+        idCard: { type: string, minLength: 18, maxLength: 18, description: 身份证号，18 位，末位可为 X/x }
+    IdentityResponse:
+      allOf:
+        - $ref: '#/components/schemas/ApiResponse'
+        - type: object
+          required: [data]
+          properties:
+            data:
+              type: object
+              required: [realName, idCardMasked, identityStatus]
+              properties:
+                realName: { type: string, description: 真实姓名，未绑定时为 null }
+                idCardMasked: { type: string, description: 身份证号掩码，未绑定时为 null }
+                identityStatus: { type: string, enum: [UNVERIFIED, VERIFIED], description: 身份状态 }
+    RegisterBankCardRequest:
+      type: object
+      required: [bankCode, holderName, idCard, phone]
+      properties:
+        bankCode: { type: string, description: 银行编码，如 ICBC、CMB }
+        holderName: { type: string, minLength: 1, maxLength: 32, description: 持卡人姓名 }
+        idCard: { type: string, minLength: 18, maxLength: 18, description: 身份证号 }
+        phone: { type: string, minLength: 11, maxLength: 11, description: 预留手机号 }
+    RegisteredCard:
+      type: object
+      required: [registrationId, bankCode, bankName, cardType, cardBin, cardLast4, status, createdAt]
+      properties:
+        registrationId: { type: string, description: 注册记录 ID，26 位字符串 }
+        bankCode: { type: string, description: 银行编码 }
+        bankName: { type: string, description: 银行名称 }
+        cardType: { type: string, enum: [DEBIT, CREDIT], description: 卡类型 }
+        cardNumber: { type: string, description: 完整卡号，仅注册响应中返回 }
+        cardBin: { type: string, description: BIN 前 6 位 }
+        cardLast4: { type: string, description: 卡号后 4 位 }
+        status: { type: string, enum: [REGISTERED, BOUND], description: 注册状态 }
+        createdAt: { type: string, format: date-time, description: 注册时间 }
+    RegisteredCardResponse:
+      allOf:
+        - $ref: '#/components/schemas/ApiResponse'
+        - type: object
+          required: [data]
+          properties:
+            data:
+              $ref: '#/components/schemas/RegisteredCard'
+    RegisteredCardListResponse:
+      allOf:
+        - $ref: '#/components/schemas/ApiResponse'
+        - type: object
+          required: [data]
+          properties:
+            data:
+              type: array
+              items:
+                $ref: '#/components/schemas/RegisteredCard'
+    BindBankCardRequest:
+      type: object
+      required: [cardNumber, holderName, idCard, phone]
+      properties:
+        cardNumber: { type: string, minLength: 16, maxLength: 26, description: 完整银行卡号，16 至 19 位数字，允许空格分组；仅出现一次，不落存储 }
+        holderName: { type: string, minLength: 1, maxLength: 32, description: 持卡人姓名明文 }
+        idCard: { type: string, minLength: 18, maxLength: 18, description: 身份证号，18 位，末位可为 X/x }
+        phone: { type: string, minLength: 11, maxLength: 11, description: 预留手机号，11 位 }
+    BankCard:
+      type: object
+      required: [cardId, bankCode, bankName, cardType, cardLast4, holderMasked, idCardMasked, phoneMasked, isDefault, status, boundAt]
+      properties:
+        cardId: { type: string, description: 银行卡 ID，26 位字符串 }
+        bankCode: { type: string, description: 银行编码，如 ICBC、CMB }
+        bankName: { type: string, description: 银行名称 }
+        cardType: { type: string, enum: [DEBIT, CREDIT], description: DEBIT 借记卡，CREDIT 信用卡 }
+        cardLast4: { type: string, description: 卡号后 4 位，前端拼接展示为 **** **** **** 1234 }
+        holderMasked: { type: string, description: 持卡人姓名掩码，如 张*三 }
+        idCardMasked: { type: string, description: 身份证号掩码 }
+        phoneMasked: { type: string, description: 预留手机号掩码，如 138****5678 }
+        isDefault: { type: boolean, description: 是否默认卡，同一用户至多一张 }
+        status: { type: string, enum: [ACTIVE, UNBOUND], description: ACTIVE 已绑定，UNBOUND 已解绑（终态） }
+        boundAt: { type: string, format: date-time, description: 绑定时间 }
+    BankCardListResponse:
+      allOf:
+        - $ref: '#/components/schemas/ApiResponse'
+        - type: object
+          required: [data]
+          properties:
+            data:
+              type: array
+              items:
+                $ref: '#/components/schemas/BankCard'
+    BankCardResponse:
+      allOf:
+        - $ref: '#/components/schemas/ApiResponse'
+        - type: object
+          required: [data]
+          properties:
+            data:
+              $ref: '#/components/schemas/BankCard'
     AccountSummaryResponse:
       allOf:
         - $ref: '#/components/schemas/ApiResponse'

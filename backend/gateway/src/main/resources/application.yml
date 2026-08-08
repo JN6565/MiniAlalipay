@@ -31,7 +31,7 @@ spring:
         - id: user-center-api
           uri: ${USER_CENTER_URI:http://localhost:8081}
           predicates:
-            - Path=/api/v1/users/**,/api/v1/contacts/**,/api/v1/friends/**
+            - Path=/api/v1/users/**,/api/v1/contacts/**,/api/v1/friends/**,/api/v1/identity/**
           filters:
             - name: RequestRateLimiter
               args:
@@ -185,7 +185,7 @@ spring:
         - id: account-center
           uri: ${ACCOUNT_CENTER_URI:http://localhost:8083}
           predicates:
-            - Path=/api/v1/accounts/**,/api/v1/credit/**,/api/v1/bills/**
+            - Path=/api/v1/accounts/**,/api/v1/credit/**,/api/v1/bills/**,/api/v1/bank-cards/**,/api/v1/bank-card-registrations/**
           filters:
             - name: RequestRateLimiter
               args:

@@ -13,6 +13,8 @@ ALTER TABLE `user_db`.`app_user`
     MODIFY COLUMN login_name VARCHAR(64) NOT NULL COMMENT '规范化登录名，用于登录和唯一识别',
     MODIFY COLUMN nickname VARCHAR(64) NOT NULL COMMENT '可重复的展示名称和模糊搜索条件',
     MODIFY COLUMN phone_tail CHAR(4) NULL COMMENT '手机号尾号，仅用于辅助检索和脱敏展示',
+    MODIFY COLUMN id_card VARCHAR(32) NULL COMMENT '身份证号掩码，绑定身份后保存，如 3301**********1234',
+    MODIFY COLUMN id_card_hash BINARY(32) NULL COMMENT '身份证号明文哈希，用于绑卡时三要素交叉比对',
     MODIFY COLUMN identity_status VARCHAR(24) NOT NULL COMMENT '演示身份状态，不代表真实 KYC',
     MODIFY COLUMN status VARCHAR(16) NOT NULL DEFAULT 'ACTIVE' COMMENT '用户物理状态：ACTIVE/LOCKED/CLOSED',
     MODIFY COLUMN version BIGINT UNSIGNED NOT NULL DEFAULT 0 COMMENT '用户资料和状态的 CAS 版本',
@@ -275,6 +277,45 @@ ALTER TABLE `account_db`.`outbox_event`
     MODIFY COLUMN next_retry_at DATETIME(3) NULL COMMENT '下次发布时间',
     MODIFY COLUMN created_at DATETIME(3) NOT NULL COMMENT 'Outbox 行创建时间',
     MODIFY COLUMN published_at DATETIME(3) NULL COMMENT '首次成功发布时间';
+
+-- 账户中心账户与额度数据库：bank_card。
+ALTER TABLE `account_db`.`bank_card`
+    COMMENT = '银行卡绑定事实，只存 BIN、尾号与掩码值，禁止存完整卡号、证件号、手机号明文',
+    MODIFY COLUMN card_id CHAR(26) NOT NULL COMMENT '银行卡 ID',
+    MODIFY COLUMN user_id CHAR(26) NOT NULL COMMENT '所属用户 ID',
+    MODIFY COLUMN account_id CHAR(26) NOT NULL COMMENT '关联的个人账户 ID',
+    MODIFY COLUMN bank_code VARCHAR(32) NOT NULL COMMENT '银行编码，如 ICBC、CMB',
+    MODIFY COLUMN bank_name VARCHAR(64) NOT NULL COMMENT '银行名称',
+    MODIFY COLUMN card_type VARCHAR(16) NOT NULL COMMENT 'DEBIT 借记卡，CREDIT 信用卡',
+    MODIFY COLUMN card_bin CHAR(6) NOT NULL COMMENT '卡号前 6 位 BIN',
+    MODIFY COLUMN card_last4 CHAR(4) NOT NULL COMMENT '卡号后 4 位',
+    MODIFY COLUMN holder_masked VARCHAR(64) NOT NULL COMMENT '持卡人姓名掩码',
+    MODIFY COLUMN id_card_masked VARCHAR(32) NOT NULL COMMENT '身份证号掩码',
+    MODIFY COLUMN phone_masked VARCHAR(16) NOT NULL COMMENT '预留手机号掩码',
+    MODIFY COLUMN is_default TINYINT(1) NOT NULL DEFAULT 0 COMMENT '是否默认卡',
+    MODIFY COLUMN status VARCHAR(16) NOT NULL DEFAULT 'ACTIVE' COMMENT 'ACTIVE/UNBOUND',
+    MODIFY COLUMN unbound_at DATETIME(3) NULL COMMENT '解绑时间',
+    MODIFY COLUMN registration_id CHAR(26) NULL COMMENT '来源注册记录 ID',
+    MODIFY COLUMN version BIGINT UNSIGNED NOT NULL DEFAULT 0 COMMENT '乐观锁版本',
+    MODIFY COLUMN created_at DATETIME(3) NOT NULL COMMENT '绑定时间',
+    MODIFY COLUMN updated_at DATETIME(3) NOT NULL COMMENT '最近变更时间';
+
+-- 账户中心账户与额度数据库：bank_card_registration。
+ALTER TABLE `account_db`.`bank_card_registration`
+    COMMENT = '银行卡注册表，记录用户注册的银行卡（尚未绑定到账户），注册时自动生成卡号并保存三要素哈希',
+    MODIFY COLUMN registration_id CHAR(26) NOT NULL COMMENT '注册记录 ID',
+    MODIFY COLUMN user_id CHAR(26) NOT NULL COMMENT '注册操作人',
+    MODIFY COLUMN bank_code VARCHAR(32) NOT NULL COMMENT '银行编码',
+    MODIFY COLUMN bank_name VARCHAR(64) NOT NULL COMMENT '银行名称',
+    MODIFY COLUMN card_type VARCHAR(16) NOT NULL COMMENT 'DEBIT/CREDIT',
+    MODIFY COLUMN card_number VARCHAR(19) NOT NULL COMMENT '自动生成的完整卡号（模拟环境允许）',
+    MODIFY COLUMN card_bin CHAR(6) NOT NULL COMMENT 'BIN 前 6 位',
+    MODIFY COLUMN card_last4 CHAR(4) NOT NULL COMMENT '尾号后 4 位',
+    MODIFY COLUMN holder_name VARCHAR(32) NOT NULL COMMENT '持卡人姓名明文（绑定时用于比对）',
+    MODIFY COLUMN id_card_hash BINARY(32) NOT NULL COMMENT '身份证号哈希（绑定时用于比对）',
+    MODIFY COLUMN phone_hash BINARY(32) NOT NULL COMMENT '手机号哈希（绑定时用于比对）',
+    MODIFY COLUMN status VARCHAR(16) NOT NULL DEFAULT 'REGISTERED' COMMENT 'REGISTERED/BOUND',
+    MODIFY COLUMN created_at DATETIME(3) NOT NULL COMMENT '注册时间';
 
 -- 账户中心账本与信用数据库：ledger_account。
 ALTER TABLE `ledger_db`.`ledger_account`

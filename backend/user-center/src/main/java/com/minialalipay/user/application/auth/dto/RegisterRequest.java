@@ -32,9 +32,6 @@ public record RegisterRequest(
          */
         String phoneNumber,
 
-        /** 真实姓名，用于身份展示和转账收款人查询。 */
-        String realName,
-
         /**
          * 昵称（必填，2-20 位）。
          * <p>可重复的展示名称，不要求唯一。</p>

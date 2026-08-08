@@ -6,8 +6,8 @@
 |---|---|
 | 系统名称 | MiniAlalipay |
 | 文档类型 | 系统分析文档 |
-| 文档版本 | V1.13 |
-| 编制日期 | 2026-07-31 |
+| 文档版本 | V1.14 |
+| 编制日期 | 2026-08-08 |
 | 需求基线 | MiniAlalipay PRD V1.9 |
 | PRD 文件 | `minialalipay-prd.md` |
 | 项目周期 | 2 周 |
@@ -33,6 +33,8 @@
 | V1.11 | 2026-07-30 | 项目组 | 明确文档权威层级，补齐注册开户中间状态和幂等恢复事实，专项实现改由派生文档引用 |
 | V1.12 | 2026-07-30 | 项目组 | 对齐 PRD V1.9 统一端侧与身份边界：C 端承载普通用户全部付款和收款能力，B 端仅承载运营维护；删除独立商户系统角色及商户 B 端页面 |
 | V1.13 | 2026-07-31 | 项目组 | 明确 REST 接口的 B/C 端调用边界、共享登录入口、角色与对象级授权规则，并标记 B 端尚未形成契约的能力 |
+| V1.14 | 2026-08-08 | 项目组 | 新增银行卡绑定管理能力（卡列表、绑卡、详情、设默认、解绑），状态流转 ACTIVE→UNBOUND |
+| V1.15 | 2026-08-08 | 项目组 | 银行卡注册与绑定流程重构：新增身份绑定、银行卡注册（自动生成卡号）、基于注册记录的绑卡流程，跨服务三要素校验 |
 
 ## 1. 文档目的与范围
 
@@ -316,6 +318,7 @@ flowchart TB
 - TCC 信用额度冻结/占用、应收确认/释放及余额还款分支。
 - 不可变复式账本与个人收支投影；本人动态扫码收款统计改由业务中心基于统一交易投影提供（见 12.7.1）。
 - 账本是资金事实来源，任何余额修复必须通过冲正分录。
+- 银行卡绑定管理：注册（选银行 + 三要素 → 自动生成卡号）、绑卡（基于注册记录、跨服务三要素校验）、卡列表、卡详情、设默认与解绑；只保存 BIN、尾号与掩码，状态流转 `REGISTERED → BOUND`（注册记录终态）、`ACTIVE → UNBOUND`（绑卡终态），同一用户至多一张默认卡，解绑默认卡后递补最早活动卡；本期不作为资金来源，不参与资金记账。用户注册后需先完成身份绑定（姓名 + 身份证号）才能进行银行卡注册和绑定。
 
 ### 6.4 功能实现总览
 
@@ -845,6 +848,7 @@ flowchart LR
 | Manual Case | ManualCase | 前置风控和事务恢复处置 |
 | Agent | AgentSession | 上下文、槽位、摘要和工具调用 |
 | Observability | MonitorAlert/MetricDefinition | 告警状态、指标口径和质量门禁 |
+| Bank Card | BankCard/RegisteredCard | 银行卡注册与绑定管理、BIN 识别、掩码存储、默认卡互斥、解绑终态、跨服务三要素校验 |
 
 ### 8.2 领域关系
 
@@ -853,6 +857,7 @@ erDiagram
     USER ||--|| ACCOUNT : owns
     USER ||--o{ CONTACT : maintains
     USER ||--o{ AGENT_SESSION : starts
+    USER ||--o{ BANK_CARD : owns
     ACCOUNT ||--|| ACCOUNT_BALANCE : has
     TRANSACTION }o--|| ACCOUNT : payer
     TRANSACTION }o--|| ACCOUNT : payee
@@ -1005,6 +1010,22 @@ classDiagram
       +String transactionId
       +long amountFen
       +RepaymentStatus status
+    }
+    class BankCard {
+      +String cardId
+      +String userId
+      +String bankCode
+      +BankCardType cardType
+      +String cardBin
+      +String cardLast4
+      +String holderMasked
+      +BankCardStatus status
+      +boolean isDefault
+      +long version
+      +bind()
+      +markDefault()
+      +clearDefault()
+      +unbind()
     }
     class Confirmation {
       +String confirmationId
@@ -1723,6 +1744,21 @@ stateDiagram-v2
 
 `PROVISIONING` 用户不能登录或发起业务。用户中心持久化唯一 `registrationId`，账户中心使用该键幂等返回既有开户结果；恢复任务只有在余额账户和适用的信用账户均可核验后才能把用户 CAS 激活为 `ACTIVE`。恢复超过自动处理阈值时，用户仍保持 `PROVISIONING` 并创建人工工单。临时登录锁定只由 `credential.login_fail_count/login_lock_until` 表达，不修改 `app_user.status`；账户销户只改变账户状态，不关闭用户身份。
 
+### 10.10 银行卡注册与绑定状态
+
+```mermaid
+stateDiagram-v2
+    [*] --> REGISTERED: 注册银行卡
+    REGISTERED --> BOUND: 绑定银行卡
+    BOUND --> [*]
+
+    [*] --> ACTIVE: 绑卡成功
+    ACTIVE --> UNBOUND: 用户解绑
+    UNBOUND --> [*]
+```
+
+注册卡记录状态：`REGISTERED` → `BOUND`（终态），注册记录一旦绑定不可逆转。绑卡记录状态：`ACTIVE` → `UNBOUND`（终态），同一实体卡解绑后如需再使用必须重新走完整绑卡流程生成新记录。同一用户至多一张 ACTIVE 默认卡，解绑默认卡后自动递补最早绑定的活动卡。本期银行卡仅用于展示管理，不作为资金来源参与资金记账。绑卡时需跨服务调用 user-center 校验三要素与用户存储身份完全匹配。
+
 ## 11. 数据架构与数据库分析
 
 ### 11.1 数据所有权
@@ -2407,6 +2443,7 @@ erDiagram
 | Mini Credit | credit/me、purchases、bills、repayment-drafts、repayments | 固定额度、账单、余额还款、额度/应收一致性 |
 | P2P Collection | p2p-collections/codes、requests、token-exchanges、orders、events | 长期码、固定请求 CAS、仅余额、对象授权、SSE |
 | Manual | manual-cases/decisions | 角色、状态机、审计 |
+| Bank Card | bank-cards（绑卡、列表、详情、设默认、解绑）、bank-card-registrations（注册银行卡、查询已注册卡）、identity（绑定身份、查询身份） | Luhn 校验、BIN 识别、三要素跨服务校验、掩码存储、默认卡互斥 |
 | Ops | metrics、alerts、quality、trace | 脱敏、只读/处置权限 |
 
 #### 12.2.1 按调用端划分
@@ -2415,7 +2452,7 @@ erDiagram
 
 | 调用端 | 主要接口范围 | 身份与数据范围 | 禁止行为 |
 |---|---|---|---|
-| C 端普通用户 | `auth`、`payment-password`、`users`、`contacts`、`accounts/me`、`recharges`、`transfer-drafts`、`transfers`（不含 `trace`）、`qr-pay`、`p2p-collections`、`credit`、`agent` | 当前会话用户、本人账户、本人创建或参与的业务资源、绑定 H5 会话 | 提交或覆盖权限主体账户；查询全局用户、交易、告警和工单 |
+| C 端普通用户 | `auth`、`payment-password`、`users`、`contacts`、`accounts/me`、`recharges`、`transfer-drafts`、`transfers`（不含 `trace`）、`qr-pay`、`p2p-collections`、`credit`、`bank-cards`、`bank-card-registrations`、`identity`、`agent` | 当前会话用户、本人账户、本人创建或参与的业务资源、绑定 H5 会话 | 提交或覆盖权限主体账户；查询全局用户、交易、告警和工单 |
 | B 端运营/观察者 | `manual-cases`、`ops`、脱敏 `trace` | 按运营角色和数据权限访问全局脱敏视图；观察者只读 | 直接修改余额、账本、额度、交易终态或查看支付密码和原始令牌 |
 | B/C 共用 | `auth/login`、`auth/logout` | 登录成功后由服务端角色决定进入端侧和可访问 API | 客户端提交角色、伪造运营身份或仅依赖前端路由鉴权 |
 | AI/MCP | `agent` 页面接口及受控工具调用 | 继承当前 C 端用户授权，只允许查询和业务草稿能力 | 使用运营角色、直接执行资金、审批、冲正或绕过可信 UI 确认 |
@@ -2459,6 +2496,15 @@ erDiagram
 | `RISK_MANUAL_REVIEW` | 202 | 审批后 | 前置人工风控，展示审核状态且资金不变化 |
 | `TRANSACTION_PROCESSING` | 202 | 查询 | 状态未确定，轮询/SSE 查询且不重复创建 |
 | `RATE_LIMITED` | 429 | `Retry-After` 后 | 达到登录、扫码或 Agent 频率限制 |
+| `BANK_CARD_INVALID` | 422 | 否 | 卡号未通过 Luhn 校验或 BIN 无法识别，提示更换银行卡 |
+| `BANK_CARD_HOLDER_INVALID` | 422 | 否 | 持卡人信息格式校验未通过，提示检查姓名、身份证、手机号 |
+| `BANK_CARD_ALREADY_BOUND` | 409 | 否 | 同一银行卡已绑定，展示已绑定状态 |
+| `BANK_CARD_NOT_FOUND` | 404 | 否 | 银行卡不存在或不属于当前用户，不暴露资源归属 |
+| `BANK_CARD_ALREADY_UNBOUND` | 409 | 否 | 银行卡已解绑（终态），禁止再次操作 |
+| `BANK_CARD_LIMIT_EXCEEDED` | 422 | 否 | 绑定银行卡已达上限（10 张），提示先解绑 |
+| `IDENTITY_NOT_BOUND` | 422 | 否 | 用户尚未绑定身份信息，提示先完成身份绑定 |
+| `REGISTRATION_NOT_FOUND` | 404 | 否 | 银行卡注册记录不存在或卡号不匹配，提示检查卡号 |
+| `IDENTITY_MISMATCH` | 422 | 否 | 持卡人信息与注册记录或用户存储身份不匹配 |
 
 ### 12.4 MCP 工具接口
 

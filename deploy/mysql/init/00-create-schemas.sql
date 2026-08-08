@@ -36,6 +36,8 @@ CREATE TABLE IF NOT EXISTS app_user (
     version BIGINT UNSIGNED NOT NULL DEFAULT 0,
     created_at DATETIME(3) NOT NULL,
     updated_at DATETIME(3) NOT NULL,
+    id_card VARCHAR(32) NULL COMMENT '身份证号掩码，绑定身份后保存，如 3301**********1234',
+    id_card_hash BINARY(32) NULL COMMENT '身份证号明文哈希，用于绑卡时三要素交叉比对',
     PRIMARY KEY (user_id),
     UNIQUE KEY uk_app_user_login_name (login_name),
     KEY idx_app_user_nickname_status (nickname, status),
@@ -415,6 +417,50 @@ CREATE TABLE IF NOT EXISTS outbox_event (
     CONSTRAINT ck_outbox_funding_source CHECK (
         funding_source IS NULL OR funding_source IN ('BALANCE', 'MINI_CREDIT', 'SYSTEM_ISSUANCE')
     )
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
+
+-- 银行卡绑定事实。只存 BIN（前 6 位）、尾号（后 4 位）与掩码值，禁止存完整卡号、证件号、手机号明文。
+CREATE TABLE IF NOT EXISTS bank_card (
+    card_id CHAR(26) NOT NULL COMMENT '银行卡 ID',
+    user_id CHAR(26) NOT NULL COMMENT '所属用户 ID',
+    account_id CHAR(26) NOT NULL COMMENT '关联的个人账户 ID',
+    bank_code VARCHAR(32) NOT NULL COMMENT '银行编码，如 ICBC、CMB',
+    bank_name VARCHAR(64) NOT NULL COMMENT '银行名称',
+    card_type VARCHAR(16) NOT NULL COMMENT 'DEBIT 借记卡，CREDIT 信用卡',
+    card_bin CHAR(6) NOT NULL COMMENT '卡号前 6 位 BIN',
+    card_last4 CHAR(4) NOT NULL COMMENT '卡号后 4 位',
+    holder_masked VARCHAR(64) NOT NULL COMMENT '持卡人姓名掩码',
+    id_card_masked VARCHAR(32) NOT NULL COMMENT '身份证号掩码',
+    phone_masked VARCHAR(16) NOT NULL COMMENT '预留手机号掩码',
+    is_default TINYINT(1) NOT NULL DEFAULT 0 COMMENT '是否默认卡',
+    status VARCHAR(16) NOT NULL DEFAULT 'ACTIVE' COMMENT 'ACTIVE/UNBOUND',
+    unbound_at DATETIME(3) NULL COMMENT '解绑时间',
+    registration_id CHAR(26) NULL COMMENT '来源注册记录 ID',
+    version BIGINT UNSIGNED NOT NULL DEFAULT 0 COMMENT '乐观锁版本',
+    created_at DATETIME(3) NOT NULL COMMENT '绑定时间',
+    updated_at DATETIME(3) NOT NULL COMMENT '最近变更时间',
+    PRIMARY KEY (card_id),
+    KEY idx_bank_card_user_status (user_id, status)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
+
+-- 银行卡注册表：记录用户注册的银行卡（尚未绑定到账户）。
+CREATE TABLE IF NOT EXISTS bank_card_registration (
+    registration_id CHAR(26) NOT NULL COMMENT '注册记录 ID',
+    user_id CHAR(26) NOT NULL COMMENT '注册操作人',
+    bank_code VARCHAR(32) NOT NULL COMMENT '银行编码',
+    bank_name VARCHAR(64) NOT NULL COMMENT '银行名称',
+    card_type VARCHAR(16) NOT NULL COMMENT 'DEBIT/CREDIT',
+    card_number VARCHAR(19) NOT NULL COMMENT '自动生成的完整卡号',
+    card_bin CHAR(6) NOT NULL COMMENT 'BIN 前 6 位',
+    card_last4 CHAR(4) NOT NULL COMMENT '尾号后 4 位',
+    holder_name VARCHAR(32) NOT NULL COMMENT '持卡人姓名明文',
+    id_card_hash BINARY(32) NOT NULL COMMENT '身份证号哈希',
+    phone_hash BINARY(32) NOT NULL COMMENT '手机号哈希',
+    status VARCHAR(16) NOT NULL DEFAULT 'REGISTERED' COMMENT 'REGISTERED/BOUND',
+    created_at DATETIME(3) NOT NULL,
+    PRIMARY KEY (registration_id),
+    KEY idx_bcr_user_status (user_id, status),
+    KEY idx_bcr_card_number (card_number)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
 
 -- 账户中心账本与信用模块。

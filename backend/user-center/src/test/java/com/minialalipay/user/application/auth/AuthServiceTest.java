@@ -54,7 +54,7 @@ class AuthServiceTest {
         when(sessionManager.createSession(anyString())).thenReturn("session-token");
 
         AuthResult result = service.register(new RegisterRequest(
-                "13800138000", "张三", "小张", "Login123", "123456"));
+                "13800138000", "张三", "Login123", "123456"));
 
         ArgumentCaptor<User> userCaptor = ArgumentCaptor.forClass(User.class);
         verify(userRepository).save(userCaptor.capture());
@@ -75,7 +75,7 @@ class AuthServiceTest {
         when(userRepository.existsByPhoneNumber("13800138000")).thenReturn(true);
 
         BusinessException exception = assertThrows(BusinessException.class, () -> service.register(
-                new RegisterRequest("13800138000", "张三", null, "Login123", "123456")));
+                new RegisterRequest("13800138000", "张三", "Login123", "123456")));
 
         assertEquals(UserErrorCode.PHONE_NUMBER_EXISTS, exception.errorCode());
     }
@@ -92,7 +92,7 @@ class AuthServiceTest {
                 .thenThrow(new BusinessException(UserErrorCode.REGISTRATION_PROCESSING));
 
         BusinessException exception = assertThrows(BusinessException.class, () -> service.register(
-                new RegisterRequest("13800138000", "张三", "小张", "Login123", "123456")));
+                new RegisterRequest("13800138000", "张三", "Login123", "123456")));
 
         assertEquals(UserErrorCode.REGISTRATION_PROCESSING, exception.errorCode());
         verify(sessionManager, never()).createSession(anyString());

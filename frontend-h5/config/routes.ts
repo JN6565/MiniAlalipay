@@ -215,6 +215,41 @@ export default [
         title: '充值',
         auth: true,
       },
+      {
+        path: '/h5/bank-cards',
+        component: '@/pages/h5/BankCards',
+        exact: true,
+        title: '银行卡',
+        auth: true,
+      },
+      {
+        path: '/h5/bank-cards/add',
+        component: '@/pages/h5/BankCardAdd',
+        exact: true,
+        title: '注册银行卡',
+        auth: true,
+      },
+      {
+        path: '/h5/bank-card-bind',
+        component: '@/pages/h5/BankCardBind',
+        exact: true,
+        title: '绑定银行卡',
+        auth: true,
+      },
+      {
+        path: '/h5/identity-bind',
+        component: '@/pages/h5/IdentityBind',
+        exact: true,
+        title: '身份绑定',
+        auth: true,
+      },
+      {
+        path: '/h5/bank-cards/:id',
+        component: '@/pages/h5/BankCardDetail',
+        exact: true,
+        title: '卡片详情',
+        auth: true,
+      },
 
       // 默认跳转
       {

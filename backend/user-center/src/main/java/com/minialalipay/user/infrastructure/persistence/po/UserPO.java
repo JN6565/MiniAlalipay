@@ -106,6 +106,12 @@ public class UserPO {
     /** 管理冻结理由，对应数据库字段 {@code disabled_reason}，可空。 */
     private String disabledReason;
 
+    /** 身份证号掩码，对应数据库字段 {@code id_card}，绑定身份后保存。 */
+    private String idCard;
+
+    /** 身份证号 SHA-256 哈希，对应数据库字段 {@code id_card_hash}，用于跨服务三要素比对。 */
+    private byte[] idCardHash;
+
     /**
      * 登录锁定截止时间，可空。
      * <p>来自 {@code credential.login_lock_until}，仅供 B 端用户列表投影使用，
@@ -138,6 +144,32 @@ public class UserPO {
             String disabledBy,
             String disabledReason
     ) {
+        this(userId, registrationId, accountNumber, phoneNumber, realName, nickname,
+             phoneTail, identityStatus, status, version, createdAt, updatedAt,
+             disabledBy, disabledReason, null, null);
+    }
+
+    /**
+     * 全参数构造函数（包含身份绑定字段）。
+     */
+    public UserPO(
+            String userId,
+            String registrationId,
+            String accountNumber,
+            String phoneNumber,
+            String realName,
+            String nickname,
+            String phoneTail,
+            String identityStatus,
+            String status,
+            long version,
+            Instant createdAt,
+            Instant updatedAt,
+            String disabledBy,
+            String disabledReason,
+            String idCard,
+            byte[] idCardHash
+    ) {
         this.userId = userId;
         this.registrationId = registrationId;
         this.accountNumber = accountNumber;
@@ -152,6 +184,8 @@ public class UserPO {
         this.updatedAt = updatedAt;
         this.disabledBy = disabledBy;
         this.disabledReason = disabledReason;
+        this.idCard = idCard;
+        this.idCardHash = idCardHash;
     }
 
     // ==================== Getters and Setters ====================
@@ -267,4 +301,9 @@ public class UserPO {
     public void setLoginLockedUntil(Instant loginLockedUntil) {
         this.loginLockedUntil = loginLockedUntil;
     }
+
+    public String getIdCard() { return idCard; }
+    public void setIdCard(String idCard) { this.idCard = idCard; }
+    public byte[] getIdCardHash() { return idCardHash; }
+    public void setIdCardHash(byte[] idCardHash) { this.idCardHash = idCardHash; }
 }

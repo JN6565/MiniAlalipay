@@ -1,11 +1,21 @@
-import React from 'react';
+import React, { useEffect, useState } from 'react';
 import { history } from '@umijs/max';
 import { Toast, Dialog } from 'antd-mobile';
 import { clearSession } from '@/services/request';
+import { getIdentity, IdentityInfo } from '@/services/identity';
 import './index.less';
 
 const ProfilePage: React.FC = () => {
   const nickname = localStorage.getItem('nickname') || '用户';
+  const [identity, setIdentity] = useState<IdentityInfo | null>(null);
+
+  useEffect(() => {
+    getIdentity()
+      .then(setIdentity)
+      .catch(() => {
+        // 静默失败，身份状态显示为未绑定
+      });
+  }, []);
 
   const handleLogout = async () => {
     const result = await Dialog.confirm({
@@ -35,6 +45,18 @@ const ProfilePage: React.FC = () => {
       <div className="profile-section">
         <div className="section-title">账号与安全</div>
         <div className="profile-list">
+          <div className="profile-item" onClick={() => history.push('/h5/identity-bind')}>
+            <div className="item-icon" style={{ background: '#fff0f6' }}>🪪</div>
+            <div className="item-content">
+              <div className="item-title">身份绑定</div>
+              <div className="item-desc">
+                {identity?.identityStatus === 'VERIFIED'
+                  ? `${identity.realName} ${identity.idCardMasked}`
+                  : '未绑定'}
+              </div>
+            </div>
+            <span className="item-arrow">›</span>
+          </div>
           <div className="profile-item" onClick={() => history.push('/h5/settings/change-login-password')}>
             <div className="item-icon" style={{ background: '#e6f7ff' }}>🔒</div>
             <div className="item-content">

@@ -45,7 +45,7 @@ class AdminUserControllerTest {
     private User activeUser(String userId) {
         return new User(userId, "REGTESTUSER0120260801000001", "6200000000000001", "13800138000", "张三", "小张",
                 "8000", "VERIFIED", UserStatus.ACTIVE, 3, Instant.parse("2026-08-01T00:00:00Z"),
-                Instant.parse("2026-08-01T00:00:00Z"), null, null);
+                Instant.parse("2026-08-01T00:00:00Z"), null, null, null, null);
     }
 
     @Test

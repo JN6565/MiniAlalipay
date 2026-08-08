@@ -107,7 +107,7 @@ public class AuthService {
         String accountNumber = generateAccountNumber();
 
         User user = new User(userId, registrationId, accountNumber, phoneNumber,
-                request.realName().trim(), request.nickname());
+                null, request.nickname());
 
         String hashedPassword = passwordHasher.hashPassword(request.loginPassword());
         Credential credential = new Credential(userId, hashedPassword);
