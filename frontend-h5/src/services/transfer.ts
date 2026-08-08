@@ -145,3 +145,28 @@ export const submitTransfer = (
 export const getTransferStatus = (transactionId: string) => {
   return request.get<TransferResult>(`/api/v1/transfers/${transactionId}`);
 };
+
+/**
+ * 验密即支付（合并提交）：一次请求完成支付密码验证、确认令牌签发与转账受理，
+ * 替代原 proof → confirmations → transfers 三次串行调用，降低点击支付到受理完成的耗时。
+ *
+ * 支付密码仅通过请求体传输，不得写入日志、URL、浏览器存储或埋点。
+ *
+ * @param draftId 草稿ID
+ * @param version 风控预检返回的草稿版本
+ * @param paymentPassword 支付密码（6 位数字）
+ * @param idempotencyKey 幂等键，缺省时自动生成；重试同一笔转账时必须复用原键
+ * @returns 转账受理结果（初次通常为 PROCESSING，终态由结果页轮询）
+ */
+export const submitTransferWithPassword = (
+  draftId: string,
+  version: number,
+  paymentPassword: string,
+  idempotencyKey?: string,
+) => {
+  return request.post<TransferResult>(
+    '/api/v1/transfers/submit-with-password',
+    { draftId, version, paymentPassword },
+    { headers: { 'Idempotency-Key': idempotencyKey || generateIdempotencyKey() } },
+  );
+};

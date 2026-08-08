@@ -167,6 +167,25 @@ public class TransferApplicationService {
     }
 
     /**
+     * 验密并一次提交转账（H5 合并提交端点专用），把客户端原本的
+     * proof → confirmations → transfers 三次串行请求压缩为一次。
+     *
+     * <p>编排在同一本地事务内串行执行：用户中心验密并签发证明（密码错误/锁定在触碰任何
+     * 本地事实前即拒绝）→ 消费证明签发确认令牌 → 复用既有受理逻辑（幂等、来源唯一、
+     * Outbox 与提交后异步 TCC 语义完全不变）。</p>
+     *
+     * <p>安全约束：确认令牌的签发与消费仍是受理前置条件，满足“资金执行必须持有未消费
+     * 确认令牌”不变量；原始支付密码只透传用户中心，不进入日志、响应或持久化。</p>
+     */
+    @Transactional
+    public FundTransaction submitWithPassword(String userId, String draftId, long subjectVersion,
+                                              String paymentPassword, String idempotencyKey, String traceId) {
+        String paymentProof = paymentProofs.verifyAndIssueProof(userId, paymentPassword, "TRANSFER_CONFIRM");
+        IssuedConfirmation issued = issueConfirmation(userId, draftId, subjectVersion, paymentProof);
+        return submit(userId, draftId, issued.confirmationToken(), idempotencyKey, traceId);
+    }
+
+    /**
      * 原子受理普通转账；同键同参返回原交易，同键异参冲突，令牌原文不进入日志和持久化。
      */
     @Transactional
