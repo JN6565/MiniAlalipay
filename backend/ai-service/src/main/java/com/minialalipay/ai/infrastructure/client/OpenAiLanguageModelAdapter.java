@@ -1,11 +1,14 @@
 package com.minialalipay.ai.infrastructure.client;
 
 import com.minialalipay.ai.application.AiServiceUtils;
+import com.minialalipay.ai.application.port.AgentDecision;
 import com.minialalipay.ai.application.port.ChatMessage;
 import com.minialalipay.ai.application.port.ChatResponse;
 import com.minialalipay.ai.application.service.StructuredOutputValidator;
 import com.minialalipay.ai.domain.agent.AgentErrorCode;
 import com.minialalipay.ai.domain.agent.IntentType;
+import com.minialalipay.ai.domain.agent.MessageRole;
+import com.minialalipay.ai.domain.tool.ToolCatalog;
 import com.minialalipay.common.error.BusinessException;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -13,16 +16,20 @@ import org.springframework.ai.chat.messages.Message;
 import org.springframework.ai.chat.messages.SystemMessage;
 import org.springframework.ai.chat.messages.UserMessage;
 import org.springframework.ai.chat.messages.AssistantMessage;
+import org.springframework.ai.chat.messages.ToolResponseMessage;
 import org.springframework.ai.chat.model.ChatModel;
 import org.springframework.ai.chat.model.StreamingChatModel;
 import org.springframework.ai.chat.prompt.Prompt;
 import org.springframework.ai.openai.OpenAiChatOptions;
+import org.springframework.ai.tool.ToolCallback;
+import org.springframework.ai.tool.function.FunctionToolCallback;
 import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Component;
 import reactor.core.publisher.Flux;
 
 import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.Semaphore;
@@ -198,6 +205,412 @@ public class OpenAiLanguageModelAdapter {
         } finally {
             semaphore.release();
         }
+    }
+
+    // ---- Agent 单步推理（function calling） ----
+
+    /**
+     * Agent 单步推理：通过 Spring AI function calling 让 LLM 自主选择工具或给出最终回复。
+     *
+     * <p>真实模式：将工具定义注册为 Spring AI FunctionCallback，检查响应中的 tool_calls。
+     * Mock 模式：关键词匹配用户消息，返回模拟的工具调用决策。</p>
+     */
+    public AgentDecision agentStep(List<ChatMessage> messages,
+                                   List<ToolCatalog.ToolDefinition> tools) {
+        circuitBreaker.assertNotOpen();
+        if (!semaphore.tryAcquire()) {
+            throw new BusinessException(AgentErrorCode.AGENT_BUSY);
+        }
+        try {
+            AgentDecision decision = mockMode
+                    ? mockAgentStep(messages)
+                    : realAgentStep(messages, tools);
+            circuitBreaker.recordSuccess();
+            return decision;
+        } catch (BusinessException e) {
+            throw e;
+        } catch (Exception e) {
+            log.warn("Agent step 异常: {}", e.getMessage());
+            circuitBreaker.recordFailure();
+            if (!mockMode) {
+                log.info("真实 LLM 不可用，降级到 Mock agentStep");
+                return mockAgentStep(messages);
+            }
+            throw new BusinessException(AgentErrorCode.LLM_UNAVAILABLE);
+        } finally {
+            semaphore.release();
+        }
+    }
+
+    /**
+     * 真实 LLM agentStep：使用 Spring AI function calling。
+     *
+     * <p>采用两阶段调用：
+     * <ol>
+     *   <li>第一次调用：注册工具定义，让 LLM 选择工具（internalToolExecutionEnabled=false 阻止自动执行）</li>
+     *   <li>若 LLM 返回 tool_calls：由 AgentLoop 执行工具后，将真实结果以 ToolResponseMessage 形式回传</li>
+     *   <li>第二次调用：携带工具结果，让 LLM 基于真实数据决定下一步</li>
+     * </ol>
+     * </p>
+     */
+    private AgentDecision realAgentStep(List<ChatMessage> messages,
+                                        List<ToolCatalog.ToolDefinition> tools) {
+        // 1. 将工具定义转换为 Spring AI ToolCallback（回调返回占位符，实际执行由 AgentLoop 完成）
+        List<ToolCallback> toolCallbacks = new ArrayList<>();
+        for (ToolCatalog.ToolDefinition tool : tools) {
+            String jsonSchema = mapToJsonSchema(tool.inputSchema());
+            log.info("注册工具: name={}, description={}, inputSchema={}",
+                    tool.toolName(), tool.description(), jsonSchema);
+            toolCallbacks.add(FunctionToolCallback.builder(
+                            tool.toolName(), (Map<String, Object> inputMap) -> "OK")
+                    .description(tool.description())
+                    .inputSchema(jsonSchema)
+                    .inputType(Map.class)
+                    .build());
+        }
+
+        // 2. 转换 ChatMessage 为 Spring AI Message
+        List<Message> springMessages = convertToSpringMessages(messages);
+
+        // 3. 构建 Prompt，附带 function callbacks
+        OpenAiChatOptions options = OpenAiChatOptions.builder()
+                .model(model)
+                .temperature(0.1)
+                .toolCallbacks(toolCallbacks)
+                .internalToolExecutionEnabled(false)
+                .build();
+        Prompt prompt = new Prompt(springMessages, options);
+
+        // 4. 调用 LLM
+        org.springframework.ai.chat.model.ChatResponse response = chatModel.call(prompt);
+        if (response.getResult() == null || response.getResult().getOutput() == null) {
+            return new AgentDecision.FinalReply("抱歉，AI 服务暂时繁忙，请稍后重试。", 10);
+        }
+
+        AssistantMessage assistantMsg = response.getResult().getOutput();
+        String content = assistantMsg.getText();
+        int estimatedTokens = estimateTokensFromMessages(messages);
+
+        // 5. 检查 tool_calls
+        if (assistantMsg.hasToolCalls()) {
+            List<AssistantMessage.ToolCall> toolCalls = assistantMsg.getToolCalls();
+            AssistantMessage.ToolCall firstCall = toolCalls.get(0);
+            String toolName = firstCall.name();
+            String toolCallId = firstCall.id();
+            Map<String, Object> arguments = parseToolCallArguments(firstCall.arguments());
+            log.info("Agent step 决策: toolCall={}, toolCallId={}, args={}", toolName, toolCallId, arguments);
+            return new AgentDecision.ToolCall(toolName, arguments, estimatedTokens, toolCallId);
+        }
+
+        // 6. 无 tool_calls → FinalReply
+        if (content == null || content.isBlank()) {
+            return new AgentDecision.FinalReply("抱歉，AI 服务暂时繁忙，请稍后重试。", estimatedTokens);
+        }
+        log.info("Agent step 决策: finalReply(无工具调用), content={}", content.length() > 200 ? content.substring(0, 200) + "..." : content);
+        return new AgentDecision.FinalReply(content, estimatedTokens);
+    }
+
+    /** 最近一次 LLM 返回的 toolCallId，用于构建 ToolResponseMessage */
+    private volatile String lastToolCallId;
+    /** 最近一次 LLM 返回的 toolCall 工具名 */
+    private volatile String lastToolCallName;
+
+    /**
+     * 基于真实工具结果进行第二次 LLM 调用。
+     *
+     * <p>将工具结果以 ToolResponseMessage 形式传入，让 LLM 基于真实数据做决策。
+     * 若 LLM 再次选择工具调用，则返回 ToolCall 由 AgentLoop 继续执行；
+     * 若 LLM 生成最终回复，则返回 FinalReply。</p>
+     *
+     * @param messages 当前消息列表（含工具结果）
+     * @param tools 可用工具定义
+     * @param toolCallId 上一次工具调用的 ID
+     * @param toolName 上一次工具调用的名称
+     * @param actualResult 工具执行的真实结果 JSON
+     * @return Agent 决策（ToolCall 或 FinalReply）
+     */
+    public AgentDecision agentStepWithToolResult(
+            List<ChatMessage> messages,
+            List<ToolCatalog.ToolDefinition> tools,
+            String toolCallId, String toolName, String actualResult) {
+
+        // 构建工具回调（第二次调用仍需注册工具定义，以便 LLM 可继续调用其他工具）
+        List<ToolCallback> toolCallbacks = new ArrayList<>();
+        for (ToolCatalog.ToolDefinition tool : tools) {
+            String jsonSchema = mapToJsonSchema(tool.inputSchema());
+            toolCallbacks.add(FunctionToolCallback.builder(
+                            tool.toolName(), (Map<String, Object> inputMap) -> "OK")
+                    .description(tool.description())
+                    .inputSchema(jsonSchema)
+                    .inputType(Map.class)
+                    .build());
+        }
+
+        // 转换消息并追加真实的工具结果（ToolResponseMessage）
+        List<Message> springMessages = convertToSpringMessages(messages);
+        ToolResponseMessage.ToolResponse toolResponse =
+                new ToolResponseMessage.ToolResponse(toolCallId, toolName, actualResult);
+        springMessages.add(new ToolResponseMessage(List.of(toolResponse)));
+
+        // 构建 Prompt
+        OpenAiChatOptions options = OpenAiChatOptions.builder()
+                .model(model)
+                .temperature(0.1)
+                .toolCallbacks(toolCallbacks)
+                .internalToolExecutionEnabled(false)
+                .build();
+        Prompt prompt = new Prompt(springMessages, options);
+
+        org.springframework.ai.chat.model.ChatResponse response = chatModel.call(prompt);
+        if (response.getResult() == null || response.getResult().getOutput() == null) {
+            return new AgentDecision.FinalReply("抱歉，AI 服务暂时繁忙，请稍后重试。", 10);
+        }
+
+        AssistantMessage assistantMsg = response.getResult().getOutput();
+        int estimatedTokens = estimateTokensFromMessages(messages);
+
+        if (assistantMsg.hasToolCalls()) {
+            List<AssistantMessage.ToolCall> toolCalls = assistantMsg.getToolCalls();
+            AssistantMessage.ToolCall nextCall = toolCalls.get(0);
+            lastToolCallId = nextCall.id();
+            lastToolCallName = nextCall.name();
+            Map<String, Object> arguments = parseToolCallArguments(nextCall.arguments());
+            log.info("Agent step(工具结果后) 决策: toolCall={}, toolCallId={}, args={}",
+                    nextCall.name(), lastToolCallId, arguments);
+            return new AgentDecision.ToolCall(nextCall.name(), arguments, estimatedTokens, lastToolCallId);
+        }
+
+        String content = assistantMsg.getText();
+        if (content == null || content.isBlank()) {
+            return new AgentDecision.FinalReply("抱歉，AI 服务暂时繁忙，请稍后重试。", estimatedTokens);
+        }
+        log.info("Agent step(工具结果后) 决策: finalReply, content={}",
+                content.length() > 200 ? content.substring(0, 200) + "..." : content);
+        return new AgentDecision.FinalReply(content, estimatedTokens);
+    }
+
+    /**
+     * Mock agentStep：关键词匹配返回模拟工具调用。
+     */
+    private AgentDecision mockAgentStep(List<ChatMessage> messages) {
+        String lastUserMessage = getLastUserMessage(messages);
+        String lower = lastUserMessage.toLowerCase();
+
+        // 检查消息列表中是否已有工具结果（用于多步推理）
+        boolean hasToolResults = messages.stream()
+                .anyMatch(m -> m.role() == MessageRole.SYSTEM
+                        && m.content() != null && m.content().startsWith("[TOOL_RESULT:"));
+
+        if (hasToolResults) {
+            // 已有工具结果，检查是否需要下一步工具或给出最终回复
+            String lastToolResult = messages.stream()
+                    .filter(m -> m.role() == MessageRole.SYSTEM
+                            && m.content() != null && m.content().startsWith("[TOOL_RESULT:"))
+                    .reduce((first, second) -> second)
+                    .map(ChatMessage::content)
+                    .orElse("");
+            return mockAgentStepAfterTool(lastUserMessage, lastToolResult, lower);
+        }
+
+        // 首次推理：根据用户消息决定调用哪个工具
+        if (containsAny(lower, "转账", "转给", "汇款", "转钱")) {
+            String payeeName = extractPayeeName(lastUserMessage);
+            Map<String, Object> args = new HashMap<>();
+            if (payeeName != null && !payeeName.isBlank()) {
+                args.put("query", payeeName);
+            } else {
+                args.put("query", "默认");
+            }
+            return new AgentDecision.ToolCall("search_payees", args, 30);
+        }
+        if (containsAny(lower, "余额", "多少钱", "查余额")) {
+            return new AgentDecision.ToolCall("get_balance", Map.of(), 25);
+        }
+        if (containsAny(lower, "账单", "花呗账单", "本月账单")) {
+            return new AgentDecision.ToolCall("list_credit_bills", Map.of("limit", 10), 30);
+        }
+        if (containsAny(lower, "交易记录", "交易明细", "流水")) {
+            Map<String, Object> args = new HashMap<>();
+            args.put("limit", 10);
+            if (containsAny(lower, "支出", "花", "转出", "付出")) {
+                args.put("direction", "OUT");
+            } else if (containsAny(lower, "收入", "收款", "转入", "入账")) {
+                args.put("direction", "IN");
+            }
+            return new AgentDecision.ToolCall("list_transactions", args, 35);
+        }
+        if (containsAny(lower, "交易状态", "转到哪了")) {
+            String txId = extractTransactionId(lastUserMessage);
+            if (txId != null && !txId.isBlank()) {
+                return new AgentDecision.ToolCall("get_transaction_status",
+                        Map.of("transactionId", txId), 25);
+            }
+            return new AgentDecision.FinalReply(
+                    "请提供您要查询的交易编号（可在交易记录中查看）。", 20);
+        }
+        if (containsAny(lower, "花呗", "信用", "额度")) {
+            if (containsAny(lower, "还", "还款")) {
+                if (containsAny(lower, "全部还清", "全额还", "还清全部", "一次还清")) {
+                    return new AgentDecision.FinalReply(
+                            "抱歉，暂不支持全部还清功能。请告诉我您想还款的具体金额（如'还200元'）。", 30);
+                }
+                long amountFen = inferAmountFen(lastUserMessage);
+                if (amountFen > 0) {
+                    return new AgentDecision.ToolCall("create_credit_repayment_draft",
+                            Map.of("amountFen", amountFen), 28);
+                }
+                return new AgentDecision.FinalReply(
+                        "您的花呗待还总额为 0 元。请问要还多少？", 28);
+            }
+            return new AgentDecision.ToolCall("get_credit_summary", Map.of(), 28);
+        }
+        if (containsAny(lower, "找", "搜索", "收款人")) {
+            return new AgentDecision.ToolCall("search_payees",
+                    Map.of("query", "默认", "limit", 10), 18);
+        }
+        return new AgentDecision.FinalReply(
+                "抱歉，我没有理解您的意图。我可以帮您：转账、查余额、查交易明细、查花呗账单、还花呗、搜收款人。", 40);
+    }
+
+    /**
+     * Mock 模式：工具调用后的下一步决策。
+     */
+    private AgentDecision mockAgentStepAfterTool(String originalUserMessage,
+                                                  String lastToolResult, String lower) {
+        // 根据原始意图和工具结果决定下一步
+        if (containsAny(lower, "转账", "转给", "汇款", "转钱")) {
+            // 转账流程：search_payees → create_transfer_draft → validate → prepare_confirmation
+            if (lastToolResult.contains("[TOOL_RESULT:search_payees]")) {
+                long amountFen = inferAmountFen(originalUserMessage);
+                if (amountFen <= 0) amountFen = 10000L; // Mock 默认 100 元
+                Map<String, Object> args = new HashMap<>();
+                args.put("payeeId", "mock-payee-001");
+                args.put("amountFen", amountFen);
+                return new AgentDecision.ToolCall("create_transfer_draft", args, 35);
+            }
+            if (lastToolResult.contains("[TOOL_RESULT:create_transfer_draft]")) {
+                return new AgentDecision.ToolCall("validate_transfer_draft",
+                        Map.of("draftId", "mock-draft-001"), 30);
+            }
+            if (lastToolResult.contains("[TOOL_RESULT:validate_transfer_draft]")) {
+                return new AgentDecision.ToolCall("prepare_confirmation_card",
+                        Map.of("draftId", "mock-draft-001"), 30);
+            }
+            if (lastToolResult.contains("[TOOL_RESULT:prepare_confirmation_card]")) {
+                return new AgentDecision.FinalReply(
+                        "转账信息已准备好，请在确认卡片中核对信息后完成支付。", 40);
+            }
+        }
+        if (containsAny(lower, "还款") && lastToolResult.contains("[TOOL_RESULT:create_credit_repayment_draft]")) {
+            return new AgentDecision.FinalReply(
+                    "还款草稿已保存，请确认还款金额。", 30);
+        }
+        // 查询类工具结果 → 生成最终回复
+        return new AgentDecision.FinalReply(
+                formatMockToolResult(lastToolResult), 35);
+    }
+
+    /**
+     * 将 Mock 工具结果格式化为自然语言回复。
+     */
+    private String formatMockToolResult(String toolResult) {
+        if (toolResult.contains("get_balance")) {
+            return "您当前账户可用余额为 10,000.00 元。";
+        }
+        if (toolResult.contains("list_transactions")) {
+            return "以下是您最近的交易明细……需要查看更多吗？";
+        }
+        if (toolResult.contains("get_credit_summary")) {
+            return "您的 Mini 花呗总额度 5,000.00 元，已用 0 元。";
+        }
+        if (toolResult.contains("list_credit_bills")) {
+            return "您本月的花呗账单如下：应还 0 元，未出账 0 元。";
+        }
+        if (toolResult.contains("search_payees")) {
+            return "为您找到 1 位候选收款人。";
+        }
+        if (toolResult.contains("get_transaction_status")) {
+            return "该笔交易当前状态: SUCCESS。";
+        }
+        return "操作已完成。";
+    }
+
+    // ---- agentStep 辅助方法 ----
+
+    /**
+     * 将 ChatMessage 列表转换为 Spring AI Message 列表。
+     * 识别 [TOOL_RESULT:toolName] 前缀的 SYSTEM 消息并转换为 ToolResponseMessage。
+     */
+    private List<Message> convertToSpringMessages(List<ChatMessage> messages) {
+        List<Message> result = new ArrayList<>();
+        for (ChatMessage msg : messages) {
+            // 所有消息统一转换为 Spring AI Message
+            // 工具结果以 SYSTEM 消息形式传递，前缀 [TOOL_RESULT:toolName]
+            result.add(switch (msg.role()) {
+                case USER -> new UserMessage(msg.content());
+                case ASSISTANT -> new AssistantMessage(msg.content());
+                case SYSTEM -> new SystemMessage(msg.content());
+            });
+        }
+        return result;
+    }
+
+    /**
+     * 解析 tool call 的 JSON 参数字符串为 Map。
+     */
+    private Map<String, Object> parseToolCallArguments(String argumentsJson) {
+        if (argumentsJson == null || argumentsJson.isBlank()) {
+            return Map.of();
+        }
+        try {
+            @SuppressWarnings("unchecked")
+            Map<String, Object> parsed = new com.fasterxml.jackson.databind.ObjectMapper()
+                    .readValue(argumentsJson, Map.class);
+            return parsed;
+        } catch (Exception e) {
+            log.warn("解析 tool call 参数失败: {}", argumentsJson, e);
+            return Map.of();
+        }
+    }
+
+    /**
+     * 将 ToolDefinition 的 inputSchema (Map) 转换为 JSON Schema 字符串。
+     */
+    private String mapToJsonSchema(Map<String, Object> inputSchema) {
+        if (inputSchema == null || inputSchema.isEmpty()) {
+            return "";
+        }
+        try {
+            return new com.fasterxml.jackson.databind.ObjectMapper()
+                    .writeValueAsString(inputSchema);
+        } catch (Exception e) {
+            log.warn("序列化 inputSchema 失败: {}", inputSchema, e);
+            return "";
+        }
+    }
+
+    /**
+     * 从消息列表中提取最后一条用户消息内容。
+     */
+    private String getLastUserMessage(List<ChatMessage> messages) {
+        for (int i = messages.size() - 1; i >= 0; i--) {
+            ChatMessage msg = messages.get(i);
+            if (msg.role() == MessageRole.USER) {
+                return msg.content();
+            }
+        }
+        return "";
+    }
+
+    /**
+     * 估算消息列表的 Token 数。
+     */
+    private int estimateTokensFromMessages(List<ChatMessage> messages) {
+        int total = 0;
+        for (ChatMessage msg : messages) {
+            total += AiServiceUtils.estimateTokens(msg.content());
+        }
+        return total;
     }
 
     // ---- 真实 LLM 调用 ----
@@ -575,16 +988,24 @@ public class OpenAiLanguageModelAdapter {
     }
 
     /**
-     * 从用户消息中提取收款人名称。
-     * 支持模式："转给XXX"、"给XXX转"、"转给XXX，"、"给XXX汇款"。
+     * 从用户消息中提取收款人信息。
+     * 优先提取 11 位手机号，其次提取中文姓名。
+     * 支持模式："转给13800138000"、"给张三转100元"、"转给13800138000转100元"。
      */
     private String extractPayeeName(String text) {
-        // 匹配 "转给XXX" 或 "给XXX转/汇/发"
-        var m = java.util.regex.Pattern.compile("[转汇发]?给(.+?)[，,。转汇发]").matcher(text);
+        if (text == null || text.isBlank()) return null;
+
+        // 优先匹配 11 位手机号（1 开头），手机号不应被数字过滤
+        var phoneMatcher = java.util.regex.Pattern.compile("1[3-9]\\d{9}").matcher(text);
+        if (phoneMatcher.find()) {
+            return phoneMatcher.group();
+        }
+
+        // 匹配 "转给XXX" 或 "给XXX转/汇/发"，XXX 为中文姓名（2-10 字）
+        var m = java.util.regex.Pattern.compile("[转汇发]?给([^，,。转汇发\\d]{2,10})(?:[，,。]|转|汇|发|$)").matcher(text);
         if (m.find()) {
             String name = m.group(1).trim();
-            // 过滤掉金额部分（如 "两千"）
-            if (!name.matches(".*\\d+.*") && name.length() <= 10) {
+            if (!name.isBlank() && name.length() <= 10) {
                 return name;
             }
         }

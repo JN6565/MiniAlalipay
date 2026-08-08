@@ -1454,6 +1454,7 @@ CREATE TABLE IF NOT EXISTS agent_session (
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
 
 -- 脱敏对话消息。client_message_id 与角色联合唯一，防止重试重复生成同一回复。
+-- kind 区分文本回复（TEXT）和工具结果（TOOL_RESULT），tool_name 记录产生结果的工具。
 CREATE TABLE IF NOT EXISTS agent_message (
     message_id CHAR(26) NOT NULL,
     session_id CHAR(26) NOT NULL,
@@ -1462,6 +1463,8 @@ CREATE TABLE IF NOT EXISTS agent_message (
     content_redacted TEXT NOT NULL,
     token_count INT UNSIGNED NOT NULL DEFAULT 0,
     created_at DATETIME(3) NOT NULL,
+    kind VARCHAR(16) NOT NULL DEFAULT 'TEXT' COMMENT '消息类型：TEXT / TOOL_RESULT',
+    tool_name VARCHAR(64) NULL COMMENT '工具名称，仅 TOOL_RESULT 类型有值',
     PRIMARY KEY (message_id),
     UNIQUE KEY uk_agent_message_client_role (session_id, client_message_id, role),
     KEY idx_agent_message_session_time (session_id, created_at),

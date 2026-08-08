@@ -609,6 +609,16 @@
 }
 
 /* ==================== 工具结果卡片 ==================== */
+/* 内嵌在气泡中时增加间距和视觉区分 */
+.ai-message-content .ai-card {
+  margin-top: 12px;
+  background: var(--ai-bg-elev);
+  box-shadow: none;
+  border: 1px solid var(--ai-border);
+  max-width: 100%;
+  box-sizing: border-box;
+}
+
 .ai-card {
   background: var(--ai-bg-message);
   border-radius: var(--ai-radius-card);
@@ -1015,4 +1025,137 @@
     font-size: 10px;
     transition: color 0.2s;
   }
+}
+
+/* ==================== 确认卡片（转账/还款二次确认） ==================== */
+/* 内嵌容器：不重复消息气泡样式，仅提供间距 */
+.ai-confirmation-card-wrapper {
+  margin-top: 12px;
+  max-width: 100%;
+}
+
+/* 内嵌在气泡中时，卡片不超过气泡宽度 */
+.ai-message-content .ai-confirmation-card {
+  max-width: 100%;
+  box-shadow: none;
+  border: 1px solid var(--ai-border);
+}
+
+.ai-confirmation-card {
+  background: var(--ai-bg-elev);
+  border-radius: var(--ai-radius-card);
+  padding: 16px;
+  min-width: 280px;
+  max-width: 340px;
+  border: 1px solid var(--ai-border);
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.06);
+}
+
+.ai-confirmation-title {
+  font-size: 15px;
+  font-weight: 600;
+  color: var(--ai-text);
+  margin-bottom: 12px;
+  text-align: center;
+}
+
+.ai-confirmation-note {
+  font-size: 12px;
+  color: var(--ai-text-secondary);
+  margin-bottom: 10px;
+  text-align: center;
+}
+
+.ai-confirmation-field {
+  margin-bottom: 12px;
+}
+
+.ai-field-label {
+  font-size: 12px;
+  color: var(--ai-text-secondary);
+  margin-bottom: 4px;
+}
+
+.ai-field-value {
+  font-size: 14px;
+  color: var(--ai-text);
+  font-weight: 500;
+  padding: 6px 0;
+}
+
+.ai-field-input {
+  width: 100%;
+  padding: 8px 10px;
+  border: 1px solid var(--ai-border);
+  border-radius: 8px;
+  font-size: 14px;
+  color: var(--ai-text);
+  background: var(--ai-bg-message);
+  outline: none;
+  box-sizing: border-box;
+
+  &:focus {
+    border-color: var(--ai-brand);
+  }
+
+  &:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+  }
+}
+
+.ai-field-amount {
+  font-size: 18px;
+  font-weight: 600;
+  color: var(--ai-brand);
+}
+
+.ai-field-select {
+  width: 100%;
+  padding: 8px 10px;
+  border: 1px solid var(--ai-border);
+  border-radius: 8px;
+  font-size: 14px;
+  color: var(--ai-text);
+  background: var(--ai-bg-message);
+  outline: none;
+  box-sizing: border-box;
+  appearance: auto;
+
+  &:focus {
+    border-color: var(--ai-brand);
+  }
+
+  &:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+  }
+}
+
+.ai-confirmation-actions {
+  display: flex;
+  gap: 10px;
+  margin-top: 16px;
+
+  button {
+    flex: 1;
+  }
+}
+
+.ai-confirmation-done {
+  text-align: center;
+  color: var(--ai-success);
+  font-size: 14px;
+  font-weight: 500;
+  margin-top: 12px;
+  padding: 8px;
+  background: rgba(82, 196, 26, 0.06);
+  border-radius: 8px;
+}
+
+.ai-confirmation-cancelled {
+  text-align: center;
+  color: var(--ai-text-muted);
+  font-size: 13px;
+  margin-top: 12px;
 }

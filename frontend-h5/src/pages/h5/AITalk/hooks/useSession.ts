@@ -1,6 +1,6 @@
 import { useState, useCallback } from 'react';
 import { getSessions, getSessionMessages, deleteSession, renameSession } from '@/services/ai';
-import type { SessionInfo, HistoryMessage, Message } from '../types';
+import type { SessionInfo, HistoryMessage, Message, AssistantTextMessage } from '../types';
 
 const SESSION_KEY = 'ai_session_id';
 
@@ -62,7 +62,11 @@ export function useSession() {
       saveSessionId(targetSessionId);
       try {
         const history: HistoryMessage[] = await getSessionMessages(targetSessionId);
-        return history.map((m, i) => {
+        // 按创建时间正序排序，确保用户消息在 AI 回复之前
+        const sorted = [...history].sort((a, b) =>
+          new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime()
+        );
+        const mapped = sorted.map((m, i) => {
           if (m.role === 'USER') {
             return {
               id: `hist_user_${i}`,
@@ -70,6 +74,29 @@ export function useSession() {
               content: m.content,
               timestamp: new Date(m.createdAt),
             };
+          }
+          // 工具结果消息：解析 JSON 内容重建卡片
+          if (m.kind === 'TOOL_RESULT') {
+            try {
+              const parsed = JSON.parse(m.content);
+              const toolMsg: AssistantTextMessage = {
+                id: `hist_tr_${i}`,
+                role: 'assistant' as const,
+                kind: 'text' as const,
+                content: '',
+                streaming: false,
+                toolResultCards: [{
+                  tool: parsed.tool || m.toolName || '',
+                  status: parsed.status || 'success',
+                  summary: parsed.summary || '',
+                  data: parsed.data || {},
+                }],
+                timestamp: new Date(m.createdAt),
+              };
+              return toolMsg;
+            } catch {
+              // JSON 解析失败时降级为普通文本消息
+            }
           }
           return {
             id: `hist_assist_${i}`,
@@ -80,6 +107,45 @@ export function useSession() {
             timestamp: new Date(m.createdAt),
           };
         });
+        // 合并相邻的工具结果卡片到同一气泡（与实时流式行为一致）
+        const merged: Message[] = [];
+        for (const msg of mapped) {
+          if (
+            msg.role === 'assistant' &&
+            msg.kind === 'text' &&
+            (msg as AssistantTextMessage).toolResultCards?.length
+          ) {
+            // 尝试合并到前一条助手文本消息
+            const last = merged.length > 0 ? merged[merged.length - 1] : null;
+            if (
+              last &&
+              last.role === 'assistant' &&
+              last.kind === 'text' &&
+              !(last as AssistantTextMessage).toolResultCards?.length &&
+              !(last as AssistantTextMessage).confirmationCard
+            ) {
+              // 前一条是空文本消息（AI 过渡文本），将卡片合并进去
+              (last as AssistantTextMessage).content = ((last as AssistantTextMessage).content || '') +
+                ((msg as AssistantTextMessage).content || '');
+              (last as AssistantTextMessage).toolResultCards = (msg as AssistantTextMessage).toolResultCards;
+              continue;
+            }
+            if (
+              last &&
+              last.role === 'assistant' &&
+              last.kind === 'text' &&
+              (last as AssistantTextMessage).toolResultCards?.length
+            ) {
+              // 前一条也有卡片，累积到同一气泡
+              (last as AssistantTextMessage).toolResultCards!.push(
+                ...(msg as AssistantTextMessage).toolResultCards!
+              );
+              continue;
+            }
+          }
+          merged.push(msg);
+        }
+        return merged;
       } catch {
         // 加载失败时返回空列表，保持当前会话
         return [];

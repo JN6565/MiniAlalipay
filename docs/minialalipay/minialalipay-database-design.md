@@ -2041,9 +2041,11 @@ MVP 退款仅支持单笔全额受控虚拟退款，不接入真实支付通道�
 | `session_id` | `CHAR(26)` | FK，必填 | 所属 AI 会话 |
 | `client_message_id` | `VARCHAR(64)` | 必填 | 客户端消息幂等键 |
 | `role` | `VARCHAR(16)` | 必填 | `USER/ASSISTANT/SYSTEM` |
-| `content_redacted` | `TEXT` | 必填 | 脱敏消息正文 |
+| `content_redacted` | `TEXT` | 必填 | 脱敏消息正文（TOOL_RESULT 类型为 JSON 格式的工具摘要） |
 | `token_count` | `INT UNSIGNED` | `0` | 上下文预算和成本统计 |
 | `created_at` | `DATETIME(3)` | 必填 | 消息创建时间 |
+| `kind` | `VARCHAR(16)` | `TEXT`，必填 | 消息类型：`TEXT`（文本回复）/ `TOOL_RESULT`（工具结果） |
+| `tool_name` | `VARCHAR(64)` | 可空 | 工具名称，仅 `TOOL_RESULT` 类型有值 |
 
 **键与索引**：UK `(session_id,client_message_id,role)`；索引 `(session_id,created_at)`。
 

@@ -113,13 +113,13 @@ public class AgentController {
                 );
             }
 
-            // 2. 内容脱敏
+            // 2. 内容脱敏（脱敏后内容仅用于存储，原始内容传给应用层供 LLM 工具调用）
             String sanitizedContent = sanitizer.sanitizeContent(request.content());
 
-            // 3. 委托应用服务
+            // 3. 委托应用服务（传入原始内容和脱敏内容）
             AgentMessageService.SendMessageResult result = agentMessageService.processMessage(
                     userId, request.clientMessageId(),
-                    request.sessionId(), sanitizedContent, clock.instant());
+                    request.sessionId(), request.content(), sanitizedContent, clock.instant());
 
             // 4. 构建响应
             SendMessageResponse data = new SendMessageResponse(
@@ -227,7 +227,9 @@ public class AgentController {
             result.add(new MessageSummaryResponse(
                     m.getMessageId(), m.getRole().name(),
                     m.getContentRedacted(),
-                    DateTimeFormatter.ISO_INSTANT.format(m.getCreatedAt())));
+                    DateTimeFormatter.ISO_INSTANT.format(m.getCreatedAt()),
+                    m.getKind().name(),
+                    m.getToolName()));
         }
         return ResponseEntity.ok(ApiResponse.success(result, requestId, traceId));
     }

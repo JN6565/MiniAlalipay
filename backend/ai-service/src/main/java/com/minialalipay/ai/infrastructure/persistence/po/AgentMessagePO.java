@@ -31,7 +31,14 @@ public class AgentMessagePO {
     /** 创建时间，对应 DATETIME(3) */
     private Instant createdAt;
 
+    /** 消息类型：TEXT / TOOL_RESULT，对应 VARCHAR(16) */
+    private String kind;
+
+    /** 工具名称（仅 TOOL_RESULT 有值），对应 VARCHAR(64) */
+    private String toolName;
+
     public AgentMessagePO() {
+        this.kind = "TEXT";
     }
 
     public AgentMessagePO(String messageId, String sessionId, String clientMessageId,
@@ -43,6 +50,7 @@ public class AgentMessagePO {
         this.contentRedacted = contentRedacted;
         this.tokenCount = tokenCount;
         this.createdAt = createdAt;
+        this.kind = "TEXT";
     }
 
     public String getMessageId() { return messageId; }
@@ -59,4 +67,8 @@ public class AgentMessagePO {
     public void setTokenCount(Integer tokenCount) { this.tokenCount = tokenCount; }
     public Instant getCreatedAt() { return createdAt; }
     public void setCreatedAt(Instant createdAt) { this.createdAt = createdAt; }
+    public String getKind() { return kind; }
+    public void setKind(String kind) { this.kind = kind; }
+    public String getToolName() { return toolName; }
+    public void setToolName(String toolName) { this.toolName = toolName; }
 }

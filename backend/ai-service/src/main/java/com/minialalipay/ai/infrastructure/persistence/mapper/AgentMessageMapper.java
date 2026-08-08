@@ -51,7 +51,7 @@ public interface AgentMessageMapper {
      */
     @Select("SELECT * FROM agent_db.agent_message "
             + "WHERE session_id = #{sessionId} "
-            + "ORDER BY created_at ASC LIMIT #{limit}")
+            + "ORDER BY created_at ASC, message_id ASC LIMIT #{limit}")
     List<AgentMessagePO> findBySessionId(
             @Param("sessionId") String sessionId,
             @Param("limit") int limit);
@@ -80,8 +80,9 @@ public interface AgentMessageMapper {
      * @return 受影响行数
      */
     @Insert("INSERT INTO agent_db.agent_message "
-            + "(message_id, session_id, client_message_id, role, content_redacted, token_count, created_at) "
+            + "(message_id, session_id, client_message_id, role, content_redacted, "
+            + "token_count, created_at, kind, tool_name) "
             + "VALUES (#{messageId}, #{sessionId}, #{clientMessageId}, #{role}, "
-            + "#{contentRedacted}, #{tokenCount}, #{createdAt})")
+            + "#{contentRedacted}, #{tokenCount}, #{createdAt}, #{kind}, #{toolName})")
     int insert(AgentMessagePO po);
 }

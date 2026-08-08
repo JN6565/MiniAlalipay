@@ -907,7 +907,9 @@ ALTER TABLE `agent_db`.`agent_message`
     MODIFY COLUMN role VARCHAR(16) NOT NULL COMMENT '取值或格式：USER/ASSISTANT/SYSTEM',
     MODIFY COLUMN content_redacted TEXT NOT NULL COMMENT '脱敏消息正文',
     MODIFY COLUMN token_count INT UNSIGNED NOT NULL DEFAULT 0 COMMENT '上下文预算和成本统计',
-    MODIFY COLUMN created_at DATETIME(3) NOT NULL COMMENT '消息创建时间';
+    MODIFY COLUMN created_at DATETIME(3) NOT NULL COMMENT '消息创建时间',
+    MODIFY COLUMN kind VARCHAR(16) NOT NULL DEFAULT 'TEXT' COMMENT '消息类型：TEXT（文本回复）/ TOOL_RESULT（工具结果）',
+    MODIFY COLUMN tool_name VARCHAR(64) NULL COMMENT '工具名称，仅 TOOL_RESULT 类型有值';
 
 -- AI 服务数据库：tool_call_log。
 ALTER TABLE `agent_db`.`tool_call_log`
