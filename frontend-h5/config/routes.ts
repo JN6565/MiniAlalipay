@@ -215,6 +215,27 @@ export default [
         title: '充值',
         auth: true,
       },
+      {
+        path: '/h5/settings/version',
+        component: '@/pages/h5/VersionInfo',
+        exact: true,
+        title: '版本信息',
+        auth: true,
+      },
+      {
+        path: '/h5/settings/user-agreement',
+        component: '@/pages/h5/UserAgreement',
+        exact: true,
+        title: '用户协议',
+        auth: true,
+      },
+      {
+        path: '/h5/settings/privacy-policy',
+        component: '@/pages/h5/PrivacyPolicy',
+        exact: true,
+        title: '隐私政策',
+        auth: true,
+      },
 
       // 默认跳转
       {

@@ -134,7 +134,7 @@ public class UserController {
         String traceId = httpRequest.getHeader("X-Trace-Id");
         UserQueryService.MyProfile profile = userQueryService.getMyProfile(userId);
         UserMeDTO dto = new UserMeDTO(profile.userId(), profile.accountNumber(),
-                profile.nickname(), profile.maskedRealName(), profile.createdAt());
+                profile.nickname(), profile.maskedPhone(), profile.maskedRealName(), profile.createdAt());
         return ResponseEntity.ok(ApiResponse.success(dto, requestId, traceId));
     }
 }

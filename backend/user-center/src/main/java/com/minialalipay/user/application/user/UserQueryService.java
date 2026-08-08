@@ -93,10 +93,10 @@ public class UserQueryService {
         User user = userRepository.findById(userId)
                 .orElseThrow(() -> new BusinessException(CommonErrorCode.NOT_FOUND));
         return new MyProfile(user.getUserId(), user.getAccountNumber(), user.getNickname(),
-                NameMasker.mask(user.getRealName()), user.getCreatedAt());
+                PhoneMasker.mask(user.getPhoneNumber()), NameMasker.mask(user.getRealName()), user.getCreatedAt());
     }
 
-    /** 当前用户最小资料投影，真实姓名已脱敏，不含手机号等敏感字段。 */
+    /** 当前用户最小资料投影，真实姓名已脱敏，手机号已脱敏。 */
     public record MyProfile(String userId, String accountNumber, String nickname,
-                            String maskedRealName, Instant createdAt) { }
+                            String maskedPhone, String maskedRealName, Instant createdAt) { }
 }

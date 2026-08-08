@@ -1,11 +1,19 @@
-import React from 'react';
+import React, { useEffect, useState } from 'react';
 import { history } from '@umijs/max';
 import { Toast, Dialog } from 'antd-mobile';
 import { clearSession } from '@/services/request';
+import * as userService from '@/services/user';
 import './index.less';
 
 const ProfilePage: React.FC = () => {
   const nickname = localStorage.getItem('nickname') || '用户';
+  const [maskedPhone, setMaskedPhone] = useState<string>('');
+
+  useEffect(() => {
+    userService.getMyInfo().then(info => {
+      setMaskedPhone(info.maskedPhone || '');
+    }).catch(() => {});
+  }, []);
 
   const handleLogout = async () => {
     const result = await Dialog.confirm({
@@ -26,7 +34,7 @@ const ProfilePage: React.FC = () => {
         <div className="avatar">👤</div>
         <div className="user-info">
           <div className="name">{nickname}</div>
-          <div className="id">ID: ****</div>
+          <div className="id">{maskedPhone || '加载中...'}</div>
         </div>
         <span className="arrow">›</span>
       </div>
@@ -56,7 +64,7 @@ const ProfilePage: React.FC = () => {
       <div className="profile-section">
         <div className="section-title">关于</div>
         <div className="profile-list">
-          <div className="profile-item" onClick={() => history.push('/h5/settings/about')}>
+          <div className="profile-item" onClick={() => history.push('/h5/settings/version')}>
             <div className="item-icon" style={{ background: '#f6ffed' }}>ℹ️</div>
             <div className="item-content">
               <div className="item-title">版本信息</div>
@@ -64,14 +72,14 @@ const ProfilePage: React.FC = () => {
             </div>
             <span className="item-arrow">›</span>
           </div>
-          <div className="profile-item" onClick={() => history.push('/h5/settings/about')}>
+          <div className="profile-item" onClick={() => history.push('/h5/settings/user-agreement')}>
             <div className="item-icon" style={{ background: '#f9f0ff' }}>📋</div>
             <div className="item-content">
               <div className="item-title">用户协议</div>
             </div>
             <span className="item-arrow">›</span>
           </div>
-          <div className="profile-item" onClick={() => history.push('/h5/settings/about')}>
+          <div className="profile-item" onClick={() => history.push('/h5/settings/privacy-policy')}>
             <div className="item-icon" style={{ background: '#fff2f0' }}>🔐</div>
             <div className="item-content">
               <div className="item-title">隐私政策</div>
