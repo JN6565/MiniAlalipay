@@ -68,10 +68,11 @@ export const createDraft = (
 /**
  * 查询草稿详情
  * @param draftId 草稿ID
+ * @param signal 可选 AbortSignal，用于取消请求
  * @returns 草稿信息
  */
-export const getDraft = (draftId: string) => {
-  return request.get<TransferDraft>(`/api/v1/transfer-drafts/${draftId}`);
+export const getDraft = (draftId: string, signal?: AbortSignal) => {
+  return request.get<TransferDraft>(`/api/v1/transfer-drafts/${draftId}`, { signal });
 };
 
 /**
@@ -95,12 +96,13 @@ export const updateDraft = (
  * 校验草稿（风控预检）；后端要求携带客户端读取到的草稿版本
  * @param draftId 草稿ID
  * @param version 草稿 CAS 版本
+ * @param signal 可选 AbortSignal，用于取消请求
  * @returns 风控结果和新版本
  */
-export const validateDraft = (draftId: string, version: number) => {
+export const validateDraft = (draftId: string, version: number, signal?: AbortSignal) => {
   return request.post<ValidationResult>(`/api/v1/transfer-drafts/${draftId}/validate`, {
     version,
-  });
+  }, { signal });
 };
 
 /**

@@ -51,6 +51,8 @@ public interface BusinessStore {
     boolean moveToManualReview(FundTransaction transaction, long expectedVersion, String xid,
                                String eventId, String caseId, String reasonCode, Instant now);
     List<FundTransactionRecord> findRecoverable(Instant updatedBefore, int limit);
+    /** 获取指定交易的 TCC 恢复重试次数，无记录返回 0。 */
+    int getTccRetryCount(String transactionId);
 
     /** 交易与请求摘要的持久化查询结果。 */
     record FundTransactionRecord(FundTransaction transaction, byte[] requestHash) { }

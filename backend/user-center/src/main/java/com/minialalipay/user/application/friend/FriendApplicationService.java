@@ -4,6 +4,7 @@ import com.minialalipay.common.error.BusinessException;
 import com.minialalipay.common.error.CommonErrorCode;
 import com.minialalipay.user.application.friend.dto.FriendDTO;
 import com.minialalipay.user.application.friend.dto.FriendRequestDTO;
+import com.minialalipay.user.application.user.PhoneMasker;
 import com.minialalipay.user.domain.friend.Friend;
 import com.minialalipay.user.domain.friend.FriendRepository;
 import com.minialalipay.user.domain.friend.FriendRequest;
@@ -154,10 +155,12 @@ public class FriendApplicationService {
     private FriendDTO toFriendDTO(Friend f) {
         String friendName = lookupUserName(f.getFriendUserId());
         String accountNumber = lookupAccountNumber(f.getFriendUserId());
+        String maskedPhone = lookupMaskedPhone(f.getFriendUserId());
         return new FriendDTO(
                 f.getFriendUserId(),
                 friendName,
                 accountNumber,
+                maskedPhone,
                 f.getAlias(),
                 f.getCreatedAt()
         );
@@ -176,6 +179,13 @@ public class FriendApplicationService {
 
     private String lookupAccountNumber(String userId) {
         return userRepository.findById(userId).map(User::getAccountNumber).orElse("");
+    }
+
+    private String lookupMaskedPhone(String userId) {
+        return userRepository.findById(userId)
+                .map(User::getPhoneNumber)
+                .map(PhoneMasker::mask)
+                .orElse("");
     }
 
     private String generateId() {

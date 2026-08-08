@@ -65,6 +65,7 @@ spring:
                 redis-rate-limiter.requestedTokens: 1
 
         # ========== 业务中心路由（仅已实现 Controller 的操作） ==========
+        # 本地开发使用直连；生产环境通过 BUSINESS_CENTER_URI 环境变量设为 lb://business-center
         - id: business-center-transfers
           uri: ${BUSINESS_CENTER_URI:http://localhost:8082}
           predicates:

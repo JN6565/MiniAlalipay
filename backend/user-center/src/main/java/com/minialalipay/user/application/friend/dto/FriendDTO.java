@@ -6,6 +6,7 @@ public record FriendDTO(
         String friendUserId,
         String friendName,
         String accountNumber,
+        String maskedPhone,
         String alias,
         Instant createdAt
 ) {

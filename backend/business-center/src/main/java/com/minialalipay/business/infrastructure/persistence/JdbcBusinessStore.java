@@ -208,6 +208,12 @@ public class JdbcBusinessStore implements BusinessStore, OpsTransactionQueryPort
                 (rs, n) -> transactionRecord(rs), before, limit);
     }
 
+    @Override public int getTccRetryCount(String transactionId) {
+        Integer count = jdbc.query("SELECT COALESCE(MAX(retry_count),0) FROM business_db.tcc_global WHERE transaction_id=?",
+                rs -> rs.next() ? rs.getInt(1) : 0, transactionId);
+        return count == null ? 0 : count;
+    }
+
     private void appendOutbox(FundTransaction t, String eventId, String type, Instant now) {
         String payload = "{\"transactionId\":\"" + t.getTransactionId() + "\",\"status\":\"" + t.getStatus().name() + "\"}";
         jdbc.update("INSERT INTO business_db.outbox_event (event_id,aggregate_type,aggregate_id,aggregate_version,event_type,event_version,transaction_id,producer,trace_id,occurred_at,payload,created_at) VALUES (?,'FUND_TRANSACTION',?,?,?,1,?,'business-center',?,?,?,?)",

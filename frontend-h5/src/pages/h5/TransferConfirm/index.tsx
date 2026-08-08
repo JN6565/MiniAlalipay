@@ -28,30 +28,34 @@ const TransferConfirmPage: React.FC = () => {
   const [validatedVersion, setValidatedVersion] = useState<number | null>(null);
 
   useEffect(() => {
-    if (draftId) {
-      loadDraft();
-    }
+    if (!draftId) return;
+    const ac = new AbortController();
+    loadDraft(ac.signal);
+    return () => ac.abort();
   }, [draftId]);
 
-  const loadDraft = async () => {
+  const loadDraft = async (signal?: AbortSignal) => {
     try {
       setDraftLoading(true);
-      // 本人资料仅用于展示，失败不阻断确认流程
+      // 本人资料仅用于展示，失败不阻断确认流程；使用独立请求不受 signal 取消影响
       userService
         .getMyInfo()
         .then(setMyInfo)
         .catch(() => setMyInfo(null));
-      const draftData = await transferService.getDraft(draftId!);
+      const draftData = await transferService.getDraft(draftId!, signal);
+      if (signal?.aborted) return;
       setDraft(draftData);
 
       // 风控预检；后端当前仅返回 PASS，不通过时抛异常由 catch 处理
-      const riskResult = await transferService.validateDraft(draftId!, draftData.version);
+      const riskResult = await transferService.validateDraft(draftId!, draftData.version, signal);
+      if (signal?.aborted) return;
       setValidatedVersion(riskResult.version);
     } catch (error: any) {
+      if (signal?.aborted) return;
       Toast.show({ content: error.message || '加载草稿失败', icon: 'fail' });
       history.back();
     } finally {
-      setDraftLoading(false);
+      if (!signal?.aborted) setDraftLoading(false);
     }
   };
 
@@ -78,18 +82,36 @@ const TransferConfirmPage: React.FC = () => {
 
     setLoading(true);
     try {
-      // 合并提交：一次请求在服务端完成验密签发证明、签发确认令牌与转账受理；
-      // 支付密码仅走请求体，不落存储；超时时必须复用同一幂等键重试
-      const result = await transferService.submitTransferWithPassword(
-        draftId!,
-        validatedVersion,
-        password,
-        generateIdempotencyKey(),
-      );
+      // 1. 验证支付密码并签发一次性支付证明（TRANSFER_CONFIRM 用途）
+      const { paymentProof } = await paymentPasswordService.issuePaymentProof(password);
 
-      // 跳转到结果页；后端状态接口不含收款人昵称，通过路由 state 携带展示
+      // 2. 用支付证明签发一次性确认令牌；令牌不得写入日志、URL 或浏览器存储
+      let currentVersion = validatedVersion!;
+      let confirmResult: transferService.IssuedConfirmation;
+      try {
+        confirmResult = await transferService.issueConfirmation(draftId!, paymentProof, currentVersion);
+      } catch (confirmError: any) {
+        // 版本冲突时重新读取草稿获取最新版本并重试一次
+        if (confirmError.status === 409 && confirmError.code === 'VERSION_CONFLICT') {
+          const freshDraft = await transferService.getDraft(draftId!);
+          currentVersion = freshDraft.version;
+          confirmResult = await transferService.issueConfirmation(draftId!, paymentProof, currentVersion);
+        } else {
+          throw confirmError;
+        }
+      }
+
+      // 3. 提交转账
+      const result = await transferService.submitTransfer({
+        draftId: draftId!,
+        confirmationToken: confirmResult!.confirmationToken,
+      });
+
+      // 跳转到结果页；后端状态接口不含收款人昵称，通过路由 state 携带展示；
+      // 同时携带提交接口返回的初始数据，后端不可用时降级展示
       history.push(`/h5/transfer/result/${result.transactionId}`, {
         payeeNickname: navState.payeeNickname,
+        initialResult: result,
       });
     } catch (error: any) {
       Toast.show({ icon: 'fail', content: error.message || '转账失败' });

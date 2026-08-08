@@ -11,11 +11,15 @@ const TransferResultPage: React.FC = () => {
   const { id } = useParams();
   const location = useLocation();
   // 路由 state 仅兼容提交后首次跳转；刷新和从明细进入时以后端详情为准。
-  const navState = (location.state || {}) as { payeeNickname?: string };
-  // 提交后跳转时路由 state 必带收款人昵称；此时直接展示“处理中”乐观首屏，不等首次轮询
+  const navState = (location.state || {}) as {
+    payeeNickname?: string;
+    /** 提交接口返回的初始交易数据，后端不可用时降级展示 */
+    initialResult?: transferService.TransferResult;
+  };
+  // 提交后跳转时路由 state 必带收款人昵称；此时直接展示”处理中”乐观首屏，不等首次轮询
   const justSubmitted = !!navState.payeeNickname;
   const [loading, setLoading] = useState(!justSubmitted);
-  const [result, setResult] = useState<transferService.TransferResult | null>(null);
+  const [result, setResult] = useState<transferService.TransferResult | null>(navState.initialResult ?? null);
 
   useEffect(() => {
     if (!id) return;
@@ -34,12 +38,15 @@ const TransferResultPage: React.FC = () => {
         if ((data.status === 'PROCESSING' || data.status === 'COMPENSATING') && attempts < 15) {
           attempts += 1;
           timer = setTimeout(load, 2000);
-          return;
+          return; // 继续轮询，不设置 loading = false
         }
+        // 终态或达到最大轮询次数，停止 loading
+        if (!cancelled) setLoading(false);
       } catch (error) {
         console.error('加载失败', error);
+        // 后端不可用时立即停止轮询，避免无限重试
+        if (!cancelled) setLoading(false);
       }
-      if (!cancelled) setLoading(false);
     };
 
     timer = setTimeout(load, justSubmitted ? 1000 : 0);

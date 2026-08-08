@@ -41,14 +41,14 @@ public class SeataTransferTccController {
 
     /** Seata TCC Try 参数；金额单位为分，所有标识在重试期间必须保持稳定。 */
     public record Request(@NotBlank @Size(max = 128) String businessXid,
-                          @NotBlank @Size(min = 26, max = 26) String transactionId,
-                          @NotBlank @Size(min = 26, max = 26) String payerAccountId,
-                          @NotBlank @Size(min = 26, max = 26) String payeeAccountId,
+                          @NotBlank @Size(max = 128) String transactionId,
+                          @NotBlank @Size(max = 128) String payerAccountId,
+                          @NotBlank @Size(max = 128) String payeeAccountId,
                           @Positive long amountFen,
-                          @NotBlank @Size(min = 26, max = 26) String payerFreezeId,
-                          @NotBlank @Size(min = 26, max = 26) String payeeReservationId,
-                          @NotBlank @Size(min = 26, max = 26) String voucherId,
+                          @NotBlank @Size(max = 128) String payerFreezeId,
+                          @NotBlank @Size(max = 128) String payeeReservationId,
+                          @NotBlank @Size(max = 128) String voucherId,
                           @Positive long debitEntryId, @Positive long creditEntryId,
-                          @NotBlank @Size(min = 26, max = 26) String ledgerEventId,
-                          @NotBlank @Size(min = 32, max = 32) String traceId) { }
+                          @NotBlank @Size(max = 128) String ledgerEventId,
+                          @NotBlank @Size(max = 128) String traceId) { }
 }

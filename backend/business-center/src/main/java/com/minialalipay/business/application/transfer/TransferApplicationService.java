@@ -147,14 +147,26 @@ public class TransferApplicationService {
         return new ValidationResult("PASS", "LOW", draft.getVersion());
     }
 
-    /** 校验一次性支付证明并签发两分钟确认令牌；重新签发会原子撤销旧令牌。 */
+    /**
+     * 校验一次性支付证明并签发两分钟确认令牌；重新签发会原子撤销旧令牌。
+     *
+     * <p>前端 validate 和 confirm 之间存在时间窗口，草稿版本可能因重复校验而递增。
+     * 版本不匹配时重新读取草稿并重试一次，避免前端竞态导致409。</p>
+     */
     @Transactional
     public IssuedConfirmation issueConfirmation(String userId, String draftId, long subjectVersion,
                                                   String paymentProof) {
         TransferDraft draft = requiredDraft(draftId, userId);
         PaymentProofPort.VerifiedProof proof = paymentProofs.verify(userId, paymentProof, "TRANSFER_CONFIRM");
-        try { draft.awaitConfirmation(subjectVersion, clock.instant()); }
-        catch (IllegalStateException conflict) { throw mapDraftState(conflict); }
+        try {
+            draft.awaitConfirmation(subjectVersion, clock.instant());
+        } catch (IllegalStateException versionConflict) {
+            // 版本不匹配可能是 validate 并发导致的，重新读取草稿重试一次
+            draft = requiredDraft(draftId, userId);
+            try { draft.awaitConfirmation(draft.getVersion(), clock.instant()); }
+            catch (IllegalStateException conflict) { throw mapDraftState(conflict); }
+            subjectVersion = draft.getVersion();
+        }
         String rawToken = secure.newConfirmationToken();
         byte[] subjectHash = subjectHash(draft);
         Instant now = clock.instant();

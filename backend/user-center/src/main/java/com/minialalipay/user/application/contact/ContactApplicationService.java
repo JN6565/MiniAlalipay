@@ -1,17 +1,16 @@
 package com.minialalipay.user.application.contact;
 
 import com.minialalipay.user.application.contact.dto.ContactDTO;
-import com.minialalipay.user.application.user.PhoneMasker;
 import com.minialalipay.user.domain.contact.Contact;
 import com.minialalipay.user.domain.contact.ContactRepository;
 import com.minialalipay.user.domain.user.User;
 import com.minialalipay.user.domain.user.UserRepository;
-import com.minialalipay.user.domain.user.UserStatus;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.time.Instant;
 import java.util.List;
+import java.util.Optional;
 import java.util.stream.Collectors;
 
 /**
@@ -38,9 +37,7 @@ public class ContactApplicationService {
      * 查询当前用户的常用联系人列表。
      *
      * <p>按置顶优先、最近成功转账时间倒序排列，最多返回指定数量。
-     * 已隐藏的联系人不包含在结果中。每条记录会按收款人用户 ID
-     * 补齐昵称、账户号和脱敏手机号等展示字段；收款人不存在或非
-     * ACTIVE 时展示字段置空，由前端自行降级，避免前端拿用户 ID 片段充当名字。</p>
+     * 已隐藏的联系人不包含在结果中。</p>
      *
      * @param ownerUserId 当前用户 ID
      * @param limit       最大返回数量（为 null 时使用默认值 5）
@@ -52,20 +49,16 @@ public class ContactApplicationService {
         List<Contact> contacts = contactRepository.listByOwner(ownerUserId, effectiveLimit);
         return contacts.stream()
                 .map(c -> {
-                    // 仅 ACTIVE 收款人才下发展示信息，完整手机号不出服务边界，只输出脱敏结果
-                    User payee = userRepository.findById(c.getPayeeUserId())
-                            .filter(user -> user.getStatus() == UserStatus.ACTIVE)
-                            .orElse(null);
+                    String payeeName = lookupMaskedName(c.getPayeeUserId());
+                    String accountNumber = lookupAccountNumber(c.getPayeeUserId());
                     return new ContactDTO(
                             c.getPayeeUserId(),
+                            payeeName,
+                            accountNumber,
                             c.getAlias(),
                             c.getSuccessCount(),
                             c.getLastSuccessAt(),
-                            c.isPinned(),
-                            payee == null ? null : payee.getNickname(),
-                            payee == null ? null : payee.getAccountNumber(),
-                            payee == null ? null : PhoneMasker.mask(payee.getPhoneNumber()),
-                            payee == null ? null : payee.getPhoneTail()
+                            c.isPinned()
                     );
                 })
                 .collect(Collectors.toList());
@@ -118,5 +111,29 @@ public class ContactApplicationService {
                     }
                     contactRepository.update(contact);
                 });
+    }
+
+    private String lookupMaskedName(String userId) {
+        if (userId == null) return "***";
+        Optional<User> user = userRepository.findById(userId);
+        if (user.isEmpty()) return "***";
+        String realName = user.get().getRealName();
+        if (realName == null || realName.isBlank()) {
+            String nickname = user.get().getNickname();
+            return (nickname == null || nickname.isBlank()) ? "***" : maskName(nickname);
+        }
+        return maskName(realName);
+    }
+
+    private String lookupAccountNumber(String userId) {
+        if (userId == null) return "";
+        Optional<User> user = userRepository.findById(userId);
+        return user.map(User::getAccountNumber).orElse("");
+    }
+
+    private static String maskName(String name) {
+        if (name == null || name.isEmpty()) return "***";
+        if (name.length() == 1) return name + "**";
+        return name.charAt(0) + "*".repeat(name.length() - 1);
     }
 }

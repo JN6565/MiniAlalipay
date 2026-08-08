@@ -14,7 +14,7 @@ export const clearSession = () => {
     .forEach((key) => localStorage.removeItem(key));
 };
 
-const request = axios.create({ timeout: 10000 });
+const request = axios.create({ timeout: 15000 });
 const generateUUID = () => 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, (c) => {
   const r = (Math.random() * 16) | 0;
   return (c === 'x' ? r : (r & 0x3) | 0x8).toString(16);
@@ -50,9 +50,30 @@ request.interceptors.response.use((response: any) => {
   if (code === 'OK' || code === 200 || code === 202) return data;
   handleExpiredSession(String(code));
   return Promise.reject(new ApiError(String(code), message || '请求失败', requestId, response.status));
-}, (error: any) => {
-  if (!error.response) return Promise.reject(new ApiError('NETWORK_ERROR', '网络异常，请检查网络连接'));
+}, async (error: any) => {
+  const config = error.config;
+  if (!error.response) {
+    // 网络错误：最多重试 3 次，指数退避
+    if (config) {
+      config.__retryCount = (config.__retryCount || 0) + 1;
+      if (config.__retryCount <= 3) {
+        const delay = Math.min(1000 * Math.pow(2, config.__retryCount - 1), 4000);
+        await new Promise(resolve => setTimeout(resolve, delay));
+        return request(config);
+      }
+    }
+    return Promise.reject(new ApiError('NETWORK_ERROR', '网络异常，请检查网络连接'));
+  }
+  // 网关错误（502/503/504）也重试
   const { status, data } = error.response;
+  if (status >= 502 && status <= 504 && config) {
+    config.__retryCount = (config.__retryCount || 0) + 1;
+    if (config.__retryCount <= 3) {
+      const delay = Math.min(1000 * Math.pow(2, config.__retryCount - 1), 4000);
+      await new Promise(resolve => setTimeout(resolve, delay));
+      return request(config);
+    }
+  }
   const code = data?.code || (status === 401 ? 'COMMON_UNAUTHORIZED' : `HTTP_${status}`);
   handleExpiredSession(code);
   return Promise.reject(new ApiError(code, data?.message || '请求失败', data?.requestId, status));
