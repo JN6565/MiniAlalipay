@@ -2,6 +2,7 @@ import React, { useEffect, useState } from 'react';
 import { history } from 'umi';
 import { List, Avatar, Button, Toast, SwipeAction, Modal, Input, SpinLoading, Empty } from 'antd-mobile';
 import * as userService from '@/services/user';
+import { useTabActiveRefresh } from '@/utils/useTabActiveRefresh';
 import './index.less';
 
 const ContactsPage: React.FC = () => {
@@ -15,13 +16,21 @@ const ContactsPage: React.FC = () => {
     loadContacts();
   }, []);
 
-  const loadContacts = async () => {
-    setLoading(true);
+  // 联系人页保活常驻，转账后自动添加的联系人需要在回切时静默重拉呈现。
+  useTabActiveRefresh('/h5/contacts', () => loadContacts(true));
+
+  const loadContacts = async (silent = false) => {
+    // 静默刷新不进入全屏加载态、失败不弹错，保留旧列表直至新数据到达。
+    if (!silent) {
+      setLoading(true);
+    }
     try {
       const result = await userService.getContacts(20);
       setContacts(result || []);
     } catch (error: any) {
-      Toast.show({ icon: 'fail', content: error.message || '加载失败' });
+      if (!silent) {
+        Toast.show({ icon: 'fail', content: error.message || '加载失败' });
+      }
     } finally {
       setLoading(false);
     }
@@ -182,26 +191,6 @@ const ContactsPage: React.FC = () => {
           },
         ]}
       />
-
-      {/* 底部导航栏 */}
-      <div className="tabbar">
-        <div className="tab" onClick={() => history.push('/h5/home')}>
-          <span className="tab-icon">🏠</span>
-          <span className="tab-label">首页</span>
-        </div>
-        <div className="tab" onClick={() => history.push('/h5/ai-talk')}>
-          <span className="tab-icon">💬</span>
-          <span className="tab-label">AI助手</span>
-        </div>
-        <div className="tab on">
-          <span className="tab-icon">👥</span>
-          <span className="tab-label">联系人</span>
-        </div>
-        <div className="tab" onClick={() => history.push('/h5/profile')}>
-          <span className="tab-icon">👤</span>
-          <span className="tab-label">我的</span>
-        </div>
-      </div>
     </div>
   );
 };

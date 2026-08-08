@@ -15,6 +15,8 @@ public enum BusinessErrorCode implements ErrorCode {
     /** 风险规则拒绝本次操作。 */ RISK_REJECTED("RISK_REJECTED", "风险检查拒绝本次操作", 422),
     /** 风险规则要求运营人工审核，尚未进入资金执行。 */ RISK_MANUAL_REVIEW("RISK_MANUAL_REVIEW", "操作已进入人工审核", 202),
     /** 支付密码证明失效。 */ PAYMENT_PROOF_INVALID("PAYMENT_PROOF_INVALID", "支付密码证明无效或已过期", 409),
+    /** 合并提交端点验密失败，透传用户中心密码错误语义。 */ PAY_PASSWORD_INVALID("PAY_PASSWORD_INVALID", "支付密码错误", 422),
+    /** 合并提交端点验密被锁定，透传用户中心锁定语义。 */ PAYMENT_LOCKED("PAYMENT_LOCKED", "支付密码校验已被临时锁定", 429),
     /** 确认已过期。 */ CONFIRMATION_EXPIRED("CONFIRMATION_EXPIRED", "确认令牌已过期", 409),
     /** 确认主体或用户不匹配。 */ CONFIRMATION_MISMATCH("CONFIRMATION_MISMATCH", "确认内容与当前业务对象不一致", 409),
     /** 草稿字段或密码版本已变化。 */ CONFIRMATION_STALE("CONFIRMATION_STALE", "业务对象已变化，请重新确认", 409),

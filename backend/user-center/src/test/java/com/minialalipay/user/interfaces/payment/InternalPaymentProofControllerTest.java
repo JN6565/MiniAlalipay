@@ -21,7 +21,7 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
 @WebMvcTest(value = InternalPaymentProofController.class,
-        properties = "minialalipay.internal.service-token=test-internal-service-token")
+        properties = "internal.auth.service-token=test-internal-service-token")
 @AutoConfigureMockMvc(addFilters = false)
 @Import(InternalPaymentProofControllerTest.TestSupportConfiguration.class)
 class InternalPaymentProofControllerTest {

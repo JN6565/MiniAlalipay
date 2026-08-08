@@ -12,13 +12,16 @@ const TransferResultPage: React.FC = () => {
   const location = useLocation();
   // 路由 state 仅兼容提交后首次跳转；刷新和从明细进入时以后端详情为准。
   const navState = (location.state || {}) as { payeeNickname?: string };
-  const [loading, setLoading] = useState(true);
+  // 提交后跳转时路由 state 必带收款人昵称；此时直接展示“处理中”乐观首屏，不等首次轮询
+  const justSubmitted = !!navState.payeeNickname;
+  const [loading, setLoading] = useState(!justSubmitted);
   const [result, setResult] = useState<transferService.TransferResult | null>(null);
 
   useEffect(() => {
     if (!id) return;
-    // TCC 协调异步执行，初次状态通常为 PROCESSING；每 2 秒轮询一次，
-    // 最多 15 次直到终态，避免用户手动刷新；超时后按当前状态展示。
+    // TCC 协调异步执行，初次状态通常为 PROCESSING；轮询直到终态，避免用户手动刷新；
+    // 超时后按当前状态展示。提交后首次查询延迟 1 秒：受理瞬间必然还是 PROCESSING，
+    // 立即查询只会浪费一次请求；后续保持 2 秒间隔，最多 15 次。
     let cancelled = false;
     let timer: ReturnType<typeof setTimeout> | undefined;
     let attempts = 0;
@@ -39,12 +42,12 @@ const TransferResultPage: React.FC = () => {
       if (!cancelled) setLoading(false);
     };
 
-    load();
+    timer = setTimeout(load, justSubmitted ? 1000 : 0);
     return () => {
       cancelled = true;
       if (timer) clearTimeout(timer);
     };
-  }, [id]);
+  }, [id, justSubmitted]);
 
   if (loading) {
     return (

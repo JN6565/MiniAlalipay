@@ -2,6 +2,8 @@ import React, { useEffect } from 'react';
 import { Outlet, useLocation, history } from '@umijs/max';
 import { ConfigProvider } from 'antd-mobile';
 import zhCN from 'antd-mobile/es/locales/zh-CN';
+import TabBar, { isTabPath } from '@/components/h5/TabBar';
+import TabViews from './TabViews';
 import './index.less';
 
 const H5Layout: React.FC = () => {
@@ -42,6 +44,9 @@ const H5Layout: React.FC = () => {
     history.back();
   };
 
+  // Tab 页由保活容器接管渲染，路由组件不再经 Outlet 重复挂载。
+  const tabPath = isTabPath(location.pathname);
+
   return (
     <ConfigProvider locale={zhCN}>
       <div className="h5-layout">
@@ -58,10 +63,14 @@ const H5Layout: React.FC = () => {
           </div>
         )}
 
-        {/* 内容区 */}
+        {/* 内容区：Tab 页走保活容器常驻不卸载，二级页仍由路由 Outlet 渲染 */}
         <div className="h5-content">
-          <Outlet />
+          <TabViews />
+          {!tabPath && <Outlet />}
         </div>
+
+        {/* 底部导航栏：布局层常驻，切换 Tab 时不重绘 */}
+        {tabPath && <TabBar activePath={location.pathname} />}
       </div>
     </ConfigProvider>
   );

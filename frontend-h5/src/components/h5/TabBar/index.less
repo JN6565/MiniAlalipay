@@ -1,0 +1,48 @@
+// 底部导航栏：由 H5Layout 常驻渲染，切换 Tab 时不重绘。
+// 样式合并自原 Home/AITalk/Contacts/Profile 四份重复定义，统一为浅色主题，
+// 高度叠加底部安全区，与 AI 助手页输入区的 bottom 偏移保持一致。
+.tabbar {
+  position: fixed;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  height: calc(60px + env(safe-area-inset-bottom, 0px));
+  padding-bottom: env(safe-area-inset-bottom, 0px);
+  background: #fff;
+  display: flex;
+  align-items: center;
+  justify-content: space-around;
+  border-top: 1px solid #eee;
+  z-index: 100;
+
+  .tab {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 4px;
+    cursor: pointer;
+
+    &.on {
+      .tab-icon {
+        transform: scale(1.1);
+      }
+      .tab-label {
+        color: #1677ff;
+        font-weight: 600;
+      }
+    }
+  }
+
+  .tab-icon {
+    font-size: 22px;
+    transition: transform 0.2s;
+  }
+
+  .tab-label {
+    font-size: 10px;
+    color: #666;
+    transition: color 0.2s;
+  }
+}

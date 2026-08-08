@@ -2,8 +2,8 @@ import React, { useEffect, useState } from 'react';
 import { history, useSearchParams, useLocation } from 'umi';
 import { Card, Button, Toast, SpinLoading, Dialog } from 'antd-mobile';
 import * as transferService from '@/services/transfer';
-import * as paymentPasswordService from '@/services/paymentPassword';
 import * as userService from '@/services/user';
+import { generateIdempotencyKey } from '@/services/utils';
 import { AmountDisplay } from '@/components/h5/AmountDisplay';
 import { PasswordInput } from '@/components/h5/PasswordInput';
 import { maskName, maskAccount } from '@/utils/format';
@@ -78,21 +78,14 @@ const TransferConfirmPage: React.FC = () => {
 
     setLoading(true);
     try {
-      // 1. 验证支付密码并签发一次性支付证明（TRANSFER_CONFIRM 用途）
-      const { paymentProof } = await paymentPasswordService.issuePaymentProof(password);
-
-      // 2. 用支付证明签发一次性确认令牌；令牌不得写入日志、URL 或浏览器存储
-      const { confirmationToken } = await transferService.issueConfirmation(
+      // 合并提交：一次请求在服务端完成验密签发证明、签发确认令牌与转账受理；
+      // 支付密码仅走请求体，不落存储；超时时必须复用同一幂等键重试
+      const result = await transferService.submitTransferWithPassword(
         draftId!,
-        paymentProof,
         validatedVersion,
+        password,
+        generateIdempotencyKey(),
       );
-
-      // 3. 提交转账
-      const result = await transferService.submitTransfer({
-        draftId: draftId!,
-        confirmationToken,
-      });
 
       // 跳转到结果页；后端状态接口不含收款人昵称，通过路由 state 携带展示
       history.push(`/h5/transfer/result/${result.transactionId}`, {

@@ -11,6 +11,7 @@ import jakarta.validation.constraints.Max;
 import jakarta.validation.constraints.Min;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotNull;
+import jakarta.validation.constraints.Pattern;
 import jakarta.validation.constraints.Size;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.GetMapping;
@@ -90,6 +91,24 @@ public class TransferController {
                 TransactionResponse.from(service.getTransactionDetail(userId, value.getTransactionId())), request));
     }
 
+    /**
+     * 验密即支付：H5 主动转账合并提交端点，一次请求在服务端内部完成
+     * 验密签发证明、签发并消费确认令牌、受理转账，响应语义与 POST /transfers 一致。
+     *
+     * <p>权限：网关注入的可信 X-User-Id；幂等：契约要求 Idempotency-Key；
+     * 敏感约束：paymentPassword 只允许出现在请求体，不落日志、URL、浏览器存储或持久化字段。</p>
+     */
+    @PostMapping("/transfers/submit-with-password")
+    public ResponseEntity<ApiResponse<TransactionResponse>> submitWithPassword(
+            @RequestHeader("X-User-Id") String userId,
+            @RequestHeader("Idempotency-Key") String key,
+            @Valid @RequestBody SubmitWithPasswordRequest body, HttpServletRequest request) {
+        FundTransaction value = service.submitWithPassword(userId, body.draftId(), body.version(),
+                body.paymentPassword(), key, request.getHeader("X-Trace-Id"));
+        return ResponseEntity.accepted().body(success(
+                TransactionResponse.from(service.getTransactionDetail(userId, value.getTransactionId())), request));
+    }
+
     /** 查询付款人或收款人本人参与的转账权威状态，无关用户按不存在处理。 */
     @GetMapping("/transfers/{id}")
     public ResponseEntity<ApiResponse<TransactionResponse>> getTransaction(@RequestHeader("X-User-Id") String userId,
@@ -125,6 +144,9 @@ public class TransferController {
                                       @Min(0) long subjectVersion, @NotBlank String paymentProof) { }
     /** 提交转账请求，确认令牌不得进入 URL 或日志。 */
     public record SubmitTransferRequest(@NotBlank String draftId, @NotBlank String confirmationToken) { }
+    /** 合并提交请求；version 为风控预检返回的草稿版本，paymentPassword 属敏感字段，禁止进入日志或 URL。 */
+    public record SubmitWithPasswordRequest(@NotBlank String draftId, @Min(0) long version,
+                                            @NotBlank @Pattern(regexp = "^\\d{6}$") String paymentPassword) { }
 
     /** 转账草稿 API DTO，不暴露内部持久化对象；收款方展示字段已脱敏且可空。 */
     public record DraftResponse(String draftId, String payeeUserId, long amountFen, String remark,

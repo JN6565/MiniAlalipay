@@ -318,6 +318,38 @@ paths:
         '409': { $ref: '#/components/responses/Conflict' }
         '422': { $ref: '#/components/responses/UnprocessableEntity' }
         '503': { $ref: '#/components/responses/ServiceUnavailable' }
+  /api/v1/transfers/submit-with-password:
+    post:
+      summary: 验密即支付（普通转账合并提交）
+      description: |
+        H5 主动转账合并提交端点：一次请求在服务端内部完成支付密码验证与证明签发、
+        确认令牌签发与消费、转账受理，替代客户端 proof → confirmations → transfers
+        三次串行调用。确认令牌的签发与消费仍是受理前置条件，受理与 TCC 语义与
+        POST /api/v1/transfers 完全一致。paymentPassword 属敏感字段，只允许出现在请求体，
+        不得进入日志、URL、浏览器存储或埋点。
+      operationId: submitTransferWithPassword
+      x-client-scope: C
+      parameters:
+        - $ref: '#/components/parameters/RequestIdHeader'
+        - $ref: '#/components/parameters/IdempotencyKeyHeader'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/SubmitWithPasswordRequest' }
+      responses:
+        '202':
+          description: 交易已受理，客户端应按状态 URL 查询
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/TransferTransactionResponse' }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409': { $ref: '#/components/responses/Conflict' }
+        '422': { $ref: '#/components/responses/UnprocessableEntity' }
+        '429': { $ref: '#/components/responses/TooManyRequests' }
+        '503': { $ref: '#/components/responses/ServiceUnavailable' }
   /api/v1/transfers/{id}:
     get:
       summary: 查询本人参与的普通转账详情与权威状态
@@ -2822,6 +2854,14 @@ components:
       properties:
         draftId: { type: string, minLength: 1, maxLength: 26 }
         confirmationToken: { type: string, minLength: 1, maxLength: 256, description: 两分钟有效的一次性确认令牌，不得进入 URL 或日志。 }
+    SubmitWithPasswordRequest:
+      type: object
+      additionalProperties: false
+      required: [draftId, version, paymentPassword]
+      properties:
+        draftId: { type: string, minLength: 1, maxLength: 26 }
+        version: { type: integer, format: int64, minimum: 0, description: 风控预检返回的草稿 CAS 版本。 }
+        paymentPassword: { type: string, pattern: '^\d{6}$', description: 六位数字支付密码，属敏感字段，不得进入 URL、日志或浏览器存储。 }
     TransferDraft:
       type: object
       additionalProperties: false

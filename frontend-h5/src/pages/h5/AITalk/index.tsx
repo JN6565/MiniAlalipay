@@ -592,26 +592,6 @@ const AITalkPage: React.FC = () => {
           setSessionDrawerOpen(false);
         }}
       />
-
-      {/* 底部导航栏 */}
-      <div className="tabbar">
-        <div className="tab" onClick={() => history.push('/h5/home')}>
-          <span className="tab-icon">🏠</span>
-          <span className="tab-label">首页</span>
-        </div>
-        <div className="tab on">
-          <span className="tab-icon">💬</span>
-          <span className="tab-label">AI助手</span>
-        </div>
-        <div className="tab" onClick={() => history.push('/h5/contacts')}>
-          <span className="tab-icon">👥</span>
-          <span className="tab-label">联系人</span>
-        </div>
-        <div className="tab" onClick={() => history.push('/h5/profile')}>
-          <span className="tab-icon">👤</span>
-          <span className="tab-label">我的</span>
-        </div>
-      </div>
     </div>
   );
 };
