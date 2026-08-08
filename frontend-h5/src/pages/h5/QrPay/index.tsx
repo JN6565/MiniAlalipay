@@ -44,15 +44,24 @@ const QrPayPage: React.FC = () => {
       await qrPayService.loadH5Shell(t);
       // 交换令牌获取订单
       const exchanged = await qrPayService.exchangeToken(t);
-      const [scanned, accountData, creditData] = await Promise.all([
-        qrPayService.markScanned(exchanged.qrOrderId),
+      // 订单交换成功后立即渲染付款页；余额/额度查询失败不能把资金来源控件一起阻塞掉。
+      setOrder(exchanged);
+      setLoading(false);
+      setCountdown(Math.max(0, Math.floor((new Date(exchanged.expiresAt).getTime() - Date.now()) / 1000)));
+
+      const scanned = await qrPayService.markScanned(exchanged.qrOrderId).catch(() => exchanged);
+      setOrder(scanned);
+
+      const [accountResult, creditResult] = await Promise.allSettled([
         accountService.getMyAccount(),
         creditService.getCreditSummary(),
       ]);
-      setOrder(scanned as qrPayService.QrPayOrder);
-      setAccount(accountData as unknown as accountService.AccountInfo);
-      setCredit(creditData as unknown as creditService.CreditSummary);
-      setCountdown(Math.max(0, Math.floor((new Date(scanned.expiresAt).getTime() - Date.now()) / 1000)));
+      if (accountResult.status === 'fulfilled') {
+        setAccount(accountResult.value as unknown as accountService.AccountInfo);
+      }
+      if (creditResult.status === 'fulfilled') {
+        setCredit(creditResult.value as unknown as creditService.CreditSummary);
+      }
     } catch (error: any) {
       Toast.show({ content: error.message || '订单无效', icon: 'fail' });
     } finally {
@@ -107,12 +116,6 @@ const QrPayPage: React.FC = () => {
     return <div className="error-state">订单无效或已过期</div>;
   }
 
-  const balanceDisabled = account?.status !== 'ACTIVE'
-    || (account?.availableFen ?? 0) < order.amountFen;
-  const creditDisabled = credit?.status !== 'ACTIVE'
-    || (credit?.availableFen ?? 0) < order.amountFen
-    || (credit?.overdueFen ?? 0) > 0;
-
   const selectFundingSource = (value: string | number) => {
     setFundingSource(value as 'BALANCE' | 'MINI_CREDIT');
     setPassword('');
@@ -149,16 +152,14 @@ const QrPayPage: React.FC = () => {
         <Radio.Group value={fundingSource || undefined} onChange={selectFundingSource}>
           <div className="funding-options">
             <div className="funding-option">
-              <Radio value="BALANCE" disabled={balanceDisabled}>
+              <Radio value="BALANCE">
                 虚拟余额（可用 <AmountDisplay amountFen={account?.availableFen || 0} size="small" />）
               </Radio>
-              {balanceDisabled ? <div className="funding-reason">可用余额不足或账户不可用</div> : null}
             </div>
             <div className="funding-option">
-              <Radio value="MINI_CREDIT" disabled={creditDisabled}>
+              <Radio value="MINI_CREDIT">
                 Mini 花呗（可用 <AmountDisplay amountFen={credit?.availableFen || 0} size="small" />）
               </Radio>
-              {creditDisabled ? <div className="funding-reason">花呗不可用、存在逾期或额度不足</div> : null}
             </div>
           </div>
         </Radio.Group>

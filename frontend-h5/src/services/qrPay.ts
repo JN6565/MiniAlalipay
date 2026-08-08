@@ -9,8 +9,21 @@ export interface QrPayOrder {
   expiresAt: string;
   status: string;
   transactionId: string | null;
+  qrCodeUrl?: string | null;
   version: number;
 }
+
+/** 创建支持余额或 Mini 花呗支付的动态扫码收款订单。 */
+export const createDynamicQrOrder = (params: {
+  amountFen: number;
+  subject?: string;
+}): Promise<QrPayOrder> => {
+  return Promise.resolve(request.post<QrPayOrder>(
+    '/api/v1/qr-pay/orders',
+    params,
+    { headers: { 'Idempotency-Key': generateIdempotencyKey() } },
+  )).then((response) => response as unknown as QrPayOrder);
+};
 
 // 加载H5壳（不消费令牌）
 export const loadH5Shell = (token: string) => {

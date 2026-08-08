@@ -1,5 +1,5 @@
 import request from '../../src/services/request';
-import { createConfirmation, loadH5Shell, submitPayment } from '../../src/services/qrPay';
+import { createConfirmation, createDynamicQrOrder, loadH5Shell, submitPayment } from '../../src/services/qrPay';
 
 jest.mock('../../src/services/request', () => ({
   __esModule: true,
@@ -24,6 +24,16 @@ describe('动态扫码支付服务契约', () => {
     expect(mockedGet).toHaveBeenCalledWith('/api/v1/qr-pay/orders/by-token', {
       params: { t: 'qr-token' },
     });
+  });
+
+  test('动态收款订单通过网关创建并携带幂等键', () => {
+    createDynamicQrOrder({ amountFen: 1200, subject: '午餐' });
+
+    expect(mockedPost).toHaveBeenCalledWith(
+      '/api/v1/qr-pay/orders',
+      { amountFen: 1200, subject: '午餐' },
+      { headers: { 'Idempotency-Key': expect.stringMatching(/^idem_/) } },
+    );
   });
 
   test('确认请求绑定订单版本支付证明和资金来源', () => {

@@ -3,6 +3,7 @@ import { history } from 'umi';
 import { Tabs, Card, Button, Input, Toast, SpinLoading } from 'antd-mobile';
 import { QRCodeSVG } from 'qrcode.react';
 import * as collectionService from '@/services/collection';
+import * as qrPayService from '@/services/qrPay';
 import { AMOUNT_MIN, AMOUNT_MAX } from '@/constants';
 import { AmountInput } from '@/components/h5/AmountInput';
 import { formatTime } from '@/utils/format';
@@ -15,6 +16,7 @@ const CollectionPage: React.FC = () => {
   const [requestAmount, setRequestAmount] = useState(0);
   const [requestSubject, setRequestSubject] = useState('');
   const [creating, setCreating] = useState(false);
+  const [dynamicOrder, setDynamicOrder] = useState<qrPayService.QrPayOrder | null>(null);
 
   useEffect(() => {
     loadPersonalCode();
@@ -77,6 +79,26 @@ const CollectionPage: React.FC = () => {
     }
   };
 
+  const handleCreateDynamicOrder = async () => {
+    if (requestAmount < AMOUNT_MIN || requestAmount > AMOUNT_MAX) {
+      Toast.show({ content: `金额范围 ${AMOUNT_MIN}-${AMOUNT_MAX} 元`, icon: 'fail' });
+      return;
+    }
+    setCreating(true);
+    try {
+      const data = await qrPayService.createDynamicQrOrder({
+        amountFen: Math.round(requestAmount * 100),
+        subject: requestSubject,
+      });
+      setDynamicOrder(data);
+      Toast.show({ icon: 'success', content: '动态收款码已生成' });
+    } catch (error: any) {
+      Toast.show({ icon: 'fail', content: error.message || '创建动态收款码失败' });
+    } finally {
+      setCreating(false);
+    }
+  };
+
   // 二维码内容直接使用后端返回的相对路径：App 内扫码按路径与令牌参数识别跳转，
   // 不拼接当前设备 origin，避免付款方设备地址不同导致二维码失效
   const getCollectionUrl = () => {
@@ -95,6 +117,7 @@ const CollectionPage: React.FC = () => {
     <div className="collection-page">
       <Tabs activeKey={activeTab} onChange={setActiveTab}>
         <Tabs.Tab title="个人收款码" key="code" />
+        <Tabs.Tab title="动态收款" key="dynamic" />
         <Tabs.Tab title="设置金额" key="request" />
       </Tabs>
 
@@ -132,6 +155,41 @@ const CollectionPage: React.FC = () => {
               </Button>
             </Card>
           )}
+        </div>
+      ) : activeTab === 'dynamic' ? (
+        <div className="request-section">
+          <Card className="request-form">
+            <div className="form-title">动态收款</div>
+            <AmountInput
+              value={requestAmount || undefined}
+              onChange={setRequestAmount}
+              placeholder="请输入收款金额"
+            />
+            <Input
+              placeholder="备注（选填）"
+              value={requestSubject}
+              onChange={setRequestSubject}
+              maxLength={50}
+            />
+            <Button
+              block
+              color="primary"
+              loading={creating}
+              onClick={handleCreateDynamicOrder}
+              style={{ marginTop: 16 }}
+            >
+              生成动态收款码
+            </Button>
+          </Card>
+          {dynamicOrder?.qrCodeUrl ? (
+            <Card className="code-card">
+              <div className="code-status">付款方扫码后可选择余额或 Mini 花呗</div>
+              <div className="code-qr">
+                <QRCodeSVG value={dynamicOrder.qrCodeUrl} size={220} level="H" includeMargin />
+              </div>
+              <div className="code-status">金额：{(dynamicOrder.amountFen / 100).toFixed(2)} 元</div>
+            </Card>
+          ) : null}
         </div>
       ) : (
         <div className="request-section">
