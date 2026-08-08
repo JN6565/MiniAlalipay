@@ -19,13 +19,13 @@ public class ToolCatalog {
             // ========================
             Map.entry("search_payees", new ToolDefinition(
                     "search_payees", ToolRiskLevel.READ_ONLY,
-                    "查询候选收款人", "user-center",
+                    "搜索收款人。当用户要转账/转钱/汇款时，必须先调用此工具搜索收款人（支持手机号精确搜索或姓名模糊搜索），获取 payeeId 后才能创建转账草稿。", "user-center",
                     "v1", true, 3,
                     Map.of(
                             "type", "object",
                             "properties", Map.of(
                                     "query", Map.of("type", "string", "minLength", 1, "maxLength", 64,
-                                            "description", "搜索手机号（11 位精确匹配）"),
+                                            "description", "搜索关键词：11位手机号精确匹配，或中文姓名模糊匹配。例如用户说'转给18736330007'则传'18736330007'，说'转给张三'则传'张三'"),
                                     "limit", Map.of("type", "integer", "default", 10, "maximum", 20,
                                             "description", "返回结果数量上限")
                             ),
@@ -58,7 +58,7 @@ public class ToolCatalog {
             )),
             Map.entry("get_balance", new ToolDefinition(
                     "get_balance", ToolRiskLevel.READ_ONLY,
-                    "查询实时余额", "account-center",
+                    "查询账户可用余额和冻结金额。当用户询问余额、多少钱、账户资金时使用此工具。注意：此工具只查账户余额，不查花呗/信用额度。", "account-center",
                     "v1", true, 3,
                     Map.of("type", "object", "properties", Map.of(), "additionalProperties", false),
                     Map.of("type", "object", "properties", Map.of(
@@ -103,7 +103,7 @@ public class ToolCatalog {
             )),
             Map.entry("get_credit_summary", new ToolDefinition(
                     "get_credit_summary", ToolRiskLevel.READ_ONLY,
-                    "查询本人额度与未出账", "account-center",
+                    "查询花呗/信用额度信息，包括总额度、已用额度和可用额度。当用户询问花呗额度、信用额度、花呗可用额度时使用此工具。注意：此工具只查信用额度，不查账户余额。", "account-center",
                     "v1", true, 3,
                     Map.of("type", "object", "properties", Map.of(), "additionalProperties", false),
                     Map.of("type", "object", "properties", Map.of(
@@ -129,7 +129,7 @@ public class ToolCatalog {
             // ========================
             Map.entry("create_transfer_draft", new ToolDefinition(
                     "create_transfer_draft", ToolRiskLevel.DRAFT,
-                    "保存结构化转账草稿", "business-center",
+                    "创建转账草稿。必须在 search_payees 找到收款人后调用，将 payeeId、金额（分）和备注保存为草稿。", "business-center",
                     "v1", true, 3,
                     Map.of("type", "object",
                             "properties", Map.of(

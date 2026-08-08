@@ -165,6 +165,11 @@ public class UserRepositoryImpl implements UserRepository {
         return userMapper.existsByPhoneNumber(phoneNumber);
     }
 
+    @Override
+    public boolean existsByIdCardHashExcluding(byte[] idCardHash, String excludeUserId) {
+        return userMapper.existsByIdCardHashExcluding(idCardHash, excludeUserId);
+    }
+
     /**
      * 按手机号搜索用户。
      *
@@ -212,7 +217,9 @@ public class UserRepositoryImpl implements UserRepository {
                 user.getCreatedAt(),
                 user.getUpdatedAt(),
                 user.getDisabledBy(),
-                user.getDisabledReason()
+                user.getDisabledReason(),
+                user.getIdCard(),
+                user.getIdCardHash()
         );
     }
 
@@ -239,7 +246,9 @@ public class UserRepositoryImpl implements UserRepository {
                 userPO.getCreatedAt(),
                 userPO.getUpdatedAt(),
                 userPO.getDisabledBy(),
-                userPO.getDisabledReason()
+                userPO.getDisabledReason(),
+                userPO.getIdCard(),
+                userPO.getIdCardHash()
         );
     }
 

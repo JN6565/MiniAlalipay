@@ -4,6 +4,7 @@ import com.minialalipay.account.domain.ledger.LedgerDirection;
 import com.minialalipay.account.domain.ledger.LedgerEntry;
 import com.minialalipay.account.domain.ledger.LedgerRepository;
 import com.minialalipay.account.domain.ledger.LedgerVoucher;
+import com.minialalipay.account.application.port.UserInfoPort;
 import org.junit.jupiter.api.Test;
 
 import java.time.Instant;
@@ -24,7 +25,7 @@ class LedgerApplicationServiceTest {
     @Test
     void repeatedVoucherBusinessKeyReturnsExistingPostedFact() {
         InMemoryLedgerRepository repository = new InMemoryLedgerRepository();
-        LedgerApplicationService service = new LedgerApplicationService(repository);
+        LedgerApplicationService service = new LedgerApplicationService(repository, new NoopUserInfoPort());
         LedgerVoucher first = voucher("voucher-1");
         LedgerVoucher repeated = voucher("voucher-2");
 
@@ -41,7 +42,7 @@ class LedgerApplicationServiceTest {
     @Test
     void repeatedVoucherBusinessKeyRejectsDifferentAmount() {
         InMemoryLedgerRepository repository = new InMemoryLedgerRepository();
-        LedgerApplicationService service = new LedgerApplicationService(repository);
+        LedgerApplicationService service = new LedgerApplicationService(repository, new NoopUserInfoPort());
         service.post(voucher("voucher-1"), "event-00000000000000000001",
                 "trace-00000000000000000000000000", NOW.plusSeconds(1));
         LedgerVoucher changed = LedgerVoucher.prepare("voucher-2", "transaction", "TRANSFER", 0, null,
@@ -61,10 +62,12 @@ class LedgerApplicationServiceTest {
     @Test
     void fullFinalPageDoesNotReturnNextCursor() {
         InMemoryLedgerRepository repository = new InMemoryLedgerRepository();
-        repository.queryEntries = List.of(new LedgerEntry(9L, "voucher", "transaction", "ledger",
-                LedgerDirection.DEBIT, 500L, 1, "付款", NOW));
+        repository.queryEntries = List.of(new LedgerEntry.WithCounterparty(
+                new LedgerEntry(9L, "voucher", "transaction", "ledger",
+                        LedgerDirection.DEBIT, 500L, 1, "付款", NOW),
+                "counterparty-user"));
 
-        var page = new LedgerApplicationService(repository).listMyEntries("user", null, 1);
+        var page = new LedgerApplicationService(repository, new NoopUserInfoPort()).listMyEntries("user", null, 1);
 
         assertThat(page.items()).hasSize(1);
         assertThat(page.nextCursor()).isNull();
@@ -75,11 +78,15 @@ class LedgerApplicationServiceTest {
     void nextPageUsesCreatedAtAndEntryIdFromOpaqueCursor() {
         InMemoryLedgerRepository repository = new InMemoryLedgerRepository();
         repository.queryEntries = List.of(
-                new LedgerEntry(9L, "voucher", "transaction", "ledger", LedgerDirection.DEBIT,
-                        500L, 1, "付款", NOW),
-                new LedgerEntry(8L, "voucher", "transaction", "ledger", LedgerDirection.CREDIT,
-                        500L, 2, "收款", NOW.minusMillis(1)));
-        LedgerApplicationService service = new LedgerApplicationService(repository);
+                new LedgerEntry.WithCounterparty(
+                        new LedgerEntry(9L, "voucher", "transaction", "ledger", LedgerDirection.DEBIT,
+                                500L, 1, "付款", NOW),
+                        "counterparty-user"),
+                new LedgerEntry.WithCounterparty(
+                        new LedgerEntry(8L, "voucher", "transaction", "ledger", LedgerDirection.CREDIT,
+                                500L, 2, "收款", NOW.minusMillis(1)),
+                        "counterparty-user"));
+        LedgerApplicationService service = new LedgerApplicationService(repository, new NoopUserInfoPort());
 
         var firstPage = service.listMyEntries("user", null, 1);
         repository.queryEntries = List.of();
@@ -99,9 +106,17 @@ class LedgerApplicationServiceTest {
                 ), NOW);
     }
 
+    /** 测试用空实现，不查询用户信息。 */
+    static final class NoopUserInfoPort implements UserInfoPort {
+        @Override
+        public UserInfo findUserInfo(String userId) {
+            return new UserInfo(userId, "", "", "");
+        }
+    }
+
     static final class InMemoryLedgerRepository implements LedgerRepository {
         final List<LedgerVoucher> saved = new ArrayList<>();
-        List<LedgerEntry> queryEntries = List.of();
+        List<LedgerEntry.WithCounterparty> queryEntries = List.of();
         Instant cursorCreatedAt;
         long cursorEntryId;
         int requestedLimit;
@@ -127,6 +142,14 @@ class LedgerApplicationServiceTest {
         }
         @Override public List<LedgerEntry> findEntriesByUserId(String userId, Instant cursorCreatedAt,
                                                                long cursorEntryId, int limit) {
+            this.cursorCreatedAt = cursorCreatedAt;
+            this.cursorEntryId = cursorEntryId;
+            this.requestedLimit = limit;
+            return queryEntries.stream().map(LedgerEntry.WithCounterparty::entry).toList();
+        }
+        @Override public List<LedgerEntry.WithCounterparty> findEntriesWithCounterparty(String userId,
+                                                                                        Instant cursorCreatedAt,
+                                                                                        long cursorEntryId, int limit) {
             this.cursorCreatedAt = cursorCreatedAt;
             this.cursorEntryId = cursorEntryId;
             this.requestedLimit = limit;

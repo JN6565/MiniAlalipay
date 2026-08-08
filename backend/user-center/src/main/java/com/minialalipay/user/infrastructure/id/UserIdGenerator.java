@@ -1,5 +1,6 @@
 package com.minialalipay.user.infrastructure.id;
 
+import com.minialalipay.user.domain.user.UserIdGeneratorPort;
 import com.minialalipay.user.infrastructure.persistence.mapper.UserIdSequenceMapper;
 import org.springframework.stereotype.Component;
 import org.springframework.transaction.annotation.Transactional;
@@ -23,7 +24,7 @@ import java.time.format.DateTimeFormatter;
  * 碰撞概率极低（26^9 约 5.4 × 10^12）。</p>
  */
 @Component
-public class UserIdGenerator {
+public class UserIdGenerator implements UserIdGeneratorPort {
 
     /** userId 前缀，与 registrationId 视觉区分。 */
     private static final String USER_PREFIX = "USR";
@@ -66,6 +67,7 @@ public class UserIdGenerator {
      * @return 成对的 userId 和 registrationId
      */
     @Transactional
+    @Override
     public IdPair generatePair() {
         LocalDate today = LocalDate.now();
         String dateStr = today.format(DATE_FORMATTER);
@@ -99,22 +101,5 @@ public class UserIdGenerator {
             sb.append(ALPHABET[secureRandom.nextInt(ALPHABET.length)]);
         }
         return sb.toString();
-    }
-
-    /**
-     * userId 与 registrationId 的成对生成结果。
-     *
-     * <p>两者共享同一日期序列号，通过前缀（USR/REG）和随机段区分。
-     * 示例：
-     * <ul>
-     *   <li>{@code userId = "USRAKXMTBNPQ20260807000001"}</li>
-     *   <li>{@code registrationId = "REGQWFLKCAZX20260807000001"}</li>
-     * </ul>
-     * </p>
-     *
-     * @param userId         26 位用户 ID
-     * @param registrationId 26 位注册幂等键
-     */
-    public record IdPair(String userId, String registrationId) {
     }
 }

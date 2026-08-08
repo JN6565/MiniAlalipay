@@ -34,4 +34,8 @@ public record LedgerEntry(long entryId, String voucherId, String transactionId, 
     private static void requireText(String value, String message) {
         if (value == null || value.isBlank()) throw new IllegalArgumentException(message);
     }
+
+    /** 携带交易对方用户 ID 的查询投影，仅用于展示，不参与过账。 */
+    public record WithCounterparty(LedgerEntry entry, String counterpartyUserId) {
+    }
 }

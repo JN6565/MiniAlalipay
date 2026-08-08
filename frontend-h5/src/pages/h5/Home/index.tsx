@@ -13,6 +13,7 @@ const HomePage: React.FC = () => {
   const [account, setAccount] = useState<accountService.AccountInfo | null>(null);
   const [credit, setCredit] = useState<creditService.CreditSummary | null>(null);
   const [transactions, setTransactions] = useState<accountService.Transaction[]>([]);
+  const [balanceHidden, setBalanceHidden] = useState(false);
 
   useEffect(() => {
     loadData();
@@ -57,6 +58,10 @@ const HomePage: React.FC = () => {
     return (fen / 100).toFixed(2);
   };
 
+  const displayAmount = (fen: number) => {
+    return balanceHidden ? '****' : formatAmount(fen);
+  };
+
   const formatRelativeTime = (dateStr: string) => {
     const now = new Date();
     const date = new Date(dateStr);
@@ -96,21 +101,23 @@ const HomePage: React.FC = () => {
         <div className="asset-box">
           <div className="asset-top">
             <span>总资产(元)</span>
-            <span className="eye">👁️</span>
+            <span className="eye" onClick={() => setBalanceHidden(!balanceHidden)}>
+              {balanceHidden ? '🙈' : '👁️'}
+            </span>
           </div>
-          <div className="asset-num">{formatAmount(account?.totalFen || 0)}</div>
+          <div className="asset-num">{displayAmount(account?.totalFen || 0)}</div>
           <div className="asset-cols">
             <div>
               <span>可用余额</span>
-              <b>{formatAmount(account?.availableFen || 0)}</b>
+              <b>{displayAmount(account?.availableFen || 0)}</b>
             </div>
             <div>
               <span>冻结金额</span>
-              <b>{formatAmount(account?.frozenFen || 0)}</b>
+              <b>{displayAmount(account?.frozenFen || 0)}</b>
             </div>
             <div>
               <span>花呗可用</span>
-              <b>{credit ? formatAmount(credit.availableFen) : '--'}</b>
+              <b>{credit ? displayAmount(credit.availableFen) : '--'}</b>
             </div>
           </div>
         </div>
@@ -146,9 +153,9 @@ const HomePage: React.FC = () => {
           <div className="func-icon" style={{ background: '#f5f5f5' }}>🏦</div>
           <span>充值</span>
         </div>
-        <div className="func-item">
-          <div className="func-icon" style={{ background: '#f5f5f5' }}>❓</div>
-          <span>帮助</span>
+        <div className="func-item" onClick={() => history.push('/h5/bank-cards')}>
+          <div className="func-icon" style={{ background: '#f5f5f5' }}>💳</div>
+          <span>银行卡</span>
         </div>
       </div>
 
@@ -164,20 +171,26 @@ const HomePage: React.FC = () => {
             暂无交易记录
           </div>
         ) : (
-          transactions.map((tx) => (
-            <div key={tx.transactionId} className="tx-item">
-              <div className="tx-icon">
-                {tx.direction === 'IN' ? '📥' : '📤'}
+          transactions.map((tx) => {
+            // 优先显示交易对方，否则显示摘要
+            const title = tx.counterpartyName
+              ? (tx.direction === 'IN' ? `来自 ${tx.counterpartyName}` : `转给 ${tx.counterpartyName}`)
+              : accountService.getLedgerEntryTitle(tx);
+            return (
+              <div key={tx.transactionId} className="tx-item">
+                <div className="tx-icon">
+                  {tx.direction === 'IN' ? '📥' : '📤'}
+                </div>
+                <div className="tx-mid">
+                  <div className="tx-name">{title}</div>
+                  <div className="tx-time">{formatRelativeTime(tx.createdAt)}</div>
+                </div>
+                <div className={`tx-amt ${tx.direction === 'IN' ? 'in' : 'out'}`}>
+                  {`${tx.direction === 'IN' ? '+' : '-'}${formatAmount(tx.amountFen)}`}
+                </div>
               </div>
-              <div className="tx-mid">
-                <div className="tx-name">{accountService.getLedgerEntryTitle(tx)}</div>
-                <div className="tx-time">{formatRelativeTime(tx.createdAt)}</div>
-              </div>
-              <div className={`tx-amt ${tx.direction === 'IN' ? 'in' : 'out'}`}>
-                {tx.direction === 'IN' ? '+' : '-'}{formatAmount(tx.amountFen)}
-              </div>
-            </div>
-          ))
+            );
+          })
         )}
       </div>
     </div>

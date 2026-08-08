@@ -16,25 +16,77 @@ const SUGGESTIONS: { icon: string; text: string }[] = [
   { icon: '🌸', text: '我的花呗账单' },
 ];
 
-/** 距底部多少像素内视为"贴底"，贴底时新消息才自动滚动 */
+/** 距底部多少像素内视为“贴底” */
 const NEAR_BOTTOM_PX = 120;
+/** 用户手动上滚后，暂停自动滚动的时长（毫秒） */
+const SCROLL_PAUSE_MS = 3000;
+/** 自动滚动节流间隔（毫秒） */
+const SCROLL_THROTTLE_MS = 150;
 
 const MessageList: React.FC<Props> = ({ messages, renderMessage, onSuggestionClick }) => {
   const containerRef = useRef<HTMLDivElement>(null);
   const endRef = useRef<HTMLDivElement>(null);
   /** 用户是否贴底：向上翻历史时不强制滚底 */
   const stickToBottomRef = useRef(true);
+  /** 用户手动上滚后暂停自动滚动的时间戳 */
+  const userScrollUntilRef = useRef(0);
+  /** 上次自动滚动的时间戳（节流用） */
+  const lastScrollAtRef = useRef(0);
+  /** 节流定时器 */
+  const scrollTimerRef = useRef<ReturnType<typeof setTimeout>>();
 
   const handleScroll = useCallback(() => {
     const el = containerRef.current;
     if (!el) return;
-    stickToBottomRef.current = el.scrollHeight - el.scrollTop - el.clientHeight < NEAR_BOTTOM_PX;
+    const isNearBottom = el.scrollHeight - el.scrollTop - el.clientHeight < NEAR_BOTTOM_PX;
+    if (!isNearBottom && stickToBottomRef.current) {
+      // 用户手动上滚，暂停自动滚动
+      stickToBottomRef.current = false;
+      userScrollUntilRef.current = Date.now() + SCROLL_PAUSE_MS;
+    } else if (isNearBottom && !stickToBottomRef.current) {
+      // 用户滚回底部，恢复自动滚动
+      stickToBottomRef.current = true;
+    }
   }, []);
 
   useEffect(() => {
-    if (stickToBottomRef.current) {
-      endRef.current?.scrollIntoView({ behavior: 'smooth' });
+    const now = Date.now();
+
+    // 如果用户手动上滚且暂停时间未到，不自动滚底
+    if (!stickToBottomRef.current && now < userScrollUntilRef.current) {
+      return;
     }
+    // 暂停时间到期后恢复贴底状态
+    if (!stickToBottomRef.current && now >= userScrollUntilRef.current) {
+      stickToBottomRef.current = true;
+    }
+
+    if (!stickToBottomRef.current) return;
+
+    // 节流：至少间隔 SCROLL_THROTTLE_MS 才执行一次滚动
+    const elapsed = now - lastScrollAtRef.current;
+    if (elapsed < SCROLL_THROTTLE_MS) {
+      // 延迟到节流间隔到期
+      if (scrollTimerRef.current) clearTimeout(scrollTimerRef.current);
+      scrollTimerRef.current = setTimeout(() => {
+        const el = containerRef.current;
+        if (el && stickToBottomRef.current) {
+          lastScrollAtRef.current = Date.now();
+          el.scrollTop = el.scrollHeight;
+        }
+      }, SCROLL_THROTTLE_MS - elapsed);
+      return;
+    }
+
+    lastScrollAtRef.current = now;
+    const el = containerRef.current;
+    if (el) {
+      el.scrollTop = el.scrollHeight;
+    }
+
+    return () => {
+      if (scrollTimerRef.current) clearTimeout(scrollTimerRef.current);
+    };
   }, [messages]);
 
   return (

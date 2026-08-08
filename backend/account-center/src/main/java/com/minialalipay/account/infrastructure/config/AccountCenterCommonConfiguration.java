@@ -7,6 +7,7 @@ import com.minialalipay.common.trace.RequestIdGenerator;
 import org.springframework.boot.web.servlet.FilterRegistrationBean;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
+import org.springframework.web.client.RestTemplate;
 
 /**
  * 账户中心跨子域共享的技术配置，不承载余额、信用或账本领域规则。
@@ -46,5 +47,11 @@ public class AccountCenterCommonConfiguration {
         registration.setOrder(1);
         registration.setName("userContextFilter");
         return registration;
+    }
+
+    /** @return 用于调用其他微服务（如 user-center）的 RestTemplate */
+    @Bean
+    public RestTemplate restTemplate() {
+        return new RestTemplate();
     }
 }

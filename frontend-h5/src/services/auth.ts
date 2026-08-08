@@ -12,7 +12,6 @@ export interface LoginParams {
 
 export interface RegisterParams {
   phoneNumber: string;
-  realName: string;
   nickname?: string;
   loginPassword: string;
   paymentPassword: string;

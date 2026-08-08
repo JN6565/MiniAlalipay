@@ -85,6 +85,9 @@ function getPageTitle(pathname: string): string {
     '/h5/settings': '设置',
     '/h5/settings/change-login-password': '修改登录密码',
     '/h5/settings/about': '关于',
+    '/h5/settings/version': '版本信息',
+    '/h5/settings/user-agreement': '用户协议',
+    '/h5/settings/privacy-policy': '隐私政策',
     '/h5/transfer': '转账',
     '/h5/transfer/confirm': '确认转账',
     '/h5/recharge': '充值',
@@ -103,11 +106,18 @@ function getPageTitle(pathname: string): string {
     '/h5/account/analytics': '资产分析',
     '/h5/payment-password/setup': '设置支付密码',
     '/h5/payment-password/change': '修改支付密码',
+    '/h5/bank-cards': '银行卡',
+    '/h5/bank-cards/add': '添加银行卡',
   };
 
   // 精确匹配
   if (titleMap[pathname]) {
     return titleMap[pathname];
+  }
+
+  // 银行卡详情页带路径参数，无法精确命中，统一展示「卡片详情」
+  if (pathname.startsWith('/h5/bank-cards/') && pathname !== '/h5/bank-cards/add') {
+    return '卡片详情';
   }
 
   // 前缀匹配（优先匹配更长的路径）

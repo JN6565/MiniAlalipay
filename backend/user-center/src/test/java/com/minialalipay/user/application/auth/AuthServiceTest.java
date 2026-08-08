@@ -13,7 +13,7 @@ import com.minialalipay.user.domain.user.SessionManagerPort;
 import com.minialalipay.user.domain.user.User;
 import com.minialalipay.user.domain.user.UserRepository;
 import com.minialalipay.user.domain.user.UserStatus;
-import com.minialalipay.user.infrastructure.id.UserIdGenerator;
+import com.minialalipay.user.domain.user.UserIdGeneratorPort;
 import org.junit.jupiter.api.Test;
 import org.mockito.ArgumentCaptor;
 
@@ -38,7 +38,7 @@ class AuthServiceTest {
     private final SessionManagerPort sessionManager = mock(SessionManagerPort.class);
     private final AccountProvisioningPort accountProvisioningPort = mock(AccountProvisioningPort.class);
     private final RoleAssignmentRepository roleAssignmentRepository = mock(RoleAssignmentRepository.class);
-    private final UserIdGenerator userIdGenerator = mock(UserIdGenerator.class);
+    private final UserIdGeneratorPort userIdGenerator = mock(UserIdGeneratorPort.class);
     private final AuthService service = new AuthService(userRepository, credentialRepository,
             passwordHasher, sessionManager, accountProvisioningPort, roleAssignmentRepository, userIdGenerator);
 
@@ -49,18 +49,18 @@ class AuthServiceTest {
         when(passwordHasher.hashPassword("Login123")).thenReturn("login-hash");
         when(passwordHasher.hashPassword("123456")).thenReturn("payment-hash");
         when(userIdGenerator.generatePair()).thenReturn(
-                new UserIdGenerator.IdPair("USRABCDEFGHI20260807000001", "REGABCDEFGHI20260807000001"));
+                new UserIdGeneratorPort.IdPair("USRABCDEFGHI20260807000001", "REGABCDEFGHI20260807000001"));
         when(accountProvisioningPort.openAccount(anyString(), anyString())).thenReturn("account-id");
         when(sessionManager.createSession(anyString())).thenReturn("session-token");
 
         AuthResult result = service.register(new RegisterRequest(
-                "13800138000", "张三", "小张", "Login123", "123456"));
+                "13800138000", "张三", "Login123", "123456"));
 
         ArgumentCaptor<User> userCaptor = ArgumentCaptor.forClass(User.class);
         verify(userRepository).save(userCaptor.capture());
         assertTrue(userCaptor.getValue().getAccountNumber().matches("^62\\d{14}$"));
         assertEquals("13800138000", userCaptor.getValue().getPhoneNumber());
-        assertEquals("张三", userCaptor.getValue().getRealName());
+        assertEquals("张三", userCaptor.getValue().getNickname());
 
         ArgumentCaptor<Credential> credentialCaptor = ArgumentCaptor.forClass(Credential.class);
         verify(credentialRepository).save(credentialCaptor.capture());
@@ -75,7 +75,7 @@ class AuthServiceTest {
         when(userRepository.existsByPhoneNumber("13800138000")).thenReturn(true);
 
         BusinessException exception = assertThrows(BusinessException.class, () -> service.register(
-                new RegisterRequest("13800138000", "张三", null, "Login123", "123456")));
+                new RegisterRequest("13800138000", "张三", "Login123", "123456")));
 
         assertEquals(UserErrorCode.PHONE_NUMBER_EXISTS, exception.errorCode());
     }
@@ -87,12 +87,12 @@ class AuthServiceTest {
         when(passwordHasher.hashPassword("Login123")).thenReturn("login-hash");
         when(passwordHasher.hashPassword("123456")).thenReturn("payment-hash");
         when(userIdGenerator.generatePair()).thenReturn(
-                new UserIdGenerator.IdPair("USRABCDEFGHI20260807000001", "REGABCDEFGHI20260807000001"));
+                new UserIdGeneratorPort.IdPair("USRABCDEFGHI20260807000001", "REGABCDEFGHI20260807000001"));
         when(accountProvisioningPort.openAccount(anyString(), anyString()))
                 .thenThrow(new BusinessException(UserErrorCode.REGISTRATION_PROCESSING));
 
         BusinessException exception = assertThrows(BusinessException.class, () -> service.register(
-                new RegisterRequest("13800138000", "张三", "小张", "Login123", "123456")));
+                new RegisterRequest("13800138000", "张三", "Login123", "123456")));
 
         assertEquals(UserErrorCode.REGISTRATION_PROCESSING, exception.errorCode());
         verify(sessionManager, never()).createSession(anyString());

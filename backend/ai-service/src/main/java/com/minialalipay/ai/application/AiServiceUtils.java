@@ -12,9 +12,9 @@ public final class AiServiceUtils {
 
     // ── 上下文窗口常量 ──────────────────────────────────────────
 
-    /** 上下文窗口：保留最近 10 轮对话 */
-    public static final int CONTEXT_TURN_LIMIT = 10;
-    /** 10 轮对话对应 20 条消息（每轮一问一答） */
+    /** 上下文窗口：保留最近 6 轮对话，减少 LLM 看到过多历史导致混淆 */
+    public static final int CONTEXT_TURN_LIMIT = 6;
+    /** 6 轮对话对应 12 条消息（每轮一问一答） */
     public static final int CONTEXT_MESSAGE_LIMIT = CONTEXT_TURN_LIMIT * 2;
     /** 上下文 token 上限，超出后截断早期消息 */
     public static final int MAX_CONTEXT_TOKENS = 4096;
@@ -60,6 +60,41 @@ public final class AiServiceUtils {
      */
     public static String formatFenDisplay(long fen) {
         return String.format("%,.2f", fen / 100.0);
+    }
+
+    // ── 内容清理 ──────────────────────────────────────────────
+
+    /**
+     * 清除 AI 回复中可能泄露的内部工具结果标记。
+     *
+     * <p>LLM 有时会将 [TOOL_RESULT:toolName]{json} 等内部标记复制到回复中，
+     * 或输出独立的 resultCode/JSON 片段。此方法将其全部移除。</p>
+     *
+     * <p>清理策略：
+     * <ol>
+     *   <li>移除完整的 [TOOL_RESULT:xxx]{...} 标记（支持一层嵌套 JSON）</li>
+     *   <li>移除独立的 resultCode 片段（如 ,"resultCode":"SUCCESS"}）</li>
+     *   <li>移除独立的 JSON 对象片段（防止 LLM 输出裸 JSON）</li>
+     *   <li>清理多余空行</li>
+     * </ol>
+     */
+    public static String sanitizeContent(String content) {
+        if (content == null) return null;
+        String result = content;
+
+        // 1. 移除 [TOOL_RESULT:xxx]{...} 模式（支持一层嵌套 JSON）
+        result = result.replaceAll("\\[TOOL_RESULT:\\w+\\]\\{(?:[^{}]*|\\{[^{}]*\\})*\\}", "");
+
+        // 2. 移除独立的 resultCode 片段
+        result = result.replaceAll(",?\\s*\"resultCode\"\\s*:\\s*\"[^\"]*\"\\s*}?", "");
+
+        // 3. 移除独立的 JSON 对象片段
+        result = result.replaceAll("\\{\\s*\"\\w+\"\\s*:\\s*\"[^\"]*\"\\s*[,}]", "");
+
+        // 4. 清理多余空白和空行
+        result = result.replaceAll("\n\\s*\n", "\n").trim();
+
+        return result;
     }
 
     // ── Token 估算 ──────────────────────────────────────────────

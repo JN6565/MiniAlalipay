@@ -8,14 +8,13 @@ import java.util.Map;
 /**
  * 用户意图→MCP 工具映射表。
  *
+ * @deprecated 已被 Agent 架构替代。AgentLoop 通过 LLM function calling 自主选择工具，
+ * 不再使用硬编码的意图→工具映射。保留此类以兼容旧测试代码。
+ *
  * <p>定义每种用户意图对应哪些 MCP 工具及其参数的来源，供 Agent 将识别出的
  * 意图编排为工具调用序列。</p>
- *
- * <p>工具名与 {@code ToolCatalog} 中注册的工具名保持一致，参数名称需与工具
- * 输入 Schema 一致。当一份映射包含多个工具且存在前后依赖时（如先创建草稿再
- * 校验、再生成确认卡片），后继工具通过 {@link ToolMapping#isChainDependent()}
- * 标记为链式依赖，前驱失败时跳过。</p>
  */
+@Deprecated
 public final class IntentToolMapping {
 
     /** 意图→工具映射表，定义 8 类已知意图对应的工具序列。 */

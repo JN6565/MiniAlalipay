@@ -112,7 +112,7 @@ public class AgentStreamController {
                 return emitter;
             }
 
-            // 内容脱敏
+            // 内容脱敏（脱敏后内容仅用于存储，原始内容传给应用层供 LLM 工具调用）
             String sanitizedContent = sanitizer.sanitizeContent(request.content());
 
             // 构建回调：将 StreamCallback 事件转为 SSE 事件
@@ -126,10 +126,11 @@ public class AgentStreamController {
             });
             emitter.onError(ex -> log.debug("SSE 连接异常: userId={}", userId, ex));
 
-            // 异步执行流式处理：显式传递 bearerToken，避免线程池复用时 InheritableThreadLocal 丢失
+            // 异步执行流式处理：传入原始内容和脱敏内容，显式传递 bearerToken
             agentStreamService.processMessageStream(
                     userId, request.clientMessageId(),
-                    request.sessionId(), sanitizedContent, callback, bearerToken);
+                    request.sessionId(), request.content(), sanitizedContent,
+                    callback, bearerToken);
 
             return emitter;
         } finally {

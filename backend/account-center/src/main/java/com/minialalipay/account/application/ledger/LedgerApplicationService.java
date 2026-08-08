@@ -8,6 +8,7 @@ import com.minialalipay.account.domain.ledger.LedgerVoucherStatus;
 import com.minialalipay.account.domain.account.AccountErrorCode;
 import com.minialalipay.account.application.ledger.dto.LedgerEntryDTO;
 import com.minialalipay.account.application.ledger.dto.LedgerEntryPageDTO;
+import com.minialalipay.account.application.port.UserInfoPort;
 import com.minialalipay.common.error.BusinessException;
 import com.minialalipay.common.error.CommonErrorCode;
 import org.springframework.stereotype.Service;
@@ -15,9 +16,11 @@ import org.springframework.transaction.annotation.Transactional;
 
 import java.time.Instant;
 import java.util.List;
+import java.util.Map;
+import java.util.Objects;
+import java.util.stream.Collectors;
 import java.nio.charset.StandardCharsets;
 import java.util.Base64;
-import java.util.Objects;
 import org.springframework.dao.DataIntegrityViolationException;
 
 /**
@@ -30,9 +33,11 @@ import org.springframework.dao.DataIntegrityViolationException;
 public class LedgerApplicationService {
 
     private final LedgerRepository ledgerRepository;
+    private final UserInfoPort userInfoPort;
 
-    public LedgerApplicationService(LedgerRepository ledgerRepository) {
+    public LedgerApplicationService(LedgerRepository ledgerRepository, UserInfoPort userInfoPort) {
         this.ledgerRepository = ledgerRepository;
+        this.userInfoPort = userInfoPort;
     }
 
     /**
@@ -78,20 +83,58 @@ public class LedgerApplicationService {
         return locked;
     }
 
-    /** 查询本人不可变账本分录，单页最多 100 条。 */
+    /** 查询本人不可变账本分录（含交易对方名称），单页最多 100 条。 */
     @Transactional(readOnly = true)
     public LedgerEntryPageDTO listMyEntries(String userId, String cursor, int limit) {
         if (limit < 1 || limit > 100) {
             throw new BusinessException(CommonErrorCode.INVALID_REQUEST);
         }
         Cursor decoded = decodeCursor(cursor);
-        List<LedgerEntry> fetched = ledgerRepository.findEntriesByUserId(userId,
+        List<LedgerEntry.WithCounterparty> fetched = ledgerRepository.findEntriesWithCounterparty(userId,
                 decoded.createdAt(), decoded.entryId(), limit + 1);
         boolean hasMore = fetched.size() > limit;
-        List<LedgerEntry> page = hasMore ? fetched.subList(0, limit) : fetched;
-        List<LedgerEntryDTO> items = page.stream().map(this::toDto).toList();
-        String nextCursor = hasMore ? encodeCursor(page.getLast()) : null;
+        List<LedgerEntry.WithCounterparty> page = hasMore ? fetched.subList(0, limit) : fetched;
+
+        // 批量查询交易对方用户信息
+        Map<String, UserInfoPort.UserInfo> counterpartyInfoMap = batchResolveCounterparties(page);
+
+        List<LedgerEntryDTO> items = page.stream()
+                .map(wc -> toDto(wc, counterpartyInfoMap))
+                .toList();
+        String nextCursor = hasMore ? encodeCursor(page.getLast().entry()) : null;
         return new LedgerEntryPageDTO(items, nextCursor);
+    }
+
+    /** 批量解析交易对方用户信息，失败时降级为空名称。 */
+    private Map<String, UserInfoPort.UserInfo> batchResolveCounterparties(
+            List<LedgerEntry.WithCounterparty> entries) {
+        List<String> userIds = entries.stream()
+                .map(LedgerEntry.WithCounterparty::counterpartyUserId)
+                .filter(Objects::nonNull)
+                .distinct()
+                .toList();
+        if (userIds.isEmpty()) return Map.of();
+
+        return userIds.stream()
+                .collect(Collectors.toMap(
+                        uid -> uid,
+                        uid -> userInfoPort.findUserInfo(uid),
+                        (a, b) -> a
+                ));
+    }
+
+    private LedgerEntryDTO toDto(LedgerEntry.WithCounterparty wc,
+                                  Map<String, UserInfoPort.UserInfo> counterpartyInfoMap) {
+        String counterpartyName = "";
+        if (wc.counterpartyUserId() != null) {
+            UserInfoPort.UserInfo info = counterpartyInfoMap.get(wc.counterpartyUserId());
+            if (info != null) {
+                counterpartyName = info.displayName();
+            }
+        }
+        LedgerEntry entry = wc.entry();
+        return new LedgerEntryDTO(entry.entryId(), entry.transactionId(), entry.direction().name(),
+                entry.amountFen(), entry.memo(), counterpartyName, entry.createdAt());
     }
 
     private Cursor decodeCursor(String cursor) {
@@ -111,11 +154,6 @@ public class LedgerApplicationService {
     private String encodeCursor(LedgerEntry entry) {
         String raw = entry.createdAt() + ":" + entry.entryId();
         return Base64.getUrlEncoder().withoutPadding().encodeToString(raw.getBytes(StandardCharsets.UTF_8));
-    }
-
-    private LedgerEntryDTO toDto(LedgerEntry entry) {
-        return new LedgerEntryDTO(entry.entryId(), entry.transactionId(), entry.direction().name(),
-                entry.amountFen(), entry.memo(), entry.createdAt());
     }
 
     private void validateRepeatedVoucher(LedgerVoucher existing, LedgerVoucher requested) {

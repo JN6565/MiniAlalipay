@@ -1,8 +1,10 @@
 package com.minialalipay.ai.infrastructure.client;
 
+import com.minialalipay.ai.application.port.AgentDecision;
 import com.minialalipay.ai.application.port.ChatMessage;
 import com.minialalipay.ai.application.port.ChatResponse;
 import com.minialalipay.ai.application.port.LanguageModelPort;
+import com.minialalipay.ai.domain.tool.ToolCatalog;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Value;
@@ -87,6 +89,40 @@ public class ResilientLanguageModelAdapter implements LanguageModelPort {
             ChatResponse response = fallback.chat(systemPrompt, history, userMessage);
             if (response.content() != null) onContentDelta.accept(response.content());
             return response;
+        }
+    }
+
+    @Override
+    public AgentDecision agentStep(List<ChatMessage> messages,
+                                   List<ToolCatalog.ToolDefinition> tools) {
+        if (useFallback) {
+            return new AgentDecision.FinalReply(
+                    FallbackLanguageModelAdapter.FALLBACK_MESSAGE, 10);
+        }
+        try {
+            return primary.agentStep(messages, tools);
+        } catch (Exception e) {
+            log.warn("Agent step 失败，降级到预设中文回复: {}", e.getMessage());
+            return new AgentDecision.FinalReply(
+                    FallbackLanguageModelAdapter.FALLBACK_MESSAGE, 10);
+        }
+    }
+
+    @Override
+    public AgentDecision agentStepWithToolResult(
+            List<ChatMessage> messages,
+            List<ToolCatalog.ToolDefinition> tools,
+            String toolCallId, String toolName, String actualResult) {
+        if (useFallback) {
+            return new AgentDecision.FinalReply(
+                    FallbackLanguageModelAdapter.FALLBACK_MESSAGE, 10);
+        }
+        try {
+            return primary.agentStepWithToolResult(messages, tools, toolCallId, toolName, actualResult);
+        } catch (Exception e) {
+            log.warn("Agent step(工具结果后) 失败，降级到预设中文回复: {}", e.getMessage());
+            return new AgentDecision.FinalReply(
+                    FallbackLanguageModelAdapter.FALLBACK_MESSAGE, 10);
         }
     }
 }

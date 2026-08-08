@@ -1,6 +1,4 @@
 import React, { useState, useCallback, useRef, useEffect } from 'react';
-import { history } from 'umi';
-import dayjs from 'dayjs';
 import { useSession } from './hooks/useSession';
 import { useSSEStream } from './hooks/useSSEStream';
 import {
@@ -9,17 +7,12 @@ import {
   AssistantTextMessage,
   ClarificationMessage,
   AssistantErrorMessage,
-  ToolResultMessage,
-  ConfirmationMessage,
 } from './types';
 import MessageList from './components/MessageList';
 import InputBar from './components/InputBar';
 import ClarificationBubble from './components/ClarificationBubble';
 import StreamingBubble from './components/StreamingBubble';
-import ToolResultCard from './components/ToolResultCard';
-import ConfirmationCard from './components/ConfirmationCard';
 import SessionList from './components/SessionList';
-import MarkdownContent from './components/MarkdownContent';
 import MessageActions from './components/MessageActions';
 import { confirmSubmission } from '@/services/ai';
 import './index.less';
@@ -67,6 +60,8 @@ const AITalkPage: React.FC = () => {
   const streamBufferRef = useRef('');
   /** 记录最后一条用户消息内容，用于错误重试时恢复 */
   const lastUserContentRef = useRef('');
+  /** 记录最近的收款人搜索结果，供确认卡片展示手机号 */
+  const lastPayeesRef = useRef<any[]>([]);
 
   /**
    * 组件挂载时恢复会话：如果 localStorage 中有 sessionId，
@@ -96,79 +91,111 @@ const AITalkPage: React.FC = () => {
     setMessages((prev) =>
       prev.map((m) =>
         m.id === streamingMsgIdRef.current && m.role === 'assistant' && m.kind === 'text'
-          ? { ...m, content: fullContent }
+          ? { ...m, content: fullContent, streaming: true }
           : m,
       ),
     );
   }, []);
 
-  /** 流式回调：工具调用开始 → 消息列表中插入加载卡片 */
+  /** 转账流程中间步骤工具（不展示工具结果卡片，只捕获数据供确认卡片使用） */
+  const TRANSFER_INTERMEDIATE_TOOLS = new Set([
+    'search_payees',
+    'create_transfer_draft',
+    'validate_transfer_draft',
+  ]);
+
+  /** 流式回调：工具调用开始 → 创建空文本消息作为加载占位符 */
   const handleToolCall = useCallback((toolName: string) => {
-    const cardId = nextId();
-    streamingMsgIdRef.current = cardId;
-    const cardMsg: ToolResultMessage = {
-      id: cardId,
+    // 中间步骤工具不展示加载卡片，避免对话被大量卡片中断
+    if (TRANSFER_INTERMEDIATE_TOOLS.has(toolName)) {
+      return;
+    }
+    // 如果当前消息尚无文本内容（空占位符或仅有卡片），直接复用，避免产生多余空气泡
+    if (streamingMsgIdRef.current && !streamBufferRef.current) {
+      return;
+    }
+    // 创建空文本消息作为加载占位符，工具结果将内嵌到此消息中
+    const msgId = nextId();
+    streamingMsgIdRef.current = msgId;
+    const loadingMsg: AssistantTextMessage = {
+      id: msgId,
       role: 'assistant',
-      kind: 'tool-result',
-      tool: toolName,
-      status: 'running',
-      summary: '',
-      data: {},
-      loading: true,
+      kind: 'text',
+      content: '',
+      streaming: true,
       timestamp: new Date(),
     };
-    setMessages((prev) => [...prev, cardMsg]);
+    setMessages((prev) => [...prev, loadingMsg]);
   }, []);
 
-  /** 流式回调：工具调用完成 → 替换卡片内容 */
+  /** 流式回调：工具调用完成 → 将工具结果内嵌到文本消息中 */
   const handleToolResult = useCallback(
     (toolName: string, status: string, summary: string, data: Record<string, any>) => {
-      const id = streamingMsgIdRef.current;
-      if (!id) return;
+      // 捕获 search_payees 结果，供后续确认卡片使用（必须在 id 检查之前，因为中间工具不设置 id）
+      if (toolName === 'search_payees' && status === 'success') {
+        lastPayeesRef.current = data.users || [];
+      }
 
-      // GAP-7：prepare_confirmation_card 工具返回后，将消息转换为确认卡片
-      if (toolName === 'prepare_confirmation_card' && status === 'success') {
-        const confirmMsg: ConfirmationMessage = {
-          id,
-          role: 'assistant',
-          kind: 'confirmation',
-          cardType: data.cardType === 'repay' ? 'repay' : 'transfer',
-          draftId: data.draftId || '',
-          payeeOptions: data.payeeNickname
-            ? [{ id: data.payeeId || '', label: String(data.payeeNickname) }]
-            : [],
-          amountFen: typeof data.amountFen === 'number' ? data.amountFen : undefined,
-          note: summary,
-          status: 'pending',
-          timestamp: new Date(),
-        };
-        setMessages((prev) =>
-          prev.map((m) => (m.id === id ? confirmMsg : m)),
-        );
-        // 确认卡片后不创建文本占位符，等待用户操作
+      // 转账流程中间步骤：不展示工具结果，仅捕获数据
+      // 不清空 streamingMsgIdRef，让后续 LLM 文本内容继续流入文本气泡
+      if (TRANSFER_INTERMEDIATE_TOOLS.has(toolName)) {
         return;
       }
 
+      const id = streamingMsgIdRef.current;
+      if (!id) return;
+
+      // prepare_confirmation_card：将确认卡片内嵌到占位文本消息中
+      if (toolName === 'prepare_confirmation_card' && status === 'success') {
+        const payees = lastPayeesRef.current || [];
+        const payeeId = data.payeeId || '';
+
+        // 更新占位消息，内嵌确认卡片
+        setMessages((prev) =>
+          prev.map((m) =>
+            m.id === id
+              ? {
+                  ...m,
+                  streaming: false,
+                  confirmationCard: {
+                    cardType: data.cardType === 'repay' ? 'repay' : 'transfer',
+                    draftId: data.draftId || '',
+                    version: typeof data.version === 'number' ? data.version : undefined,
+                    payeeOptions: payees.length > 0
+                      ? payees.map((p: any) => ({
+                          id: p.userId || '',
+                          label: `${p.nickname || ''} (${p.maskedPhone || p.phoneTail || ''})`,
+                          maskedPhone: p.maskedPhone || '',
+                          phoneTail: p.phoneTail || '',
+                        }))
+                      : (data.payeeNickname
+                          ? [{ id: payeeId, label: String(data.payeeNickname), maskedPhone: '', phoneTail: '' }]
+                          : []),
+                    amountFen: typeof data.amountFen === 'number' ? data.amountFen : undefined,
+                    note: summary,
+                    status: 'pending' as const,
+                  },
+                }
+              : m,
+          ),
+        );
+        // 不创建新文本消息：后续 LLM 文本将追加到卡片消息，实现文本+卡片同气泡
+        return;
+      }
+
+      // 其他工具：将工具结果卡片累积到占位消息中（支持多工具结果同气泡）
       setMessages((prev) =>
-        prev.map((m) =>
-          m.id === id && m.role === 'assistant' && m.kind === 'tool-result'
-            ? { ...m, tool: toolName, status, summary, data, loading: false }
-            : m,
-        ),
+        prev.map((m) => {
+          if (m.id !== id || m.role !== 'assistant' || m.kind !== 'text') return m;
+          const existing = (m as AssistantTextMessage).toolResultCards ?? [];
+          return {
+            ...m,
+            streaming: false,
+            toolResultCards: [...existing, { tool: toolName, status, summary, data }],
+          };
+        }),
       );
-      // tool-result 之后，文本增量会落到下一个 text 消息
-      const textId = nextId();
-      streamingMsgIdRef.current = textId;
-      streamBufferRef.current = '';
-      const textMsg: AssistantTextMessage = {
-        id: textId,
-        role: 'assistant',
-        kind: 'text',
-        content: '',
-        streaming: true,
-        timestamp: new Date(),
-      };
-      setMessages((prev) => [...prev, textMsg]);
+      // 不创建新文本消息：后续 LLM 文本将追加到卡片消息，实现文本+卡片同气泡
     },
     [],
   );
@@ -213,6 +240,25 @@ const AITalkPage: React.FC = () => {
       }
       streamingMsgIdRef.current = null;
       streamBufferRef.current = '';
+      // 清理末尾的空文本消息（工具调用后 LLM 未产生文本时残留的占位符）
+      setMessages((prev) => {
+        let end = prev.length;
+        while (end > 0) {
+          const last = prev[end - 1];
+          if (
+            last.role === 'assistant' &&
+            (last as AssistantTextMessage).kind === 'text' &&
+            !(last as AssistantTextMessage).content &&
+            !(last as AssistantTextMessage).toolResultCards &&
+            !(last as AssistantTextMessage).confirmationCard
+          ) {
+            end--;
+          } else {
+            break;
+          }
+        }
+        return end < prev.length ? prev.slice(0, end) : prev;
+      });
     },
     [saveSessionId],
   );
@@ -222,7 +268,16 @@ const AITalkPage: React.FC = () => {
     const id = streamingMsgIdRef.current;
     const content = streamBufferRef.current;
     if (id) {
-      if (content) {
+      // 检查当前消息是否已有卡片（有卡片时保留，不转为错误消息）
+      let hasCards = false;
+      setMessages((prev) => {
+        const cur = prev.find((m) => m.id === id);
+        if (cur && cur.role === 'assistant' && cur.kind === 'text') {
+          hasCards = !!((cur as AssistantTextMessage).toolResultCards?.length || (cur as AssistantTextMessage).confirmationCard);
+        }
+        return prev;
+      });
+      if (content || hasCards) {
         setMessages((prev) =>
           prev.map((m) =>
             m.id === id && m.role === 'assistant' && m.kind === 'text'
@@ -346,15 +401,15 @@ const AITalkPage: React.FC = () => {
 
   /** 确认卡片——用户点击确认并完成支付密码输入后触发 */
   const handleConfirmTransfer = useCallback(
-    async (draftId: string, payeeId: string, amountFen: number, password: string) => {
+    async (draftId: string, payeeId: string, amountFen: number, password: string, version?: number) => {
       try {
         const idempotencyKey = `confirm_${draftId}_${Date.now()}`;
-        await confirmSubmission(draftId, password, idempotencyKey);
-        // 更新卡片状态为已完成
+        await confirmSubmission(draftId, password, version ?? 0, idempotencyKey);
+        // 更新内嵌卡片状态为已完成（确认卡片现在嵌入在文本消息中）
         setMessages((prev) =>
           prev.map((m) =>
-            m.id === streamingMsgIdRef.current && m.kind === 'confirmation'
-              ? { ...m, status: 'done' as const }
+            'kind' in m && m.kind === 'text' && m.confirmationCard?.draftId === draftId
+              ? { ...m, confirmationCard: { ...m.confirmationCard, status: 'done' as const } }
               : m,
           ),
         );
@@ -388,11 +443,11 @@ const AITalkPage: React.FC = () => {
   /** 确认卡片——用户取消操作 */
   const handleCancelTransfer = useCallback(
     (draftId: string) => {
-      // 更新卡片状态为已取消
+      // 更新内嵌卡片状态为已取消（确认卡片现在嵌入在文本消息中）
       setMessages((prev) =>
         prev.map((m) =>
-          'kind' in m && m.kind === 'confirmation' && (m as ConfirmationMessage).draftId === draftId
-            ? { ...m, status: 'cancelled' as const }
+          'kind' in m && m.kind === 'text' && m.confirmationCard?.draftId === draftId
+            ? { ...m, confirmationCard: { ...m.confirmationCard, status: 'cancelled' as const } }
             : m,
         ),
       );
@@ -501,27 +556,7 @@ const AITalkPage: React.FC = () => {
         );
       }
 
-      // 工具结果卡片
-      if (msg.kind === 'tool-result') {
-        return (
-          <div className="ai-message ai-message-assistant">
-            <div className="ai-message-body">
-              <ToolResultCard message={msg} />
-            </div>
-          </div>
-        );
-      }
-
-      // GAP-7：确认卡片（转账/还款二次确认）
-      if (msg.kind === 'confirmation') {
-        return (
-          <ConfirmationCard
-            message={msg}
-            onConfirm={handleConfirmTransfer}
-            onCancel={handleCancelTransfer}
-          />
-        );
-      }
+      // 工具结果卡片（已内嵌到文本消息中，不再作为独立气泡渲染）
 
       // 文本消息（含流式中）
       if (msg.kind === 'text') {
@@ -530,6 +565,8 @@ const AITalkPage: React.FC = () => {
             message={msg}
             onFeedbackChange={handleFeedbackChange}
             onRegenerate={handleRegenerate}
+            onConfirmTransfer={handleConfirmTransfer}
+            onCancelTransfer={handleCancelTransfer}
           />
         );
       }

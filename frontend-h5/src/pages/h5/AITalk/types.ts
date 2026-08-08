@@ -8,7 +8,7 @@ export interface UserMessage {
   timestamp: Date;
 }
 
-/** 助手纯文本 / Markdown 回复 */
+/** 助手纯文本 / Markdown 回复（可内嵌确认卡片） */
 export interface AssistantTextMessage {
   id: string;
   role: 'assistant';
@@ -23,6 +23,23 @@ export interface AssistantTextMessage {
   feedback?: 'like' | 'dislike' | null;
   /** 是否展示操作按钮行（false 时隐藏操作行；欢迎页/历史回放等场景可关闭） */
   showActions?: boolean;
+  /** 内嵌的确认卡片数据（转账/还款二次确认），与文本同气泡显示 */
+  confirmationCard?: {
+    cardType: 'transfer' | 'repay';
+    draftId: string;
+    version?: number;
+    payeeOptions?: { id: string; label: string; maskedPhone?: string; phoneTail?: string }[];
+    amountFen?: number;
+    note?: string;
+    status: 'pending' | 'done' | 'cancelled';
+  };
+  /** 内嵌的工具结果卡片列表（余额、额度、交易记录等），与文本同气泡显示 */
+  toolResultCards?: {
+    tool: string;
+    status: string;
+    summary: string;
+    data: Record<string, any>;
+  }[];
   timestamp: Date;
 }
 
@@ -76,7 +93,8 @@ export interface ConfirmationMessage {
   kind: 'confirmation';
   cardType: 'transfer' | 'repay';
   draftId: string;
-  payeeOptions?: { id: string; label: string }[];
+  version?: number;
+  payeeOptions?: { id: string; label: string; maskedPhone?: string; phoneTail?: string }[];
   amountFen?: number;
   note?: string;
   status: 'pending' | 'done' | 'cancelled';
@@ -106,4 +124,8 @@ export interface HistoryMessage {
   role: string;
   content: string;
   createdAt: string;
+  /** 消息类型：TEXT（文本）/ TOOL_RESULT（工具结果） */
+  kind?: string;
+  /** 工具名称（仅 TOOL_RESULT 有值） */
+  toolName?: string;
 }

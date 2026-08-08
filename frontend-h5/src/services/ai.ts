@@ -1,5 +1,7 @@
 import request from './request';
 import type { SessionInfo, HistoryMessage } from '@/pages/h5/AITalk/types';
+import { issueConfirmation, submitTransfer } from './transfer';
+import { issuePaymentProof } from './paymentPassword';
 
 /** 发送消息入参：clientMessageId 为客户端幂等键，sessionId 为空表示新建会话 */
 interface SendMessageParams {
@@ -144,19 +146,25 @@ export function streamMessage(
 
 /**
  * 确认提交（高风险操作：转账/还款）。
- * 注意：后端 /api/v1/confirmations 端点尚未实现，当前预留。
+ * 遵循与独立转账确认页相同的 3 步流程：
+ * 1. 验证支付密码并签发一次性支付证明
+ * 2. 用支付证明签发一次性确认令牌
+ * 3. 提交转账
  */
 export async function confirmSubmission(
   draftId: string,
   password: string,
+  version: number,
   idempotencyKey: string,
 ): Promise<any> {
-  return request.post('/api/v1/confirmations', {
-    draftId,
-    paymentPassword: password,
-  }, {
-    headers: { 'Idempotency-Key': idempotencyKey },
-  });
+  // 1. 验证支付密码并签发一次性支付证明（TRANSFER_CONFIRM 用途）
+  const { paymentProof } = (await issuePaymentProof(password)) as any;
+
+  // 2. 用支付证明签发一次性确认令牌
+  const { confirmationToken } = (await issueConfirmation(draftId, paymentProof, version)) as any;
+
+  // 3. 提交转账
+  return (await submitTransfer({ draftId, confirmationToken }, idempotencyKey)) as any;
 }
 
 /**

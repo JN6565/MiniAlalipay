@@ -40,4 +40,36 @@ public class AccountDirectoryHttpAdapter implements AccountDirectoryPort {
             throw new BusinessException(CommonErrorCode.SERVICE_UNAVAILABLE);
         }
     }
+
+    /** 通过账户中心只读预检接口校验信用状态与可用额度，不在业务中心复制额度事实。 */
+    @Override
+    public void requireCreditPaymentEligible(String userId, long amountFen) {
+        try {
+            CreditAccountReference credit = client.get()
+                    .uri("/internal/v1/credit-accounts/by-user/{id}", userId)
+                    .retrieve().body(CreditAccountReference.class);
+            if (credit == null) throw new BusinessException(BusinessErrorCode.FUNDING_SOURCE_NOT_ALLOWED);
+            CreditEligibility result = client.post()
+                    .uri("/internal/v1/credit-accounts/{id}/eligibility", credit.creditAccountId())
+                    .body(new CreditEligibilityRequest(amountFen))
+                    .retrieve().body(CreditEligibility.class);
+            if (result == null) throw new BusinessException(CommonErrorCode.SERVICE_UNAVAILABLE);
+            if (!result.eligible()) throw new BusinessException(BusinessErrorCode.FUNDING_SOURCE_NOT_ALLOWED);
+        } catch (BusinessException exception) {
+            throw exception;
+        } catch (HttpClientErrorException.NotFound notFound) {
+            throw new BusinessException(BusinessErrorCode.FUNDING_SOURCE_NOT_ALLOWED);
+        } catch (RuntimeException exception) {
+            throw new BusinessException(CommonErrorCode.SERVICE_UNAVAILABLE);
+        }
+    }
+
+    /** 账户中心信用账户只读引用。 */
+    private record CreditAccountReference(String creditAccountId, String userId, String status, long version) { }
+
+    /** 信用支付资格预检请求。 */
+    private record CreditEligibilityRequest(long amountFen) { }
+
+    /** 信用支付资格预检响应。 */
+    private record CreditEligibility(boolean eligible, String reasonCode, long version) { }
 }

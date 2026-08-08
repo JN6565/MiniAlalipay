@@ -53,6 +53,9 @@ public enum UserErrorCode implements ErrorCode {
     /** 手机号已经完成注册。 */
     PHONE_NUMBER_EXISTS("PHONE_NUMBER_EXISTS", "手机号已注册", 409),
 
+    /** 身份证号已被其他账户绑定，同一身份证全系统只允许绑定一个账户。 */
+    ID_CARD_ALREADY_BOUND("ID_CARD_ALREADY_BOUND", "该身份证号已被其他账户绑定", 409),
+
     /**
      * 密码不符合安全规则。
      */

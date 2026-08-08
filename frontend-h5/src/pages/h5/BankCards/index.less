@@ -1,0 +1,95 @@
+.bank-cards-page {
+  padding: 16px;
+  min-height: 100%;
+  background: #f5f6f8;
+}
+
+.bank-cards-empty {
+  text-align: center;
+  padding: 64px 0 24px;
+  color: #999;
+
+  .empty-icon {
+    font-size: 48px;
+  }
+
+  p {
+    margin: 8px 0 0;
+    font-size: 15px;
+  }
+
+  .empty-hint {
+    font-size: 12px;
+    color: #bbb;
+  }
+}
+
+.bank-card-list {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+.bank-card-item {
+  border-radius: 12px;
+  padding: 18px 16px;
+  color: #fff;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.08);
+}
+
+.bank-card-head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+
+  .bank-name {
+    font-size: 16px;
+    font-weight: 600;
+  }
+
+  .card-type {
+    font-size: 12px;
+    opacity: 0.85;
+  }
+
+  .default-badge {
+    margin-left: auto;
+    font-size: 11px;
+    background: rgba(255, 255, 255, 0.25);
+    border-radius: 8px;
+    padding: 2px 8px;
+  }
+}
+
+.bank-card-number {
+  margin-top: 24px;
+  font-size: 20px;
+  letter-spacing: 2px;
+  font-family: 'Courier New', monospace;
+}
+
+.bank-card-actions {
+  margin-top: 18px;
+  display: flex;
+  gap: 12px;
+
+  .bank-card-add,
+  .bank-card-bind {
+    flex: 1;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 6px;
+    height: 48px;
+    border-radius: 12px;
+    border: 1px dashed #c8ccd4;
+    color: #666;
+    font-size: 15px;
+    background: #fff;
+
+    .add-icon {
+      font-size: 18px;
+      color: #1677ff;
+    }
+  }
+}

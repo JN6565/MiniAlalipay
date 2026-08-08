@@ -3,12 +3,11 @@ package com.minialalipay.ai.application.service;
 import com.minialalipay.ai.application.AiServiceUtils;
 import com.minialalipay.ai.application.port.*;
 import com.minialalipay.ai.application.security.InjectionDetector;
-import com.minialalipay.ai.application.security.ToolAuditService;
 import com.minialalipay.ai.domain.agent.*;
 import com.minialalipay.ai.infrastructure.client.RequestContext;
-import com.minialalipay.ai.infrastructure.client.ToolRouter;
 import com.minialalipay.common.error.BusinessException;
 
+import com.fasterxml.jackson.databind.ObjectMapper;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Value;
@@ -24,22 +23,21 @@ import java.util.concurrent.locks.ReentrantLock;
 /**
  * AI Agent 流式消息处理服务。
  *
- * <p>与 {@link AgentMessageService} 共享相同的会话管理和工具执行逻辑，
- * 但在处理过程中通过 {@link StreamCallback} 发射 SSE 事件，实现流式输出。</p>
+ * <p>与 {@link AgentMessageService} 共享相同的会话管理逻辑，
+ * 但通过 {@link StreamCallback} 发射 SSE 事件实现流式输出。
+ * 核心推理和工具调用委托给 {@link AgentLoop}（ReAct 主循环）。</p>
  *
  * <h3>与同步端点的关系</h3>
  * <ul>
  *   <li>{@code POST /messages}（同步）由 {@link AgentMessageService} 处理</li>
  *   <li>{@code POST /messages/stream}（SSE）由本服务处理</li>
- *   <li>两者共享相同的 Repository、ToolRouter 和 LLM 端口</li>
+ *   <li>两者共享相同的 Repository、AgentLoop 和 LLM 端口</li>
  * </ul>
  */
 @Service
 public class AgentStreamService {
 
     private static final Logger log = LoggerFactory.getLogger(AgentStreamService.class);
-
-
 
     /** 流式文本分块大小（中文字符数），通过 ai.streaming.chunk-size 配置 */
     private final int chunkSize;
@@ -55,14 +53,11 @@ public class AgentStreamService {
     private final AgentMessageRepository messageRepository;
     private final LanguageModelPort languageModelPort;
     private final InjectionDetector injectionDetector;
-    private final ToolRouter toolRouter;
-    private final ToolPolicyService toolPolicy;
-    private final ToolAuditService toolAudit;
-    private final ResultInterpreter resultInterpreter;
+    private final AgentLoop agentLoop;
     private final TaskExecutor taskExecutor;
-    private final boolean mockMode;
     private final int sessionTimeoutMinutes;
     private final UserPreferenceService userPreferenceService;
+    private final ObjectMapper objectMapper;
 
     /** 会话级锁，保证同一会话串行处理 */
     private final ConcurrentHashMap<String, ReentrantLock> sessionLocks = new ConcurrentHashMap<>();
@@ -72,31 +67,25 @@ public class AgentStreamService {
             AgentMessageRepository messageRepository,
             LanguageModelPort languageModelPort,
             InjectionDetector injectionDetector,
-            ToolRouter toolRouter,
-            ToolPolicyService toolPolicy,
-            ToolAuditService toolAudit,
-            ResultInterpreter resultInterpreter,
+            AgentLoop agentLoop,
             TaskExecutor taskExecutor,
             UserPreferenceService userPreferenceService,
+            ObjectMapper objectMapper,
             @Value("${ai.session.timeout:30m}") String sessionTimeout,
-            @Value("${ai.llm.mock-mode:true}") boolean mockMode,
-            @Value("${ai.prompt.system:你是一只傲娇猫娘，名叫财喵，现在作为aialipay助手，你的职责是帮助用户完成转账、查余额、查交易、查花呗和还花呗等操作。}") String systemPrompt,
-            @Value("${ai.streaming.chunk-size:2}") int chunkSize,
-            @Value("${ai.streaming.chunk-delay-ms:120}") long chunkDelayMs,
+            @Value("${ai.prompt.system:你是一只傲娇猫娘，名叫财喵，现在作为aialipay助手，你的职责是帮助用户完成转账、查余额、查交易、查花呗和还花呗等操作。重要规则：1.如果已经通过工具获取了某项数据（如余额、额度、交易记录），不要再次调用同一工具，直接基于已有结果生成回复。2.工具选择必须精确：用户问余额/多少钱→get_balance；用户问花呗额度/信用额度→get_credit_summary；用户问交易记录/流水→list_transactions；用户问花呗账单→list_credit_bills。不要混淆余额和额度。3.转账流程必须严格按顺序完成全部4步，不得中途停止生成文本：第一步调用search_payees搜索收款人（从用户消息中提取手机号或姓名作为query参数），第二步用返回的payeeId调用create_transfer_draft创建草稿，第三步调用validate_transfer_draft校验草稿，第四步调用prepare_confirmation_card生成确认卡片。每一步完成后必须立即调用下一步工具，不要在中间步骤生成文本回复。4.从用户消息中提取金额时，将元转换为分（如100元=10000分）。5.回复中禁止输出任何原始JSON数据、工具结果标记（如[TOOL_RESULT:xxx]）或resultCode等内部字段。6.提及收款人姓名时必须使用工具返回的完整姓名，不得截断或修改。7.系统不支持备注功能，回复中不得提及备注字段。}") String systemPrompt,
+            @Value("${ai.streaming.chunk-size:5}") int chunkSize,
+            @Value("${ai.streaming.chunk-delay-ms:50}") long chunkDelayMs,
             @Value("${ai.streaming.thinking-delay-ms:800}") long thinkingDelayMs
     ) {
         this.sessionRepository = sessionRepository;
         this.messageRepository = messageRepository;
         this.languageModelPort = languageModelPort;
         this.injectionDetector = injectionDetector;
-        this.toolRouter = toolRouter;
-        this.toolPolicy = toolPolicy;
-        this.toolAudit = toolAudit;
-        this.resultInterpreter = resultInterpreter;
+        this.agentLoop = agentLoop;
         this.taskExecutor = taskExecutor;
         this.userPreferenceService = userPreferenceService;
+        this.objectMapper = objectMapper;
         this.sessionTimeoutMinutes = (int) parseDurationMinutes(sessionTimeout);
-        this.mockMode = mockMode;
         this.systemPrompt = systemPrompt;
         this.chunkSize = chunkSize;
         this.chunkDelayMs = chunkDelayMs;
@@ -107,7 +96,7 @@ public class AgentStreamService {
      * 异步处理消息并通过回调发射 SSE 事件。
      *
      * <p>在独立线程中执行完整的消息处理流程，包括会话管理、注入检测、
-     * 幂等检查、LLM 推理、工具执行和结果解释。每个关键步骤通过回调
+     * 幂等检查、AgentLoop 推理和工具执行。每个关键步骤通过回调
      * 发射对应的 SSE 事件。</p>
      *
      * @param userId 用户 ID
@@ -120,21 +109,19 @@ public class AgentStreamService {
     public void processMessageStream(
             String userId, String clientMessageId,
             String sessionId, String rawContent,
+            String sanitizedContent,
             StreamCallback callback, String bearerToken
     ) {
         taskExecutor.execute(() -> {
             try {
-                // 手动将 Servlet 线程的 Bearer Token 传播到异步线程
-                // InheritableThreadLocal 与线程池复用线程不兼容，必须显式传递
                 if (bearerToken != null && !bearerToken.isEmpty()) {
                     RequestContext.setBearerToken(bearerToken);
                 }
-                doProcessStream(userId, clientMessageId, sessionId, rawContent, callback);
+                doProcessStream(userId, clientMessageId, sessionId, rawContent, sanitizedContent, callback);
             } catch (Exception e) {
                 log.error("流式消息处理异常: userId={}", userId, e);
                 safeEmitError(callback, "INTERNAL_ERROR", "服务内部异常");
             } finally {
-                // 异步线程执行完毕后清理上下文，避免线程池复用时泄漏
                 RequestContext.clear();
             }
         });
@@ -146,6 +133,7 @@ public class AgentStreamService {
     private void doProcessStream(
             String userId, String clientMessageId,
             String sessionId, String rawContent,
+            String sanitizedContent,
             StreamCallback callback
     ) {
         Instant now = Instant.now();
@@ -198,214 +186,73 @@ public class AgentStreamService {
             // 5. 发射意图理解状态
             callback.onStatus("INTENT", "正在理解您的意图…");
 
-            // 6. 保存用户消息
+            // 6. 保存用户消息（使用脱敏后内容存储，避免敏感信息进入数据库）
+            String storeContent = (sanitizedContent != null && !sanitizedContent.isBlank())
+                    ? sanitizedContent : rawContent;
             String messageId = AiServiceUtils.generateUlid();
             AgentMessage userMessage = new AgentMessage(
                     messageId, session.getSessionId(), clientMessageId,
-                    MessageRole.USER, rawContent, AiServiceUtils.estimateTokens(rawContent), now);
+                    MessageRole.USER, storeContent, AiServiceUtils.estimateTokens(storeContent), now);
             messageRepository.insert(userMessage);
             session.touch(now);
 
-            // 7. 构建上下文并调用 LLM
+            // 7. 构建上下文并调用 AgentLoop（使用原始内容，LLM 需要真实参数调用工具）
             List<ChatMessage> context = buildContext(session, rawContent);
-            ChatResponse llmResponse = languageModelPort.chat(
-                    systemPrompt, context.subList(0, context.size() - 1),
-                    context.get(context.size() - 1).content());
+            List<ChatMessage> history = context.subList(0, context.size() - 1);
 
-            // 8. 澄清分支：需要澄清时直接发射澄清事件
-            if (llmResponse.clarificationNeeded()) {
-                List<StreamCallback.ClarificationOption> options =
-                        deriveClarificationOptions(llmResponse.slots());
-                callback.onClarification(llmResponse.content(), options);
+            AgentLoop.AgentContext agentContext = new AgentLoop.AgentContext(
+                    userId, session.getSessionId(), rawContent,
+                    history, session, systemPrompt, callback);
 
-                // 保存助手消息
-                String assistantMsgId = AiServiceUtils.generateUlid();
-                AgentMessage assistantMsg = new AgentMessage(
-                        assistantMsgId, session.getSessionId(), clientMessageId,
-                        MessageRole.ASSISTANT, llmResponse.content(),
-                        llmResponse.tokenCount(), now);
-                messageRepository.insert(assistantMsg);
-                session.touch(now);
-                sessionRepository.save(session);
+            AgentLoop.AgentResult agentResult = agentLoop.executeStreaming(agentContext);
 
-                callback.onDone(assistantMsgId, session.getSessionId(),
-                        llmResponse.intent().name());
-                return;
+            String finalContent = agentResult.finalContent();
+            String pendingText = agentResult.pendingText();
+            Map<String, Object> finalSlots = agentResult.accumulatedSlots();
+
+            // 7.5 记录最近完成的操作，防止 LLM 重复提及已完成任务
+            if (finalSlots == null) {
+                finalSlots = new HashMap<>();
+            }
+            String completedAction = inferCompletedAction(agentResult.executedTools());
+            if (completedAction != null) {
+                finalSlots.put("lastCompletedAction", completedAction);
             }
 
-            // 9. 工具执行分支
-            String finalContent;
-            Map<String, Object> finalSlots;
-            // 标记内容是否已通过流式 LLM 调用推送给前端
-            boolean contentAlreadyStreamed = false;
-
-            if (shouldExecuteTools(llmResponse)) {
-                // 转账意图前置校验：逐项检查必填槽位（收款人 → 金额），并做异常金额风险提示
-                if (llmResponse.intent() == IntentType.TRANSFER) {
-                    // GAP-9：收款人缺失时单独追问，不混同于金额追问
-                    Object queryObj = llmResponse.slots().get("query");
-                    if (queryObj == null || queryObj.toString().isBlank()) {
-                        log.info("转账意图收款人缺失，引导用户补充: userId={}", userId);
-                        callback.onClarification("请问您要转账给谁？请提供收款人姓名或手机号。", List.of());
-                        String assistId = AiServiceUtils.generateUlid();
-                        messageRepository.insert(new AgentMessage(
-                                assistId, session.getSessionId(), clientMessageId,
-                                MessageRole.ASSISTANT, "请问您要转账给谁？请提供收款人姓名或手机号。",
-                                0, now));
-                        session.touch(now);
-                        sessionRepository.save(session);
-                        callback.onDone(assistId, session.getSessionId(),
-                                llmResponse.intent().name());
-                        return;
-                    }
-                    long amountFen = 0L;
-                    Object amountObj = llmResponse.slots().get("amountFen");
-                    if (amountObj instanceof Number) {
-                        amountFen = ((Number) amountObj).longValue();
-                    }
-                    if (amountFen <= 0) {
-                        log.info("转账意图金额缺失或为 0，引导用户补充: userId={}", userId);
-                        callback.onClarification("请问您要转账多少金额？", List.of());
-                        String assistId = AiServiceUtils.generateUlid();
-                        messageRepository.insert(new AgentMessage(
-                                assistId, session.getSessionId(), clientMessageId,
-                                MessageRole.ASSISTANT, "请问您要转账多少金额？",
-                                0, now));
-                        session.touch(now);
-                        sessionRepository.save(session);
-                        callback.onDone(assistId, session.getSessionId(),
-                                llmResponse.intent().name());
-                        return;
-                    }
-                    // GAP-3：异常大额风险提示——单笔转账 ≥ 5000 元时主动确认
-                    if (amountFen >= AiServiceUtils.LARGE_AMOUNT_THRESHOLD_FEN) {
-                        log.info("大额转账风险提示: userId={}, amountFen={}", userId, amountFen);
-                        callback.onClarification(
-                                "本次转账金额为 " + AiServiceUtils.formatFenDisplay(amountFen)
-                                        + " 元，属于大额操作。请确认您确实要转账此金额。",
-                                List.of(
-                                        new StreamCallback.ClarificationOption("confirm", "确认转账"),
-                                        new StreamCallback.ClarificationOption("cancel", "取消")));
-                        String assistId = AiServiceUtils.generateUlid();
-                        String riskMsg = "⚠️ 大额转账提醒：本次转账金额为 "
-                                + AiServiceUtils.formatFenDisplay(amountFen) + " 元，请仔细核对收款人信息。";
-                        messageRepository.insert(new AgentMessage(
-                                assistId, session.getSessionId(), clientMessageId,
-                                MessageRole.ASSISTANT, riskMsg, 0, now));
-                        session.touch(now);
-                        sessionRepository.save(session);
-                        callback.onDone(assistId, session.getSessionId(),
-                                llmResponse.intent().name());
-                        return;
-                    }
-                }
-                // 花呗还款意图前置校验：PRD 要求禁止"全部还清"，必须指定具体金额
-                if (llmResponse.intent() == IntentType.CREDIT_REPAYMENT) {
-                    // 安全边界：检测用户原始消息是否包含"全部还清"关键词，强制拦截
-                    String lowerRaw = rawContent.toLowerCase();
-                    if (AiServiceUtils.containsAny(lowerRaw, "全部还清", "全额还", "还清全部", "一次还清")) {
-                        log.info("拦截全部还清请求: userId={}, rawContent={}", userId, rawContent);
-                        callback.onClarification("抱歉，暂不支持全部还清功能。请告诉我您想还款的具体金额（如'还200元'）。", List.of());
-                        String assistId = AiServiceUtils.generateUlid();
-                        messageRepository.insert(new AgentMessage(
-                                assistId, session.getSessionId(), clientMessageId,
-                                MessageRole.ASSISTANT, "抱歉，暂不支持全部还清功能。请告诉我您想还款的具体金额（如'还200元'）。",
-                                0, now));
-                        session.touch(now);
-                        sessionRepository.save(session);
-                        callback.onDone(assistId, session.getSessionId(),
-                                llmResponse.intent().name());
-                        return;
-                    }
-                    // 金额必须大于 0
-                    long amountFen = 0L;
-                    Object amountObj = llmResponse.slots().get("amountFen");
-                    if (amountObj instanceof Number) {
-                        amountFen = ((Number) amountObj).longValue();
-                    }
-                    if (amountFen <= 0) {
-                        log.info("还款意图金额缺失或为 0，引导用户补充: userId={}", userId);
-                        callback.onClarification("请问您要还款多少金额？", List.of());
-                        String assistId = AiServiceUtils.generateUlid();
-                        messageRepository.insert(new AgentMessage(
-                                assistId, session.getSessionId(), clientMessageId,
-                                MessageRole.ASSISTANT, "请问您要还款多少金额？",
-                                0, now));
-                        session.touch(now);
-                        sessionRepository.save(session);
-                        callback.onDone(assistId, session.getSessionId(),
-                                llmResponse.intent().name());
-                        return;
-                    }
-                }
-
-                String traceId = AiServiceUtils.generateUlid();
-                List<ToolExecution> toolResults = executeToolsStreaming(
-                        llmResponse.intent(), llmResponse.slots(),
-                        userId, session, traceId, callback);
-
-                if (!toolResults.isEmpty()) {
-                    ToolExecution primary = toolResults.get(toolResults.size() - 1);
-
-                    // 合并工具返回数据到槽位
-                    finalSlots = new java.util.HashMap<>(llmResponse.slots());
-                    for (ToolExecution te : toolResults) {
-                        if (te.toolResult() != null && te.toolResult().data() != null) {
-                            finalSlots.putAll(te.toolResult().data());
-                        }
-                    }
-
-                    if (mockMode) {
-                        finalContent = resultInterpreter.interpret(
-                                primary.toolName(), primary.toolResult());
-                    } else {
-                        callback.onStatus("GENERATING", "正在生成回复…");
-                        String toolContext = formatToolResultsAsSystemMessage(toolResults);
-                        context.add(new ChatMessage(MessageRole.SYSTEM, toolContext));
-                        // 使用纯自然语言流式调用：不附加 JSON 格式指令，避免结构化 JSON 泄漏到前端
-                        // 安全边界：强制要求 LLM 严格基于工具结果回复，禁止编造工具未返回的数据
-                        ChatResponse secondResponse = languageModelPort.streamNaturalLanguageChat(
-                                systemPrompt, context.subList(0, context.size() - 1),
-                                "请严格基于以下工具调用结果回复用户。如果工具返回空列表或空数据，必须如实告知用户未找到匹配内容，绝对不得编造工具未返回的姓名、金额或状态。使用自然语言回复。",
-                                callback::onContentDelta);
-                        finalContent = secondResponse.content();
-                        // 内容已通过流式回调推送，后续无需再次 emitContentDeltas
-                        contentAlreadyStreamed = true;
-                    }
-                } else {
-                    finalContent = llmResponse.content();
-                    finalSlots = llmResponse.slots();
-                }
-            } else {
-                finalContent = llmResponse.content();
-                finalSlots = llmResponse.slots();
+            // 8. 流式推送内容：先推送过渡文本（LLM 在工具调用前生成的回复），再推送最终内容
+            callback.onStatus("GENERATING", "正在生成回复…");
+            try {
+                Thread.sleep(thinkingDelayMs);
+            } catch (InterruptedException e) {
+                Thread.currentThread().interrupt();
             }
-
-            // 10. 流式推送最终内容（仅在内容未通过流式 LLM 推送时分块发射）
-            if (!contentAlreadyStreamed) {
-                callback.onStatus("GENERATING", "正在生成回复…");
-                try {
-                    Thread.sleep(thinkingDelayMs);
-                } catch (InterruptedException e) {
-                    Thread.currentThread().interrupt();
-                }
-                emitContentDeltas(finalContent, callback);
+            // 推送过渡文本（如"好的，我来为您向东东转账100元..."）
+            // 与 finalContent 相同，pendingText 也需要清理，防止 LLM 输出中残留 JSON 片段
+            if (pendingText != null && !pendingText.isBlank()) {
+                emitContentDeltas(AiServiceUtils.sanitizeContent(pendingText), callback);
             }
+            emitContentDeltas(finalContent, callback);
 
-            // 11. 保存 AI 回复
+            // 9. 保存 AI 回复（使用当前时间确保排序在用户消息之后）
             String assistantMessageId = AiServiceUtils.generateUlid();
+            String fullAssistantContent = (pendingText != null && !pendingText.isBlank())
+                    ? pendingText + "\n" + finalContent : finalContent;
             AgentMessage assistantMessage = new AgentMessage(
                     assistantMessageId, session.getSessionId(), clientMessageId,
-                    MessageRole.ASSISTANT, finalContent, llmResponse.tokenCount(), now);
+                    MessageRole.ASSISTANT, fullAssistantContent, agentResult.totalTokens(), Instant.now());
             messageRepository.insert(assistantMessage);
 
-            // 12. 更新会话状态
-            if (!finalSlots.isEmpty()) {
+            // 9.5 保存工具结果消息（用于历史消息恢复时重建卡片）
+            saveToolResultMessages(agentResult.toolResults(), session.getSessionId(),
+                    clientMessageId, assistantMessage.getCreatedAt());
+
+            // 10. 更新会话状态
+            if (finalSlots != null && !finalSlots.isEmpty()) {
                 session.updateSlots(finalSlots);
             }
 
-            // 13. 上下文压缩
-            long totalTokens = estimateContextTokens(context, llmResponse.tokenCount());
+            // 11. 上下文压缩
+            long totalTokens = estimateContextTokens(context, agentResult.totalTokens());
             if (totalTokens > AiServiceUtils.MAX_CONTEXT_TOKENS) {
                 String summary = compressContext(session, context);
                 session.updateSummary(summary);
@@ -414,9 +261,10 @@ public class AgentStreamService {
             session.touch(now);
             sessionRepository.save(session);
 
-            // 14. 完成
+            // 12. 推导意图并完成
+            IntentType inferredIntent = inferIntent(agentResult.executedTools());
             callback.onDone(assistantMessageId, session.getSessionId(),
-                    llmResponse.intent().name());
+                    inferredIntent.name());
 
         } catch (BusinessException e) {
             log.warn("流式处理业务异常: userId={}, errorCode={}", userId, e.errorCode());
@@ -432,101 +280,32 @@ public class AgentStreamService {
         }
     }
 
-    // ---- 流式工具执行 ----
+    // ---- 私有方法 ----
 
     /**
-     * 带 SSE 回调的工具执行链。
-     * 每个工具调用前后发射 agent-tool-call / agent-tool-result 事件。
+     * 根据 AgentLoop 执行的工具列表推导用户意图。
      */
-    private List<ToolExecution> executeToolsStreaming(
-            IntentType intent, Map<String, Object> slots,
-            String userId, AgentSession session, String traceId,
-            StreamCallback callback
-    ) {
-        List<IntentToolMapping.ToolMapping> mappings =
-                IntentToolMapping.getToolsForIntent(intent);
-        if (mappings.isEmpty()) {
-            return List.of();
+    private IntentType inferIntent(List<String> executedTools) {
+        if (executedTools == null || executedTools.isEmpty()) {
+            return IntentType.UNKNOWN;
         }
-
-        List<ToolExecution> results = new java.util.ArrayList<>();
-        Map<String, Object> cumulativeParams = new java.util.HashMap<>(slots);
-
-        for (IntentToolMapping.ToolMapping mapping : mappings) {
-            ToolPolicyService.PolicyDecision decision =
-                    toolPolicy.evaluate(mapping.toolName(), session);
-            if (!decision.allowed()) {
-                log.warn("工具执行被策略拒绝: tool={}, reason={}",
-                        mapping.toolName(), decision.reason());
-                results.add(ToolExecution.skipped(mapping.toolName(), decision.reason()));
-                if (mapping.isChainDependent()) {
-                    break;
-                }
-                continue;
-            }
-
-            // 发射工具调用开始事件
-            callback.onToolCall(mapping.toolName(), "running");
-
-            Map<String, Object> params = extractParams(mapping, cumulativeParams, userId);
-
-            long startMs = System.currentTimeMillis();
-            ToolResult toolResult;
-            try {
-                toolResult = toolRouter.route(mapping.toolName(), params, userId);
-            } catch (Exception e) {
-                log.error("工具执行异常: tool={}", mapping.toolName(), e);
-                toolResult = new ToolResult("TOOL_UNAVAILABLE", Map.of(),
-                        "工具执行异常", 0);
-            }
-            int duration = (int) (System.currentTimeMillis() - startMs);
-
-            toolAudit.audit(mapping.toolName(), params, toolResult.resultCode(),
-                    session.getSessionId(), traceId, duration, Instant.now());
-
-            results.add(ToolExecution.completed(mapping.toolName(), toolResult, params));
-
-            // 发射工具结果事件（附带结构化数据供前端渲染卡片）
-            String status = toolResult.isSuccess() ? "success" : "failed";
-            String summary = toolResult.isSuccess()
-                    ? resultInterpreter.interpret(mapping.toolName(), toolResult)
-                    : (toolResult.errorMessage() != null ? toolResult.errorMessage() : "工具执行失败");
-            Map<String, Object> resultData = toolResult.data() != null
-                    ? new java.util.HashMap<>(toolResult.data()) : Map.of();
-            callback.onToolResult(mapping.toolName(), status, summary, resultData);
-
-            if (!toolResult.isSuccess()) {
-                log.warn("工具执行失败，中止链条: tool={}, resultCode={}",
-                        mapping.toolName(), toolResult.resultCode());
-                break;
-            }
-
-            if (toolResult.data() != null && !toolResult.data().isEmpty()) {
-                cumulativeParams.putAll(toolResult.data());
-            }
-
-            // GAP-5：转账流程中 search_payees 返回多个重名收款人时，
-            // 中止工具链并发起澄清，让用户选择正确的收款人
-            if ("search_payees".equals(mapping.toolName())
-                    && toolResult.isSuccess() && toolResult.data() != null
-                    && intent == IntentType.TRANSFER) {
-                List<StreamCallback.ClarificationOption> dupes =
-                        findDuplicatePayees(toolResult.data());
-                if (!dupes.isEmpty()) {
-                    callback.onClarification("找到多个同名收款人，请选择：", dupes);
-                    break;
-                }
-            }
-        }
-        return results;
+        String firstTool = executedTools.get(0);
+        return switch (firstTool) {
+            case "search_payees" ->
+                    executedTools.size() > 1 ? IntentType.TRANSFER : IntentType.USER_SEARCH;
+            case "get_balance" -> IntentType.BALANCE_QUERY;
+            case "list_transactions" -> IntentType.TRANSACTION_LIST;
+            case "get_transaction_status" -> IntentType.TRANSACTION_STATUS;
+            case "get_credit_summary" -> IntentType.CREDIT_SUMMARY;
+            case "list_credit_bills" -> IntentType.CREDIT_BILL;
+            case "create_credit_repayment_draft" -> IntentType.CREDIT_REPAYMENT;
+            case "create_transfer_draft" -> IntentType.TRANSFER;
+            default -> IntentType.UNKNOWN;
+        };
     }
 
     // ---- 流式文本分块推送 ----
 
-    /**
-     * 将完整文本按固定大小分块，逐块通过回调推送。
-     * 模拟 LLM 流式输出的打字效果。
-     */
     private void emitContentDeltas(String fullText, StreamCallback callback) {
         if (fullText == null || fullText.isBlank()) return;
         int len = fullText.length();
@@ -544,23 +323,20 @@ public class AgentStreamService {
         }
     }
 
-    // ---- 复用 AgentMessageService 的核心逻辑 ----
+    // ---- 会话管理 ----
 
     private AgentSession resolveSession(String userId, String sessionId, Instant now) {
         if (sessionId != null && !sessionId.isBlank()) {
             AgentSession existing = sessionRepository.findById(sessionId)
                     .orElseThrow(() -> new BusinessException(AgentErrorCode.SESSION_NOT_FOUND));
             boolean wasExpiredInDb = existing.getStatus() == AgentSessionStatus.EXPIRED;
-            // 会话超时后重新激活：保留 AI 上下文（摘要和消息历史），清除过期草稿槽位
             if (existing.checkExpiry(now, sessionTimeoutMinutes)) {
                 log.info("会话已超时，重新激活: sessionId={}, lastActiveAt={}",
                         existing.getSessionId(), existing.getLastActiveAt());
                 existing.reactivate(now);
                 if (wasExpiredInDb) {
-                    // DB 中已是 EXPIRED，普通 CAS 无法匹配，使用专用重新激活方法
                     sessionRepository.reactivateSession(existing);
                 } else {
-                    // DB 中仍为 ACTIVE，checkExpiry 仅在内存中变更，CAS 可正常匹配
                     sessionRepository.save(existing);
                 }
             }
@@ -587,7 +363,6 @@ public class AgentStreamService {
             context.add(new ChatMessage(MessageRole.SYSTEM,
                     "【当前槽位】" + session.getSlots()));
         }
-        // GAP-6：注入用户偏好（如最近使用的收款人），为 LLM 提供个性化上下文
         try {
             userPreferenceService.getLastPayee(session.getUserId()).ifPresent(payee -> {
                 String nickname = payee.getOrDefault("nickname", "");
@@ -599,9 +374,19 @@ public class AgentStreamService {
         } catch (Exception e) {
             log.debug("加载用户偏好失败，跳过：{}", e.getMessage());
         }
-        // 防止上下文污染：要求 LLM 仅针对当前用户消息回复，不重复历史答案
+        // 操作完成感知：如果用户刚完成了某个操作，明确告知 LLM 不要重复
+        Object lastAction = session.getSlots().get("lastCompletedAction");
+        if (lastAction != null) {
+            String actionDesc = describeCompletedAction(lastAction.toString());
+            context.add(new ChatMessage(MessageRole.SYSTEM,
+                    "【注意】" + actionDesc + "，请勿重复执行相同操作或重复展示相同结果。"));
+        }
+        // 增强防重复提示：更具体的指令
         context.add(new ChatMessage(MessageRole.SYSTEM,
-                "【重要】请仅针对用户最新消息回复，不要重复之前已经回答过的内容。"));
+                "【重要】请仅针对用户最新消息回复。"
+                + "如果用户之前的请求已经完成（如转账已完成、余额已展示），"
+                + "不要重复执行相同操作或重复展示相同结果。"
+                + "对于新的请求，直接执行对应操作。"));
         List<AgentMessage> history = messageRepository.findRecentBySessionId(
                 session.getSessionId(), AiServiceUtils.CONTEXT_MESSAGE_LIMIT);
         for (AgentMessage msg : history) {
@@ -613,6 +398,73 @@ public class AgentStreamService {
         }
         context.add(new ChatMessage(MessageRole.USER, currentMessage));
         return context;
+    }
+
+    /**
+     * 根据 AgentLoop 执行的工具列表推断用户刚完成的操作。
+     *
+     * @return 操作名称（如 "transfer"、"repay"），无完成操作时返回 null
+     */
+    private String inferCompletedAction(List<String> executedTools) {
+        if (executedTools == null || executedTools.isEmpty()) return null;
+        // 转账流程完成标志：执行了 submit_confirmed_transfer
+        if (executedTools.contains("submit_confirmed_transfer")) return "transfer";
+        // 还款流程完成标志：执行了 create_credit_repayment_draft
+        if (executedTools.contains("create_credit_repayment_draft")) return "repay";
+        // 查询类操作完成标志：执行了查询工具且没有后续转账操作
+        if (executedTools.contains("prepare_confirmation_card")) return "transfer_confirm_pending";
+        return null;
+    }
+
+    /**
+     * 将操作名称转换为可读的中文描述，用于上下文注入。
+     */
+    private String describeCompletedAction(String action) {
+        return switch (action) {
+            case "transfer" -> "用户刚刚完成了转账操作";
+            case "repay" -> "用户刚刚完成了花呗还款操作";
+            case "transfer_confirm_pending" -> "用户已确认转账待提交";
+            default -> "用户刚刚完成了" + action + "操作";
+        };
+    }
+
+    /**
+     * 将工具执行结果保存为独立消息，用于历史对话恢复时重建卡片。
+     *
+     * <p>每个工具结果使用唯一的 {@code client_message_id}（格式：{@code {原始ID}_tr_{工具名}_{序号}}）
+     * 以避免唯一约束冲突。时间戳在 AI 回复时间基础上逐条递增 1 毫秒，保证排序在文本回复之前。</p>
+     *
+     * @param toolResults 工具结果摘要列表
+     * @param sessionId 会话 ID
+     * @param clientMessageId 原始客户端消息幂等键
+     * @param baseTime AI 回复的创建时间（工具结果消息时间从此开始递增）
+     */
+    private void saveToolResultMessages(List<AgentLoop.ToolResultRecord> toolResults,
+                                         String sessionId, String clientMessageId,
+                                         Instant baseTime) {
+        if (toolResults == null || toolResults.isEmpty()) return;
+        for (int i = 0; i < toolResults.size(); i++) {
+            AgentLoop.ToolResultRecord tr = toolResults.get(i);
+            try {
+                String json = objectMapper.writeValueAsString(Map.of(
+                        "tool", tr.toolName(),
+                        "status", tr.status(),
+                        "summary", tr.summary(),
+                        "data", tr.data() != null ? tr.data() : Map.of()
+                ));
+                // 唯一 client_message_id：原始ID + 工具名 + 序号
+                String trClientId = clientMessageId + "_tr_" + tr.toolName() + "_" + i;
+                // 时间戳逐条递增 1 毫秒，保证排序在 AI 文本回复之前
+                Instant trTime = baseTime.plusMillis(i + 1);
+                AgentMessage trMessage = new AgentMessage(
+                        AiServiceUtils.generateUlid(), sessionId, trClientId,
+                        MessageRole.ASSISTANT, json, 0, trTime,
+                        MessageKind.TOOL_RESULT, tr.toolName());
+                messageRepository.insert(trMessage);
+            } catch (Exception e) {
+                log.warn("保存工具结果消息失败: tool={}, error={}", tr.toolName(), e.getMessage());
+            }
+        }
     }
 
     private String compressContext(AgentSession session, List<ChatMessage> context) {
@@ -637,124 +489,10 @@ public class AgentStreamService {
         return total;
     }
 
-    private boolean shouldExecuteTools(ChatResponse llmResponse) {
-        return !llmResponse.clarificationNeeded()
-                && llmResponse.intent() != IntentType.UNKNOWN;
-    }
-
-    private Map<String, Object> extractParams(
-            IntentToolMapping.ToolMapping mapping,
-            Map<String, Object> cumulativeParams, String userId
-    ) {
-        Map<String, Object> params = new java.util.HashMap<>();
-        for (var entry : mapping.paramSources().entrySet()) {
-            String paramName = entry.getKey();
-            IntentToolMapping.ParamSource source = entry.getValue();
-            switch (source) {
-                case SLOTS, SLOTS_OPTIONAL, PREVIOUS_RESULT -> {
-                    Object value = cumulativeParams.get(paramName);
-                    if (value != null) params.put(paramName, value);
-                }
-                case CONSTANT -> { /* 默认值由 ToolRouter 处理 */ }
-            }
-        }
-        params.put("idempotencyKey",
-                userId + "-" + mapping.toolName() + "-" + System.currentTimeMillis());
-        return params;
-    }
-
-    private String formatToolResultsAsSystemMessage(List<ToolExecution> results) {
-        StringBuilder sb = new StringBuilder("【工具调用结果】\n");
-        for (ToolExecution te : results) {
-            sb.append("工具: ").append(te.toolName());
-            if (te.toolResult() != null) {
-                sb.append(" | 状态: ").append(te.toolResult().resultCode());
-                if (te.toolResult().data() != null && !te.toolResult().data().isEmpty()) {
-                    sb.append(" | 数据: ").append(te.toolResult().data());
-                }
-            } else {
-                sb.append(" | 状态: SKIPPED (").append(te.skipReason()).append(")");
-            }
-            sb.append("\n");
-        }
-        return sb.toString();
-    }
-
-    /**
-     * 从 LLM 槽位中推导澄清选项。
-     */
-    private List<StreamCallback.ClarificationOption> deriveClarificationOptions(
-            Map<String, Object> slots) {
-        if (slots == null || slots.isEmpty()) return List.of();
-        for (Object value : slots.values()) {
-            if (!(value instanceof List<?>) || ((List<?>) value).isEmpty()) continue;
-            List<?> rawList = (List<?>) value;
-            List<StreamCallback.ClarificationOption> options = new ArrayList<>();
-            for (Object item : rawList.subList(0, Math.min(4, rawList.size()))) {
-                if (item instanceof String s && !s.isBlank()) {
-                    options.add(new StreamCallback.ClarificationOption(s, s));
-                } else if (item instanceof Map<?, ?> map) {
-                    Object label = map.get("label");
-                    if (label == null) label = map.get("nickname");
-                    if (label == null) label = map.get("name");
-                    if (label instanceof String ls && !ls.isBlank()) {
-                        Object id = map.get("id");
-                        options.add(new StreamCallback.ClarificationOption(
-                                id != null ? id.toString() : ls, ls));
-                    }
-                }
-            }
-            if (!options.isEmpty()) return options;
-        }
-        return List.of();
-    }
-
-    /**
-     * GAP-5：检测 search_payees 返回结果中是否存在多个重名收款人。
-     * 当多个用户昵称相同时返回澄清选项列表，否则返回空列表。
-     */
-    private List<StreamCallback.ClarificationOption> findDuplicatePayees(
-            Map<String, Object> toolData) {
-        Object usersObj = toolData.get("users");
-        if (!(usersObj instanceof java.util.List<?> usersList) || usersList.size() < 2) {
-            return List.of();
-        }
-        // 按昵称分组
-        Map<String, List<Map<String, Object>>> byNickname = new java.util.LinkedHashMap<>();
-        for (Object item : usersList) {
-            if (!(item instanceof Map<?, ?> map)) continue;
-            @SuppressWarnings("unchecked")
-            Map<String, Object> userMap = (Map<String, Object>) map;
-            Object nickname = userMap.get("nickname");
-            if (nickname instanceof String name && !name.isBlank()) {
-                byNickname.computeIfAbsent(name, k -> new ArrayList<>()).add(userMap);
-            }
-        }
-        // 找到出现次数 > 1 的昵称，生成澄清选项
-        List<StreamCallback.ClarificationOption> options = new ArrayList<>();
-        for (var entry : byNickname.entrySet()) {
-            if (entry.getValue().size() > 1) {
-                for (Map<String, Object> user : entry.getValue()) {
-                    Object userId = user.get("userId");
-                    Object phoneTail = user.get("phoneTail");
-                    String label = entry.getKey()
-                            + (phoneTail != null ? "（尾号" + phoneTail + "）" : "");
-                    options.add(new StreamCallback.ClarificationOption(
-                            userId != null ? userId.toString() : entry.getKey(), label));
-                }
-                break; // 只处理第一组重名
-            }
-        }
-        return options;
-    }
-
-    // ---- 辅助方法 ----
-
     private void safeEmitError(StreamCallback callback, String code, String message) {
         try {
             callback.onError(code, message);
         } catch (Exception ignored) {
-            // 回调异常不影响主流程
         }
     }
 
@@ -772,24 +510,5 @@ public class AgentStreamService {
         if (trimmed.endsWith("m")) return Long.parseLong(trimmed.replace("m", ""));
         if (trimmed.endsWith("h")) return Long.parseLong(trimmed.replace("h", "")) * 60;
         return Long.parseLong(trimmed);
-    }
-
-    /**
-     * 工具执行记录（内部使用）。
-     */
-    private record ToolExecution(
-            String toolName,
-            ToolResult toolResult,
-            Map<String, Object> params,
-            String skipReason
-    ) {
-        static ToolExecution completed(String toolName, ToolResult result,
-                                        Map<String, Object> params) {
-            return new ToolExecution(toolName, result, params, null);
-        }
-
-        static ToolExecution skipped(String toolName, String reason) {
-            return new ToolExecution(toolName, null, Map.of(), reason);
-        }
     }
 }

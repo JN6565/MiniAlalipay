@@ -33,7 +33,7 @@ public class User {
     /**
      * 用户 ID（26 位字符，格式：{@code USR} + 9 位随机大写字母 + {@code YYYYMMDD} + 6 位日序列号）。
      * <p>跨模块引用用户的稳定标识，在整个系统生命周期内不变。注册时由
-     * {@link com.minialalipay.user.infrastructure.id.UserIdGenerator} 与 {@code registrationId} 成对生成。</p>
+     * {@link UserIdGeneratorPort} 实现与 {@code registrationId} 成对生成。</p>
      */
     private final String userId;
 
@@ -54,8 +54,8 @@ public class User {
     /** 完整手机号，规范化为 11 位数字并在数据库中保持唯一。 */
     private final String phoneNumber;
 
-    /** 用户注册时提供的真实姓名，用于收款人精确或模糊查询。 */
-    private final String realName;
+    /** 用户真实姓名，注册时为 null，绑定身份后设置，用于收款人精确或模糊查询。 */
+    private String realName;
 
     /**
      * 昵称（最大 64 字符）。
@@ -95,6 +95,12 @@ public class User {
 
     /** 管理冻结理由（仅 DISABLED 状态有值），用于 B 端审计展示。 */
     private String disabledReason;
+
+    /** 身份证号掩码（如 3301**********1234），绑定身份后保存。 */
+    private String idCard;
+
+    /** 身份证号明文 SHA-256 哈希，用于绑卡时三要素交叉比对。 */
+    private byte[] idCardHash;
 
     /**
      * 用户注册时间（UTC，毫秒精度）。
@@ -139,16 +145,14 @@ public class User {
         if (phoneNumber == null || phoneNumber.isBlank()) {
             throw new IllegalArgumentException("手机号不能为空");
         }
-        if (realName == null || realName.isBlank()) {
-            throw new IllegalArgumentException("真实姓名不能为空");
-        }
-
         this.userId = userId;
         this.registrationId = registrationId;
         this.accountNumber = accountNumber;
         this.phoneNumber = phoneNumber;
-        this.realName = realName;
-        this.nickname = nickname == null || nickname.isBlank() ? realName : nickname.trim();
+        this.realName = (realName == null || realName.isBlank()) ? null : realName.trim();
+        this.nickname = nickname == null || nickname.isBlank()
+                ? maskPhoneNumber(phoneNumber)
+                : nickname.trim();
         this.phoneTail = phoneNumber.substring(phoneNumber.length() - 4);
         this.identityStatus = "PENDING_VERIFICATION";
         this.status = UserStatus.PROVISIONING;
@@ -188,7 +192,9 @@ public class User {
             Instant createdAt,
             Instant updatedAt,
             String disabledBy,
-            String disabledReason
+            String disabledReason,
+            String idCard,
+            byte[] idCardHash
     ) {
         this.userId = userId;
         this.registrationId = registrationId;
@@ -204,6 +210,8 @@ public class User {
         this.updatedAt = updatedAt;
         this.disabledBy = disabledBy;
         this.disabledReason = disabledReason;
+        this.idCard = idCard;
+        this.idCardHash = idCardHash;
     }
 
     /**
@@ -299,6 +307,27 @@ public class User {
         this.updatedAt = Instant.now();
     }
 
+    /**
+     * 绑定身份信息：设置真实姓名和身份证号，计算哈希，更新身份状态为 VERIFIED。
+     *
+     * <p>绑定后用户可以通过三要素交叉校验来绑定银行卡。</p>
+     *
+     * @param realName 真实姓名
+     * @param idCard 身份证号明文（用于计算哈希）
+     * @param idCardHash 身份证号明文 SHA-256 哈希
+     * @param idCardMasked 身份证号掩码
+     */
+    public void bindIdentity(String realName, byte[] idCardHashBytes, String idCardMasked) {
+        if (realName == null || realName.isBlank()) {
+            throw new IllegalArgumentException("真实姓名不能为空");
+        }
+        this.realName = realName.trim();
+        this.idCard = idCardMasked;
+        this.idCardHash = idCardHashBytes;
+        this.identityStatus = "VERIFIED";
+        this.updatedAt = Instant.now();
+    }
+
     // ==================== Getters ====================
 
     /**
@@ -333,9 +362,19 @@ public class User {
         return phoneNumber;
     }
 
-    /** @return 注册真实姓名 */
+    /** @return 真实姓名，绑定身份后非 null */
     public String getRealName() {
         return realName;
+    }
+
+    /** @return 身份证号掩码，绑定身份后非 null */
+    public String getIdCard() {
+        return idCard;
+    }
+
+    /** @return 身份证号哈希，绑定身份后非 null */
+    public byte[] getIdCardHash() {
+        return idCardHash;
     }
 
     /**
@@ -417,5 +456,13 @@ public class User {
      */
     public String getDisabledReason() {
         return disabledReason;
+    }
+
+    /** 将手机号转为脱敏昵称格式，如 13812345678 → 手机用户1234。 */
+    private static String maskPhoneNumber(String phone) {
+        if (phone == null || phone.length() < 4) {
+            return "手机用户";
+        }
+        return "手机用户" + phone.substring(phone.length() - 4);
     }
 }

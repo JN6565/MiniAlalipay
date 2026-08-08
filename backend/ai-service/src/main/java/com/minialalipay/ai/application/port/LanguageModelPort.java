@@ -1,5 +1,7 @@
 package com.minialalipay.ai.application.port;
 
+import com.minialalipay.ai.domain.tool.ToolCatalog;
+
 import java.util.List;
 import java.util.function.Consumer;
 
@@ -68,5 +70,44 @@ public interface LanguageModelPort {
             String userMessage, Consumer<String> onContentDelta) {
         // 默认实现回退到 streamChat（兼容未覆盖的实现）
         return streamChat(systemPrompt, history, userMessage, onContentDelta);
+    }
+
+    /**
+     * Agent 单步推理：给定完整对话上下文和可用工具定义，LLM 决定调用工具或给出最终回复。
+     *
+     * <p>用于 ReAct 主循环。真实模式通过 Spring AI function calling 实现；
+     * Mock 模式通过关键词匹配返回模拟的工具调用决策。</p>
+     *
+     * @param messages 完整对话消息列表（含 system、user、assistant、tool results）
+     * @param tools 当前可用工具定义（来自 ToolCatalog，排除 HIGH_RISK_WRITE）
+     * @return {@link AgentDecision.ToolCall} 或 {@link AgentDecision.FinalReply}
+     */
+    default AgentDecision agentStep(List<ChatMessage> messages,
+                                    List<ToolCatalog.ToolDefinition> tools) {
+        // 默认实现：返回 FinalReply 降级话术（兼容未覆盖的实现）
+        return new AgentDecision.FinalReply(
+                "抱歉，AI 助手暂时不可用。您可以使用传统表单完成转账、查余额、还花呗等操作。",
+                10);
+    }
+
+    /**
+     * 基于真实工具结果的 Agent 单步推理。
+     *
+     * <p>在 AgentLoop 执行工具后调用，将真实工具结果以 ToolResponseMessage 形式传给 LLM，
+     * 让 LLM 基于实际数据决定下一步操作（继续调用工具或生成最终回复）。</p>
+     *
+     * @param messages 当前消息列表（不含工具结果）
+     * @param tools 可用工具定义
+     * @param toolCallId 上一次工具调用的 ID
+     * @param toolName 上一次工具调用的工具名
+     * @param actualResult 工具执行的真实结果 JSON
+     * @return {@link AgentDecision.ToolCall} 或 {@link AgentDecision.FinalReply}
+     */
+    default AgentDecision agentStepWithToolResult(
+            List<ChatMessage> messages,
+            List<ToolCatalog.ToolDefinition> tools,
+            String toolCallId, String toolName, String actualResult) {
+        // 默认实现：回退到普通 agentStep（兼容未覆盖的实现）
+        return agentStep(messages, tools);
     }
 }

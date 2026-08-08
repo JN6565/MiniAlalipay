@@ -2,6 +2,7 @@ package com.minialalipay.ai.infrastructure.persistence;
 
 import com.minialalipay.ai.domain.agent.AgentMessage;
 import com.minialalipay.ai.domain.agent.AgentMessageRepository;
+import com.minialalipay.ai.domain.agent.MessageKind;
 import com.minialalipay.ai.domain.agent.MessageRole;
 import com.minialalipay.ai.infrastructure.persistence.mapper.AgentMessageMapper;
 import com.minialalipay.ai.infrastructure.persistence.po.AgentMessagePO;
@@ -60,6 +61,14 @@ public class MyBatisAgentMessageRepository implements AgentMessageRepository {
     }
 
     private AgentMessage toDomain(AgentMessagePO po) {
+        MessageKind kind = MessageKind.TEXT;
+        if (po.getKind() != null && !po.getKind().isBlank()) {
+            try {
+                kind = MessageKind.valueOf(po.getKind());
+            } catch (IllegalArgumentException ignored) {
+                // 未知类型降级为 TEXT
+            }
+        }
         return new AgentMessage(
                 po.getMessageId(),
                 po.getSessionId(),
@@ -67,7 +76,9 @@ public class MyBatisAgentMessageRepository implements AgentMessageRepository {
                 MessageRole.valueOf(po.getRole()),
                 po.getContentRedacted(),
                 po.getTokenCount(),
-                po.getCreatedAt()
+                po.getCreatedAt(),
+                kind,
+                po.getToolName()
         );
     }
 
@@ -80,6 +91,8 @@ public class MyBatisAgentMessageRepository implements AgentMessageRepository {
         po.setContentRedacted(message.getContentRedacted());
         po.setTokenCount(message.getTokenCount());
         po.setCreatedAt(message.getCreatedAt());
+        po.setKind(message.getKind().name());
+        po.setToolName(message.getToolName());
         return po;
     }
 }

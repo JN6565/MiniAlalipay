@@ -16,7 +16,7 @@ import com.minialalipay.user.domain.user.SessionManagerPort;
 import com.minialalipay.user.domain.user.User;
 import com.minialalipay.user.domain.user.UserRepository;
 import com.minialalipay.user.domain.user.UserStatus;
-import com.minialalipay.user.infrastructure.id.UserIdGenerator;
+import com.minialalipay.user.domain.user.UserIdGeneratorPort;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Service;
@@ -48,7 +48,7 @@ public class AuthService {
     private final SessionManagerPort sessionManager;
     private final AccountProvisioningPort accountProvisioningPort;
     private final RoleAssignmentRepository roleAssignmentRepository;
-    private final UserIdGenerator userIdGenerator;
+    private final UserIdGeneratorPort userIdGenerator;
 
     /**
      * 构造认证服务所需依赖。
@@ -68,7 +68,7 @@ public class AuthService {
             SessionManagerPort sessionManager,
             AccountProvisioningPort accountProvisioningPort,
             RoleAssignmentRepository roleAssignmentRepository,
-            UserIdGenerator userIdGenerator
+            UserIdGeneratorPort userIdGenerator
     ) {
         this.userRepository = userRepository;
         this.credentialRepository = credentialRepository;
@@ -80,12 +80,13 @@ public class AuthService {
     }
 
     /**
-     * 使用手机号、真实姓名、登录密码和支付密码注册 C 端用户，并自动开立零余额账户。
+     * 使用手机号、昵称、登录密码和支付密码注册 C 端用户，并自动开立零余额账户。
+     * 真实姓名不在注册时采集，由后续身份绑定流程补充。
      *
      * <p>注册成功的对外语义必须包含开户成功：如果账户中心不可用或拒绝开户，本方法抛出业务异常，不创建会话，
      * 防止前端拿到 PROVISIONING 用户后停留在“注册开户中”。账户中心按 registrationId 幂等，后续登录恢复仍可复用同一编号。</p>
      *
-     * @param request 注册请求，包含手机号、真实姓名、可选昵称、登录密码和支付密码
+     * @param request 注册请求，包含手机号、昵称、登录密码和支付密码
      * @return 认证结果，包含会话令牌、用户 ID、系统账户号、昵称和用户状态
      * @throws BusinessException 手机号重复、密码不符合规则或开户注册失败时抛出
      */
@@ -101,13 +102,13 @@ public class AuthService {
         validatePassword(request.loginPassword());
         validatePaymentPassword(request.paymentPassword());
 
-        UserIdGenerator.IdPair ids = userIdGenerator.generatePair();
+        UserIdGeneratorPort.IdPair ids = userIdGenerator.generatePair();
         String userId = ids.userId();
         String registrationId = ids.registrationId();
         String accountNumber = generateAccountNumber();
 
         User user = new User(userId, registrationId, accountNumber, phoneNumber,
-                request.realName().trim(), request.nickname());
+                null, request.nickname());
 
         String hashedPassword = passwordHasher.hashPassword(request.loginPassword());
         Credential credential = new Credential(userId, hashedPassword);

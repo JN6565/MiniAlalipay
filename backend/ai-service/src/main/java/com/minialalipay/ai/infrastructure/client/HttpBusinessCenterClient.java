@@ -125,6 +125,8 @@ public class HttpBusinessCenterClient implements BusinessCenterPort {
         card.put("remark", draft.getOrDefault("remark", ""));
         // 资金来源默认 BALANCE，待 business-center 提供专用 API 后替换
         card.put("fundingSource", draft.getOrDefault("fundingSource", "BALANCE"));
+        // 草稿版本号，前端确认转账时需要传给 issueConfirmation 接口
+        card.put("version", draft.getOrDefault("version", 0L));
         return card;
     }
 

@@ -4,6 +4,7 @@ export interface UserInfo {
   userId: string;
   accountNumber: string;
   nickname: string;
+  maskedPhone?: string;
   avatar?: string;
   userType: string;
   createdAt: string;

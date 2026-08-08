@@ -38,12 +38,6 @@ public record RegisterRequestDTO(
         @Pattern(regexp = "^1[3-9]\\d{9}$", message = "手机号格式不正确")
         String phoneNumber,
 
-        /** 真实姓名，2-32 个中文、英文字符或中间点。 */
-        @NotBlank(message = "真实姓名不能为空")
-        @Size(min = 2, max = 32, message = "真实姓名长度必须在 2-32 位之间")
-        @Pattern(regexp = "^[\\p{L}·•. ]+$", message = "真实姓名格式不正确")
-        String realName,
-
         /**
          * 昵称（必填，2-20 位）。
          * <p>可重复的展示名称，不要求唯一。</p>

@@ -628,9 +628,11 @@ erDiagram
 | `registration_id` | `CHAR(26)` | 必填 | 用户中心生成的注册幂等键，用于开户恢复和既有资源查询 |
 | `account_number` | `VARCHAR(64)` | 必填 | 系统生成的 16 位账户号，以 `62` 开头，用于登录和唯一识别 |
 | `phone_number` | `VARCHAR(11)` | 新注册必填、历史数据可空 | 完整手机号，用于登录及转账查询；禁止跨上下文透传或写日志 |
-| `real_name` | `VARCHAR(64)` | 新注册必填、历史数据可空 | 注册真实姓名，用于收款确认展示 |
+| `real_name` | `VARCHAR(64)` | 可空 | 真实姓名，身份绑定后保存，注册时不再填写 |
 | `nickname` | `VARCHAR(64)` | 必填 | 可重复的展示名称 |
 | `phone_tail` | `CHAR(4)` | 可空 | 手机号尾号，仅用于脱敏展示 |
+| `id_card` | `VARCHAR(32)` | 可空 | 身份证号掩码，绑定身份后保存，如 3301**********1234 |
+| `id_card_hash` | `BINARY(32)` | 可空 | 身份证号明文哈希，用于绑卡时三要素交叉比对 |
 | `identity_status` | `VARCHAR(16)` | 必填 | 演示身份状态，不代表真实 KYC |
 | `status` | `VARCHAR(16)` | `PROVISIONING` | 用户状态：`PROVISIONING/ACTIVE/DISABLED` |
 | `disabled_by` | `CHAR(26)` | 可空 | 管理冻结操作者用户 ID，解冻后清空 |
@@ -854,6 +856,59 @@ erDiagram
 **键与索引**：UK `(xid,branch_type,resource_id)`；索引 `(transaction_id)`、`(status,updated_at)`。
 
 **写入规则**：Cancel 先到时写 `CANCELLED/EMPTY` 屏障，晚到 Try 必须拒绝；普通 Cancel 使用 `NORMAL`，重复 Confirm/Cancel 返回已有终态。`CREDIT_PAY_LEDGER` 是 `ledger_db` 中独立于普通 `LEDGER` 的信用支付账本分支，资源为稳定凭证 ID；它只允许保存 `CREDIT_PAY` 预记账凭证，Confirm 前必须汇总验平，已过账凭证不得由 Cancel 删除。
+
+### 6.7 `bank_card_registration`
+
+**功能与归属**：归属 `account_db`，由 `account-center` 的银行卡注册模块写入。记录用户银行卡注册事实，注册时自动生成卡号并保存三要素哈希；绑定时与用户存储身份交叉比对。安全约束：完整卡号只在注册响应中返回一次，表中保存完整卡号用于绑定时匹配。
+
+| 字段 | 类型 | 必填/默认 | 功能 |
+| --- | --- | --- | --- |
+| `registration_id` | `CHAR(26)` | PK，必填 | 注册记录 ID，26 位字符串 |
+| `user_id` | `CHAR(26)` | 必填 | 注册操作人（记录是谁注册的） |
+| `bank_code` | `VARCHAR(32)` | 必填 | 银行编码，如 ICBC、CMB |
+| `bank_name` | `VARCHAR(64)` | 必填 | 银行名称 |
+| `card_type` | `VARCHAR(16)` | 必填 | `DEBIT` 借记卡，`CREDIT` 信用卡 |
+| `card_number` | `VARCHAR(19)` | 必填 | 自动生成的完整卡号（模拟环境允许） |
+| `card_bin` | `CHAR(6)` | 必填 | BIN 前 6 位 |
+| `card_last4` | `CHAR(4)` | 必填 | 尾号后 4 位 |
+| `holder_name` | `VARCHAR(32)` | 必填 | 持卡人姓名明文（绑定时用于比对） |
+| `id_card_hash` | `BINARY(32)` | 必填 | 身份证号哈希（绑定时用于比对） |
+| `phone_hash` | `BINARY(32)` | 必填 | 手机号哈希（绑定时用于比对） |
+| `status` | `VARCHAR(16)` | `REGISTERED` | `REGISTERED` 已注册未绑定，`BOUND` 已绑定（终态） |
+| `created_at` | `DATETIME(3)` | 必填 | 注册时间 |
+
+**键与索引**：索引 `(user_id,status)`，服务查询已注册但未绑定的卡列表；索引 `(card_number)`，服务绑定时按卡号查找注册记录。
+
+**写入规则**：注册时插入新记录；绑定时通过卡号查找注册记录，校验三要素哈希匹配后标记为 `BOUND`（终态），注册记录一旦绑定不可逆转。
+
+### 6.8 `bank_card`
+
+**功能与归属**：归属 `account_db`，由 `account-center` 的银行卡模块写入。记录用户银行卡绑定事实；安全约束：只存 BIN（前 6 位）、尾号（后 4 位）与掩码值，禁止存完整卡号、证件号、手机号明文。
+
+| 字段 | 类型 | 必填/默认 | 功能 |
+| --- | --- | --- | --- |
+| `card_id` | `CHAR(26)` | PK，必填 | 银行卡 ID，26 位字符串 |
+| `user_id` | `CHAR(26)` | 必填 | 所属用户 ID |
+| `account_id` | `CHAR(26)` | 必填 | 关联的个人账户 ID |
+| `bank_code` | `VARCHAR(32)` | 必填 | 银行编码，如 ICBC、CMB |
+| `bank_name` | `VARCHAR(64)` | 必填 | 银行名称 |
+| `card_type` | `VARCHAR(16)` | 必填 | `DEBIT` 借记卡，`CREDIT` 信用卡 |
+| `card_bin` | `CHAR(6)` | 必填 | 卡号前 6 位 BIN，用于银行识别 |
+| `card_last4` | `CHAR(4)` | 必填 | 卡号后 4 位 |
+| `holder_masked` | `VARCHAR(64)` | 必填 | 持卡人姓名掩码，如 张*三 |
+| `id_card_masked` | `VARCHAR(32)` | 必填 | 身份证号掩码 |
+| `phone_masked` | `VARCHAR(16)` | 必填 | 预留手机号掩码，如 138****5678 |
+| `is_default` | `TINYINT(1)` | `0` | 是否默认卡，同一用户至多一张，应用层条件更新保证 |
+| `status` | `VARCHAR(16)` | `ACTIVE` | `ACTIVE` 已绑定，`UNBOUND` 已解绑（终态） |
+| `unbound_at` | `DATETIME(3)` | 可空 | 解绑时间 |
+| `version` | `BIGINT UNSIGNED` | `0` | 乐观锁版本，默认卡与解绑条件更新使用 |
+| `created_at` | `DATETIME(3)` | 必填 | 绑定时间 |
+| `updated_at` | `DATETIME(3)` | 必填 | 最近变更时间 |
+| `registration_id` | `CHAR(26)` | 可空 | 来源注册记录 ID，关联 `bank_card_registration` 表 |
+
+**键与索引**：索引 `(user_id,status)`，服务卡列表与重复绑卡校验。
+
+**写入规则**：绑卡只插入不更新；重复绑卡（同用户 BIN+尾号已 ACTIVE）与默认卡唯一性由应用层条件校验保证，因解绑后允许重绑，唯一索引无法用简单列组合表达；设默认与解绑一律走乐观锁 CAS，解绑默认卡后递补最早活动卡为默认。
 
 ## 7. 信用应收、账单与还款表
 
@@ -1306,7 +1361,7 @@ MVP 退款仅支持单笔全额受控虚拟退款，不接入真实支付通道�
 
 **键与索引**：UK `(source_type,source_order_id)`、UK `(initiator_user_id,business_type,idempotency_key)`；索引 `(status,updated_at)`、`(payee_account_id,created_at)`、`(business_type,created_at)`。
 
-**写入规则**：业务类型必须匹配来源类型。充值强制 `SYSTEM_ISSUANCE` 且付款账户为空；其他业务双方账户非空且不同；退款必须关联原交易。
+**写入规则**：业务类型必须匹配来源类型。转账可来自转账草稿、个人收款码或固定金额收款请求，但资金来源只能是 `BALANCE`；普通动态扫码的 `QR_PAY` 只能来自动态扫码订单且使用余额；动态扫码、个人收款码和固定金额收款请求均可在用户明确选择 Mini 花呗时创建 `CREDIT_PAY`，资金来源必须为 `MINI_CREDIT`。充值强制 `SYSTEM_ISSUANCE` 且付款账户为空；其他业务双方账户非空且不同；退款必须关联原交易。
 
 ### 9.8 `qr_pay_order`
 
@@ -1986,9 +2041,11 @@ MVP 退款仅支持单笔全额受控虚拟退款，不接入真实支付通道�
 | `session_id` | `CHAR(26)` | FK，必填 | 所属 AI 会话 |
 | `client_message_id` | `VARCHAR(64)` | 必填 | 客户端消息幂等键 |
 | `role` | `VARCHAR(16)` | 必填 | `USER/ASSISTANT/SYSTEM` |
-| `content_redacted` | `TEXT` | 必填 | 脱敏消息正文 |
+| `content_redacted` | `TEXT` | 必填 | 脱敏消息正文（TOOL_RESULT 类型为 JSON 格式的工具摘要） |
 | `token_count` | `INT UNSIGNED` | `0` | 上下文预算和成本统计 |
 | `created_at` | `DATETIME(3)` | 必填 | 消息创建时间 |
+| `kind` | `VARCHAR(16)` | `TEXT`，必填 | 消息类型：`TEXT`（文本回复）/ `TOOL_RESULT`（工具结果） |
+| `tool_name` | `VARCHAR(64)` | 可空 | 工具名称，仅 `TOOL_RESULT` 类型有值 |
 
 **键与索引**：UK `(session_id,client_message_id,role)`；索引 `(session_id,created_at)`。
 
