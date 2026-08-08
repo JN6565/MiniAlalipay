@@ -36,6 +36,12 @@ const QrPayPage: React.FC = () => {
 
   const loadOrder = async (t: string) => {
     try {
+      if (!localStorage.getItem('accessToken')) {
+        history.replace(`/h5/login?redirect=${encodeURIComponent(`/h5/qr-pay/${t}`)}`);
+        return;
+      }
+      // 先建立匿名引导会话，再在同一会话中交换二维码令牌。
+      await qrPayService.loadH5Shell(t);
       // 交换令牌获取订单
       const exchanged = await qrPayService.exchangeToken(t);
       const [scanned, accountData, creditData] = await Promise.all([
