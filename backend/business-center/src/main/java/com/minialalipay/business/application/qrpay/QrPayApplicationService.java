@@ -231,14 +231,15 @@ public class QrPayApplicationService {
     @Transactional
     public IssuedConfirmation issueConfirmation(String userId, String orderId, String bootstrapSessionId,
                                                 long version, String paymentProof, FundingSource fundingSource) {
-        if (fundingSource != FundingSource.BALANCE) {
-            throw new BusinessException(CommonErrorCode.SERVICE_UNAVAILABLE);
-        }
+        if (fundingSource == null) throw new BusinessException(BusinessErrorCode.FUNDING_SOURCE_NOT_ALLOWED);
         requirePaymentDependencies();
         QrPayOrder order = requiredOrder(orderId);
         requireBoundSession(order, bootstrapSessionId);
         var payer = accounts.resolvePersonalAccount(userId);
         if (!"ACTIVE".equals(payer.status())) throw new BusinessException(BusinessErrorCode.ACCOUNT_UNAVAILABLE);
+        if (fundingSource == FundingSource.MINI_CREDIT) {
+            accounts.requireCreditPaymentEligible(userId, order.getAmountFen());
+        }
         PaymentProofPort.VerifiedProof proof = paymentProofs.verify(userId, paymentProof, "QR_PAY_CONFIRM");
         long expectedVersion = order.getVersion();
         if (expectedVersion != version) throw new BusinessException(BusinessErrorCode.VERSION_CONFLICT);
@@ -291,7 +292,10 @@ public class QrPayApplicationService {
         byte[] requestHash = security.digest(orderId + "\n" + Base64.getEncoder().encodeToString(tokenDigest));
         Confirmation confirmation = businessStore.findConfirmationForUpdate(tokenDigest)
                 .orElseThrow(() -> new BusinessException(BusinessErrorCode.CONFIRMATION_MISMATCH));
-        var repeated = businessStore.findByIdempotency(userId, TransactionType.QR_PAY, idempotencyKey).orElse(null);
+        FundingSource fundingSource = resolveFundingSource(order, confirmation);
+        TransactionType transactionType = fundingSource == FundingSource.MINI_CREDIT
+                ? TransactionType.CREDIT_PAY : TransactionType.QR_PAY;
+        var repeated = businessStore.findByIdempotency(userId, transactionType, idempotencyKey).orElse(null);
         if (repeated != null) {
             if (!Arrays.equals(repeated.requestHash(), requestHash)) throw new BusinessException(BusinessErrorCode.IDEMPOTENCY_CONFLICT);
             return repeated.transaction();
@@ -300,7 +304,7 @@ public class QrPayApplicationService {
         if (sameSource != null) return sameSource.transaction();
         if (confirmation.getSubjectType() != SubjectType.QR_PAY_ORDER || !confirmation.getSubjectId().equals(orderId)
                 || !confirmation.getPayerUserId().equals(userId)
-                || !Arrays.equals(confirmation.getSubjectHash(), subjectHash(order, FundingSource.BALANCE,
+                || !Arrays.equals(confirmation.getSubjectHash(), subjectHash(order, fundingSource,
                 confirmation.getPayPasswordVersion()))) {
             throw new BusinessException(BusinessErrorCode.CONFIRMATION_STALE);
         }
@@ -321,13 +325,25 @@ public class QrPayApplicationService {
         try { order.acceptByFundTransaction(expectedVersion, transactionId, now); }
         catch (IllegalStateException invalid) { throw new BusinessException(BusinessErrorCode.ORDER_STATE_INVALID); }
         if (!store.update(order, expectedVersion)) throw new BusinessException(BusinessErrorCode.VERSION_CONFLICT);
-        FundTransaction transaction = FundTransaction.accept(transactionId, TransactionType.QR_PAY, SourceType.QR_PAY_ORDER,
-                orderId, userId, order.getPayerAccountId(), order.getPayeeAccountId(), FundingSource.BALANCE, order.getAmountFen(),
+        FundTransaction transaction = FundTransaction.accept(transactionId, transactionType, SourceType.QR_PAY_ORDER,
+                orderId, userId, order.getPayerAccountId(), order.getPayeeAccountId(), fundingSource, order.getAmountFen(),
                 idempotencyKey, "LOW", validTraceId(traceId), now);
         businessStore.createTransaction(transaction, requestHash, security.newId(), now);
         store.appendOrderEvent(new QrPayOrderEvent(security.newId(), orderId, transactionId, QrPayOrderStatus.PROCESSING.name(), now));
         afterCommit(() -> coordinator.startOrResume(transaction));
         return transaction;
+    }
+
+    /** 从确认摘要反推出已授权的资金来源，防止支付请求覆盖用户在确认阶段的选择。 */
+    private FundingSource resolveFundingSource(QrPayOrder order, Confirmation confirmation) {
+        long passwordVersion = confirmation.getPayPasswordVersion();
+        if (Arrays.equals(confirmation.getSubjectHash(), subjectHash(order, FundingSource.BALANCE, passwordVersion))) {
+            return FundingSource.BALANCE;
+        }
+        if (Arrays.equals(confirmation.getSubjectHash(), subjectHash(order, FundingSource.MINI_CREDIT, passwordVersion))) {
+            return FundingSource.MINI_CREDIT;
+        }
+        throw new BusinessException(BusinessErrorCode.CONFIRMATION_STALE);
     }
 
     private CreatedOrder replay(QrPayStore.IdempotencyRecord existing, byte[] requestDigest, String userId) {

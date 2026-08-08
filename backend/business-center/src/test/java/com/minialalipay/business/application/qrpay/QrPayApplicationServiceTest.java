@@ -148,6 +148,32 @@ class QrPayApplicationServiceTest {
     }
 
     @Test
+    void 动态扫码允许为Mini花呗签发资金来源绑定的确认令牌() {
+        MemoryStore store = new MemoryStore();
+        TestSecurity security = new TestSecurity();
+        BusinessStore businessStore = mock(BusinessStore.class);
+        PaymentProofPort proofs = mock(PaymentProofPort.class);
+        AccountDirectoryPort accounts = userId ->
+                new AccountDirectoryPort.AccountReference("account-" + userId, userId, "ACTIVE");
+        QrPayApplicationService service = new QrPayApplicationService(store, accounts, security,
+                new IdempotencyKeyValidator(), businessStore, proofs, mock(TccCoordinatorPort.class),
+                null, null, Clock.fixed(NOW, ZoneOffset.UTC));
+        QrPayApplicationService.CreatedOrder created = service.create("payee-1", 100, "午餐", KEY);
+        service.exchange("session-a", created.rawToken());
+        service.scan(created.order().getOrderId(), "session-a");
+        when(proofs.verify("payer-1", "proof-1", "QR_PAY_CONFIRM"))
+                .thenReturn(new PaymentProofPort.VerifiedProof("proof-id", 3));
+
+        QrPayApplicationService.IssuedConfirmation issued = service.issueConfirmation(
+                "payer-1", created.order().getOrderId(), "session-a", 2L,
+                "proof-1", FundingSource.MINI_CREDIT);
+
+        assertEquals(120, java.time.Duration.between(NOW, issued.expiresAt()).toSeconds());
+        verify(businessStore).replaceQrPayConfirmation(any(Confirmation.class),
+                org.mockito.ArgumentMatchers.eq(2L), any(QrPayOrder.class));
+    }
+
+    @Test
     void 命中转人工规则时订单进入人工复核且不签发确认令牌() {
         MemoryStore store = new MemoryStore();
         TestSecurity security = new TestSecurity();

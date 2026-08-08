@@ -3,6 +3,8 @@ import { useParams, history } from 'umi';
 import { Card, Button, Radio, Toast, SpinLoading } from 'antd-mobile';
 import * as qrPayService from '@/services/qrPay';
 import * as paymentPasswordService from '@/services/paymentPassword';
+import * as accountService from '@/services/account';
+import * as creditService from '@/services/credit';
 import { AmountDisplay } from '@/components/h5/AmountDisplay';
 import { PasswordInput } from '@/components/h5/PasswordInput';
 import { formatCountdown } from '@/utils/format';
@@ -13,7 +15,9 @@ const QrPayPage: React.FC = () => {
   const [loading, setLoading] = useState(true);
   const [submitting, setSubmitting] = useState(false);
   const [order, setOrder] = useState<qrPayService.QrPayOrder | null>(null);
-  const [fundingSource, setFundingSource] = useState<'BALANCE' | 'MINI_CREDIT'>('BALANCE');
+  const [account, setAccount] = useState<accountService.AccountInfo | null>(null);
+  const [credit, setCredit] = useState<creditService.CreditSummary | null>(null);
+  const [fundingSource, setFundingSource] = useState<'BALANCE' | 'MINI_CREDIT' | null>(null);
   const [password, setPassword] = useState('');
   const [countdown, setCountdown] = useState(0);
 
@@ -33,9 +37,16 @@ const QrPayPage: React.FC = () => {
   const loadOrder = async (t: string) => {
     try {
       // 交换令牌获取订单
-      const data = await qrPayService.exchangeToken(t);
-      setOrder(data);
-      setCountdown(data.remainingSeconds || 300);
+      const exchanged = await qrPayService.exchangeToken(t);
+      const [scanned, accountData, creditData] = await Promise.all([
+        qrPayService.markScanned(exchanged.qrOrderId),
+        accountService.getMyAccount(),
+        creditService.getCreditSummary(),
+      ]);
+      setOrder(scanned as qrPayService.QrPayOrder);
+      setAccount(accountData as unknown as accountService.AccountInfo);
+      setCredit(creditData as unknown as creditService.CreditSummary);
+      setCountdown(Math.max(0, Math.floor((new Date(scanned.expiresAt).getTime() - Date.now()) / 1000)));
     } catch (error: any) {
       Toast.show({ content: error.message || '订单无效', icon: 'fail' });
     } finally {
@@ -44,26 +55,32 @@ const QrPayPage: React.FC = () => {
   };
 
   const handlePay = async () => {
+    if (!fundingSource) {
+      Toast.show({ content: '请选择支付方式', icon: 'fail' });
+      return;
+    }
     if (!password || password.length !== 6) {
-      Toast.show({ content: '请输入6位支付密码', icon: 'fail' });
+      Toast.show({ content: '请输入 6 位支付密码', icon: 'fail' });
       return;
     }
 
     setSubmitting(true);
     try {
-      // 1. 生成确认令牌
+      // 支付密码证明与确认令牌均为一次性敏感数据，只保存在当前调用栈中。
+      const { paymentProof } = await paymentPasswordService.issuePaymentProof(
+        password,
+        'QR_PAY_CONFIRM',
+      );
       const { confirmationToken } = await qrPayService.createConfirmation(
-        order!.orderId,
-        { paymentPassword: password, fundingSource },
+        order!.qrOrderId,
+        { version: order!.version, paymentProof, fundingSource },
       );
 
-      // 2. 提交支付
-      const result = await qrPayService.submitPayment(order!.orderId, {
+      const result = await qrPayService.submitPayment(order!.qrOrderId, {
         confirmationToken,
-        fundingSource,
       });
 
-      Toast.show({ icon: 'success', content: '支付成功' });
+      Toast.show({ icon: 'success', content: '支付已受理' });
       history.push(`/h5/qr-pay/receipt/${result.transactionId}`);
     } catch (error: any) {
       Toast.show({ icon: 'fail', content: error.message || '支付失败' });
@@ -84,11 +101,22 @@ const QrPayPage: React.FC = () => {
     return <div className="error-state">订单无效或已过期</div>;
   }
 
+  const balanceDisabled = account?.status !== 'ACTIVE'
+    || (account?.availableFen ?? 0) < order.amountFen;
+  const creditDisabled = credit?.status !== 'ACTIVE'
+    || (credit?.availableFen ?? 0) < order.amountFen
+    || (credit?.overdueFen ?? 0) > 0;
+
+  const selectFundingSource = (value: string | number) => {
+    setFundingSource(value as 'BALANCE' | 'MINI_CREDIT');
+    setPassword('');
+  };
+
   return (
     <div className="qr-pay-page">
       <Card className="order-card">
         <div className="order-header">
-          <div className="merchant-name">{order.merchantName}</div>
+          <div className="merchant-name">{order.payeeDisplayName || '收款用户'}</div>
           <div className="order-countdown">
             剩余时间：{formatCountdown(countdown)}
           </div>
@@ -112,13 +140,19 @@ const QrPayPage: React.FC = () => {
 
       <Card className="funding-card">
         <div className="funding-title">选择资金来源</div>
-        <Radio.Group value={fundingSource} onChange={(val) => setFundingSource(val as any)}>
+        <Radio.Group value={fundingSource || undefined} onChange={selectFundingSource}>
           <div className="funding-options">
             <div className="funding-option">
-              <Radio value="BALANCE">虚拟余额</Radio>
+              <Radio value="BALANCE" disabled={balanceDisabled}>
+                虚拟余额（可用 <AmountDisplay amountFen={account?.availableFen || 0} size="small" />）
+              </Radio>
+              {balanceDisabled ? <div className="funding-reason">可用余额不足或账户不可用</div> : null}
             </div>
             <div className="funding-option">
-              <Radio value="MINI_CREDIT">Mini花呗</Radio>
+              <Radio value="MINI_CREDIT" disabled={creditDisabled}>
+                Mini 花呗（可用 <AmountDisplay amountFen={credit?.availableFen || 0} size="small" />）
+              </Radio>
+              {creditDisabled ? <div className="funding-reason">花呗不可用、存在逾期或额度不足</div> : null}
             </div>
           </div>
         </Radio.Group>
@@ -135,6 +169,7 @@ const QrPayPage: React.FC = () => {
           color="primary"
           size="large"
           loading={submitting}
+          disabled={!fundingSource}
           onClick={handlePay}
         >
           确认支付
