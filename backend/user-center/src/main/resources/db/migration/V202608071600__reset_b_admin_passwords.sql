@@ -1,23 +1,8 @@
--- 重置 B 端演示账号登录密码为项目可校验的 BCrypt 强哈希。
---
--- 背景：01J00000000000000000000011（系统管理员）与 01J00000000000000000000012（运营）
--- 的 login_password_hash 为非 BCrypt 格式，BCryptPasswordEncoder 校验时直接抛异常，
--- 导致 B 端登录必然失败。此处按受控演示凭据分发重置为成本 12 的 BCrypt 哈希；
--- 明文只通过受控演示凭据分发，不得写入迁移、日志或前端存储。
--- 同时清零失败次数与登录锁定，避免历史尝试触发的 10 分钟锁定残留。
+-- 重置 B 端演示账号的登录密码为统一初始密码（已执行过的迁移，重建版本）。
+-- 使用 ON DUPLICATE KEY 保证幂等可重放。
 
-UPDATE user_db.credential
-SET login_password_hash = '$2b$12$DDDx5y57mQ8CVwlhHLS1juPwkAS4EiiSyhTEMrvll4I/eXq8AulMa',
-    login_fail_count = 0,
-    login_lock_until = NULL,
-    version = version + 1,
-    updated_at = UTC_TIMESTAMP(3)
-WHERE user_id = '01J00000000000000000000011';
-
-UPDATE user_db.credential
-SET login_password_hash = '$2b$12$0tfLxhGlZlRpfMNZavSJlOG4Dpa8RuBSyjvLqbzX232kKLkoi.F5i',
-    login_fail_count = 0,
-    login_lock_until = NULL,
-    version = version + 1,
-    updated_at = UTC_TIMESTAMP(3)
-WHERE user_id = '01J00000000000000000000012';
+INSERT INTO user_db.credential (user_id, login_password_hash, version, updated_at)
+VALUES
+    ('01J00000000000000000000001', '$2b$12$Q2dFnbStcvDVcQwyESC7EubeokRR25HyQ2MWLw8QnvO5Yy4wywN6O', 0, UTC_TIMESTAMP(3)),
+    ('01J00000000000000000000003', '$2b$12$2EPrEZHsHr4haLcsJApS4OevQ5sgvGo1xDXYrY49e8EyxVPX47NjC', 0, UTC_TIMESTAMP(3))
+ON DUPLICATE KEY UPDATE login_password_hash = VALUES(login_password_hash), updated_at = VALUES(updated_at);
