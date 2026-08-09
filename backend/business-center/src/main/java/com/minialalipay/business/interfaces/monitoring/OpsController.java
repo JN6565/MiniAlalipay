@@ -2,6 +2,7 @@ package com.minialalipay.business.interfaces.monitoring;
 
 import com.minialalipay.business.application.monitoring.MonitoringApplicationService;
 import com.minialalipay.business.application.monitoring.DailyReportJob;
+import com.minialalipay.business.application.monitoring.DailyReportDetailApplicationService;
 import com.minialalipay.business.application.monitoring.OpsTransactionQueryService;
 import com.minialalipay.business.application.monitoring.DashboardSummary;
 import com.minialalipay.business.application.monitoring.DashboardSummaryApplicationService;
@@ -42,6 +43,7 @@ import org.springframework.web.bind.annotation.RestController;
 
 import java.time.Instant;
 import java.time.LocalDate;
+import java.math.BigDecimal;
 import java.util.List;
 
 /**
@@ -57,6 +59,7 @@ public class OpsController {
     private final OpsTransactionQueryService transactionService;
     private final DashboardSummaryApplicationService dashboardService;
     private final DailyReportJob dailyReportJob;
+    private final DailyReportDetailApplicationService dailyReportDetailService;
     private final OpsAccessGuard access;
     private final RequestIdGenerator requestIds;
     private final IdempotencyKeyValidator idempotencyKeyValidator;
@@ -64,31 +67,33 @@ public class OpsController {
     /** 创建监控运维 Controller。 */
     public OpsController(MonitoringApplicationService service, OpsAccessGuard access,
                          RequestIdGenerator requestIds, IdempotencyKeyValidator idempotencyKeyValidator) {
-        this(service, null, null, null, access, requestIds, idempotencyKeyValidator);
+        this(service, null, null, null, null, access, requestIds, idempotencyKeyValidator);
     }
 
     /** 创建监控运维 Controller（含运营交易查询）。 */
     public OpsController(MonitoringApplicationService service, OpsTransactionQueryService transactionService,
                          OpsAccessGuard access, RequestIdGenerator requestIds, IdempotencyKeyValidator idempotencyKeyValidator) {
-        this(service, transactionService, null, null, access, requestIds, idempotencyKeyValidator);
+        this(service, transactionService, null, null, null, access, requestIds, idempotencyKeyValidator);
     }
 
     /** 创建监控运维 Controller，包含看板汇总与全局交易只读查询。 */
     public OpsController(MonitoringApplicationService service, OpsTransactionQueryService transactionService,
                          DashboardSummaryApplicationService dashboardService, OpsAccessGuard access,
                          RequestIdGenerator requestIds, IdempotencyKeyValidator idempotencyKeyValidator) {
-        this(service, transactionService, dashboardService, null, access, requestIds, idempotencyKeyValidator);
+        this(service, transactionService, dashboardService, null, null, access, requestIds, idempotencyKeyValidator);
     }
 
     /** 创建监控运维 Controller，包含受控临时报表预览。 */
     @org.springframework.beans.factory.annotation.Autowired
     public OpsController(MonitoringApplicationService service, OpsTransactionQueryService transactionService,
                          DashboardSummaryApplicationService dashboardService, @Nullable DailyReportJob dailyReportJob,
+                         @Nullable DailyReportDetailApplicationService dailyReportDetailService,
                          OpsAccessGuard access, RequestIdGenerator requestIds, IdempotencyKeyValidator idempotencyKeyValidator) {
         this.service = service;
         this.transactionService = transactionService;
         this.dashboardService = dashboardService;
         this.dailyReportJob = dailyReportJob;
+        this.dailyReportDetailService = dailyReportDetailService;
         this.access = access;
         this.requestIds = requestIds;
         this.idempotencyKeyValidator = idempotencyKeyValidator;
@@ -189,6 +194,17 @@ public class OpsController {
             HttpServletRequest request) {
         access.requireRead(roles);
         return ResponseEntity.ok(success(service.listDailyReports(reportDate), request));
+    }
+
+    /** 查询已发布 T+1 日报详情；返回交易总览、趋势、脱敏对账、质量、告警和报表元信息。 */
+    @GetMapping("/daily-reports/{reportDate}/detail")
+    public ResponseEntity<ApiResponse<DailyReportDetailResponse>> dailyReportDetail(
+            @RequestHeader("X-User-Roles") String roles,
+            @PathVariable @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate reportDate,
+            HttpServletRequest request) {
+        access.requireRead(roles);
+        if (dailyReportDetailService == null) throw new BusinessException(CommonErrorCode.NOT_FOUND);
+        return ResponseEntity.ok(success(DailyReportDetailResponse.from(dailyReportDetailService.get(reportDate)), request));
     }
 
     /** 按指定已结束业务日重新生成正式日报；失败时只返回门禁结果，不发布指标。 */
@@ -378,6 +394,81 @@ public class OpsController {
                     result.checks().stream().map(check -> new DailyReportPreviewCheck(check.ruleCode(), check.status(),
                             check.checkedCount(), check.failedCount())).toList(),
                     result.failures().stream().map(DailyReportFailure::from).toList());
+        }
+    }
+
+    /** T+1 日报详情响应；详情 DTO 只暴露运营所需的脱敏聚合事实。 */
+    public record DailyReportDetailResponse(ReportMetaResponse reportMeta, List<DailyMetric> metrics,
+                                            OverviewResponse overview, List<TrendPointResponse> transactionTrend,
+                                            List<ReconciliationResponse> reconciliation,
+                                            List<QualityResponse> quality, List<AlertSummaryResponse> alerts) {
+        static DailyReportDetailResponse from(com.minialalipay.business.application.monitoring.DailyReportDetailApplicationService.DailyReportDetail value) {
+            return new DailyReportDetailResponse(
+                    ReportMetaResponse.from(value.reportMeta()), value.metrics(), OverviewResponse.from(value.overview()),
+                    value.transactionTrend().stream().map(TrendPointResponse::from).toList(),
+                    value.reconciliation().stream().map(ReconciliationResponse::from).toList(),
+                    value.quality().stream().map(QualityResponse::from).toList(),
+                    value.alerts().stream().map(AlertSummaryResponse::from).toList());
+        }
+    }
+
+    /** 日报元信息响应。 */
+    public record ReportMetaResponse(LocalDate reportDate, Instant generatedAt, String reportVersion,
+                                     ReportWindowResponse dataWindow, List<String> dataSources) {
+        static ReportMetaResponse from(com.minialalipay.business.application.monitoring.DailyReportDetailApplicationService.ReportMeta value) {
+            return new ReportMetaResponse(value.reportDate(), value.generatedAt(), value.reportVersion(),
+                    new ReportWindowResponse(value.dataWindow().from(), value.dataWindow().to()), value.dataSources());
+        }
+    }
+
+    /** 日报业务时间窗口响应。 */
+    public record ReportWindowResponse(Instant from, Instant to) { }
+
+    /** 交易总览响应。 */
+    public record OverviewResponse(long transactionCount, long transactionAmountFen, long successRateBps,
+                                   long averageLatencyMs, DayOverDayChangesResponse dayOverDayChanges) {
+        static OverviewResponse from(com.minialalipay.business.application.monitoring.DailyReportDetailApplicationService.Overview value) {
+            var changes = value.dayOverDayChanges();
+            return new OverviewResponse(value.transactionCount(), value.transactionAmountFen(), value.successRateBps(),
+                    value.averageLatencyMs(), new DayOverDayChangesResponse(changes.transactionCountBps(),
+                    changes.transactionAmountBps(), changes.successRateBps(), changes.averageLatencyBps()));
+        }
+    }
+
+    /** 交易总览环比变化响应，单位为基点。 */
+    public record DayOverDayChangesResponse(long transactionCountBps, long transactionAmountBps,
+                                             long successRateBps, long averageLatencyBps) { }
+
+    /** 最终成功交易按整点小时聚合的趋势响应。 */
+    public record TrendPointResponse(Instant timeBucket, long transactionCount, long amountFen) {
+        static TrendPointResponse from(com.minialalipay.business.application.monitoring.DailyReportDetailApplicationService.TrendPoint value) {
+            return new TrendPointResponse(value.timeBucket(), value.transactionCount(), value.amountFen());
+        }
+    }
+
+    /** 脱敏对账差异响应。 */
+    public record ReconciliationResponse(String voucherNo, String transactionId, Instant occurredAt,
+                                         long amountFen, String differenceType, String status) {
+        static ReconciliationResponse from(com.minialalipay.business.application.monitoring.DailyReportDetailApplicationService.Reconciliation value) {
+            return new ReconciliationResponse(value.voucherNo(), value.transactionId(), value.occurredAt(),
+                    value.amountFen(), value.differenceType(), value.status());
+        }
+    }
+
+    /** 数据质量维度响应。 */
+    public record QualityResponse(String dimension, String definition, BigDecimal currentValue,
+                                  BigDecimal threshold, String conclusion) {
+        static QualityResponse from(com.minialalipay.business.application.monitoring.DailyReportDetailApplicationService.Quality value) {
+            return new QualityResponse(value.dimension(), value.definition(), value.currentValue(), value.threshold(), value.conclusion());
+        }
+    }
+
+    /** 告警汇总响应。 */
+    public record AlertSummaryResponse(String alertId, String level, String content, Instant occurredAt,
+                                       String action, String status) {
+        static AlertSummaryResponse from(com.minialalipay.business.application.monitoring.DailyReportDetailApplicationService.AlertSummary value) {
+            return new AlertSummaryResponse(value.alertId(), value.level(), value.content(), value.occurredAt(),
+                    value.action(), value.status());
         }
     }
 

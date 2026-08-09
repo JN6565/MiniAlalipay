@@ -110,6 +110,24 @@ class JdbcMonitoringEventStoreIntegrationTest {
     }
 
     @Test
+    void 交易事件按发生时间归并为一条最终投影且旧事件不得覆盖终态() {
+        store.project(new MonitoringEvent("event-accepted", "transaction.accepted", 1, NOW, "trace-1",
+                Map.of("transactionId", "tx-1", "status", "PROCESSING", "businessType", "TRANSFER", "amountFen", "1200")));
+        Instant successAt = NOW.plusSeconds(30);
+        store.project(new MonitoringEvent("event-success", "transaction.status.changed", 1, successAt, "trace-1",
+                Map.of("transactionId", "tx-1", "status", "SUCCESS", "businessType", "TRANSFER", "amountFen", "1200")));
+        store.project(new MonitoringEvent("event-old", "transaction.status.changed", 1, NOW.plusSeconds(10), "trace-1",
+                Map.of("transactionId", "tx-1", "status", "PROCESSING", "businessType", "TRANSFER", "amountFen", "1200")));
+
+        assertThat(jdbc.queryForObject("SELECT COUNT(*) FROM metrics_db.monitoring_transaction_final_projection", Long.class))
+                .isEqualTo(1L);
+        assertThat(jdbc.queryForObject("SELECT status FROM metrics_db.monitoring_transaction_final_projection WHERE transaction_id='tx-1'", String.class))
+                .isEqualTo("SUCCESS");
+        assertThat(jdbc.queryForObject("SELECT amount_fen FROM metrics_db.monitoring_transaction_final_projection WHERE transaction_id='tx-1'", Long.class))
+                .isEqualTo(1200L);
+    }
+
+    @Test
     void 契约不合法的事件进入隔离表() {
         store.quarantine(event("event-bad", "alert.status.changed",
                 Map.of("alertId", "alert-1", "paymentPassword", "secret")), "事件包含禁止的敏感字段");
@@ -142,6 +160,9 @@ class JdbcMonitoringEventStoreIntegrationTest {
         jdbc.execute("CREATE TABLE metrics_db.analytics_event (event_id VARCHAR(64) PRIMARY KEY,event_type VARCHAR(64) NOT NULL,"
                 + "event_version SMALLINT NOT NULL,business_type VARCHAR(16),occurred_at TIMESTAMP NOT NULL,"
                 + "definition_version INT NOT NULL,dimensions_json VARCHAR(512),metrics_json VARCHAR(512),trace_id VARCHAR(32) NOT NULL)");
+        jdbc.execute("CREATE TABLE metrics_db.monitoring_transaction_final_projection (transaction_id VARCHAR(26) PRIMARY KEY,"
+                + "amount_fen BIGINT NOT NULL,business_type VARCHAR(16),status VARCHAR(16) NOT NULL,accepted_at TIMESTAMP,"
+                + "terminal_at TIMESTAMP,source_occurred_at TIMESTAMP NOT NULL,source_event_id VARCHAR(64) NOT NULL,updated_at TIMESTAMP NOT NULL)");
         jdbc.execute("CREATE TABLE metrics_db.quarantined_event (consumer_name VARCHAR(64),event_id VARCHAR(64),"
                 + "reason_code VARCHAR(32),schema_version INT,payload VARCHAR(512),status VARCHAR(16),quarantined_at TIMESTAMP,"
                 + "PRIMARY KEY (consumer_name,event_id))");

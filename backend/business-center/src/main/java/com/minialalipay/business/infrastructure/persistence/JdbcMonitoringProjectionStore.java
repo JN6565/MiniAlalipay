@@ -22,6 +22,7 @@ import java.time.Clock;
 import java.time.Instant;
 import java.time.LocalDate;
 import java.time.ZoneId;
+import java.time.temporal.ChronoUnit;
 import java.nio.charset.StandardCharsets;
 import java.security.MessageDigest;
 import java.security.NoSuchAlgorithmException;
@@ -269,6 +270,151 @@ public class JdbcMonitoringProjectionStore implements MonitoringProjectionStore,
         }
         return jdbc.query(select + "WHERE metric_date=? AND quality_status IN ('PASSED','WARNING') ORDER BY metric_code ASC",
                 (rs, rowNum) -> mapDailyMetric(rs), java.sql.Date.valueOf(reportDate));
+    }
+
+    @Override
+    public DailyReportTransactionStats dailyReportTransactionStats(Instant from, Instant to,
+                                                                    Instant previousFrom, Instant previousTo) {
+        DailyReportTransactionStats current = queryDailyReportTransactionStats(from, to);
+        DailyReportTransactionStats previous = queryDailyReportTransactionStats(previousFrom, previousTo);
+        return new DailyReportTransactionStats(current.transactionCount(), current.transactionAmountFen(),
+                current.successRateBps(), current.averageLatencyMs(), previous.transactionCount(),
+                previous.transactionAmountFen(), previous.successRateBps(), previous.averageLatencyMs());
+    }
+
+    @Override
+    public List<DailyReportTrendPoint> dailyReportTrend(Instant from, Instant to) {
+        Map<Instant, DailyReportTrendAccumulator> buckets = new LinkedHashMap<>();
+        jdbc.query("SELECT terminal_at,amount_fen FROM metrics_db.monitoring_transaction_final_projection "
+                        + "WHERE status='SUCCESS' AND terminal_at>=? AND terminal_at<? ORDER BY terminal_at ASC",
+                rs -> {
+                    Instant bucket = rs.getTimestamp("terminal_at").toInstant().truncatedTo(ChronoUnit.HOURS);
+                    buckets.computeIfAbsent(bucket, ignored -> new DailyReportTrendAccumulator()).add(rs.getLong("amount_fen"));
+                }, Timestamp.from(from), Timestamp.from(to));
+        return buckets.entrySet().stream()
+                .map(entry -> new DailyReportTrendPoint(entry.getKey(), entry.getValue().transactionCount, entry.getValue().amountFen))
+                .toList();
+    }
+
+    private DailyReportTransactionStats queryDailyReportTransactionStats(Instant from, Instant to) {
+        return jdbc.query("SELECT COUNT(*) AS transaction_count,"
+                        + "COALESCE(SUM(CASE WHEN status='SUCCESS' THEN amount_fen ELSE 0 END),0) AS amount_fen,"
+                        + "COALESCE(SUM(CASE WHEN status='SUCCESS' THEN 1 ELSE 0 END),0) AS success_count "
+                        + "FROM metrics_db.monitoring_transaction_final_projection "
+                        + "WHERE terminal_at>=? AND terminal_at<? AND status IN ('SUCCESS','REVERSED','CANCELLED')",
+                rs -> {
+                    if (!rs.next()) return new DailyReportTransactionStats(0, 0, 0, 0, 0, 0, 0, 0);
+                    long count = rs.getLong("transaction_count");
+                    long success = rs.getLong("success_count");
+                    return new DailyReportTransactionStats(count, rs.getLong("amount_fen"),
+                            count == 0 ? 0 : success * 10_000L / count, 0L,
+                            0, 0, 0, 0);
+                }, Timestamp.from(from), Timestamp.from(to));
+    }
+
+    /** 单小时成功交易趋势累加器，金额始终保留为整数分。 */
+    private static final class DailyReportTrendAccumulator {
+        private long transactionCount;
+        private long amountFen;
+
+        private void add(long value) {
+            transactionCount++;
+            amountFen += value;
+        }
+    }
+
+    @Override
+    public Optional<DailyReportMetadata> findDailyReportMetadata(LocalDate reportDate) {
+        return jdbc.query("SELECT MAX(q.checked_at) AS generated_at,COALESCE(MAX(d.version),1) AS report_version "
+                        + "FROM metrics_db.quality_result q LEFT JOIN metrics_db.daily_metric d ON d.metric_date=q.data_date "
+                        + "WHERE q.task_code='TPLUS1' AND q.data_date=?",
+                rs -> {
+                    if (!rs.next() || rs.getTimestamp("generated_at") == null) return Optional.empty();
+                    return Optional.of(new DailyReportMetadata(rs.getTimestamp("generated_at").toInstant(),
+                            "v" + rs.getInt("report_version")));
+                }, java.sql.Date.valueOf(reportDate));
+    }
+
+    @Override
+    public List<DailyReportReconciliation> listDailyReportReconciliation(Instant from, Instant to) {
+        return jdbc.query("SELECT event_id,occurred_at,dimensions_json FROM metrics_db.analytics_event "
+                        + "WHERE event_type='reconciliation.diff.detected' AND occurred_at>=? AND occurred_at<? "
+                        + "ORDER BY occurred_at ASC LIMIT 500",
+                (rs, rowNum) -> {
+                    JsonNode dimensions = readJson(rs.getString("dimensions_json"));
+                    return new DailyReportReconciliation(firstText(dimensions, "voucherNo", "voucherId"),
+                            text(dimensions, "transactionId"), rs.getTimestamp("occurred_at").toInstant(),
+                            firstLong(dimensions, "amountFen", "diffAmountFen", "expectedAmountFen"),
+                            textOrDefault(dimensions, "diffType", "UNKNOWN"),
+                            textOrDefault(dimensions, "status", "OPEN"));
+                }, Timestamp.from(from), Timestamp.from(to));
+    }
+
+    @Override
+    public List<DailyReportQuality> listDailyReportQuality(LocalDate reportDate) {
+        return jdbc.query("SELECT rule_code,expected_value,actual_value,status FROM metrics_db.quality_result "
+                        + "WHERE task_code='TPLUS1' AND data_date=? ORDER BY checked_at ASC",
+                (rs, rowNum) -> new DailyReportQuality(rs.getString("rule_code"),
+                        qualityDefinition(rs.getString("rule_code")), rs.getBigDecimal("actual_value"),
+                        rs.getBigDecimal("expected_value"), rs.getString("status")),
+                java.sql.Date.valueOf(reportDate));
+    }
+
+    @Override
+    public List<DailyReportAlert> listDailyReportAlerts(Instant from, Instant to) {
+        return jdbc.query("SELECT alert_id,severity,rule_code,last_reason,status,opened_at FROM metrics_db.monitor_alert "
+                        + "WHERE opened_at>=? AND opened_at<? ORDER BY opened_at DESC LIMIT 100",
+                (rs, rowNum) -> new DailyReportAlert(rs.getString("alert_id"), rs.getString("severity"),
+                        firstText(rs.getString("last_reason"), rs.getString("rule_code")),
+                        rs.getTimestamp("opened_at").toInstant(),
+                        rs.getString("last_reason") == null ? "待处理" : rs.getString("last_reason"),
+                        rs.getString("status")), Timestamp.from(from), Timestamp.from(to));
+    }
+
+    private static String qualityDefinition(String ruleCode) {
+        return switch (ruleCode) {
+            case "INBOX_COMPLETE" -> "事件消费完整性";
+            case "EVENT_QUARANTINE_EMPTY" -> "隔离事件数量";
+            default -> "质量检查结果";
+        };
+    }
+
+    private static JsonNode readJson(String value) {
+        try { return JSON.readTree(value == null ? "{}" : value); }
+        catch (Exception ignored) { return JSON.createObjectNode(); }
+    }
+
+    private static String text(JsonNode node, String field) {
+        JsonNode value = node.get(field);
+        return value == null || value.isNull() ? null : value.asText();
+    }
+
+    private static String firstText(JsonNode node, String... fields) {
+        for (String field : fields) {
+            String value = text(node, field);
+            if (value != null && !value.isBlank()) return value;
+        }
+        return null;
+    }
+
+    private static String firstText(String first, String fallback) {
+        return first == null || first.isBlank() ? fallback : first;
+    }
+
+    private static String textOrDefault(JsonNode node, String field, String fallback) {
+        String value = text(node, field);
+        return value == null || value.isBlank() ? fallback : value;
+    }
+
+    private static long firstLong(JsonNode node, String... fields) {
+        for (String field : fields) {
+            JsonNode value = node.get(field);
+            if (value != null && value.isNumber()) return value.longValue();
+            if (value != null && value.isTextual()) {
+                try { return Long.parseLong(value.asText()); } catch (NumberFormatException ignored) { }
+            }
+        }
+        return 0L;
     }
 
     @Override

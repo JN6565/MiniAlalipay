@@ -10,19 +10,21 @@ jest.mock('@umijs/max', () => ({
 }));
 
 import Reports from '@/pages/Reports';
-import { generateDailyReport, generateDailyReportPreview, listDailyReports, listMetricDefinitions } from '@/services/ops';
+import { generateDailyReport, generateDailyReportPreview, getDailyReportDetail, listDailyReports, listMetricDefinitions } from '@/services/ops';
 
 jest.mock('@/components/PageHeader', () => () => <div>页面标题</div>);
 
 jest.mock('@/services/ops', () => ({
   generateDailyReport: jest.fn(),
   generateDailyReportPreview: jest.fn(),
+  getDailyReportDetail: jest.fn(),
   listDailyReports: jest.fn(),
   listMetricDefinitions: jest.fn(),
 }));
 
 const generateDailyReportPreviewMock = generateDailyReportPreview as unknown as jest.Mock;
 const generateDailyReportMock = generateDailyReport as unknown as jest.Mock;
+const getDailyReportDetailMock = getDailyReportDetail as unknown as jest.Mock;
 const listDailyReportsMock = listDailyReports as unknown as jest.Mock;
 const listMetricDefinitionsMock = listMetricDefinitions as unknown as jest.Mock;
 
@@ -50,6 +52,7 @@ describe('T+1 临时报表质量门禁', () => {
     jest.clearAllMocks();
     listDailyReportsMock.mockResolvedValue({ code: 'SUCCESS', message: '成功', data: [] });
     listMetricDefinitionsMock.mockResolvedValue({ code: 'SUCCESS', message: '成功', data: [] });
+    getDailyReportDetailMock.mockResolvedValue({ code: 'SUCCESS', message: '成功', data: undefined });
   });
 
   it('临时报表被门禁阻断时展示失败检查及数量，不展示指标', async () => {
@@ -148,5 +151,35 @@ describe('T+1 临时报表质量门禁', () => {
     const qualityGate = await screen.findByRole('alert');
     expect(qualityGate).toHaveTextContent('正式日报未通过质量门禁');
     expect(qualityGate).toHaveTextContent('事件消费未完成：失败 2 条，检查 8 条');
+  });
+
+  it('日报详情将技术编码转换为运营中文', async () => {
+    getDailyReportDetailMock.mockResolvedValue({
+      code: 'SUCCESS',
+      message: '成功',
+      data: {
+        reportMeta: {
+          reportDate: '2026-08-08', generatedAt: '2026-08-09T02:00:00Z', reportVersion: 'v1',
+          dataWindow: { from: '2026-08-07T16:00:00Z', to: '2026-08-08T16:00:00Z' },
+          dataSources: ['metrics_db.monitoring_transaction_final_projection', 'metrics_db.quality_result', 'metrics_db.monitor_alert'],
+        },
+        metrics: [],
+        overview: {
+          transactionCount: 1, transactionAmountFen: 100, successRateBps: 10_000, averageLatencyMs: 10,
+          dayOverDayChanges: { transactionCountBps: 0, transactionAmountBps: 0, successRateBps: 0, averageLatencyBps: 0 },
+        },
+        transactionTrend: [{ timeBucket: '2026-08-08T02:00:00Z', transactionCount: 1, amountFen: 100 }],
+        reconciliation: [],
+        quality: [{ dimension: 'INBOX_COMPLETE', definition: '事件消费完整性', currentValue: 0, threshold: 0, conclusion: 'PASSED' }],
+        alerts: [],
+      },
+    });
+
+    renderPage();
+
+    expect(await screen.findByText('最终交易投影、数据质量检查、运营告警')).toBeInTheDocument();
+    expect(screen.getAllByText('事件消费完整性')).not.toHaveLength(0);
+    expect(screen.queryByText('metrics_db.analytics_event')).not.toBeInTheDocument();
+    expect(screen.queryByText('INBOX_COMPLETE')).not.toBeInTheDocument();
   });
 });

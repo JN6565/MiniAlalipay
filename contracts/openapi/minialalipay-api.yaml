@@ -1948,6 +1948,23 @@ paths:
         '401': { $ref: '#/components/responses/Unauthorized' }
         '403': { $ref: '#/components/responses/Forbidden' }
         '404': { $ref: '#/components/responses/NotFound' }
+  /api/v1/ops/daily-reports/{reportDate}/detail:
+    get:
+      summary: 查询 T+1 日报运营详情
+      description: 返回已通过质量门禁的日报元信息、交易总览、小时趋势、脱敏对账差异、质量维度和告警汇总；不跨库读取 account-center 私有表。
+      operationId: getDailyReportDetail
+      x-client-scope: B
+      parameters:
+        - $ref: '#/components/parameters/RequestIdHeader'
+        - name: reportDate
+          in: path
+          required: true
+          schema: { type: string, format: date }
+      responses:
+        '200': { description: 返回日报详情聚合结果, content: { application/json: { schema: { $ref: '#/components/schemas/DailyReportDetailResponse' } } } }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
   /api/v1/ops/daily-reports/{reportDate}/generate:
     post:
       summary: 按业务日重新生成正式 T+1 报表
@@ -2526,6 +2543,101 @@ components:
                 metrics: { type: array, items: { $ref: '#/components/schemas/DailyReportPreviewMetric' } }
                 qualityChecks: { type: array, items: { $ref: '#/components/schemas/DailyReportPreviewCheck' } }
                 failures: { type: array, items: { $ref: '#/components/schemas/DailyReportFailure' } }
+    DailyReportDetailResponse:
+      allOf:
+        - $ref: '#/components/schemas/ApiResponse'
+        - type: object
+          required: [data]
+          properties:
+            data: { $ref: '#/components/schemas/DailyReportDetail' }
+    DailyReportDetail:
+      type: object
+      additionalProperties: false
+      required: [reportMeta, metrics, overview, transactionTrend, reconciliation, quality, alerts]
+      properties:
+        reportMeta: { $ref: '#/components/schemas/DailyReportMeta' }
+        metrics: { type: array, items: { $ref: '#/components/schemas/DailyMetric' } }
+        overview: { $ref: '#/components/schemas/DailyReportOverview' }
+        transactionTrend: { type: array, items: { $ref: '#/components/schemas/DailyReportTrendPoint' } }
+        reconciliation: { type: array, items: { $ref: '#/components/schemas/DailyReportReconciliation' } }
+        quality: { type: array, items: { $ref: '#/components/schemas/DailyReportQuality' } }
+        alerts: { type: array, items: { $ref: '#/components/schemas/DailyReportAlertSummary' } }
+    DailyReportMeta:
+      type: object
+      additionalProperties: false
+      required: [reportDate, generatedAt, reportVersion, dataWindow, dataSources]
+      properties:
+        reportDate: { type: string, format: date }
+        generatedAt: { type: string, format: date-time }
+        reportVersion: { type: string, maxLength: 32 }
+        dataWindow: { $ref: '#/components/schemas/DailyReportWindow' }
+        dataSources: { type: array, items: { type: string, maxLength: 128 } }
+    DailyReportWindow:
+      type: object
+      additionalProperties: false
+      required: [from, to]
+      properties:
+        from: { type: string, format: date-time }
+        to: { type: string, format: date-time }
+    DailyReportOverview:
+      type: object
+      additionalProperties: false
+      required: [transactionCount, transactionAmountFen, successRateBps, averageLatencyMs, dayOverDayChanges]
+      properties:
+        transactionCount: { type: integer, format: int64, minimum: 0 }
+        transactionAmountFen: { type: integer, format: int64, minimum: 0 }
+        successRateBps: { type: integer, format: int64, minimum: 0, maximum: 10000 }
+        averageLatencyMs: { type: integer, format: int64, minimum: 0 }
+        dayOverDayChanges: { $ref: '#/components/schemas/DailyReportDayOverDayChanges' }
+    DailyReportDayOverDayChanges:
+      type: object
+      additionalProperties: false
+      required: [transactionCountBps, transactionAmountBps, successRateBps, averageLatencyBps]
+      properties:
+        transactionCountBps: { type: integer, format: int64, description: 相对上一业务日的变化基点。 }
+        transactionAmountBps: { type: integer, format: int64 }
+        successRateBps: { type: integer, format: int64 }
+        averageLatencyBps: { type: integer, format: int64 }
+    DailyReportTrendPoint:
+      type: object
+      additionalProperties: false
+      required: [timeBucket, transactionCount, amountFen]
+      properties:
+        timeBucket: { type: string, format: date-time, description: 上海业务日内按整点分桶的小时起始时间。 }
+        transactionCount: { type: integer, format: int64, minimum: 0 }
+        amountFen: { type: integer, format: int64, minimum: 0 }
+    DailyReportReconciliation:
+      type: object
+      additionalProperties: false
+      required: [transactionId, occurredAt, amountFen, differenceType, status]
+      properties:
+        voucherNo: { type: string, nullable: true, maxLength: 64, description: 脱敏对账事件携带时返回，未携带则为空。 }
+        transactionId: { type: string, maxLength: 26 }
+        occurredAt: { type: string, format: date-time }
+        amountFen: { type: integer, format: int64, minimum: 0 }
+        differenceType: { type: string, maxLength: 32 }
+        status: { type: string, maxLength: 32 }
+    DailyReportQuality:
+      type: object
+      additionalProperties: false
+      required: [dimension, definition, conclusion]
+      properties:
+        dimension: { type: string, maxLength: 64 }
+        definition: { type: string, maxLength: 128 }
+        currentValue: { type: number, format: double, nullable: true }
+        threshold: { type: number, format: double, nullable: true }
+        conclusion: { type: string, enum: [PASSED, FAILED, UNKNOWN] }
+    DailyReportAlertSummary:
+      type: object
+      additionalProperties: false
+      required: [alertId, level, content, occurredAt, action, status]
+      properties:
+        alertId: { type: string, maxLength: 26 }
+        level: { type: string, maxLength: 16 }
+        content: { type: string, maxLength: 512 }
+        occurredAt: { type: string, format: date-time }
+        action: { type: string, maxLength: 512 }
+        status: { type: string, maxLength: 32 }
     FreezeUserRequest:
       type: object
       additionalProperties: false

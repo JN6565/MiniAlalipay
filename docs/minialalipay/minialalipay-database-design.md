@@ -69,7 +69,7 @@
 | `ledger_db` | `account-center` 账本/信用模块 | `ledger_account`、`ledger_voucher`、`ledger_entry`、`credit_receivable`、`credit_purchase`、`credit_bill`、`credit_bill_item`、`credit_repayment`、`credit_repayment_allocation`、`credit_repayment_allocation_detail`、`credit_job_run`、`tcc_branch`、`reconciliation_diff`、`outbox_event` |
 | `business_db` | `business-center` | `recharge_policy`、`recharge_daily_usage`、`recharge_order`、`refund_order`、`transfer_draft`、`credit_repayment_draft`、`fund_transaction`、`qr_pay_order`、`qr_pay_order_event`、`qr_pay_token`、`personal_collection_code`、`collection_request`、`collection_order`、`collection_order_event`、`confirmation_subject`、`confirmation`、`risk_decision`、`manual_case`、`tcc_global`、`inbox_event`、`idempotency_record`、`audit_log`、`outbox_event` |
 | `agent_db` | `ai-service` | `agent_session`、`agent_message`、`tool_call_log`、`preference`、`idempotency_record`、`audit_log`、`outbox_event` |
-| `metrics_db` | `business-center` 监控投影模块 | `inbox_event`、`analytics_event`、`personal_cashflow_daily`、`personal_counterparty_stat`、`merchant_business_daily`、`merchant_reconciliation_daily`、`quarantined_event`、`metric_definition`、`minute_metric`、`daily_metric`、`quality_result`、`monitor_alert` |
+| `metrics_db` | `business-center` 监控投影模块 | `inbox_event`、`analytics_event`、`monitoring_transaction_final_projection`、`personal_cashflow_daily`、`personal_counterparty_stat`、`merchant_business_daily`、`merchant_reconciliation_daily`、`quarantined_event`、`metric_definition`、`minute_metric`、`daily_metric`、`quality_result`、`monitor_alert` |
 
 历史迁移 `V202608050900__create_credit_tables.sql` 在 2026-08-05 已由 Flyway 成功执行，内容同时初始化
 `account_db` 与 `ledger_db` 的信用表。依据“已执行迁移不可修改”的规则保留该文件及校验和，不再拆分、删除或重命名；
@@ -1778,6 +1778,26 @@ MVP 退款仅支持单笔全额受控虚拟退款，不接入真实支付通道�
 
 **写入规则**：正式金额只来自确定终态；生命周期事件只更新状态计数。原始账户 ID 仅用于授权投影，哈希 ID 用于脱敏聚合。
 
+### 11.2.1 `monitoring_transaction_final_projection`
+
+**功能与归属**：按资金交易号归并 `transaction.accepted` 与 `transaction.status.changed` 事件，为可信运行看板和 T+1 报表提供一致、去重的最终交易统计来源；不承载资金事实，也不回查业务交易表。
+
+| 字段 | 类型 | 必填/默认 | 功能 |
+| --- | --- | --- | --- |
+| `transaction_id` | `CHAR(26)` | PK，必填 | 统一资金交易号，保证同一交易只保留一行 |
+| `amount_fen` | `BIGINT` | 必填 | 事件携带的整数分金额，仅在 `SUCCESS` 时计入交易金额 |
+| `business_type` | `VARCHAR(16)` | 可空 | 脱敏业务类型，用于审计定位，不参与日报趋势拆分 |
+| `status` | `VARCHAR(16)` | 必填 | 最新资金交易状态 |
+| `accepted_at` | `DATETIME(3)` | 可空 | 首次受理事件时间 |
+| `terminal_at` | `DATETIME(3)` | 可空 | `SUCCESS`、`REVERSED` 或 `CANCELLED` 的最终状态时间 |
+| `source_occurred_at` | `DATETIME(3)` | 必填 | 当前投影来源事件时间，用于拒绝乱序旧事件 |
+| `source_event_id` | `CHAR(26)` | 必填 | 同时刻事件的稳定比较键 |
+| `updated_at` | `DATETIME(3)` | 必填 | 投影最近更新时间 |
+
+**键与索引**：PK `(transaction_id)`；索引 `(status,terminal_at)` 支持按上海业务日统计最终交易与按小时趋势聚合。
+
+**写入规则**：消费者在写入 `analytics_event` 的同一 `metrics_db` 本地事务中更新本表。只有发生时间更晚，或同一时间事件号更大的消息才能覆盖状态；受理事件可补齐缺失的受理时间。日报与看板金额只累计 `status=SUCCESS` 的金额，成功率分母只包括 `SUCCESS`、`REVERSED`、`CANCELLED`。
+
 ### 11.3 `quarantined_event`
 
 **功能与归属**：隔离 Schema 不兼容、字段缺失或口径无法判定的事件，避免污染指标。
@@ -1896,7 +1916,21 @@ MVP 退款仅支持单笔全额受控虚拟退款，不接入真实支付通道�
 
 **写入规则**：恢复正常只生成恢复证据，P0/P1 仍需人工确认后关闭；证据不得删除。
 
-### 11.8.1 `monitor_alert_rule`
+### 11.8.1 历史日报详情查询投影约束
+
+本节记录最终交易投影引入前的实现约束，仅用于解释历史迁移 `V202608091500__add_daily_report_detail_metrics_indexes.sql`；当前实现以 11.8.2 为准。
+
+日报详情只消费 `business-center` 已发布的 `daily_metric` 与 `metrics_db` 分析投影，不得跨库读取 `account-center` 的账本或对账表。交易总览和趋势从 `analytics_event` 的脱敏事件聚合；对账明细仅展示事件携带的脱敏凭证号、交易号和差异类型，事件未携带凭证号时返回空值。
+
+迁移 `V202608091500__add_daily_report_detail_metrics_indexes.sql` 增加日报质量、告警和对账事件的日期查询索引：`quality_result(task_code,data_date,status,checked_at)`、`monitor_alert(opened_at,severity,status)`、`analytics_event(event_type,occurred_at,business_type)`。
+
+### 11.8.2 日报详情当前投影约束
+
+日报详情只消费 `business-center` 已发布的 `daily_metric` 与 `metrics_db` 投影，不得跨库读取 `account-center` 的账本或对账表。交易总览和趋势从 `monitoring_transaction_final_projection` 聚合，按交易号去重后仅将最终 `SUCCESS` 计入金额；趋势按终态时间的上海业务日整点每小时返回一行。对账明细仅展示分析事件携带的脱敏凭证号、交易号和差异类型，事件未携带凭证号时返回空值。
+
+迁移 `V202608091600__create_monitoring_transaction_final_projection.sql` 新增最终交易投影及索引 `(status,terminal_at)`。消费者在写入 `analytics_event` 的同一 `metrics_db` 本地事务中写入该投影，事件按发生时间和事件号去重，避免重放或乱序导致看板和日报重复计额。迁移 `V202608091700__backfill_monitoring_transaction_final_projection.sql` 是一次性历史修复：旧 `analytics_event` 缺失金额字段时，从业务中心自有的 `business_db.fund_transaction` 读取交易号、金额、当前状态与受理时间，并以 Outbox 最新事件时间作为投影时间；该迁移只写入 `metrics_db`，使用条件更新保护新消费者已写入的更新版本。迁移完成后报表与看板不得回查 `business_db`，仍只读最终交易投影；修复过程可重复执行但不得回退终态或重复计额。
+
+### 11.8.3 `monitor_alert_rule`
 
 **功能与归属**：保存告警规则及阈值配置，属于运营投影，不持有资金事实；阈值由管理员在版本 CAS 下修改，规则结构（指标、算符、级别）不可变更。迁移见 `V202608061100__create_monitor_alert_rule.sql`。
 
