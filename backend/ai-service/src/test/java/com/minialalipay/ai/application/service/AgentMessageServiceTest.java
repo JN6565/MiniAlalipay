@@ -1,6 +1,5 @@
 package com.minialalipay.ai.application.service;
 
-import com.minialalipay.ai.application.port.AgentDecision;
 import com.minialalipay.ai.application.port.LanguageModelPort;
 import com.minialalipay.ai.application.security.InjectionDetector;
 import com.minialalipay.ai.domain.agent.*;
@@ -14,6 +13,7 @@ import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 
 import java.time.Instant;
+import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
@@ -25,8 +25,8 @@ import static org.mockito.Mockito.*;
 /**
  * AgentMessageService 单元测试。
  *
- * <p>验证会话管理、消息幂等、注入检测等编排逻辑。
- * 核心推理和工具调用委托给 AgentLoop，本测试通过 Mock AgentLoop 隔离验证。</p>
+ * <p>验证会话管理、消息幂等、注入检测、上下文构建与 AgentResult 到发送结果的映射等编排逻辑。
+ * 核心推理和工具调用委托给 {@link AgentLoop}，本测试通过 Mock AgentLoop 隔离验证。</p>
  */
 @ExtendWith(MockitoExtension.class)
 class AgentMessageServiceTest {
@@ -54,11 +54,16 @@ class AgentMessageServiceTest {
                 "你是财喵，AI支付助手。");
     }
 
+    /** 构造 AgentLoop 执行结果（同步模式，无工具结果消息与过渡文本）。 */
+    private static AgentLoop.AgentResult agentResult(String content, List<String> tools,
+                                                     Map<String, Object> slots) {
+        return new AgentLoop.AgentResult(content, tools, slots, 0, 1);
+    }
+
     @Test
     @DisplayName("sessionId 为空时创建新会话并返回 AgentLoop 结果")
     void shouldCreateNewSessionAndReturnAgentResult() {
-        // 新会话 → sessionRepository.save 被调用
-        // AgentLoop 返回最终内容
+        // 新会话 → sessionRepository.save 被调用；AgentLoop 返回最终内容
         when(agentLoop.execute(any(AgentLoop.AgentContext.class)))
                 .thenReturn(new AgentLoop.AgentResult(
                         "您当前账户可用余额为 10,000.00 元。",
@@ -143,7 +148,7 @@ class AgentMessageServiceTest {
         when(sessionRepository.findById("01J5Q000000000000000000001"))
                 .thenReturn(Optional.of(session));
         when(injectionDetector.check(any()))
-                .thenReturn(new InjectionDetector.InjectionCheckResult(false, "ignore_instructions"));
+                .thenReturn(new InjectionDetector.InjectionCheckResult(false, "ignore_instructions", null));
 
         assertThatThrownBy(() -> service.processMessage(
                 USER_ID, "client-msg-001", "01J5Q000000000000000000001",
@@ -162,7 +167,7 @@ class AgentMessageServiceTest {
         when(sessionRepository.findById("01J5Q000000000000000000001"))
                 .thenReturn(Optional.of(session));
 
-        Map<String, Object> slots = Map.of("payeeId", "payee-001", "amountFen", 10000L);
+        Map<String, Object> slots = new HashMap<>(Map.of("payeeId", "payee-001", "amountFen", 10000L));
         when(agentLoop.execute(any(AgentLoop.AgentContext.class)))
                 .thenReturn(new AgentLoop.AgentResult(
                         "请核对以下信息后完成支付：\n收款人: 张三\n金额: 100.00 元",
@@ -223,5 +228,142 @@ class AgentMessageServiceTest {
 
         // 验证工具结果消息被插入（1 条工具结果 + 1 条用户消息 + 1 条助手消息）
         verify(messageRepository, times(3)).insert(any(AgentMessage.class));
+    }
+
+    @Test
+    @DisplayName("转账新信息更新到结果 slots")
+    void shouldUpdateSlotsOnNewInfo() {
+        AgentSession session = new AgentSession(
+                "01J5Q000000000000000000001", USER_ID, NOW);
+        when(sessionRepository.findById("01J5Q000000000000000000001"))
+                .thenReturn(Optional.of(session));
+        when(messageRepository.findByClientMessageId(any(), any(), any()))
+                .thenReturn(Optional.empty());
+        when(messageRepository.findRecentBySessionId(any(), anyInt())).thenReturn(List.of());
+        when(agentLoop.execute(any())).thenReturn(agentResult(
+                "好的，请核对信息",
+                List.of("create_transfer_draft"),
+                new HashMap<>(Map.of("amountFen", 10000L))));
+
+        AgentMessageService.SendMessageResult result = service.processMessage(
+                USER_ID, "client-msg-001", "01J5Q000000000000000000001",
+                "转账 100 元", null, NOW);
+
+        assertThat(result.slots()).containsEntry("amountFen", 10000L);
+    }
+
+    @Test
+    @DisplayName("BALANCE_QUERY 意图经 AgentLoop 执行 get_balance 并返回解释结果")
+    void shouldExecuteGetBalanceForBalanceQuery() {
+        AgentSession session = new AgentSession(
+                "01J5Q000000000000000000001", USER_ID, NOW);
+        when(sessionRepository.findById("01J5Q000000000000000000001"))
+                .thenReturn(Optional.of(session));
+        when(messageRepository.findByClientMessageId(any(), any(), any()))
+                .thenReturn(Optional.empty());
+        when(messageRepository.findRecentBySessionId(any(), anyInt())).thenReturn(List.of());
+        when(agentLoop.execute(any())).thenReturn(agentResult(
+                "您当前账户可用余额为 10,000.00 元。",
+                List.of("get_balance"),
+                new HashMap<>(Map.of("availableFen", 1_000_000L, "frozenFen", 0L))));
+
+        AgentMessageService.SendMessageResult result = service.processMessage(
+                USER_ID, "client-msg-010", "01J5Q000000000000000000001",
+                "查余额", null, NOW);
+
+        assertThat(result.intent()).isEqualTo(IntentType.BALANCE_QUERY);
+        assertThat(result.content()).isEqualTo("您当前账户可用余额为 10,000.00 元。");
+        assertThat(result.clarificationNeeded()).isFalse();
+    }
+
+    @Test
+    @DisplayName("TRANSFER 意图经 AgentLoop 链式执行 create→validate→prepare 三个工具")
+    void shouldChainExecuteTransferTools() {
+        AgentSession session = new AgentSession(
+                "01J5Q000000000000000000001", USER_ID, NOW);
+        when(sessionRepository.findById("01J5Q000000000000000000001"))
+                .thenReturn(Optional.of(session));
+        when(messageRepository.findByClientMessageId(any(), any(), any()))
+                .thenReturn(Optional.empty());
+        when(messageRepository.findRecentBySessionId(any(), anyInt())).thenReturn(List.of());
+        when(agentLoop.execute(any())).thenReturn(agentResult(
+                "请核对以下信息后完成支付：\n收款人: 张三\n金额: 100.00 元",
+                List.of("search_payees", "create_transfer_draft",
+                        "validate_transfer_draft", "prepare_confirmation_card"),
+                new HashMap<>(Map.of("payeeId", "01J5Q000000000000000000010", "amountFen", 10000L))));
+
+        AgentMessageService.SendMessageResult result = service.processMessage(
+                USER_ID, "client-msg-011", "01J5Q000000000000000000001",
+                "转给张三100元", null, NOW);
+
+        assertThat(result.content()).contains("张三");
+        assertThat(result.intent()).isEqualTo(IntentType.TRANSFER);
+    }
+
+    @Test
+    @DisplayName("TRANSFER 中间工具失败时 AgentLoop 返回失败话术")
+    void shouldStopChainOnIntermediateFailure() {
+        AgentSession session = new AgentSession(
+                "01J5Q000000000000000000001", USER_ID, NOW);
+        when(sessionRepository.findById("01J5Q000000000000000000001"))
+                .thenReturn(Optional.of(session));
+        when(messageRepository.findByClientMessageId(any(), any(), any()))
+                .thenReturn(Optional.empty());
+        when(messageRepository.findRecentBySessionId(any(), anyInt())).thenReturn(List.of());
+        when(agentLoop.execute(any())).thenReturn(agentResult(
+                "余额不足，无法完成支付。请查看余额后调低转账金额。",
+                List.of("search_payees", "create_transfer_draft", "validate_transfer_draft"),
+                new HashMap<>()));
+
+        AgentMessageService.SendMessageResult result = service.processMessage(
+                USER_ID, "client-msg-012", "01J5Q000000000000000000001",
+                "转给张三100元", null, NOW);
+
+        assertThat(result.content()).contains("余额不足");
+    }
+
+    @Test
+    @DisplayName("澄清类回复由 AgentLoop 直达，服务层原样返回且无工具执行副作用")
+    void shouldSkipToolsWhenClarificationNeeded() {
+        AgentSession session = new AgentSession(
+                "01J5Q000000000000000000001", USER_ID, NOW);
+        when(sessionRepository.findById("01J5Q000000000000000000001"))
+                .thenReturn(Optional.of(session));
+        when(messageRepository.findByClientMessageId(any(), any(), any()))
+                .thenReturn(Optional.empty());
+        when(messageRepository.findRecentBySessionId(any(), anyInt())).thenReturn(List.of());
+        when(agentLoop.execute(any())).thenReturn(agentResult(
+                "好的，请告诉我收款人是谁，以及转账金额是多少？",
+                List.of(), new HashMap<>()));
+
+        AgentMessageService.SendMessageResult result = service.processMessage(
+                USER_ID, "client-msg-013", "01J5Q000000000000000000001",
+                "转账给张三", null, NOW);
+
+        assertThat(result.content()).contains("请告诉我");
+        assertThat(result.intent()).isEqualTo(IntentType.UNKNOWN);
+        assertThat(result.clarificationNeeded()).isFalse();
+    }
+
+    @Test
+    @DisplayName("工具调用失败时 AgentLoop 返回降级话术，不影响会话状态")
+    void shouldReturnFallbackOnToolFailure() {
+        AgentSession session = new AgentSession(
+                "01J5Q000000000000000000001", USER_ID, NOW);
+        when(sessionRepository.findById("01J5Q000000000000000000001"))
+                .thenReturn(Optional.of(session));
+        when(messageRepository.findByClientMessageId(any(), any(), any()))
+                .thenReturn(Optional.empty());
+        when(messageRepository.findRecentBySessionId(any(), anyInt())).thenReturn(List.of());
+        when(agentLoop.execute(any())).thenReturn(agentResult(
+                "暂时无法查询余额，请稍后重试或刷新页面。",
+                List.of("get_balance"), new HashMap<>()));
+
+        AgentMessageService.SendMessageResult result = service.processMessage(
+                USER_ID, "client-msg-015", "01J5Q000000000000000000001",
+                "查余额", null, NOW);
+
+        assertThat(result.content()).isNotNull();
+        verify(sessionRepository, atLeastOnce()).save(any(AgentSession.class));
     }
 }

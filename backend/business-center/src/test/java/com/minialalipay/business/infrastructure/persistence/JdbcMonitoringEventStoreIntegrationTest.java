@@ -14,6 +14,9 @@ import java.util.Map;
 import java.util.UUID;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static com.minialalipay.business.application.monitoring.MonitoringEventStore.InboxClaimResult.ALREADY_DONE;
+import static com.minialalipay.business.application.monitoring.MonitoringEventStore.InboxClaimResult.CLAIMED;
+import static com.minialalipay.business.application.monitoring.MonitoringEventStore.InboxClaimResult.RETRY_LATER;
 
 /** 监控 Inbox 消费者与投影仓储的 H2 集成测试：幂等领取、失败重试和事件投影落表。 */
 class JdbcMonitoringEventStoreIntegrationTest {
@@ -34,11 +37,12 @@ class JdbcMonitoringEventStoreIntegrationTest {
         MonitoringEvent event = event("event-1", "alert.status.changed",
                 Map.of("alertId", "alert-1", "status", "OPEN"));
 
-        assertThat(store.claim("consumer-1", "event-1")).isTrue();
-        assertThat(store.claim("consumer-1", "event-1")).isFalse();
+        assertThat(store.claim("consumer-1", "event-1")).isEqualTo(CLAIMED);
+        assertThat(store.claim("consumer-1", "event-1")).isEqualTo(RETRY_LATER);
         store.project(event);
         store.complete("consumer-1", "event-1");
         assertThat(status("consumer-1", "event-1")).isEqualTo("DONE");
+        assertThat(store.claim("consumer-1", "event-1")).isEqualTo(ALREADY_DONE);
     }
 
     @Test
@@ -47,8 +51,30 @@ class JdbcMonitoringEventStoreIntegrationTest {
                 + "VALUES ('consumer-1','event-old','FAILED',?,?)",
                 Timestamp.from(NOW.minusSeconds(120)), Timestamp.from(NOW.minusSeconds(120)));
 
-        assertThat(store.claim("consumer-1", "event-old")).isTrue();
+        assertThat(store.claim("consumer-1", "event-old")).isEqualTo(CLAIMED);
         assertThat(status("consumer-1", "event-old")).isEqualTo("PROCESSING");
+    }
+
+    @Test
+    void 失败记录未到退避时间时要求消费者保留流游标() {
+        jdbc.update("INSERT INTO metrics_db.inbox_event (consumer_name,event_id,status,received_at,updated_at) "
+                        + "VALUES ('consumer-1','event-waiting','FAILED',?,?)",
+                Timestamp.from(NOW), Timestamp.from(NOW));
+
+        assertThat(store.claim("consumer-1", "event-waiting")).isEqualTo(RETRY_LATER);
+    }
+
+    @Test
+    void 失败记录保存原因并写入重试时间() {
+        store.claim("consumer-1", "event-failed");
+        store.fail("consumer-1", "event-failed", "数据库连接暂时不可用");
+
+        assertThat(jdbc.queryForObject("SELECT failure_reason FROM metrics_db.inbox_event "
+                + "WHERE consumer_name='consumer-1' AND event_id='event-failed'", String.class))
+                .isEqualTo("数据库连接暂时不可用");
+        assertThat(jdbc.queryForObject("SELECT retry_count FROM metrics_db.inbox_event "
+                + "WHERE consumer_name='consumer-1' AND event_id='event-failed'", Integer.class))
+                .isEqualTo(1);
     }
 
     @Test
@@ -77,6 +103,10 @@ class JdbcMonitoringEventStoreIntegrationTest {
                 .isEqualTo("transaction.status.changed");
         assertThat(jdbc.queryForObject("SELECT trace_id FROM metrics_db.analytics_event WHERE event_id='event-tx'", String.class))
                 .isEqualTo("trace-1");
+        assertThat(jdbc.queryForObject("SELECT event_version FROM metrics_db.analytics_event WHERE event_id='event-tx'", Integer.class))
+                .isEqualTo(1);
+        assertThat(jdbc.queryForObject("SELECT definition_version FROM metrics_db.analytics_event WHERE event_id='event-tx'", Integer.class))
+                .isEqualTo(1);
     }
 
     @Test
@@ -107,9 +137,11 @@ class JdbcMonitoringEventStoreIntegrationTest {
         jdbc.execute("CREATE SCHEMA IF NOT EXISTS metrics_db");
         jdbc.execute("CREATE TABLE metrics_db.inbox_event (consumer_name VARCHAR(64) NOT NULL,event_id VARCHAR(26) NOT NULL,"
                 + "status VARCHAR(16) NOT NULL DEFAULT 'PROCESSING',received_at TIMESTAMP NOT NULL,updated_at TIMESTAMP NOT NULL,"
+                + "failure_reason VARCHAR(512),retry_count INT NOT NULL DEFAULT 0,next_retry_at TIMESTAMP,last_failed_at TIMESTAMP,"
                 + "PRIMARY KEY (consumer_name,event_id))");
-        jdbc.execute("CREATE TABLE metrics_db.analytics_event (event_id VARCHAR(64) PRIMARY KEY,event_type VARCHAR(64),"
-                + "business_type VARCHAR(16),occurred_at TIMESTAMP,dimensions_json VARCHAR(512),metrics_json VARCHAR(512),trace_id VARCHAR(32))");
+        jdbc.execute("CREATE TABLE metrics_db.analytics_event (event_id VARCHAR(64) PRIMARY KEY,event_type VARCHAR(64) NOT NULL,"
+                + "event_version SMALLINT NOT NULL,business_type VARCHAR(16),occurred_at TIMESTAMP NOT NULL,"
+                + "definition_version INT NOT NULL,dimensions_json VARCHAR(512),metrics_json VARCHAR(512),trace_id VARCHAR(32) NOT NULL)");
         jdbc.execute("CREATE TABLE metrics_db.quarantined_event (consumer_name VARCHAR(64),event_id VARCHAR(64),"
                 + "reason_code VARCHAR(32),schema_version INT,payload VARCHAR(512),status VARCHAR(16),quarantined_at TIMESTAMP,"
                 + "PRIMARY KEY (consumer_name,event_id))");

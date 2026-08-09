@@ -36,6 +36,9 @@ public interface RechargeStore {
     /** 使用传入版本 CAS 持久化充值订单状态（受理资金交易或渠道拒绝）。 */
     boolean updateOrder(RechargeOrder order, long expectedVersion);
 
+    /** 使用传入版本 CAS 持久化日额度变更（渠道拒绝释放或成功终态结算）。 */
+    boolean updateDailyUsage(RechargeDailyUsage usage, long expectedVersion);
+
     /** 充值创建接口的幂等快照。 */
     record IdempotencyRecord(byte[] requestHash, String rechargeOrderId) { }
 }

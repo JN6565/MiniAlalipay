@@ -54,6 +54,7 @@ export async function getInitialState(): Promise<AdminInitialState> {
       );
       return {
         currentAdmin: {
+          userId: me.data.userId,
           displayName: me.data.displayName,
           roles,
         },

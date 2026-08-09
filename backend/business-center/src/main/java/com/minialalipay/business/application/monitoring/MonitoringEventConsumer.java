@@ -14,6 +14,7 @@ public final class MonitoringEventConsumer {
             "risk.decision.created",
             "alert.status.changed",
             "data_quality.check.completed",
+            "transaction.accepted",
             "transaction.status.changed",
             "reconciliation.diff.detected");
 
@@ -38,10 +39,14 @@ public final class MonitoringEventConsumer {
      */
     public EventConsumeResult consume(MonitoringEvent event) {
         if (event == null) return EventConsumeResult.QUARANTINED;
-        if (!store.claim(consumerName, event.eventId())) return EventConsumeResult.DUPLICATE;
+        MonitoringEventStore.InboxClaimResult claimResult = store.claim(consumerName, event.eventId());
+        if (claimResult == MonitoringEventStore.InboxClaimResult.ALREADY_DONE) return EventConsumeResult.DUPLICATE;
+        if (claimResult == MonitoringEventStore.InboxClaimResult.RETRY_LATER) return EventConsumeResult.RETRYABLE_FAILURE;
         String invalidReason = validate(event);
         if (invalidReason != null) {
             store.quarantine(event, invalidReason);
+            // 已隔离的事件不再等待重试；同时完成 Inbox 才能使 Stream 检查点安全向前推进。
+            store.complete(consumerName, event.eventId());
             return EventConsumeResult.QUARANTINED;
         }
         try {
@@ -71,7 +76,7 @@ public final class MonitoringEventConsumer {
             case "risk.decision.created" -> new String[]{"decisionId", "subjectId", "action"};
             case "alert.status.changed" -> new String[]{"alertId", "status"};
             case "data_quality.check.completed" -> new String[]{"resultId", "status"};
-            case "transaction.status.changed" -> new String[]{"transactionId", "status"};
+            case "transaction.accepted", "transaction.status.changed" -> new String[]{"transactionId", "status"};
             case "reconciliation.diff.detected" -> new String[]{"transactionId", "diffType"};
             default -> new String[0];
         };

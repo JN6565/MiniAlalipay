@@ -41,7 +41,8 @@ export interface AlertPage {
 /** 数据质量结果，与 OpenAPI DataQualityResult 对齐。 */
 export interface DataQualityItem {
   resultId: string;
-  checkType: string;
+  taskCode: string;
+  ruleCode: string;
   status: string;
   checkedCount: number;
   failedCount: number;
@@ -64,6 +65,53 @@ export interface RealtimeMetricItem {
   value: number;
   metricVersion: string;
   qualityStatus: string;
+}
+
+/** 临时报表预览；仅表示服务端计算时刻的快照，不会替代已发布的 T+1 日报。 */
+export interface DailyReportPreview {
+  windowStart: string;
+  windowEnd: string;
+  status: 'READY' | 'BLOCKED';
+  metrics: Array<{ metricCode: string; value: number; metricVersion: string }>;
+  qualityChecks: Array<{ ruleCode: string; status: 'PASSED' | 'FAILED'; checkedCount: number; failedCount: number }>;
+  failures: Array<{ eventId: string; reason: string; retryCount: number; status: string }>;
+}
+
+/** 正式日报重生成结果；门禁阻断时不返回指标值。 */
+export interface DailyReportGeneration {
+  reportDate: string;
+  status: 'PUBLISHED' | 'BLOCKED';
+  generatedAt: string;
+  metrics: Array<{ metricCode: string; value: number; metricVersion: string }>;
+  qualityChecks: Array<{ ruleCode: string; status: 'PASSED' | 'FAILED'; checkedCount: number; failedCount: number }>;
+  failures: Array<{ eventId: string; reason: string; retryCount: number; status: string }>;
+}
+
+/** 可信运行看板顶部四项只读指标；金额单位为分，成功率单位为万分比。 */
+export interface DashboardKpis {
+  todayTransactionAmountFen: number;
+  paymentSuccessRateBps: number;
+  pendingManualCaseCount: number;
+  openAlertCount: number;
+}
+
+/** 看板服务探针状态；UNKNOWN 表示无法取得足够证据，前端不得按正常或故障推断。 */
+export interface DashboardServiceHealth {
+  serviceCode: 'gateway' | 'account-center' | 'redis' | 'ai-service';
+  serviceName: string;
+  status: 'UP' | 'DOWN' | 'UNKNOWN';
+  probeLatencyMs: number | null;
+  checkedAt: string;
+}
+
+/** 可信运行看板的服务端只读汇总投影。 */
+export interface DashboardSummary {
+  generatedAt: string;
+  kpis: DashboardKpis;
+  transactionTrend: RealtimeMetricItem[];
+  dataQuality: DataQualityItem[];
+  services: DashboardServiceHealth[];
+  recentTransactions: OpsTransactionItem[];
 }
 
 /** 人工工单行，与 OpenAPI ManualCase 对齐；处置后暴露操作者、理由与证据引用等审计事实。 */
@@ -232,6 +280,23 @@ export function listRealtimeMetrics(
   return gatewayRequest<ApiResponse<RealtimeMetricItem[]>>(`/api/v1/ops/realtime-metrics?${params.toString()}`);
 }
 
+/** 生成昨日零点至当前时刻的临时报表预览，仅管理员可调用。 */
+export function generateDailyReportPreview(): Promise<ApiResponse<DailyReportPreview>> {
+  return gatewayRequest<ApiResponse<DailyReportPreview>>('/api/v1/ops/daily-report-previews', { method: 'POST' });
+}
+
+/** 按已结束业务日重新生成正式日报，服务端负责质量门禁和幂等发布。 */
+export function generateDailyReport(reportDate: string): Promise<ApiResponse<DailyReportGeneration>> {
+  return gatewayRequest<ApiResponse<DailyReportGeneration>>(
+    `/api/v1/ops/daily-reports/${encodeURIComponent(reportDate)}/generate`, { method: 'POST' },
+  );
+}
+
+/** 查询可信运行看板汇总；数据由服务端按统一口径聚合，前端不得自行估算交易金额或成功率。 */
+export function getDashboardSummary(): Promise<ApiResponse<DashboardSummary>> {
+  return gatewayRequest<ApiResponse<DashboardSummary>>('/api/v1/ops/dashboard-summary');
+}
+
 /** 查询运营可见人工工单，支持按状态、类型筛选与稳定游标分页。 */
 export function listManualCases(
   status?: string,
@@ -274,11 +339,12 @@ export function listMetricDefinitions(): Promise<ApiResponse<MetricDefinitionIte
 
 /** 分页查询全平台脱敏交易摘要；金额为整数分，仅展示服务端确定的资金事实。 */
 export function listOpsTransactions(
-  params?: { status?: string; businessType?: string; cursor?: string; limit?: number },
+  params?: { status?: string; businessType?: string; initiator?: string; cursor?: string; limit?: number },
 ): Promise<ApiResponse<OpsTransactionPage>> {
   const query = new URLSearchParams({ limit: String(params?.limit ?? 50) });
   if (params?.status) query.set('status', params.status);
   if (params?.businessType) query.set('businessType', params.businessType);
+  if (params?.initiator) query.set('initiator', params.initiator);
   if (params?.cursor) query.set('cursor', params.cursor);
   return gatewayRequest<ApiResponse<OpsTransactionPage>>(`/api/v1/ops/transactions?${query.toString()}`);
 }

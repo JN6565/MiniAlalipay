@@ -20,6 +20,8 @@ export type AdminRole = 'USER' | 'OPERATOR' | 'ADMIN';
 
 /** 当前 B 端身份的最小客户端视图，正式字段应在身份契约落地后由 OpenAPI 生成。 */
 export interface AdminIdentity {
+  /** 运营用户 ID（来自网关 /auth/me），用于识别工单领取人是否当前操作者。 */
+  userId: string;
   /** 脱敏展示名称。 */
   displayName: string;
   /** 服务端授予的 B 端角色；多角色身份按权限并集计算。 */

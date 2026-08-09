@@ -87,7 +87,7 @@ class AuthServiceTest {
         when(passwordHasher.hashPassword("Login123")).thenReturn("login-hash");
         when(passwordHasher.hashPassword("123456")).thenReturn("payment-hash");
         when(userIdGenerator.generatePair()).thenReturn(
-                new UserIdGeneratorPort.IdPair("USRABCDEFGHI20260807000001", "REGABCDEFGHI20260807000001"));
+                new UserIdGeneratorPort.IdPair("USRFAILREGISTRATION01", "REGFAILREGISTRATION01"));
         when(accountProvisioningPort.openAccount(anyString(), anyString()))
                 .thenThrow(new BusinessException(UserErrorCode.REGISTRATION_PROCESSING));
 
@@ -116,6 +116,23 @@ class AuthServiceTest {
         assertEquals("ACTIVE", result.status());
         assertEquals("session-token", result.accessToken());
         verify(userRepository).update(user);
+    }
+
+    /** 冻结账号仅在凭据验证通过后返回明确提示，避免泄露账号状态。 */
+    @Test
+    void shouldReportFrozenAccountAfterValidPassword() {
+        User user = activeUser("USER123");
+        user.freeze("ADMIN", "运营冻结");
+        Credential credential = new Credential(user.getUserId(), "login-hash");
+        when(userRepository.findByLoginIdentifier("13800138000")).thenReturn(Optional.of(user));
+        when(credentialRepository.findByUserId(user.getUserId())).thenReturn(Optional.of(credential));
+        when(passwordHasher.matches("Login123", "login-hash")).thenReturn(true);
+
+        BusinessException exception = assertThrows(BusinessException.class,
+                () -> service.login(new LoginRequest("13800138000", "Login123")));
+
+        assertEquals(UserErrorCode.ACCOUNT_FROZEN, exception.errorCode());
+        verify(sessionManager, never()).createSession(anyString());
     }
 
     /** 验证修改密码会更新强哈希并立即销毁当前会话。 */
@@ -189,7 +206,7 @@ class AuthServiceTest {
         assertTrue(service.resolveSession("orphan-token").isEmpty());
     }
 
-    /** 构造并激活一个 ACTIVE 用户。 */
+    /** 构造并激活一个 ACTIVE 用户（6 参构造器默认 PROVISIONING）。 */
     private User activeUser(String userId) {
         User user = new User(userId, "REG" + userId, "6200000000000001", "13800138000", "张三", "小张");
         user.activate();

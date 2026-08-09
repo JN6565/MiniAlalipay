@@ -134,10 +134,10 @@ public class RefundApplicationService {
             throw new BusinessException(BusinessErrorCode.ORDER_STATE_INVALID);
         }
         if (!store.update(order, expectedVersion)) throw new BusinessException(BusinessErrorCode.VERSION_CONFLICT);
-        FundTransaction transaction = FundTransaction.accept(transactionId, TransactionType.REFUND, SourceType.REFUND_ORDER,
+        FundTransaction transaction = FundTransaction.acceptRefund(transactionId, SourceType.REFUND_ORDER,
                 refundOrderId, userId, order.getMerchantAccountId(), order.getPayerAccountId(),
                 FundingSource.valueOf(order.getFundingSource()), order.getAmountFen(), idempotencyKey, "LOW",
-                validTraceId(traceId), now);
+                validTraceId(traceId), order.getOriginalTransactionId(), now);
         businessStore.createTransaction(transaction, security.digest(refundOrderId), security.newId(), now);
         afterCommit(() -> coordinator.startOrResume(transaction));
         return order;

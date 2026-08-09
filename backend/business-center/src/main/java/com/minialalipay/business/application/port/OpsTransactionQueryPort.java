@@ -20,9 +20,52 @@ public interface OpsTransactionQueryPort {
     /** 按链路编号查询跨服务脱敏链路片段（业务中心、账户账本、用户审计、AI 工具/审计）；traceId 无结果返回空列表。 */
     List<TraceSpan> findTraceSpansByTraceId(String traceId);
 
-    /** 运营交易查询条件；cursor 为稳定交易 ID 游标，时间范围为创建时间过滤。 */
-    record OpsTransactionQuery(String status, String businessType, String cursor, int limit,
+    /**
+     * 按上海业务日的时间边界汇总看板交易指标。
+     *
+     * <p>成功率分母只包括 SUCCESS、REVERSED、CANCELLED 三种确定终态；PROCESSING、COMPENSATING、
+     * MANUAL_REVIEW 不属于成功或失败，防止未收敛交易污染经营指标。</p>
+     */
+    default DashboardTransactionStats dashboardTransactionStats(Instant from, Instant to) {
+        return new DashboardTransactionStats(0L, 0L, 0L, 0L);
+    }
+
+    /**
+     * 运营交易查询条件；cursor 为不透明复合游标（创建时间 + 交易 ID），时间范围为创建时间过滤，
+     * initiator 为发起用户 ID 关键词（按原始发起人 ID 模糊匹配，空表示不限）。
+     */
+    record OpsTransactionQuery(String status, String businessType, String initiator, String cursor, int limit,
                                Instant from, Instant to) { }
+
+    /** 看板交易汇总；金额单位为分，成功率单位为万分比。 */
+    record DashboardTransactionStats(long successAmountFen, long successRateBps, long pendingManualCaseCount,
+                                     long definitiveTransactionCount) { }
+
+    /** 游标键：创建时间毫秒与交易 ID 复合键，保证「创建时间倒序」分页稳定并处理同毫秒平局。 */
+    record CursorKey(Instant createdAt, String transactionId) { }
+
+    /**
+     * 编码下一页游标：{@code epochMillis:transactionId}。
+     *
+     * <p>交易 ID 为随机 base32 非时间有序，因此排序以创建时间倒序为准、交易 ID 作平局裁决；
+     * 游标必须携带创建时间才能继续「比边界行更旧」的比较，而不能只带交易 ID。</p>
+     */
+    static String encodeCursor(Instant createdAt, String transactionId) {
+        return createdAt.toEpochMilli() + ":" + transactionId;
+    }
+
+    /** 解析不透明游标；格式非法或为空时返回空，调用方等价于从未携带游标（从最新开始）。 */
+    static Optional<CursorKey> parseCursor(String cursor) {
+        if (cursor == null || cursor.isBlank()) return Optional.empty();
+        int sep = cursor.indexOf(':');
+        if (sep <= 0 || sep == cursor.length() - 1) return Optional.empty();
+        try {
+            Instant createdAt = Instant.ofEpochMilli(Long.parseLong(cursor.substring(0, sep)));
+            return Optional.of(new CursorKey(createdAt, cursor.substring(sep + 1)));
+        } catch (NumberFormatException e) {
+            return Optional.empty();
+        }
+    }
 
     /** B 端脱敏交易摘要；不暴露完整用户或账户标识，金额使用整数分。 */
     record OpsTransactionRow(String transactionId, String businessType, String sourceType, String sourceOrderId,

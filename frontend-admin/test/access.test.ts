@@ -28,7 +28,7 @@ describe('B 端界面权限', () => {
 
   it('运营人员可以查看公共页面并处置工单、告警，但不能触发演示任务', () => {
     const permissions = access({
-      currentAdmin: { displayName: '运营人员', roles: ['OPERATOR'] },
+      currentAdmin: { userId: 'op-1', displayName: '运营人员', roles: ['OPERATOR'] },
     });
 
     expect(permissions).toEqual({
@@ -50,7 +50,7 @@ describe('B 端界面权限', () => {
 
   it('管理员拥有运营人员全部能力并可配置告警与管理系统用户', () => {
     const permissions = access({
-      currentAdmin: { displayName: '管理员', roles: ['ADMIN'] },
+      currentAdmin: { userId: 'admin-1', displayName: '管理员', roles: ['ADMIN'] },
     });
 
     expect(permissions).toEqual({
@@ -73,6 +73,7 @@ describe('B 端界面权限', () => {
   it('多角色身份按权限并集计算', () => {
     const permissions = access({
       currentAdmin: {
+        userId: 'both-1',
         displayName: '复合角色管理员',
         roles: ['OPERATOR', 'ADMIN'],
       },

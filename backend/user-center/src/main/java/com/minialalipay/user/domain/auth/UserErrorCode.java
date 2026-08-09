@@ -34,6 +34,11 @@ public enum UserErrorCode implements ErrorCode {
      */
     LOGIN_INVALID("LOGIN_INVALID", "登录名或登录密码错误", 401),
 
+    /**
+     * 登录凭据验证通过，但账号已被管理员冻结。
+     */
+    ACCOUNT_FROZEN("ACCOUNT_FROZEN", "你的账号已冻结", 403),
+
     /** 修改密码时当前登录密码错误，不代表会话失效。 */
     CURRENT_LOGIN_PASSWORD_INVALID("CURRENT_LOGIN_PASSWORD_INVALID", "当前登录密码错误", 422),
 

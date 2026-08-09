@@ -28,12 +28,12 @@ public class OpsTransactionQueryService {
         this.store = store;
     }
 
-    /** 分页查询脱敏交易摘要；status/businessType 为空表示不限。 */
+    /** 分页查询脱敏交易摘要；status/businessType/initiator 为空表示不限。 */
     @Transactional(readOnly = true)
-    public List<OpsTransactionRow> listTransactions(String status, String businessType, String cursor, int limit,
-                                                    Instant from, Instant to) {
+    public List<OpsTransactionRow> listTransactions(String status, String businessType, String initiator,
+                                                    String cursor, int limit, Instant from, Instant to) {
         if (limit < 1 || limit > 100) throw new IllegalArgumentException("交易分页数量必须在 1 到 100 之间");
-        return store.listTransactionsForOps(new OpsTransactionQuery(status, businessType, cursor, limit, from, to));
+        return store.listTransactionsForOps(new OpsTransactionQuery(status, businessType, initiator, cursor, limit, from, to));
     }
 
     /** 查询单笔脱敏交易详情；交易不存在时按资源不存在返回。 */

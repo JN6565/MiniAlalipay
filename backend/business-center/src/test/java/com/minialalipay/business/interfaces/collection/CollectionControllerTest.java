@@ -138,8 +138,8 @@ class CollectionControllerTest {
         }
         @Override public java.util.List<CollectionOrder> findOrdersByRequestId(String requestId) { return java.util.List.of(); }
         @Override public boolean updateOrder(CollectionOrder order, long expectedVersion) { return true; }
+        // 令牌交换永不复用订单：旧订单一律解绑，保持一会话至多一个绑定订单，允许同一会话创建新订单。
         @Override public void clearSessionBinding(String orderId) {
-            // 令牌交换永不复用订单：旧订单一律解绑，保持一会话至多一个绑定订单
             orderBySession.values().removeIf(order -> order.getOrderId().equals(orderId));
         }
         @Override public boolean createRequest(CollectionRequest request, byte[] tokenDigest, String recordId, String userId, String idempotencyKey, byte[] requestDigest) { return false; }

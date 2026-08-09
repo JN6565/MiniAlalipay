@@ -8,6 +8,8 @@ import java.util.HashSet;
 import java.util.Map;
 import java.util.Set;
 
+import static com.minialalipay.business.application.monitoring.MonitoringEventStore.InboxClaimResult.ALREADY_DONE;
+import static com.minialalipay.business.application.monitoring.MonitoringEventStore.InboxClaimResult.CLAIMED;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 
 class MonitoringEventConsumerTest {
@@ -45,7 +47,8 @@ class MonitoringEventConsumerTest {
                         Map.of("resultId", "quality-1", "status", "PASSED"))));
         assertEquals(2, store.quarantined.size());
         assertEquals(1, store.projected.size());
-        assertEquals(Set.of("event-4"), store.completed);
+        // 隔离属于明确终态，Inbox 完成后 Stream 游标才能跳过坏消息继续消费后续事件。
+        assertEquals(Set.of("event-2", "event-3", "event-4"), store.completed);
     }
 
     private static MonitoringEvent event(String id, String type, int version, Map<String, String> attributes) {
@@ -61,8 +64,8 @@ class MonitoringEventConsumerTest {
         private boolean failFirstProjection = true;
 
         @Override
-        public boolean claim(String consumerName, String eventId) {
-            return claimed.add(consumerName + ":" + eventId);
+        public InboxClaimResult claim(String consumerName, String eventId) {
+            return claimed.add(consumerName + ":" + eventId) ? CLAIMED : ALREADY_DONE;
         }
 
         @Override

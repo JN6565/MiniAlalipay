@@ -45,6 +45,10 @@ public class HttpTccCoordinator implements TccCoordinatorPort {
             creditPay(transaction, a);
             return;
         }
+        if (transaction.getBusinessType() == com.minialalipay.business.domain.transaction.TransactionType.REFUND) {
+            refund(transaction, a);
+            return;
+        }
         if (transaction.getStatus() == TransactionStatus.COMPENSATING) {
             cancelAndFinalize(transaction, a);
             return;
@@ -92,7 +96,9 @@ public class HttpTccCoordinator implements TccCoordinatorPort {
         } catch (RuntimeException failure) {
             try {
                 rechargeCall("cancel", transaction, a);
-                transaction.startCompensating(Instant.now());
+                if (transaction.getStatus() == TransactionStatus.PROCESSING) {
+                    startCompensating(transaction);
+                }
                 long version = transaction.getVersion();
                 transaction.publishCancelled(true, Instant.now());
                 store.finalizeTransaction(transaction, version, a.xid(), "CANCELLED", secure.newId(), Instant.now());
@@ -162,6 +168,79 @@ public class HttpTccCoordinator implements TccCoordinatorPort {
         accountClient.post().uri("/internal/v1/tcc/recharge/{action}", action)
                 .body(new RechargeCommand(a.xid(), t.getTransactionId(), t.getPayeeAccountId(), t.getAmountFen(),
                         a.voucherId(), a.debitEntryId(), a.creditEntryId(), a.ledgerEventId(), t.getTraceId()))
+                .retrieve().toBodilessEntity();
+    }
+
+    /**
+     * 受控退款专用 TCC 协调：只冻结退款发起人（原收款方）余额，不冻结原付款人。
+     *
+     * <p>余额退款贷记原付款人余额；信用退款核销原付款人信用应收并把消费明细置为冲正终态，
+     * 原付款人余额不被增加。退款不参与两账户事实核验，与充值、信用支付一样由专用分支推进。</p>
+     */
+    private void refund(FundTransaction transaction, Artifacts a) {
+        try {
+            if (transaction.getStatus() == TransactionStatus.COMPENSATING) {
+                refundCall("cancel", transaction, a);
+                long version = transaction.getVersion();
+                transaction.publishCancelled(true, Instant.now());
+                store.finalizeTransaction(transaction, version, a.xid(), "CANCELLED", secure.newId(), Instant.now());
+                return;
+            }
+            refundCall("try", transaction, a);
+            store.updateTccGlobal(a.xid(), "COMMITTING", "{\"phase\":\"CONFIRM\"}", Instant.now(), Instant.now());
+            refundCall("confirm", transaction, a);
+            store.updateTccGlobal(a.xid(), "COMMITTING", "{\"result\":\"CONFIRMED\"}", null, Instant.now());
+            long version = transaction.getVersion();
+            transaction.publishSuccess(true, Instant.now());
+            store.finalizeTransaction(transaction, version, a.xid(), "SUCCESS", secure.newId(), Instant.now());
+        } catch (RuntimeException failure) {
+            try {
+                refundCall("cancel", transaction, a);
+                if (transaction.getStatus() == TransactionStatus.PROCESSING) {
+                    startCompensating(transaction);
+                }
+                long version = transaction.getVersion();
+                transaction.publishCancelled(true, Instant.now());
+                store.finalizeTransaction(transaction, version, a.xid(), "CANCELLED", secure.newId(), Instant.now());
+            } catch (RuntimeException cancelFailure) {
+                store.updateTccGlobal(a.xid(), "ROLLING_BACK", "{\"result\":\"UNKNOWN\"}", Instant.now().plusSeconds(10), Instant.now());
+            }
+        }
+    }
+
+    private void refundCall(String action, FundTransaction t, Artifacts a) {
+        if ("cancel".equals(action)) {
+            refundLedger("cancel", t, a);
+            refundRecipient("cancel", t, a);
+            balance("payer", "cancel", t, a);
+            return;
+        }
+        balance("payer", action, t, a);
+        refundRecipient(action, t, a);
+        refundLedger(action, t, a);
+    }
+
+    private void refundRecipient(String action, FundTransaction t, Artifacts a) {
+        if (t.getFundingSource() == com.minialalipay.business.domain.transaction.FundingSource.MINI_CREDIT) {
+            accountClient.post().uri("/internal/v1/tcc/credit-refund/{action}", action)
+                    .body(new CreditRefundCommand(a.xid(), t.getTransactionId(), t.getRelatedTransactionId(),
+                            t.getPayerAccountId(), t.getAmountFen()))
+                    .retrieve().toBodilessEntity();
+        } else {
+            balance("payee", action, t, a);
+        }
+    }
+
+    private void refundLedger(String action, FundTransaction t, Artifacts a) {
+        String creditAccountId = null;
+        if (t.getFundingSource() == com.minialalipay.business.domain.transaction.FundingSource.MINI_CREDIT) {
+            creditAccountId = store.findTransaction(t.getRelatedTransactionId())
+                    .map(r -> r.transaction().getPayerAccountId()).orElse(null);
+        }
+        accountClient.post().uri("/internal/v1/tcc/refund-ledger/{action}", action)
+                .body(new RefundLedgerCommand(a.xid(), t.getTransactionId(), t.getPayerAccountId(), t.getPayeeAccountId(),
+                        creditAccountId, t.getAmountFen(), a.voucherId(), a.debitEntryId(), a.creditEntryId(),
+                        a.ledgerEventId(), t.getTraceId()))
                 .retrieve().toBodilessEntity();
     }
 
@@ -293,6 +372,11 @@ public class HttpTccCoordinator implements TccCoordinatorPort {
             long amountFen, String voucherId, long debitEntryId, long creditEntryId, String eventId, String traceId) { }
     private record RechargeCommand(String xid, String transactionId, String targetAccountId, long amountFen,
             String voucherId, long debitEntryId, long creditEntryId, String eventId, String traceId) { }
+    private record CreditRefundCommand(String xid, String transactionId, String originalTransactionId,
+            String merchantAccountId, long amountFen) { }
+    private record RefundLedgerCommand(String xid, String transactionId, String merchantAccountId,
+            String payerAccountId, String creditAccountId, long amountFen, String voucherId,
+            long debitEntryId, long creditEntryId, String eventId, String traceId) { }
     private record Facts(boolean successConsistent, boolean cancelConsistent, boolean accountsConfirmed,
             boolean ledgerConfirmed, boolean freezeConfirmed, boolean ledgerPosted, boolean accountsCancelled,
             boolean ledgerCancelled, boolean noActiveFreeze) { }

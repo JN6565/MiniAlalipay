@@ -163,7 +163,7 @@ class AgentSessionTest {
     @Test
     void shouldReconstructFromPersistence() {
         AgentSession session = new AgentSession(
-                SESSION_ID, USER_ID, "脱敏摘要",
+                SESSION_ID, USER_ID, "脱敏摘要", null,
                 Map.of("intent", "BALANCE_QUERY"),
                 AgentSessionStatus.ACTIVE, 3L,
                 NOW.plusSeconds(300), NOW

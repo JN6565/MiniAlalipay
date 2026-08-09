@@ -1,6 +1,7 @@
+import { LeftOutlined, RightOutlined } from '@ant-design/icons';
 import { useAccess } from '@umijs/max';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { App, Button, Empty, Form, Input, Modal, Select, Space, Table } from 'antd';
+import { App, Button, Empty, Form, Input, Modal, Select, Space, Table, Typography } from 'antd';
 import type { ColumnsType } from 'antd/es/table';
 import { useState } from 'react';
 import PageHeader from '@/components/PageHeader';
@@ -144,17 +145,9 @@ export default function Alerts() {
           options={Object.entries(SEVERITY_LABEL).map(([value, label]) => ({ value, label }))}
           onChange={changeSeverity}
         />
-        <Button type="primary" onClick={() => alertsQuery.refetch()}>
+        <Button type="primary" className="admin-btn-query" onClick={() => alertsQuery.refetch()}>
           查询
         </Button>
-        <Space>
-          <Button onClick={goPrevPage} disabled={cursorStack.length === 0}>
-            上一页
-          </Button>
-          <Button onClick={goNextPage} disabled={!nextCursor}>
-            下一页
-          </Button>
-        </Space>
       </section>
       <section className={pageStyles.panel} aria-label="告警列表">
         <Table<AlertItem>
@@ -176,6 +169,18 @@ export default function Alerts() {
           }}
           scroll={{ x: 980 }}
         />
+        {/* 游标分页置于列表右下角，与用户管理页保持一致，避免筛选操作与翻页操作混在同一行。 */}
+        <Space style={{ marginTop: 16, justifyContent: 'flex-end', width: '100%' }}>
+          <Button ghost disabled={cursorStack.length === 0} icon={<LeftOutlined />} onClick={goPrevPage}>
+            上一页
+          </Button>
+          <Typography.Text type="secondary">
+            {(alertsQuery.data?.data.items ?? []).length} 条
+          </Typography.Text>
+          <Button ghost disabled={!nextCursor} onClick={goNextPage}>
+            下一页 <RightOutlined />
+          </Button>
+        </Space>
       </section>
       <Modal
         title={action ? `处置告警（${STATUS_LABEL[action.alert.status] ?? action.alert.status}）` : ''}

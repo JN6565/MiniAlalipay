@@ -30,16 +30,6 @@ public class UserInfoHttpAdapter implements UserInfoPort {
         this.serviceToken = serviceToken;
     }
 
-    /**
-     * 获取用户真实姓名。
-     *
-     * @param userId 用户 ID
-     * @return 真实姓名，如果查询失败则返回 null
-     */
-    public String getRealName(String userId) {
-        return findUserInfo(userId).realName();
-    }
-
     /** 调用用户中心获取最小展示投影，查询失败时降级为空名称。 */
     @Override
     public UserInfo findUserInfo(String userId) {

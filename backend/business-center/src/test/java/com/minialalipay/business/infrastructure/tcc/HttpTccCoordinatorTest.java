@@ -194,9 +194,108 @@ class HttpTccCoordinatorTest {
                 .startOrResume(transaction);
 
         assertThat(transaction.getStatus()).isEqualTo(TransactionStatus.SUCCESS);
+        verify(store).finalizeTransaction(eq(transaction), eq(0L),
+                eq("tcc:" + transaction.getTransactionId()), eq("SUCCESS"),
+                any(), any(Instant.class));
         server.verify();
     }
 
+    @Test
+    void 信用退款只冻结商户并走creditRefund与refundLedger专用分支() {
+        BusinessStore store = mock(BusinessStore.class);
+        FundTransaction transaction = creditRefundTransaction();
+        when(store.findTransaction(transaction.getTransactionId()))
+                .thenReturn(Optional.of(new BusinessStore.FundTransactionRecord(transaction, null)));
+        FundTransaction original = creditPayTransaction();
+        when(store.findTransaction(transaction.getRelatedTransactionId()))
+                .thenReturn(Optional.of(new BusinessStore.FundTransactionRecord(original, null)));
+        RestClient.Builder builder = RestClient.builder();
+        MockRestServiceServer server = MockRestServiceServer.bindTo(builder).build();
+
+        // 只冻结退款发起人（原收款方）余额，不冻结原付款人
+        expectPost(server, "/internal/v1/tcc/balance/payer/try");
+        server.expect(once(), requestTo("http://account/internal/v1/tcc/credit-refund/try"))
+                .andExpect(method(HttpMethod.POST))
+                .andExpect(jsonPath("$.originalTransactionId").value(transaction.getRelatedTransactionId()))
+                .andExpect(jsonPath("$.merchantAccountId").value(MERCHANT_ACCOUNT_ID))
+                .andRespond(withSuccess());
+        server.expect(once(), requestTo("http://account/internal/v1/tcc/refund-ledger/try"))
+                .andExpect(method(HttpMethod.POST))
+                // 信用账户由原信用支付交易的付款账户稳定派生
+                .andExpect(jsonPath("$.creditAccountId").value(CREDIT_ACCOUNT_ID))
+                .andExpect(jsonPath("$.merchantAccountId").value(MERCHANT_ACCOUNT_ID))
+                .andRespond(withSuccess());
+        expectPost(server, "/internal/v1/tcc/balance/payer/confirm");
+        expectPost(server, "/internal/v1/tcc/credit-refund/confirm");
+        expectPost(server, "/internal/v1/tcc/refund-ledger/confirm");
+
+        new HttpTccCoordinator(store, new SecureMaterialService(), builder, "http://account")
+                .startOrResume(transaction);
+
+        assertThat(transaction.getStatus()).isEqualTo(TransactionStatus.SUCCESS);
+        verify(store).finalizeTransaction(eq(transaction), eq(0L),
+                eq("tcc:" + transaction.getTransactionId()), eq("SUCCESS"),
+                any(), any(Instant.class));
+        server.verify();
+    }
+
+    @Test
+    void 余额退款仍只冻结商户并贷记原付款人余额() {
+        BusinessStore store = mock(BusinessStore.class);
+        FundTransaction transaction = balanceRefundTransaction();
+        when(store.findTransaction(transaction.getTransactionId()))
+                .thenReturn(Optional.of(new BusinessStore.FundTransactionRecord(transaction, null)));
+        RestClient.Builder builder = RestClient.builder();
+        MockRestServiceServer server = MockRestServiceServer.bindTo(builder).build();
+
+        expectPost(server, "/internal/v1/tcc/balance/payer/try");
+        expectPost(server, "/internal/v1/tcc/balance/payee/try");
+        server.expect(once(), requestTo("http://account/internal/v1/tcc/refund-ledger/try"))
+                .andExpect(method(HttpMethod.POST))
+                // 余额退款不携带信用账户，贷方为原付款人余额科目
+                .andExpect(jsonPath("$.creditAccountId").doesNotExist())
+                .andExpect(jsonPath("$.payerAccountId").value(PAYER_ACCOUNT_ID))
+                .andRespond(withSuccess());
+        expectPost(server, "/internal/v1/tcc/balance/payer/confirm");
+        expectPost(server, "/internal/v1/tcc/balance/payee/confirm");
+        expectPost(server, "/internal/v1/tcc/refund-ledger/confirm");
+
+        new HttpTccCoordinator(store, new SecureMaterialService(), builder, "http://account")
+                .startOrResume(transaction);
+
+        assertThat(transaction.getStatus()).isEqualTo(TransactionStatus.SUCCESS);
+        server.verify();
+    }
+
+    private static FundTransaction creditPayTransaction() {
+        return FundTransaction.accept(CREDIT_PAY_TX, TransactionType.CREDIT_PAY, SourceType.QR_PAY_ORDER,
+                QR_ORDER_ID, "payer-user", CREDIT_ACCOUNT_ID, MERCHANT_ACCOUNT_ID,
+                FundingSource.MINI_CREDIT, 100L, "idem-key-00000001", "LOW",
+                "0123456789abcdef0123456789abcdef", Instant.parse("2026-08-04T08:00:00Z"));
+    }
+
+    private static FundTransaction creditRefundTransaction() {
+        return FundTransaction.acceptRefund(REFUND_TX, SourceType.REFUND_ORDER, REFUND_ORDER_ID,
+                "merchant-user", MERCHANT_ACCOUNT_ID, PAYER_ACCOUNT_ID, FundingSource.MINI_CREDIT,
+                100L, "idem-key-00000001", "LOW", "0123456789abcdef0123456789abcdef",
+                CREDIT_PAY_TX, Instant.parse("2026-08-04T08:00:00Z"));
+    }
+
+    private static FundTransaction balanceRefundTransaction() {
+        return FundTransaction.acceptRefund(BALANCE_REFUND_TX, SourceType.REFUND_ORDER, REFUND_ORDER_ID,
+                "merchant-user", MERCHANT_ACCOUNT_ID, PAYER_ACCOUNT_ID, FundingSource.BALANCE,
+                100L, "idem-key-00000001", "LOW", "0123456789abcdef0123456789abcdef",
+                "01K1ORGT02GH3JK4MN5PQRSTVW", Instant.parse("2026-08-04T08:00:00Z"));
+    }
+
+    private static final String CREDIT_PAY_TX = "01K1CRP002GH3JK4MN5PQRSTVW";
+    private static final String REFUND_TX = "01K1RFX002GH3JK4MN5PQRSTVW";
+    private static final String BALANCE_REFUND_TX = "01K1RFB002GH3JK4MN5PQRSTVW";
+    private static final String REFUND_ORDER_ID = "01K1RFOD02GH3JK4MN5PQRSTVW";
+    private static final String QR_ORDER_ID = "01K1QROD02GH3JK4MN5PQRSTVW";
+    private static final String CREDIT_ACCOUNT_ID = "01K1CRD002GH3JK4MN5PQRSTVW";
+    private static final String MERCHANT_ACCOUNT_ID = "01K1MCH002GH3JK4MN5PQRSTVW";
+    private static final String PAYER_ACCOUNT_ID = "01K1PAY002GH3JK4MN5PQRSTVW";
     private static void expectPost(MockRestServiceServer server, String path) {
         server.expect(once(), requestTo("http://account" + path)).andExpect(method(HttpMethod.POST))
                 .andRespond(withSuccess());

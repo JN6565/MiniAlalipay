@@ -99,6 +99,7 @@ class RiskReviewResumeServiceTest {
             this.dbVersion = order.getVersion();
             return true;
         }
+        // 内存 Mock 不维护 H5 会话绑定，清除为空操作。
         @Override public void clearSessionBinding(String orderId) { }
         @Override public Optional<com.minialalipay.business.domain.collection.PersonalCollectionCode> findActiveCode(String userId) { return Optional.empty(); }
         @Override public Optional<com.minialalipay.business.domain.collection.PersonalCollectionCode> findCode(String codeId) { return Optional.empty(); }

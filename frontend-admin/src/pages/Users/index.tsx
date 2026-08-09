@@ -1,6 +1,7 @@
+import { LeftOutlined, RightOutlined, SearchOutlined } from '@ant-design/icons';
 import { useAccess } from '@umijs/max';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { App, Button, Descriptions, Drawer, Empty, Form, Input, Modal, Select, Space, Table, Tag } from 'antd';
+import { App, Button, Descriptions, Drawer, Empty, Form, Input, Modal, Select, Space, Table, Tag, Typography } from 'antd';
 import type { ColumnsType } from 'antd/es/table';
 import { useState } from 'react';
 import PageHeader from '@/components/PageHeader';
@@ -35,6 +36,9 @@ export default function Users() {
   const access = useAccess();
   const queryClient = useQueryClient();
   const [status, setStatus] = useState<AdminUserStatus>();
+  // 生效的登录名搜索词（进入 queryKey）；输入框临时值提交后才生效。
+  const [loginName, setLoginName] = useState<string>();
+  const [loginNameInput, setLoginNameInput] = useState('');
   const [action, setAction] = useState<{ user: AdminUserItem; kind: 'FREEZE' | 'UNFREEZE' }>();
   const [detail, setDetail] = useState<AdminUserItem>();
   const [form] = Form.useForm();
@@ -43,14 +47,22 @@ export default function Users() {
   const [cursorStack, setCursorStack] = useState<string[]>([]);
 
   const usersQuery = useQuery({
-    queryKey: ['admin-users', status, cursor],
-    queryFn: () => listAdminUsers(status, cursor),
+    queryKey: ['admin-users', status, loginName, cursor],
+    queryFn: () => listAdminUsers(status, loginName, cursor),
   });
 
   const nextCursor = usersQuery.data?.data.nextCursor ?? null;
+  const rows = usersQuery.data?.data.items ?? [];
 
   function changeStatus(value?: AdminUserStatus) {
     setStatus(value);
+    setCursor(undefined);
+    setCursorStack([]);
+  }
+
+  /** 提交登录名搜索：生效搜索词并回到第一页。 */
+  function submitSearch() {
+    setLoginName(loginNameInput.trim() || undefined);
     setCursor(undefined);
     setCursorStack([]);
   }
@@ -156,23 +168,25 @@ export default function Users() {
           options={Object.entries(STATUS_LABEL).map(([value, label]) => ({ value, label }))}
           onChange={changeStatus}
         />
-        <Button type="primary" onClick={() => usersQuery.refetch()}>
+        <Input
+          aria-label="登录名搜索"
+          allowClear
+          prefix={<SearchOutlined />}
+          placeholder="按登录名搜索"
+          style={{ width: 220 }}
+          value={loginNameInput}
+          onChange={(e) => setLoginNameInput(e.target.value)}
+          onPressEnter={submitSearch}
+        />
+        <Button type="primary" className="admin-btn-query" onClick={submitSearch}>
           查询
         </Button>
-        <Space>
-          <Button onClick={goPrevPage} disabled={cursorStack.length === 0}>
-            上一页
-          </Button>
-          <Button onClick={goNextPage} disabled={!nextCursor}>
-            下一页
-          </Button>
-        </Space>
       </section>
       <section className={pageStyles.panel} aria-label="用户列表">
         <Table<AdminUserItem>
           rowKey="userId"
           columns={columns}
-          dataSource={usersQuery.data?.data.items ?? []}
+          dataSource={rows}
           loading={usersQuery.isLoading}
           pagination={false}
           locale={{
@@ -180,14 +194,26 @@ export default function Users() {
               <Empty
                 description={usersQuery.isError
                   ? '加载失败，请确认网关已启动'
-                  : status
-                    ? '暂无该状态用户'
-                    : '暂无用户数据'}
+                  : loginName
+                    ? '未查询到匹配该登录名的用户，请调整搜索词'
+                    : status
+                      ? '暂无该状态用户'
+                      : '暂无用户数据'}
               />
             ),
           }}
           scroll={{ x: 760 }}
         />
+        {/* 游标分页置于表格右下角，交互与交易查询页保持一致。 */}
+        <Space style={{ marginTop: 16, justifyContent: 'flex-end', width: '100%' }}>
+          <Button ghost disabled={cursorStack.length === 0} icon={<LeftOutlined />} onClick={goPrevPage}>
+            上一页
+          </Button>
+          <Typography.Text type="secondary">{rows.length} 条</Typography.Text>
+          <Button ghost disabled={!nextCursor} onClick={goNextPage}>
+            下一页 <RightOutlined />
+          </Button>
+        </Space>
       </section>
       <Modal
         title={action
@@ -226,7 +252,9 @@ export default function Users() {
       >
         {detail && (
           <Descriptions column={1} bordered size="small">
-            <Descriptions.Item label="用户编号">{detail.userId}</Descriptions.Item>
+            <Descriptions.Item label="用户编号">
+              <Typography.Text copyable>{detail.userId}</Typography.Text>
+            </Descriptions.Item>
             <Descriptions.Item label="登录名">{detail.loginNameMasked}</Descriptions.Item>
             <Descriptions.Item label="昵称">{placeholder(detail.nickname)}</Descriptions.Item>
             <Descriptions.Item label="状态">{STATUS_LABEL[detail.status] ?? detail.status}</Descriptions.Item>

@@ -127,6 +127,33 @@ public class CreditPurchase {
         validateInvariants();
     }
 
+    /**
+     * 受控退款全额冲正本笔信用消费。
+     *
+     * <p>仅接受未出账或已出账但尚未还款的消费；全额退款后标记为终态 {@link CreditPurchaseBillingStatus#REVERSED}，
+     * 保存退款金额与退款交易号作为冲正事实。已部分还款或已冲正的消费不可再次退款。</p>
+     *
+     * @param refundTransactionId 冲正本笔消费的 REFUND 统一交易号
+     * @param refundAmountFen 退款金额（分），必须覆盖当前未退款余额
+     * @param now 冲正时间
+     */
+    public void applyRefund(String refundTransactionId, long refundAmountFen, Instant now) {
+        if (billingStatus == CreditPurchaseBillingStatus.REVERSED || billingStatus == CreditPurchaseBillingStatus.REPAID) {
+            throw new IllegalStateException("已终态的信用消费不可退款");
+        }
+        if (repaidFen > 0) {
+            throw new IllegalStateException("已部分还款的信用消费不可全额退款");
+        }
+        if (refundAmountFen <= 0 || refundAmountFen > this.amountFen - this.refundedFen) {
+            throw new IllegalArgumentException("退款金额必须覆盖本笔消费未退款余额");
+        }
+        this.refundedFen = refundAmountFen;
+        this.refundTransactionId = Objects.requireNonNull(refundTransactionId, "退款交易 ID 不能为空");
+        this.billingStatus = CreditPurchaseBillingStatus.REVERSED;
+        this.updatedAt = now;
+        validateInvariants();
+    }
+
     /** @return 未还余额（分）= 消费金额 - 已还 - 已退款 */
     public long getOutstandingFen() {
         return amountFen - repaidFen - refundedFen;

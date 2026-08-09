@@ -146,9 +146,6 @@ public class AuthService {
         User user = userRepository.findByLoginIdentifier(loginIdentifier)
                 .orElseThrow(() -> new BusinessException(UserErrorCode.LOGIN_INVALID));
 
-        if (user.isDisabled()) {
-            throw new BusinessException(UserErrorCode.LOGIN_INVALID);
-        }
         if (user.isProvisioning()) {
             user = recoverProvisioningUser(user);
         }
@@ -168,6 +165,11 @@ public class AuthService {
                 throw new BusinessException(UserErrorCode.LOGIN_LOCKED);
             }
             throw new BusinessException(UserErrorCode.LOGIN_INVALID);
+        }
+
+        // 先验证凭据再提示冻结，避免攻击者通过登录错误信息枚举账号状态。
+        if (user.isDisabled()) {
+            throw new BusinessException(UserErrorCode.ACCOUNT_FROZEN);
         }
 
         credential.resetLoginFailCount();

@@ -51,7 +51,7 @@ class AdminUserControllerTest {
     @Test
     void 管理员可分页查询脱敏用户列表() throws Exception {
         User user = activeUser("USRTESTUSER0120260801000001");
-        when(adminUserService.list(UserStatus.ACTIVE, null, 50))
+        when(adminUserService.list(UserStatus.ACTIVE, null, null, 50))
                 .thenReturn(List.of(new UserAdminView(user, null)));
 
         mockMvc.perform(get("/api/v1/admin/users")
@@ -63,6 +63,29 @@ class AdminUserControllerTest {
                 .andExpect(jsonPath("$.data.items[0].loginNameMasked").value("620****0001"))
                 .andExpect(jsonPath("$.data.items[0].status").value("ACTIVE"))
                 .andExpect(jsonPath("$.data.items[0].version").value(3));
+    }
+
+    @Test
+    void 管理员可按登录名关键词过滤用户列表() throws Exception {
+        User user = activeUser("USRTESTUSER0120260801000001");
+        when(adminUserService.list(null, "test", null, 50))
+                .thenReturn(List.of(new UserAdminView(user, null)));
+
+        mockMvc.perform(get("/api/v1/admin/users")
+                        .header("X-User-Id", "adm-001")
+                        .header("X-User-Roles", "ADMIN")
+                        .param("loginName", "test"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.items[0].loginNameMasked").value("620****0001"));
+    }
+
+    @Test
+    void 登录名关键词超长返回400() throws Exception {
+        mockMvc.perform(get("/api/v1/admin/users")
+                        .header("X-User-Id", "adm-001")
+                        .header("X-User-Roles", "ADMIN")
+                        .param("loginName", "a".repeat(65)))
+                .andExpect(status().isBadRequest());
     }
 
     @Test

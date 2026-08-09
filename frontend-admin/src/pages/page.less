@@ -51,6 +51,12 @@
   box-shadow: var(--admin-shadow-md);
 }
 
+/* 需要固定尺寸的运营列表禁止横向滚动；列宽和省略由页面自身配置，避免内容把面板撑开。 */
+.noHorizontalScroll :global(.ant-table-content),
+.noHorizontalScroll :global(.ant-table-container) {
+  overflow-x: hidden !important;
+}
+
 /* 面板内标题：对齐面板内边距，去掉 antd 标题默认上边距。 */
 .panelTitle {
   margin-top: 0 !important;

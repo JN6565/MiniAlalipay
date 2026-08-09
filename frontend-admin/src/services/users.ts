@@ -35,14 +35,16 @@ export interface AdminUserPage {
   nextCursor: string | null;
 }
 
-/** 分页查询 B 端用户只读列表，支持状态筛选与稳定 ID 游标分页。 */
+/** 分页查询 B 端用户只读列表，支持状态与登录名关键词筛选及稳定 ID 游标分页。 */
 export function listAdminUsers(
   status?: string,
+  loginName?: string,
   cursor?: string,
   limit = 50,
 ): Promise<ApiResponse<AdminUserPage>> {
   const params = new URLSearchParams({ limit: String(limit) });
   if (status) params.set('status', status);
+  if (loginName) params.set('loginName', loginName);
   if (cursor) params.set('cursor', cursor);
   return gatewayRequest<ApiResponse<AdminUserPage>>(`/api/v1/admin/users?${params.toString()}`);
 }

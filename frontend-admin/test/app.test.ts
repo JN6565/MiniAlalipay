@@ -50,6 +50,7 @@ describe('B 端初始身份加载', () => {
     const state = await getInitialState();
 
     expect(setActiveTokenMock).toHaveBeenCalledWith('real-token');
+    expect(state.currentAdmin?.userId).toBe('u1');
     expect(state.currentAdmin?.displayName).toBe('管理员');
     expect(state.currentAdmin?.roles).toEqual(['ADMIN', 'USER']);
   });
@@ -73,6 +74,7 @@ describe('B 端初始身份加载', () => {
     const state = await getInitialState();
 
     expect(setActiveTokenMock).toHaveBeenCalledWith(DEV_STUB_TOKEN);
+    expect(state.currentAdmin?.userId).toBe('dev');
     expect(state.currentAdmin?.roles).toEqual(['ADMIN']);
   });
 
