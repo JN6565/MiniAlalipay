@@ -103,6 +103,26 @@ class JdbcMonitoringProjectionStoreIntegrationTest {
     }
 
     @Test
+    void 日报总览按最终交易去重且趋势按整点小时聚合() {
+        jdbc.update("INSERT INTO metrics_db.monitoring_transaction_final_projection (transaction_id,amount_fen,status,terminal_at) VALUES ('tx-1',100,'SUCCESS',?)", Timestamp.from(NOW.plusSeconds(600)));
+        jdbc.update("INSERT INTO metrics_db.monitoring_transaction_final_projection (transaction_id,amount_fen,status,terminal_at) VALUES ('tx-2',200,'SUCCESS',?)", Timestamp.from(NOW.plusSeconds(3_000)));
+        jdbc.update("INSERT INTO metrics_db.monitoring_transaction_final_projection (transaction_id,amount_fen,status,terminal_at) VALUES ('tx-3',500,'REVERSED',?)", Timestamp.from(NOW.plusSeconds(3_300)));
+        jdbc.update("INSERT INTO metrics_db.monitoring_transaction_final_projection (transaction_id,amount_fen,status,terminal_at) VALUES ('tx-4',400,'SUCCESS',?)", Timestamp.from(NOW.plusSeconds(3_700)));
+
+        var statistics = store.dailyReportTransactionStats(NOW, NOW.plusSeconds(7_200), NOW.minusSeconds(7_200), NOW);
+        var trend = store.dailyReportTrend(NOW, NOW.plusSeconds(7_200));
+
+        assertThat(statistics.transactionCount()).isEqualTo(4L);
+        assertThat(statistics.transactionAmountFen()).isEqualTo(700L);
+        assertThat(statistics.successRateBps()).isEqualTo(7_500L);
+        assertThat(trend).hasSize(2);
+        assertThat(trend.get(0).transactionCount()).isEqualTo(2L);
+        assertThat(trend.get(0).amountFen()).isEqualTo(300L);
+        assertThat(trend.get(1).transactionCount()).isEqualTo(1L);
+        assertThat(trend.get(1).amountFen()).isEqualTo(400L);
+    }
+
+    @Test
     void 数据质量结果按日期任务规则过滤并解析数量() {
         jdbc.update("INSERT INTO metrics_db.quality_result (result_id,task_code,data_date,rule_code,status,evidence_json,checked_at) "
                 + "VALUES ('q-1','交易完整性','2026-08-04','rule-1','PASSED',?,?)",
@@ -162,6 +182,8 @@ class JdbcMonitoringProjectionStoreIntegrationTest {
         jdbc.execute("CREATE SCHEMA IF NOT EXISTS metrics_db");
         jdbc.execute("CREATE TABLE metrics_db.analytics_event (event_id VARCHAR(64) PRIMARY KEY,event_type VARCHAR(64),"
                 + "business_type VARCHAR(16),occurred_at TIMESTAMP,dimensions_json VARCHAR(512),metrics_json VARCHAR(512),trace_id VARCHAR(32))");
+        jdbc.execute("CREATE TABLE metrics_db.monitoring_transaction_final_projection (transaction_id VARCHAR(26) PRIMARY KEY,"
+                + "amount_fen BIGINT NOT NULL,status VARCHAR(16) NOT NULL,terminal_at TIMESTAMP)");
         jdbc.execute("CREATE TABLE metrics_db.monitor_alert (alert_id VARCHAR(26) PRIMARY KEY,rule_code VARCHAR(64),"
                 + "severity VARCHAR(8),status VARCHAR(16),subject_id VARCHAR(128),evidence_json VARCHAR(512),"
                 + "assignee_id VARCHAR(26),last_reason VARCHAR(256),version BIGINT,opened_at TIMESTAMP,updated_at TIMESTAMP,closed_at TIMESTAMP)");

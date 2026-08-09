@@ -1,0 +1,61 @@
+.meta {
+  margin-bottom: 16px;
+}
+
+.overview {
+  margin-bottom: 20px;
+}
+
+.overview :global(.ant-card) {
+  height: 100%;
+}
+
+.reportSection {
+  margin-bottom: 20px;
+}
+
+.reportSection :global(.ant-typography) {
+  margin-top: 0;
+}
+
+.trendChart {
+  display: grid;
+  grid-template-rows: 160px;
+  grid-template-columns: repeat(auto-fit, minmax(44px, 1fr));
+  align-items: flex-end;
+  gap: 8px;
+  min-height: 180px;
+  padding: 16px 0 8px;
+}
+
+.trendItem {
+  display: flex;
+  min-width: 0;
+  height: 160px;
+  flex-direction: column;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 4px;
+}
+
+.trendBar {
+  width: min(32px, 72%);
+  min-height: 12px;
+  border-radius: 4px 4px 0 0;
+}
+
+.trendItem :global(.ant-typography) {
+  width: 100%;
+  overflow: hidden;
+  text-align: center;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.successBar {
+  background: #438a61;
+}
+
+.metricTitle {
+  margin-top: 8px !important;
+}

@@ -2680,8 +2680,9 @@ C2C 创建请求与个人码订单金额锁定共用以下 OpenAPI 字段约束�
 | PATCH | `/api/v1/agent/sessions/{id}/title` | 会话所有者 | 重命名会话标题 | `title` 最大 100 字符 |
 | DELETE | `/api/v1/agent/sessions/{id}/memory` | 会话所有者 | 清除可删除记忆 | 不删除资金审计日志 |
 | GET | `/api/v1/ops/realtime-metrics` | 运营/观察者 | 查询分钟级指标 | `metricCode` + 时间范围限制 |
-| GET | `/api/v1/ops/dashboard-summary` | 运营/观察者 | 查询可信运行看板汇总 | 上海业务日指标、服务受控探针、T+1 质量与最近脱敏交易 |
+| GET | `/api/v1/ops/dashboard-summary` | 运营/观察者 | 查询可信运行看板汇总 | 上海业务日最终成功交易金额、服务受控探针、T+1 质量与最近脱敏交易；金额口径与日报一致 |
 | GET | `/api/v1/ops/daily-reports` | 运营/观察者 | 查询 T+1 报表 | 返回口径与质量版本 |
+| GET | `/api/v1/ops/daily-reports/{reportDate}/detail` | 运营/观察者 | 查询 T+1 日报详情 | 返回元信息、交易总览、每小时一条的成功交易趋势、脱敏对账、质量维度和告警汇总；只消费业务事件与 metrics_db 投影 |
 | POST | `/api/v1/ops/daily-report-previews` | 系统管理员 | 生成昨日零点至当前时刻的临时报表预览 | 服务端确定上海时间窗；只读聚合，质量门禁失败不返回指标，不覆盖正式日报 |
 | GET | `/api/v1/ops/alerts` | 运营/观察者 | 查询告警 | 游标分页；观察者只读 |
 | POST | `/api/v1/ops/alerts/{id}/acknowledge` | 运营 | 确认告警 | 状态 CAS + 说明必填 |
@@ -3553,7 +3554,7 @@ flowchart LR
 
 离线指标包括登录成功率、注册转化率、六类交易成功率与金额、余额不足/额度不足占比、AI 转账完成率、信用额度利用率/应收/逾期、TCC 补偿成功率、动态扫码成功率、个人码转化率、固定请求支付/过期率以及充值和退款金额。任务按上海业务日 01:00 启动，先检查 Inbox 未完成数和隔离事件数；质量门禁通过后以指标版本 1 发布 `daily_metric`，失败结果保留在 `quality_result` 并隐藏当日指标，允许安全重跑。系统管理员可按需触发“昨日零点至当前时刻”的临时预览：时间窗必须由服务端时钟计算，复用 Inbox 与隔离事件质量检查；预览只读聚合，不写入 `daily_metric` 或 `quality_result`，门禁失败时不返回指标值，避免未结束业务日数据冒充正式 T+1 报表。B 端从临时报表跳转至数据质量页时，仅可通过当前应用路由状态携带该次响应中的检查结果，并必须将其标识为未持久化的临时预览检查；页面刷新或直接访问时只能查询 `quality_result` 中的正式结果。
 
-T+1 报表按事件类型聚合为单指标行，不按业务类型拆分维度；指标中文名称、计量单位和计算公式由 `metric_definition` 种子提供，B 端报表页通过 `metric-definitions` 接口加载后按指标码映射展示。
+T+1 报表按事件类型聚合为单指标行，不按业务类型拆分维度；指标中文名称、计量单位和计算公式由 `metric_definition` 种子提供，B 端报表页通过 `metric-definitions` 接口加载后按指标码映射展示。监控消费者将 `transaction.accepted` 和 `transaction.status.changed` 事件归并为 `monitoring_transaction_final_projection`：每个交易号只保留最新状态、金额和终态时间，旧事件不得覆盖新状态。新增该投影时，若历史监控事件缺失统计所需字段，允许在一次性、幂等的前向迁移中读取业务中心自有的 `business_db.fund_transaction` 快照和 Outbox 事件时间，回填 `metrics_db` 投影；迁移完成后日常查询与消费者回放仍只消费业务事件和 `metrics_db` 投影，不得跨服务访问或修改资金事实。日报详情和可信运行看板均以该投影中的最终 `SUCCESS` 交易累计金额，成功率以 `SUCCESS`、`REVERSED`、`CANCELLED` 三种最终状态为分母；日报趋势按上海业务日整点每小时聚合一次，只返回成功笔数和金额。质量、告警从 `quality_result`、`monitor_alert` 读取，对账明细从分析事件读取；禁止直接查询业务交易表或 account-center 账本表。
 
 个人收款生命周期事件固定为：`P2P_COLLECTION_CODE_CREATED`、`P2P_COLLECTION_CODE_REVOKED`、`P2P_COLLECTION_REQUEST_CREATED`、`P2P_COLLECTION_REQUEST_CANCELLED`、`P2P_COLLECTION_REQUEST_EXPIRED`、`P2P_COLLECTION_ORDER_ACCEPTED`、`P2P_COLLECTION_ORDER_SUCCEEDED`、`P2P_COLLECTION_ORDER_FAILED`。所有事件携带 `traceId`、`sourceType`、来源 ID、订单 ID 和可选交易 ID，不携带原始令牌或完整账户。
 

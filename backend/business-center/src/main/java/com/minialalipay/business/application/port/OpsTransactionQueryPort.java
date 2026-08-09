@@ -30,6 +30,7 @@ public interface OpsTransactionQueryPort {
         return new DashboardTransactionStats(0L, 0L, 0L, 0L);
     }
 
+
     /**
      * 运营交易查询条件；cursor 为不透明复合游标（创建时间 + 交易 ID），时间范围为创建时间过滤，
      * initiator 为发起用户 ID 关键词（按原始发起人 ID 模糊匹配，空表示不限）。
@@ -40,6 +41,7 @@ public interface OpsTransactionQueryPort {
     /** 看板交易汇总；金额单位为分，成功率单位为万分比。 */
     record DashboardTransactionStats(long successAmountFen, long successRateBps, long pendingManualCaseCount,
                                      long definitiveTransactionCount) { }
+
 
     /** 游标键：创建时间毫秒与交易 ID 复合键，保证「创建时间倒序」分页稳定并处理同毫秒平局。 */
     record CursorKey(Instant createdAt, String transactionId) { }

@@ -87,6 +87,58 @@ export interface DailyReportGeneration {
   failures: Array<{ eventId: string; reason: string; retryCount: number; status: string }>;
 }
 
+/** T+1 日报详情，与 OpenAPI DailyReportDetail 对齐；金额字段保持整数分。 */
+export interface DailyReportDetail {
+  reportMeta: {
+    reportDate: string;
+    generatedAt: string;
+    reportVersion: string;
+    dataWindow: { from: string; to: string };
+    dataSources: string[];
+  };
+  metrics: DailyMetricItem[];
+  overview: {
+    transactionCount: number;
+    transactionAmountFen: number;
+    successRateBps: number;
+    averageLatencyMs: number;
+    dayOverDayChanges: {
+      transactionCountBps: number;
+      transactionAmountBps: number;
+      successRateBps: number;
+      averageLatencyBps: number;
+    };
+  };
+  transactionTrend: Array<{
+    timeBucket: string;
+    transactionCount: number;
+    amountFen: number;
+  }>;
+  reconciliation: Array<{
+    voucherNo?: string | null;
+    transactionId: string;
+    occurredAt: string;
+    amountFen: number;
+    differenceType: string;
+    status: string;
+  }>;
+  quality: Array<{
+    dimension: string;
+    definition: string;
+    currentValue?: number | null;
+    threshold?: number | null;
+    conclusion: string;
+  }>;
+  alerts: Array<{
+    alertId: string;
+    level: string;
+    content: string;
+    occurredAt: string;
+    action: string;
+    status: string;
+  }>;
+}
+
 /** 可信运行看板顶部四项只读指标；金额单位为分，成功率单位为万分比。 */
 export interface DashboardKpis {
   todayTransactionAmountFen: number;
@@ -289,6 +341,13 @@ export function generateDailyReportPreview(): Promise<ApiResponse<DailyReportPre
 export function generateDailyReport(reportDate: string): Promise<ApiResponse<DailyReportGeneration>> {
   return gatewayRequest<ApiResponse<DailyReportGeneration>>(
     `/api/v1/ops/daily-reports/${encodeURIComponent(reportDate)}/generate`, { method: 'POST' },
+  );
+}
+
+/** 查询已发布 T+1 日报详情，服务端返回脱敏聚合结果。 */
+export function getDailyReportDetail(reportDate: string): Promise<ApiResponse<DailyReportDetail>> {
+  return gatewayRequest<ApiResponse<DailyReportDetail>>(
+    `/api/v1/ops/daily-reports/${encodeURIComponent(reportDate)}/detail`,
   );
 }
 

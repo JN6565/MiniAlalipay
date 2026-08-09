@@ -4,6 +4,7 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import com.minialalipay.business.application.monitoring.MonitoringEvent;
 import com.minialalipay.business.application.monitoring.MonitoringEventStore;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.dao.DuplicateKeyException;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.stereotype.Repository;
 
@@ -128,9 +129,63 @@ public class JdbcMonitoringEventStore implements MonitoringEventStore {
                             + "dimensions_json,metrics_json,trace_id) VALUES (?,?,?,?,?,?,?,?,?)",
                     event.eventId(), event.eventType(), event.version(), businessType, Timestamp.from(event.occurredAt()),
                     ANALYTICS_DEFINITION_VERSION, dimensions, dimensions, event.traceId());
+            projectFinalTransaction(event);
         } catch (com.fasterxml.jackson.core.JsonProcessingException impossible) {
             throw new IllegalStateException("监控事件属性无法序列化", impossible);
         }
+    }
+
+    /**
+     * 将资金交易事件归并为按交易号唯一的最终状态投影。
+     *
+     * <p>分析事件保留完整审计轨迹，不能直接作为金额汇总来源；同一交易会经历受理、处理中和终态等多个事件。
+     * 此处以事件发生时间和事件号拒绝乱序旧消息覆盖新状态，保证看板与 T+1 日报只统计一次最终结果。</p>
+     */
+    private void projectFinalTransaction(MonitoringEvent event) {
+        if (!"transaction.accepted".equals(event.eventType()) && !"transaction.status.changed".equals(event.eventType())) {
+            return;
+        }
+        Map<String, String> attributes = event.attributes();
+        String status = attributes.get("status");
+        Timestamp occurredAt = Timestamp.from(event.occurredAt());
+        Timestamp acceptedAt = "transaction.accepted".equals(event.eventType()) ? occurredAt : null;
+        Timestamp terminalAt = isTerminalStatus(status) ? occurredAt : null;
+        String transactionId = attributes.get("transactionId");
+        long amountFen = parseLong(attributes.get("amountFen"));
+        if (updateFinalTransactionIfNewer(transactionId, amountFen, attributes.get("businessType"), status,
+                terminalAt, occurredAt, event.eventId()) == 0) {
+            try {
+                jdbc.update("INSERT INTO metrics_db.monitoring_transaction_final_projection "
+                                + "(transaction_id,amount_fen,business_type,status,accepted_at,terminal_at,source_occurred_at,source_event_id,updated_at) "
+                                + "VALUES (?,?,?,?,?,?,?,?,?)",
+                        transactionId, amountFen, attributes.get("businessType"), status, acceptedAt, terminalAt,
+                        occurredAt, event.eventId(), occurredAt);
+            } catch (DuplicateKeyException ignored) {
+                // 并发消费者已先插入同一交易时，只允许本事件在时间更新条件满足后覆盖。
+                updateFinalTransactionIfNewer(transactionId, amountFen, attributes.get("businessType"), status,
+                        terminalAt, occurredAt, event.eventId());
+            }
+        }
+        if (acceptedAt != null) {
+            // 受理事件可能晚于终态事件到达；它只能补齐受理时间，绝不能回退当前终态。
+            jdbc.update("UPDATE metrics_db.monitoring_transaction_final_projection SET accepted_at=COALESCE(accepted_at,?) "
+                    + "WHERE transaction_id=?", acceptedAt, transactionId);
+        }
+    }
+
+    private int updateFinalTransactionIfNewer(String transactionId, long amountFen, String businessType, String status,
+                                               Timestamp terminalAt, Timestamp occurredAt, String eventId) {
+        return jdbc.update("UPDATE metrics_db.monitoring_transaction_final_projection SET "
+                        + "amount_fen=CASE WHEN ?>0 THEN ? ELSE amount_fen END,business_type=COALESCE(?,business_type),"
+                        + "status=?,terminal_at=CASE WHEN ? IS NOT NULL THEN ? ELSE terminal_at END,"
+                        + "source_occurred_at=?,source_event_id=?,updated_at=? WHERE transaction_id=? AND "
+                        + "(source_occurred_at<? OR (source_occurred_at=? AND source_event_id<?))",
+                amountFen, amountFen, businessType, status, terminalAt, terminalAt, occurredAt, eventId, occurredAt,
+                transactionId, occurredAt, occurredAt, eventId);
+    }
+
+    private static boolean isTerminalStatus(String status) {
+        return "SUCCESS".equals(status) || "REVERSED".equals(status) || "CANCELLED".equals(status);
     }
 
     @Override

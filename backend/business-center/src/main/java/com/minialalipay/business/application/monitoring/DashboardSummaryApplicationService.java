@@ -58,13 +58,16 @@ public class DashboardSummaryApplicationService {
         Instant now = clock.instant();
         LocalDate today = now.atZone(BUSINESS_ZONE).toLocalDate();
         Instant startOfToday = today.atStartOfDay(BUSINESS_ZONE).toInstant();
-        OpsTransactionQueryPort.DashboardTransactionStats statistics =
+        Instant startOfYesterday = today.minusDays(1).atStartOfDay(BUSINESS_ZONE).toInstant();
+        MonitoringProjectionStore.DailyReportTransactionStats statistics =
+                monitoringStore.dailyReportTransactionStats(startOfToday, now, startOfYesterday, startOfToday);
+        OpsTransactionQueryPort.DashboardTransactionStats operationalStatistics =
                 transactionStore.dashboardTransactionStats(startOfToday, now);
 
         return new DashboardSummary(
                 now,
-                new DashboardSummary.DashboardKpis(statistics.successAmountFen(), statistics.successRateBps(),
-                        statistics.pendingManualCaseCount(), monitoringStore.countOpenAlerts()),
+                new DashboardSummary.DashboardKpis(statistics.transactionAmountFen(), statistics.successRateBps(),
+                        operationalStatistics.pendingManualCaseCount(), monitoringStore.countOpenAlerts()),
                 monitoringStore.listRealtimeMetrics("transaction.status.changed", now.minusSeconds(TREND_WINDOW_SECONDS), now),
                 monitoringStore.listDataQuality(today.minusDays(1), null, null),
                 healthProbe.probeAll(),
