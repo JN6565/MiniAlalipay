@@ -442,27 +442,22 @@ public class AgentLoop {
         }
 
         // 3. 异常金额检测（PRD FR-AI-003：超限金额主动风险提示）
+        // 硬拒绝（>50000 元）直接返回错误，软提示（≥5000 元）不阻断工具执行，
+        // 而是在工具调用成功后将 warning 注入返回数据，让 LLM 引导用户确认。
         AmountCheckResult amountCheck = checkAmountLimits(toolName, arguments);
-        if (amountCheck != null) {
-            if (amountCheck.hardReject) {
-                // 超过硬上限，直接拒绝
-                log.warn("异常金额拒绝: tool={}, reason={}", toolName, amountCheck.message);
-                return new ToolExecutionResult(
-                        new ToolResult("AMOUNT_EXCEEDED", Map.of(), amountCheck.message, 0));
-            }
-            // 大额风险提示，作为成功结果返回，让 LLM 引导用户确认
-            log.warn("异常金额提示: tool={}, warning={}", toolName, amountCheck.message);
+        if (amountCheck != null && amountCheck.hardReject) {
+            log.warn("异常金额拒绝: tool={}, reason={}", toolName, amountCheck.message);
             return new ToolExecutionResult(
-                    new ToolResult("SUCCESS", Map.of("warning", amountCheck.message),
-                            amountCheck.message, 0));
+                    new ToolResult("AMOUNT_EXCEEDED", Map.of(), amountCheck.message, 0));
         }
+        String amountWarning = (amountCheck != null) ? amountCheck.message : null;
 
         // 4. 构建调用参数（添加幂等键）
         Map<String, Object> params = new HashMap<>(arguments);
         params.put("idempotencyKey",
                 context.userId() + "-" + toolName + "-" + System.currentTimeMillis());
 
-        // 4. 执行工具
+        // 5. 执行工具
         long startMs = System.currentTimeMillis();
         ToolResult toolResult;
         try {
@@ -474,7 +469,15 @@ public class AgentLoop {
         }
         int duration = (int) (System.currentTimeMillis() - startMs);
 
-        // 5. 审计
+        // 5.1 大额风险提示注入：工具执行成功时，将金额 warning 合并到返回数据中
+        if (amountWarning != null && toolResult.isSuccess() && toolResult.data() != null) {
+            java.util.Map<String, Object> enriched = new java.util.HashMap<>(toolResult.data());
+            enriched.put("warning", amountWarning);
+            toolResult = new ToolResult(toolResult.resultCode(), enriched,
+                    toolResult.errorMessage(), toolResult.durationMs());
+        }
+
+        // 6. 审计
         String traceId = AiServiceUtils.generateUlid();
         toolAudit.audit(toolName, params, toolResult.resultCode(),
                 context.sessionId(), traceId, duration, Instant.now());

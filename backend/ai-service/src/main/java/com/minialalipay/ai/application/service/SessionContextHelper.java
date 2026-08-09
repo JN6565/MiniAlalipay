@@ -182,10 +182,29 @@ public class SessionContextHelper {
      * @return 操作名称（如 "transfer"、"repay"），无完成操作时返回 null
      */
     public String inferCompletedAction(List<String> executedTools) {
-        if (executedTools == null || executedTools.isEmpty()) return null;
-        if (executedTools.contains("submit_confirmed_transfer")) return "transfer";
-        if (executedTools.contains("create_credit_repayment_draft")) return "repay";
-        if (executedTools.contains("prepare_confirmation_card")) return "transfer_confirm_pending";
+        return inferCompletedAction(executedTools, null);
+    }
+
+    /**
+     * 根据已执行工具列表和用户消息推断用户刚完成的操作。
+     *
+     * <p>除了检查工具列表外，还会检查用户消息是否包含前端发来的系统通知
+     * （如转账确认提交通知），以覆盖前端直接完成操作而未经过 AgentLoop 工具调用的场景。</p>
+     *
+     * @param executedTools 已执行的工具名列表
+     * @param userMessage 用户消息内容（可空）
+     * @return 操作名称（如 "transfer"、"repay"），无完成操作时返回 null
+     */
+    public String inferCompletedAction(List<String> executedTools, String userMessage) {
+        if (executedTools != null) {
+            if (executedTools.contains("submit_confirmed_transfer")) return "transfer";
+            if (executedTools.contains("create_credit_repayment_draft")) return "repay";
+            if (executedTools.contains("prepare_confirmation_card")) return "transfer_confirm_pending";
+        }
+        // 前端直接完成转账后发来的系统通知，AgentLoop 未执行 submit_confirmed_transfer
+        if (userMessage != null && userMessage.contains("[系统通知]") && userMessage.contains("转账已确认提交")) {
+            return "transfer";
+        }
         return null;
     }
 

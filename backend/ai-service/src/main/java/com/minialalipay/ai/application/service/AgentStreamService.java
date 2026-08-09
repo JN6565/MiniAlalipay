@@ -212,7 +212,7 @@ public class AgentStreamService {
             if (finalSlots == null) {
                 finalSlots = new HashMap<>();
             }
-            String completedAction = contextHelper.inferCompletedAction(agentResult.executedTools());
+            String completedAction = contextHelper.inferCompletedAction(agentResult.executedTools(), rawContent);
             if (completedAction != null) {
                 finalSlots.put("lastCompletedAction", completedAction);
             }

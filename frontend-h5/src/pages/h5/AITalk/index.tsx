@@ -14,7 +14,7 @@ import ClarificationBubble from './components/ClarificationBubble';
 import StreamingBubble from './components/StreamingBubble';
 import SessionList from './components/SessionList';
 import MessageActions from './components/MessageActions';
-import { confirmSubmission } from '@/services/ai';
+import { confirmSubmission, sendMessage } from '@/services/ai';
 import './index.less';
 
 let idCounter = 0;
@@ -404,7 +404,7 @@ const AITalkPage: React.FC = () => {
     async (draftId: string, payeeId: string, amountFen: number, password: string, version?: number) => {
       try {
         const idempotencyKey = `confirm_${draftId}_${Date.now()}`;
-        await confirmSubmission(draftId, password, version ?? 0, idempotencyKey);
+        const transferResult = await confirmSubmission(draftId, password, version ?? 0, idempotencyKey);
         // 更新内嵌卡片状态为已完成（确认卡片现在嵌入在文本消息中）
         setMessages((prev) =>
           prev.map((m) =>
@@ -425,6 +425,19 @@ const AITalkPage: React.FC = () => {
           timestamp: new Date(),
         };
         setMessages((prev) => [...prev, successMsg]);
+
+        // 通知 AI agent 转账已提交，更新其上下文（不显示在 UI 中）
+        if (transferResult?.transactionId && sessionId) {
+          try {
+            await sendMessage({
+              clientMessageId: `notify_transfer_${transferResult.transactionId}_${Date.now()}`,
+              sessionId,
+              content: `[系统通知] 转账已确认提交：交易ID=${transferResult.transactionId}，状态=${transferResult.status || 'PROCESSING'}，金额=${(amountFen / 100).toFixed(2)}元，收款人ID=${payeeId}。`,
+            });
+          } catch (e) {
+            console.warn('通知 AI agent 转账结果失败:', e);
+          }
+        }
       } catch (err: any) {
         const errorMsg: AssistantErrorMessage = {
           id: nextId(),
@@ -437,7 +450,7 @@ const AITalkPage: React.FC = () => {
         setMessages((prev) => [...prev, errorMsg]);
       }
     },
-    [],
+    [sessionId],
   );
 
   /** 确认卡片——用户取消操作 */
