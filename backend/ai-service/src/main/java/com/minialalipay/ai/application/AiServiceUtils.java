@@ -16,8 +16,10 @@ public final class AiServiceUtils {
     public static final int CONTEXT_TURN_LIMIT = 6;
     /** 6 轮对话对应 12 条消息（每轮一问一答） */
     public static final int CONTEXT_MESSAGE_LIMIT = CONTEXT_TURN_LIMIT * 2;
-    /** 上下文 token 上限，超出后截断早期消息 */
+    /** 上下文 token 上限，超出后触发压缩 */
     public static final int MAX_CONTEXT_TOKENS = 4096;
+    /** PRD 要求的压缩轮次阈值：对话超过 10 轮（20 条消息）时触发四部分结构化压缩 */
+    public static final int COMPRESSION_ROUND_THRESHOLD = 20;
 
     /** GAP-3：大额风险提示阈值（分），单笔转账 ≥ 此值时主动确认 */
     public static final long LARGE_AMOUNT_THRESHOLD_FEN = 500_000L;
@@ -95,6 +97,104 @@ public final class AiServiceUtils {
         result = result.replaceAll("\n\\s*\n", "\n").trim();
 
         return result;
+    }
+
+    // ── 金额解析 ──────────────────────────────────────────────
+
+    /**
+     * 从自然语言文本中提取金额（单位：分）。
+     *
+     * <p>支持阿拉伯数字（"2元"、"50块"、"100.5"）和中文数字
+     * （"两块"、"五十"、"一百"、"一千五百"）。</p>
+     *
+     * @param text 用户消息文本
+     * @return 金额（分），未找到时返回 {@code null}
+     */
+    public static Long parseAmountFromText(String text) {
+        if (text == null || text.isBlank()) return null;
+
+        // 1. 阿拉伯数字 + 单位（元/块/毛/分）
+        java.util.regex.Matcher m = java.util.regex.Pattern
+                .compile("(\\d+(?:\\.\\d+)?)\\s*(?:元|块|毛|分)?").matcher(text);
+        if (m.find()) {
+            double yuan = Double.parseDouble(m.group(1));
+            // 判断单位：如果后面紧跟"毛"或"分"则按对应单位，否则默认"元"
+            String after = m.group(0);
+            if (after.endsWith("毛")) return (long) (yuan * 10);
+            if (after.endsWith("分")) return (long) yuan;
+            return (long) (yuan * 100);
+        }
+
+        // 2. 纯中文数字（无阿拉伯数字时尝试）
+        Long chineseAmount = parseChineseAmount(text);
+        if (chineseAmount != null) return chineseAmount;
+
+        return null;
+    }
+
+    /**
+     * 解析中文数字为金额（分）。
+     * 支持"两块"、"五十"、"一百"、"一千五百"、"一万"等。
+     */
+    private static Long parseChineseAmount(String text) {
+        // 提取中文数字片段（含单位）
+        java.util.regex.Matcher m = java.util.regex.Pattern
+                .compile("([零一二三四五六七八九十百千万亿两]+)\\s*(?:元|块)?").matcher(text);
+        if (!m.find()) return null;
+
+        String numStr = m.group(1);
+        long result = 0;
+        long segment = 0; // 当前段（万以下）
+
+        for (int i = 0; i < numStr.length(); i++) {
+            char c = numStr.charAt(i);
+            int digit = chineseDigitValue(c);
+            if (digit >= 0) {
+                segment += digit;
+            } else {
+                long multiplier = chineseUnitMultiplier(c);
+                if (multiplier > 0) {
+                    if (segment == 0) segment = 1; // "百" → 100, "千" → 1000
+                    if (multiplier >= 10000) {
+                        result += segment * multiplier;
+                        segment = 0;
+                    } else {
+                        segment *= multiplier;
+                    }
+                }
+            }
+        }
+        result += segment;
+        if (result <= 0) return null;
+        return result * 100; // 元 → 分
+    }
+
+    private static int chineseDigitValue(char c) {
+        return switch (c) {
+            case '零' -> 0;
+            case '一' -> 1;
+            case '二', '两' -> 2;
+            case '三' -> 3;
+            case '四' -> 4;
+            case '五' -> 5;
+            case '六' -> 6;
+            case '七' -> 7;
+            case '八' -> 8;
+            case '九' -> 9;
+            case '十' -> 10;
+            default -> -1;
+        };
+    }
+
+    private static long chineseUnitMultiplier(char c) {
+        return switch (c) {
+            case '十' -> 10;
+            case '百' -> 100;
+            case '千' -> 1000;
+            case '万' -> 10000;
+            case '亿' -> 100000000;
+            default -> 0;
+        };
     }
 
     // ── Token 估算 ──────────────────────────────────────────────

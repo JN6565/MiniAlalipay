@@ -3,6 +3,7 @@ package com.minialalipay.ai.domain.tool;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
+import java.util.stream.Collectors;
 
 /**
  * MCP 工具白名单注册表。
@@ -257,6 +258,43 @@ public class ToolCatalog {
 
     public Map<String, ToolDefinition> allTools() {
         return Map.copyOf(tools);
+    }
+
+    /**
+     * MCP 工具发现接口。
+     *
+     * <p>返回所有已注册工具的可发现列表，符合 MCP Protocol 的 tools/list 响应格式。
+     * Agent 通过此方法动态发现可用工具，无需硬编码工具列表。</p>
+     *
+     * @return MCP 格式的工具描述列表，每项包含 name、description、inputSchema
+     */
+    public List<Map<String, Object>> discoverTools() {
+        return tools.values().stream()
+                .map(tool -> Map.<String, Object>of(
+                        "name", tool.toolName(),
+                        "description", tool.description(),
+                        "inputSchema", tool.inputSchema()
+                ))
+                .collect(Collectors.toList());
+    }
+
+    /**
+     * 按风险等级筛选工具发现接口。
+     *
+     * <p>用于 MCP 层权限控制：不同角色可发现不同风险等级的工具。</p>
+     *
+     * @param maxRiskLevel 允许的最高风险等级
+     * @return 符合条件的工具描述列表
+     */
+    public List<Map<String, Object>> discoverTools(ToolRiskLevel maxRiskLevel) {
+        return tools.values().stream()
+                .filter(tool -> tool.riskLevel().ordinal() <= maxRiskLevel.ordinal())
+                .map(tool -> Map.<String, Object>of(
+                        "name", tool.toolName(),
+                        "description", tool.description(),
+                        "inputSchema", tool.inputSchema()
+                ))
+                .collect(Collectors.toList());
     }
 
     /**

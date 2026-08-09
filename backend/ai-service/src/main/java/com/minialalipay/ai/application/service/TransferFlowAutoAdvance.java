@@ -1,5 +1,6 @@
 package com.minialalipay.ai.application.service;
 
+import com.minialalipay.ai.application.AiServiceUtils;
 import com.minialalipay.ai.application.port.AgentDecision;
 import com.minialalipay.ai.application.port.ToolResult;
 import com.minialalipay.ai.application.service.AgentLoop.AgentContext;
@@ -147,7 +148,8 @@ public class TransferFlowAutoAdvance {
 
         int advancedCount = 0;
         for (int step = 0; step < MAX_AUTO_STEPS; step++) {
-            NextStepInfo nextStep = determineNextStep(executedTools, accumulatedSlots);
+            NextStepInfo nextStep = determineNextStep(executedTools, accumulatedSlots,
+                    context.userMessage());
             if (nextStep == null) {
                 return advancedCount > 0;
             }
@@ -237,9 +239,17 @@ public class TransferFlowAutoAdvance {
     /**
      * 根据当前流程状态确定下一步应执行的工具。
      *
+     * <p>当 {@code accumulatedSlots} 中缺少 {@code amountFen} 时，
+     * 尝试从用户原始消息中提取金额作为兜底（支持阿拉伯数字和中文数字）。</p>
+     *
+     * @param executedTools 已执行的工具列表
+     * @param slots 累积槽位
+     * @param userMessage 用户原始消息（用于金额兜底提取）
      * @return 下一步工具信息，或 null 表示流程已完成/无法继续
      */
-    private NextStepInfo determineNextStep(List<String> executedTools, Map<String, Object> slots) {
+    private NextStepInfo determineNextStep(List<String> executedTools,
+                                            Map<String, Object> slots,
+                                            String userMessage) {
         boolean hasSearch = executedTools.contains("search_payees");
         boolean hasDraft = executedTools.contains("create_transfer_draft");
         boolean hasValidate = executedTools.contains("validate_transfer_draft");
@@ -248,8 +258,17 @@ public class TransferFlowAutoAdvance {
         if (hasSearch && !hasDraft) {
             Object payeeId = slots.get("payeeId");
             Object amountFen = slots.get("amountFen");
+            // 兜底：从用户消息中提取金额
+            if (amountFen == null && userMessage != null) {
+                Long parsed = AiServiceUtils.parseAmountFromText(userMessage);
+                if (parsed != null) {
+                    amountFen = parsed;
+                    log.info("从用户消息中提取到金额: userMessage={}, amountFen={}", userMessage, parsed);
+                }
+            }
             if (payeeId == null || amountFen == null) {
-                log.warn("FinalReply 自动推进失败: 缺少 payeeId 或 amountFen, slots={}", slots.keySet());
+                log.warn("FinalReply 自动推进失败: 缺少 payeeId 或 amountFen, slots={}, hasUserMessage={}",
+                        slots.keySet(), userMessage != null);
                 return null;
             }
             return new NextStepInfo("create_transfer_draft",

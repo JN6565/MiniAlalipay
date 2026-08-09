@@ -247,9 +247,9 @@ public class AgentStreamService {
                 session.updateSlots(finalSlots);
             }
 
-            // 11. 上下文压缩
+            // 11. 上下文压缩（Token 超限或对话超过 10 轮时触发四部分结构化压缩）
             long totalTokens = contextHelper.estimateContextTokens(context, agentResult.totalTokens());
-            if (totalTokens > AiServiceUtils.MAX_CONTEXT_TOKENS) {
+            if (contextHelper.needsCompression(session.getSessionId(), totalTokens)) {
                 String summary = contextHelper.compressContext(context);
                 session.updateSummary(summary);
             }

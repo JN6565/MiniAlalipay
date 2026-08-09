@@ -441,7 +441,23 @@ public class AgentLoop {
             }
         }
 
-        // 3. 构建调用参数（添加幂等键）
+        // 3. 异常金额检测（PRD FR-AI-003：超限金额主动风险提示）
+        AmountCheckResult amountCheck = checkAmountLimits(toolName, arguments);
+        if (amountCheck != null) {
+            if (amountCheck.hardReject) {
+                // 超过硬上限，直接拒绝
+                log.warn("异常金额拒绝: tool={}, reason={}", toolName, amountCheck.message);
+                return new ToolExecutionResult(
+                        new ToolResult("AMOUNT_EXCEEDED", Map.of(), amountCheck.message, 0));
+            }
+            // 大额风险提示，作为成功结果返回，让 LLM 引导用户确认
+            log.warn("异常金额提示: tool={}, warning={}", toolName, amountCheck.message);
+            return new ToolExecutionResult(
+                    new ToolResult("SUCCESS", Map.of("warning", amountCheck.message),
+                            amountCheck.message, 0));
+        }
+
+        // 4. 构建调用参数（添加幂等键）
         Map<String, Object> params = new HashMap<>(arguments);
         params.put("idempotencyKey",
                 context.userId() + "-" + toolName + "-" + System.currentTimeMillis());
@@ -496,6 +512,59 @@ public class AgentLoop {
             return "";
         }
     }
+
+    /**
+     * 金额限制检查（PRD FR-AI-003）。
+     *
+     * <p>当用户输入明显超限金额（如“转给小王 500 万”）时，
+     * 在工具执行前拦截并返回风险提示或拒绝。
+     * 仅对涉及资金写入的工具（转账草稿、还款草稿）生效。</p>
+     *
+     * <p>检测规则：
+     * <ul>
+     *   <li>单笔金额 > 50,000 元（5,000,000 分）时硬拒绝（超过 Schema 上限）</li>
+     *   <li>单笔金额 ≥ {@link AiServiceUtils#LARGE_AMOUNT_THRESHOLD_FEN}（5,000 元）时风险提示</li>
+     * </ul>
+     *
+     * @param toolName 工具名
+     * @param arguments 工具参数
+     * @return 检查结果，无异常时返回 null
+     */
+    private AmountCheckResult checkAmountLimits(String toolName, Map<String, Object> arguments) {
+        if (!"create_transfer_draft".equals(toolName)
+                && !"create_credit_repayment_draft".equals(toolName)) {
+            return null;
+        }
+        Object amountObj = arguments.get("amountFen");
+        if (amountObj == null) return null;
+
+        long amountFen;
+        try {
+            amountFen = ((Number) amountObj).longValue();
+        } catch (ClassCastException e) {
+            return null;
+        }
+
+        // 超过 Schema 硬上限（50,000 元）直接拒绝
+        if (amountFen > 5_000_000L) {
+            return new AmountCheckResult(true,
+                    "金额超过单笔上限 50,000 元，请拆分或前往柜台办理。");
+        }
+
+        // 超过大额阈值（5,000 元）返回风险提示，让 LLM 引导用户确认
+        if (amountFen >= AiServiceUtils.LARGE_AMOUNT_THRESHOLD_FEN) {
+            String action = "create_transfer_draft".equals(toolName) ? "转账" : "还款";
+            return new AmountCheckResult(false,
+                    String.format("⚠️ 大额%s风险提示：本次%s金额为 %.2f 元，"
+                                    + "请确认金额是否正确，并提醒用户注意资金安全。",
+                            action, action, amountFen / 100.0));
+        }
+
+        return null;
+    }
+
+    /** 金额检查结果（内部使用） */
+    private record AmountCheckResult(boolean hardReject, String message) {}
 
     /**
      * 工具选择校验：检测 LLM 选择的工具是否与用户意图明显不匹配。

@@ -242,6 +242,30 @@ public class SessionContextHelper {
     }
 
     /**
+     * 判断会话是否需要触发上下文压缩。
+     *
+     * <p>满足以下任一条件时返回 {@code true}：
+     * <ul>
+     *   <li>对话总消息数超过 10 轮（{@link AiServiceUtils#COMPRESSION_ROUND_THRESHOLD}）</li>
+     *   <li>上下文 Token 估算超过上限（{@link AiServiceUtils#MAX_CONTEXT_TOKENS}）</li>
+     * </ul>
+     *
+     * @param sessionId 会话 ID
+     * @param contextTokens 当前上下文 Token 估算
+     * @return 需要压缩时返回 {@code true}
+     */
+    public boolean needsCompression(String sessionId, long contextTokens) {
+        if (contextTokens > AiServiceUtils.MAX_CONTEXT_TOKENS) {
+            return true;
+        }
+        // PRD 10.3：对话超过 10 轮时触发压缩。
+        // 查询前 N+1 条消息判断是否超过阈值，避免全表扫描。
+        List<AgentMessage> probe = messageRepository.findBySessionId(
+                sessionId, AiServiceUtils.COMPRESSION_ROUND_THRESHOLD + 1);
+        return probe.size() > AiServiceUtils.COMPRESSION_ROUND_THRESHOLD;
+    }
+
+    /**
      * 压缩对话上下文为结构化摘要。
      *
      * @param context 当前对话上下文
