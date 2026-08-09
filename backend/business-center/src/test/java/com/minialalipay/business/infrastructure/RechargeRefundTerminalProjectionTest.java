@@ -156,5 +156,6 @@ class RechargeRefundTerminalProjectionTest {
         jdbc.execute("CREATE TABLE business_db.recharge_daily_usage (user_id VARCHAR(26),business_date DATE,processing_fen BIGINT,success_fen BIGINT,processing_count INT,success_count INT,version BIGINT,updated_at TIMESTAMP,PRIMARY KEY (user_id,business_date))");
         jdbc.execute("CREATE TABLE business_db.refund_order (refund_order_id VARCHAR(26) PRIMARY KEY,transaction_id VARCHAR(26),status VARCHAR(32),version BIGINT,completed_at TIMESTAMP,updated_at TIMESTAMP)");
         jdbc.execute("CREATE TABLE business_db.outbox_event (event_id VARCHAR(64) PRIMARY KEY,aggregate_type VARCHAR(32),aggregate_id VARCHAR(26),aggregate_version BIGINT,event_type VARCHAR(64),event_version INT,transaction_id VARCHAR(26),producer VARCHAR(32),trace_id VARCHAR(32),occurred_at TIMESTAMP,payload VARCHAR(512),created_at TIMESTAMP)");
+        jdbc.execute("CREATE TABLE business_db.manual_case (case_id VARCHAR(26) PRIMARY KEY,case_type VARCHAR(32),subject_type VARCHAR(24),subject_id VARCHAR(26),transaction_id VARCHAR(26),reason_code VARCHAR(32),status VARCHAR(16),operator_id VARCHAR(26),version BIGINT,created_at TIMESTAMP,updated_at TIMESTAMP)");
     }
 }

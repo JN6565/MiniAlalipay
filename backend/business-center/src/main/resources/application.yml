@@ -10,8 +10,9 @@ spring:
     driver-class-name: com.mysql.cj.jdbc.Driver
   data:
     redis:
-      host: ${REDIS_HOST:localhost}
+      host: ${REDIS_HOST:121.43.51.164}
       port: ${REDIS_PORT:6379}
+      password: teamuser2026
   flyway:
     enabled: true
     locations: classpath:db/migration

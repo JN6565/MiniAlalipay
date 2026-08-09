@@ -51,11 +51,27 @@ public interface BusinessStore {
     boolean moveToManualReview(FundTransaction transaction, long expectedVersion, String xid,
                                String eventId, String caseId, String reasonCode, Instant now);
     List<FundTransactionRecord> findRecoverable(Instant updatedBefore, int limit);
+    /**
+     * 查找可复核的人工态交易：状态为 MANUAL_REVIEW 且超过指定时间未更新。
+     *
+     * <p>人工态不是终态，恢复任务需定期复核：事实一致时重新驱动 TCC 并自动收敛为终态，
+     * 避免事实核验规则修复前的存量误判交易永远停留在人工态。</p>
+     */
+    List<FundTransactionRecord> findManualReviewRecheckable(Instant updatedBefore, int limit);
+    /**
+     * 查询交易当前活动人工工单（OPEN 或 PROCESSING）的工单号与原因码。
+     *
+     * <p>复核时据此选择恢复路径（取消事实不一致走补偿）并复用工单，
+     * 避免同一交易反复进入人工态时产生重复工单。</p>
+     */
+    Optional<ManualCaseRecord> findActiveManualCase(String transactionId);
     /** 获取指定交易的 TCC 恢复重试次数，无记录返回 0。 */
     int getTccRetryCount(String transactionId);
 
     /** 交易与请求摘要的持久化查询结果。 */
     record FundTransactionRecord(FundTransaction transaction, byte[] requestHash) { }
+    /** 活动人工工单摘要：工单号与进入人工态的原因码。 */
+    record ManualCaseRecord(String caseId, String reasonCode) { }
     /** 通用创建接口幂等事实。 */
     record IdempotencyRecord(byte[] requestHash, String resourceId) { }
 }

@@ -49,6 +49,13 @@ public class JdbcTccBranchRepository implements TccBranchRepository {
         return count != null && count == expectedCount;
     }
 
+    @Override
+    public boolean hasAccountBranch(String transactionId, TccBranchType branchType) {
+        Integer count = jdbcTemplate.queryForObject("SELECT COUNT(*) FROM account_db.tcc_branch WHERE transaction_id=? AND branch_type=?",
+                Integer.class, transactionId, branchType.name());
+        return count != null && count > 0;
+    }
+
     @Override public Optional<TccBranch> findLedgerBranchForUpdate(String xid, String resourceId) {
         return findLedgerBranchForUpdate(xid, TccBranchType.LEDGER, resourceId);
     }

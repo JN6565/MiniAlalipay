@@ -183,6 +183,10 @@ public class JdbcBusinessStore implements BusinessStore, OpsTransactionQueryPort
         projectCollectionTerminalState(transaction, eventId, now);
         projectRechargeTerminalState(transaction, now);
         projectRefundTerminalState(transaction, now);
+        // 终态发布后自动处置对应人工工单：复核收敛成功/取消的交易不得继续占用人工处置队列。
+        jdbc.update("UPDATE business_db.manual_case SET status='RESOLVED',updated_at=? "
+                        + "WHERE transaction_id=? AND status IN ('OPEN','PROCESSING')",
+                now, transaction.getTransactionId());
         appendOutbox(transaction, eventId, "transaction.status.changed", now);
         jdbc.update("UPDATE business_db.tcc_global SET status=?,next_retry_at=NULL,updated_at=? WHERE xid=?",
                 globalStatus, now, xid);
@@ -204,15 +208,33 @@ public class JdbcBusinessStore implements BusinessStore, OpsTransactionQueryPort
         appendOutbox(transaction, eventId, "transaction.status.changed", now);
         jdbc.update("UPDATE business_db.tcc_global SET status='MANUAL_REVIEW',next_retry_at=NULL,updated_at=? WHERE xid=?",
                 now, xid);
-        jdbc.update("INSERT INTO business_db.manual_case (case_id,case_type,subject_type,subject_id,transaction_id,reason_code,status,created_at,updated_at) "
-                        + "VALUES (?,'TRANSACTION_RECOVERY','FUND_TRANSACTION',?,?,?,'OPEN',?,?) "
-                        + "ON DUPLICATE KEY UPDATE updated_at=VALUES(updated_at)",
-                caseId, transaction.getTransactionId(), transaction.getTransactionId(), reasonCode, now, now);
+        // 同一交易的活动工单唯一：复核后再次进入人工态时更新已有工单原因，否则新建，
+        // 避免违反活动主体唯一索引并防止人工队列出现同一交易的重复工单。
+        int reused = jdbc.update("UPDATE business_db.manual_case SET reason_code=?,updated_at=? "
+                        + "WHERE transaction_id=? AND subject_type='FUND_TRANSACTION' AND status IN ('OPEN','PROCESSING')",
+                reasonCode, now, transaction.getTransactionId());
+        if (reused == 0) {
+            jdbc.update("INSERT INTO business_db.manual_case (case_id,case_type,subject_type,subject_id,transaction_id,reason_code,status,created_at,updated_at) "
+                            + "VALUES (?,'TRANSACTION_RECOVERY','FUND_TRANSACTION',?,?,?,'OPEN',?,?)",
+                    caseId, transaction.getTransactionId(), transaction.getTransactionId(), reasonCode, now, now);
+        }
         return true;
     }
     @Override public List<FundTransactionRecord> findRecoverable(Instant before, int limit) {
         return jdbc.query("SELECT t.*,NULL AS request_hash FROM business_db.fund_transaction t WHERE status IN ('PROCESSING','COMPENSATING') AND updated_at<? ORDER BY updated_at LIMIT ?",
                 (rs, n) -> transactionRecord(rs), before, limit);
+    }
+
+    @Override public List<FundTransactionRecord> findManualReviewRecheckable(Instant before, int limit) {
+        return jdbc.query("SELECT t.*,NULL AS request_hash FROM business_db.fund_transaction t WHERE status='MANUAL_REVIEW' AND updated_at<? ORDER BY updated_at LIMIT ?",
+                (rs, n) -> transactionRecord(rs), before, limit);
+    }
+
+    @Override public Optional<ManualCaseRecord> findActiveManualCase(String transactionId) {
+        return jdbc.query("SELECT case_id,reason_code FROM business_db.manual_case "
+                        + "WHERE transaction_id=? AND status IN ('OPEN','PROCESSING') ORDER BY created_at DESC LIMIT 1",
+                rs -> rs.next() ? Optional.of(new ManualCaseRecord(rs.getString(1), rs.getString(2))) : Optional.empty(),
+                transactionId);
     }
 
     @Override public int getTccRetryCount(String transactionId) {
@@ -236,6 +258,12 @@ public class JdbcBusinessStore implements BusinessStore, OpsTransactionQueryPort
      *
      * <p>只接受由协调器完成资金事实核验后的 {@code SUCCESS}/{@code CANCELLED}/{@code MANUAL_REVIEW}；
      * Controller 和 TCC HTTP 返回路径均不会调用此方法，因此不会抢先展示成功。</p>
+     *
+     * <p>一码多收下固定请求不单笔占用，{@code active_order_id} 已弃用恒为 NULL，
+     * 请求终态不能按单笔订单直接回填：必须等同一请求的全部订单到达终态后请求才进入终态，
+     * 存在任一成功订单时请求为 {@code SUCCESS}，否则为 {@code CANCELLED}
+     * （系统分析不变量 13 与 9.4.4）。终态闸门未满足时请求保持 {@code PROCESSING}/
+     * {@code MANUAL_REVIEW}，单笔订单的失败或取消不得阻断其他付款人。</p>
      */
     private void projectCollectionTerminalState(FundTransaction transaction, String eventId, Instant now) {
         if (transaction.getSourceType() != SourceType.PERSONAL_QR_ORDER
@@ -246,22 +274,61 @@ public class JdbcBusinessStore implements BusinessStore, OpsTransactionQueryPort
             case MANUAL_REVIEW -> "MANUAL_REVIEW";
             default -> throw new IllegalStateException("C2C 终态发布收到非终态交易");
         };
+        // 允许从人工态恢复为终态：复核收敛的交易其来源订单此前已被投影为 MANUAL_REVIEW，
+        // 若只接受 PROCESSING 会把订单永远卡在人工态。
         int orderChanged = jdbc.update("UPDATE business_db.collection_order SET status=?,version=version+1,updated_at=? "
-                        + "WHERE order_id=? AND transaction_id=? AND status='PROCESSING'",
+                        + "WHERE order_id=? AND transaction_id=? AND status IN ('PROCESSING','MANUAL_REVIEW')",
                 projectedStatus, now, transaction.getSourceOrderId(), transaction.getTransactionId());
         if (orderChanged != 1) return;
         if (transaction.getSourceType() != SourceType.COLLECTION_REQUEST_ORDER) return;
         String requestId = jdbc.query("SELECT request_id FROM business_db.collection_order WHERE order_id=?",
                 rs -> rs.next() ? rs.getString(1) : null, transaction.getSourceOrderId());
         if (requestId == null) throw new IllegalStateException("固定请求订单缺少请求关联");
-        int requestChanged = jdbc.update("UPDATE business_db.collection_request SET status=?,version=version+1,updated_at=? "
-                        + "WHERE request_id=? AND active_order_id=? AND transaction_id=? AND status='PROCESSING'",
-                projectedStatus, now, requestId, transaction.getSourceOrderId(), transaction.getTransactionId());
-        if (requestChanged != 1) throw new IllegalStateException("固定请求终态投影版本已经变化");
+        // SSE 事实与订单终态同事务写入：即使请求终态闸门未满足，收款方也要逐笔看到该订单进展
         jdbc.update("INSERT IGNORE INTO business_db.collection_order_event "
                         + "(event_id,order_id,request_id,transaction_id,status,occurred_at,retention_until) VALUES (?,?,?,?,?,?,?)",
                 eventId, transaction.getSourceOrderId(), requestId, transaction.getTransactionId(), projectedStatus,
                 now, now.plusSeconds(7 * 24 * 60 * 60));
+        if ("MANUAL_REVIEW".equals(projectedStatus)) {
+            // 未知结果按不变量 13 冻结请求到人工态，等待复核收敛；不触碰既有 transaction_id
+            updateRequestProjection(requestId, "MANUAL_REVIEW", null, now);
+            return;
+        }
+        // 终态闸门：仍有受理前或资金未决订单时请求保持 PROCESSING，不得提前进入终态
+        Integer pending = jdbc.queryForObject("SELECT COUNT(*) FROM business_db.collection_order "
+                        + "WHERE request_id=? AND status NOT IN ('SUCCESS','FAILED','CANCELLED','EXPIRED')",
+                Integer.class, requestId);
+        if (pending != null && pending > 0) return;
+        // 全部订单终态后按订单事实收敛请求：先成功一笔、后一笔取消的请求必须仍是 SUCCESS，
+        // 不得被最后一笔的 CANCELLED 投影覆盖成取消
+        boolean anySuccess = jdbc.query("SELECT 1 FROM business_db.collection_order "
+                + "WHERE request_id=? AND status='SUCCESS' LIMIT 1", java.sql.ResultSet::next, requestId);
+        String requestStatus = anySuccess ? "SUCCESS" : "CANCELLED";
+        String successTransactionId = anySuccess
+                ? jdbc.query("SELECT transaction_id FROM business_db.collection_order "
+                                + "WHERE request_id=? AND status='SUCCESS' ORDER BY updated_at DESC,order_id DESC LIMIT 1",
+                        rs -> rs.next() ? rs.getString(1) : null, requestId)
+                : null;
+        updateRequestProjection(requestId, requestStatus, successTransactionId, now);
+    }
+
+    /**
+     * 以 CAS 方式投影固定请求状态；并发终态发布可能抢先收敛，幂等跳过不得回滚真实资金终态。
+     *
+     * <p>仅接受请求尚在 {@code PROCESSING}/{@code MANUAL_REVIEW} 的在途事实；更新 0 行时回读请求状态，
+     * 已是终态视为并发收敛直接跳过，其余情况才视为投影异常。{@code transactionId} 为空时保留既有值。</p>
+     */
+    private void updateRequestProjection(String requestId, String status, String transactionId, Instant now) {
+        int requestChanged = jdbc.update("UPDATE business_db.collection_request "
+                        + "SET status=?,transaction_id=COALESCE(?,transaction_id),version=version+1,updated_at=? "
+                        + "WHERE request_id=? AND status IN ('PROCESSING','MANUAL_REVIEW')",
+                status, transactionId, now, requestId);
+        if (requestChanged == 1) return;
+        String current = jdbc.query("SELECT status FROM business_db.collection_request WHERE request_id=?",
+                rs -> rs.next() ? rs.getString(1) : null, requestId);
+        if (!"SUCCESS".equals(current) && !"CANCELLED".equals(current) && !"EXPIRED".equals(current)) {
+            throw new IllegalStateException("固定请求终态投影状态意外: " + current);
+        }
     }
 
     /**

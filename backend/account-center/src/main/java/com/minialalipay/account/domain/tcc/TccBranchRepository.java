@@ -12,6 +12,13 @@ public interface TccBranchRepository {
     boolean updateAccountBranch(TccBranch branch, long expectedVersion);
     /** 查询指定交易的全部账户分支是否为目标终态。 */
     boolean allAccountBranches(String transactionId, TccBranchStatus status, int expectedCount);
+    /**
+     * 判断交易是否存在指定类型的账户分支（不限分支状态）。
+     *
+     * <p>用于终态事实核验识别资金路径：存在 {@link TccBranchType#CREDIT_PAY} 分支即表示
+     * 该交易走花呗信用支付，须按信用规则集核验，不能套用余额转账规则。</p>
+     */
+    default boolean hasAccountBranch(String transactionId, TccBranchType branchType) { return false; }
     /** 查询并锁定账本分支。 */
     Optional<TccBranch> findLedgerBranchForUpdate(String xid, String resourceId);
     /** 查询并锁定指定类型的账本分支，信用支付不得复用普通账本分支。 */

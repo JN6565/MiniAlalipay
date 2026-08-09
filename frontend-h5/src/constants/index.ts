@@ -51,6 +51,16 @@ export const BILL_STATUS_TEXT: Record<string, string> = {
   OVERDUE: '已逾期',
 };
 
+// 信用消费明细出账状态中文映射：
+// UNBILLED 未出账（当月消费，下月 1 日生成账单）；BILLED 已出账（已计入月度账单）；
+// REPAID 已还清；REVERSED 已冲正（退款撤销）
+export const BILLING_STATUS_TEXT: Record<string, string> = {
+  UNBILLED: '未出账',
+  BILLED: '已出账',
+  REPAID: '已还清',
+  REVERSED: '已冲正',
+};
+
 // 风险动作
 export const RISK_ACTION = {
   PASS: 'PASS',

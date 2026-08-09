@@ -21,11 +21,16 @@ const TransferPage: React.FC = () => {
   const [showRecentTransfers, setShowRecentTransfers] = useState(true);
   const [recentExpanded, setRecentExpanded] = useState(false);
 
-  // 名字脱敏：首字 + ***
-  const maskName = (name?: string) => {
-    if (!name) return '***';
-    if (name.length === 1) return name + '**';
-    return name.charAt(0) + '*'.repeat(name.length - 1);
+  // 收款人展示名：搜索结果优先展示服务端脱敏后的真实姓名（用于收款确认），未绑定身份时降级为昵称；
+  // 姓名与手机号脱敏均在服务端完成，前端不再重复脱敏
+  const payeeDisplayName = (payee: userService.PayeeInfo) => payee.maskedRealName || payee.nickname;
+
+  // 收款人手机号展示：优先后端脱敏手机号（如 138****9150），缺失时降级手机尾号；
+  // 联系人/URL 带入的场景两者都缺失，才降级展示账户号尾号
+  const payeePhoneDisplay = (payee: userService.PayeeInfo) => {
+    if (payee.maskedPhone) return payee.maskedPhone;
+    if (payee.phoneTail) return `尾号 ${payee.phoneTail}`;
+    return payee.accountNumber ? `尾号 ${payee.accountNumber.slice(-4)}` : '';
   };
 
   // 加载常用联系人（最近转账）
@@ -85,7 +90,7 @@ const TransferPage: React.FC = () => {
   const handleSelectPayee = (payee: userService.PayeeInfo) => {
     setSelectedPayee(payee);
     setPayeeCandidates([]);
-    setPayeeKeyword(payee.nickname);
+    setPayeeKeyword(payeeDisplayName(payee));
   };
 
   const handleSelectContact = (contact: userService.Contact) => {
@@ -182,11 +187,11 @@ const TransferPage: React.FC = () => {
                       {contact.payeeName?.charAt(0) || '?'}
                     </Avatar>
                   }
-                  description={`尾号 ${(contact.accountNumber || '').slice(-4)}`}
+                  description={contact.maskedPhone || (contact.phoneTail ? `尾号 ${contact.phoneTail}` : `尾号 ${(contact.accountNumber || '').slice(-4)}`)}
                   extra={<Button size="mini" fill="none" onClick={() => handleSelectContact(contact)}>选择</Button>}
                   onClick={() => handleSelectContact(contact)}
                 >
-                  {contact.alias || maskName(contact.payeeName)}
+                  {contact.alias || contact.payeeName}
                 </List.Item>
               ))}
             </List>
@@ -209,11 +214,11 @@ const TransferPage: React.FC = () => {
                     <UserOutline />
                   </Avatar>
                 }
-                description={`尾号 ${payee.accountNumber.slice(-4)}`}
+                description={payeePhoneDisplay(payee)}
                 onClick={() => handleSelectPayee(payee)}
                 arrow
               >
-                {payee.nickname}
+                {payeeDisplayName(payee)}
               </List.Item>
             ))}
           </List>
@@ -227,8 +232,8 @@ const TransferPage: React.FC = () => {
             <UserOutline />
           </Avatar>
           <div className="payee-info">
-            <div className="payee-name">{selectedPayee.nickname}</div>
-            <div className="payee-account">尾号 {selectedPayee.accountNumber.slice(-4)}</div>
+            <div className="payee-name">{payeeDisplayName(selectedPayee)}</div>
+            <div className="payee-account">{payeePhoneDisplay(selectedPayee)}</div>
           </div>
           <Button size="small" fill="none" onClick={() => setSelectedPayee(null)}>
             更换

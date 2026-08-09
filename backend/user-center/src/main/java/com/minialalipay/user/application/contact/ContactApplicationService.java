@@ -1,6 +1,7 @@
 package com.minialalipay.user.application.contact;
 
 import com.minialalipay.user.application.contact.dto.ContactDTO;
+import com.minialalipay.user.application.user.PhoneMasker;
 import com.minialalipay.user.domain.contact.Contact;
 import com.minialalipay.user.domain.contact.ContactRepository;
 import com.minialalipay.user.domain.user.User;
@@ -49,8 +50,14 @@ public class ContactApplicationService {
         List<Contact> contacts = contactRepository.listByOwner(ownerUserId, effectiveLimit);
         return contacts.stream()
                 .map(c -> {
-                    String payeeName = lookupMaskedName(c.getPayeeUserId());
-                    String accountNumber = lookupAccountNumber(c.getPayeeUserId());
+                    // 收款人展示信息一次查询统一组装：姓名在服务边界脱敏，手机号仅下发脱敏形式
+                    Optional<User> payee = c.getPayeeUserId() == null
+                            ? Optional.empty()
+                            : userRepository.findById(c.getPayeeUserId());
+                    String payeeName = payee.map(this::resolveMaskedName).orElse("***");
+                    String accountNumber = payee.map(User::getAccountNumber).orElse("");
+                    String maskedPhone = payee.map(u -> PhoneMasker.mask(u.getPhoneNumber())).orElse(null);
+                    String phoneTail = payee.map(User::getPhoneTail).orElse(null);
                     return new ContactDTO(
                             c.getPayeeUserId(),
                             payeeName,
@@ -58,7 +65,9 @@ public class ContactApplicationService {
                             c.getAlias(),
                             c.getSuccessCount(),
                             c.getLastSuccessAt(),
-                            c.isPinned()
+                            c.isPinned(),
+                            maskedPhone,
+                            phoneTail
                     );
                 })
                 .collect(Collectors.toList());
@@ -113,22 +122,14 @@ public class ContactApplicationService {
                 });
     }
 
-    private String lookupMaskedName(String userId) {
-        if (userId == null) return "***";
-        Optional<User> user = userRepository.findById(userId);
-        if (user.isEmpty()) return "***";
-        String realName = user.get().getRealName();
+    /** 生成收款人脱敏展示名：真实姓名优先，未绑定身份时降级昵称，均缺失时返回 ***。 */
+    private String resolveMaskedName(User user) {
+        String realName = user.getRealName();
         if (realName == null || realName.isBlank()) {
-            String nickname = user.get().getNickname();
+            String nickname = user.getNickname();
             return (nickname == null || nickname.isBlank()) ? "***" : maskName(nickname);
         }
         return maskName(realName);
-    }
-
-    private String lookupAccountNumber(String userId) {
-        if (userId == null) return "";
-        Optional<User> user = userRepository.findById(userId);
-        return user.map(User::getAccountNumber).orElse("");
     }
 
     private static String maskName(String name) {

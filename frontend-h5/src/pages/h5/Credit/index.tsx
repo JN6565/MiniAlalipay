@@ -111,7 +111,21 @@ const CreditPage: React.FC = () => {
         </div>
 
         {bills.length === 0 ? (
-          <div className="empty-state">暂无账单</div>
+          credit?.unbilledFen ? (
+            // 有未出账消费但尚未生成月度账单（每月 1 日出账）：
+            // 提示出账规则并引导到账单页查看未出账明细，避免误以为消费丢失
+            <div className="empty-state">
+              <div>本月消费暂未出账，将于下月 1 日生成账单</div>
+              <a
+                className="empty-state-link"
+                onClick={() => history.push('/h5/credit/bills')}
+              >
+                查看未出账明细
+              </a>
+            </div>
+          ) : (
+            <div className="empty-state">暂无账单</div>
+          )
         ) : (
           <List>
             {bills.map((bill) => (

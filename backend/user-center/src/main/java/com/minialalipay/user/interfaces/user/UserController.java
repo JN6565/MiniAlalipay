@@ -99,12 +99,13 @@ public class UserController {
         // 2. 调用应用服务完成搜索
         List<UserSearchResult> appResults = userQueryService.searchUsers(keyword, userId);
 
-        // 3. 转换为接口层 DTO
+        // 3. 转换为接口层 DTO；脱敏姓名与脱敏手机号均已由应用层在服务边界完成处理
         List<UserSearchResultDTO> results = appResults.stream()
                 .map(r -> new UserSearchResultDTO(
                         r.userId(),
                         r.accountNumber(),
                         r.nickname(),
+                        r.maskedRealName(),
                         r.identityStatus(),
                         r.phoneTail(),
                         r.maskedPhone()
