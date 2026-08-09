@@ -1,10 +1,12 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useContext, useRef } from 'react';
 import { history } from 'umi';
 import { Toast, SpinLoading } from 'antd-mobile';
 import { ScanCodeOutline } from 'antd-mobile-icons';
 import * as accountService from '@/services/account';
 import * as creditService from '@/services/credit';
 import { useTabActiveRefresh } from '@/utils/useTabActiveRefresh';
+import { TabActiveContext } from '@/layouts/H5Layout/TabViews';
+import { POLL_INTERVAL } from '@/constants';
 import './index.less';
 
 const HomePage: React.FC = () => {
@@ -22,6 +24,24 @@ const HomePage: React.FC = () => {
   // 首页保活常驻，转账/充值等业务完成后回切时静默重拉，
   // 余额与最近交易始终以服务端最新事实为准。
   useTabActiveRefresh('/h5/home', () => loadData(true));
+
+  // 首页保活后只在首次挂载加载一次，他人转入不会主动触达本页；
+  // 通过后台轮询近实时刷新总资产与最近交易。仅在首页激活且页面可见时轮询，
+  // 切到其他 Tab 或浏览器退到后台时暂停，避免无效请求；上一轮未完成时跳过本轮。
+  const activePath = useContext(TabActiveContext);
+  const pollingRef = useRef(false);
+  useEffect(() => {
+    const timer = setInterval(() => {
+      if (document.hidden || activePath !== '/h5/home' || pollingRef.current) {
+        return;
+      }
+      pollingRef.current = true;
+      loadData(true).finally(() => {
+        pollingRef.current = false;
+      });
+    }, POLL_INTERVAL.HOME_BALANCE);
+    return () => clearInterval(timer);
+  }, [activePath]);
 
   const loadData = async (silent = false) => {
     // 静默刷新不进入全屏加载态：保留旧内容直至新数据到达，避免回切时闪加载圈。

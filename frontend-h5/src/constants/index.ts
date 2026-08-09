@@ -89,4 +89,6 @@ export const DAILY_RECHARGE_COUNT = 5; // 每日充值次数上限
 export const POLL_INTERVAL = {
   ORDER_STATUS: 2000,
   TRANSFER_STATUS: 3000,
+  // 首页总资产与最近交易后台轮询：收款方停留首页时近实时看到他人转入
+  HOME_BALANCE: 10000,
 } as const;
