@@ -12,6 +12,8 @@
         <!-- Nacos 服务注册：bootstrap.yml 需 bootstrap starter 才会被加载 -->
         <dependency><groupId>org.springframework.cloud</groupId><artifactId>spring-cloud-starter-bootstrap</artifactId></dependency>
         <dependency><groupId>com.alibaba.cloud</groupId><artifactId>spring-cloud-starter-alibaba-nacos-discovery</artifactId></dependency>
+        <!-- 客户端负载均衡：@LoadBalanced RestTemplate 通过 Nacos 实例解析服务名 -->
+        <dependency><groupId>org.springframework.cloud</groupId><artifactId>spring-cloud-starter-loadbalancer</artifactId></dependency>
         <dependency><groupId>org.springframework.boot</groupId><artifactId>spring-boot-starter-data-redis</artifactId></dependency>
         <dependency><groupId>org.springframework.data</groupId><artifactId>spring-data-commons</artifactId></dependency>
         <dependency><groupId>org.springframework.data</groupId><artifactId>spring-data-keyvalue</artifactId></dependency>

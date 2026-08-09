@@ -7,6 +7,7 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
+import org.springframework.cloud.client.loadbalancer.LoadBalanced;
 import org.springframework.http.HttpStatusCode;
 import org.springframework.http.MediaType;
 import org.springframework.http.client.SimpleClientHttpRequestFactory;
@@ -20,7 +21,9 @@ import java.util.Map;
  * 业务中心真实 HTTP 客户端。
  *
  * <p>通过 RestClient 调用业务中心的公开 API，统一处理超时、重试和错误映射。
- * 写操作使用幂等键重试，超时后查询原资源状态而非盲重试。</p>
+ * 写操作使用幂等键重试，超时后查询原资源状态而非盲重试。调用经网关完成鉴权与审计，
+ * 基址默认使用网关服务名，注入的 {@link RestClient.Builder} 必须标注 {@link LoadBalanced}
+ * 才会被 Spring Cloud LoadBalancer 装饰并经 Nacos 解析实例；未装饰的构建器会把服务名当作域名走 DNS 解析。</p>
  */
 @Component
 @ConditionalOnProperty(name = "ai.client.mock-mode", havingValue = "false")
@@ -32,14 +35,15 @@ public class HttpBusinessCenterClient implements BusinessCenterPort {
     private final int timeoutMs;
 
     public HttpBusinessCenterClient(
-            @Value("${ai.client.business-center.base-url:http://localhost:8082}") String baseUrl,
+            @LoadBalanced RestClient.Builder restClientBuilder,
+            @Value("${ai.client.business-center.base-url:http://minialalipay-gateway}") String baseUrl,
             @Value("${ai.client.timeout-ms:3000}") int timeoutMs
     ) {
         this.timeoutMs = timeoutMs;
         SimpleClientHttpRequestFactory factory = new SimpleClientHttpRequestFactory();
         factory.setConnectTimeout(Duration.ofMillis(timeoutMs));
         factory.setReadTimeout(Duration.ofMillis(timeoutMs));
-        this.restClient = RestClient.builder()
+        this.restClient = restClientBuilder
                 .baseUrl(baseUrl)
                 .requestFactory(factory)
                 .defaultHeader("Content-Type", "application/json")

@@ -6,6 +6,10 @@ spring:
     driver-class-name: org.h2.Driver
   flyway:
     enabled: false
+  cloud:
+    # 测试使用 localhost 直连 stub 地址，关闭负载均衡避免主机名被当作服务名解析
+    loadbalancer:
+      enabled: false
 minialalipay:
   monitoring:
     enabled: false

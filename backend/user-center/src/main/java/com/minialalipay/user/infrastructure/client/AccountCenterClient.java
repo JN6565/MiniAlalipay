@@ -40,7 +40,7 @@ public class AccountCenterClient implements AccountProvisioningPort {
 
     public AccountCenterClient(
             RestTemplate restTemplate,
-            @Value("${account-center.url:http://localhost:8083}") String accountCenterUrl
+            @Value("${account-center.url:http://account-center}") String accountCenterUrl
     ) {
         this.restTemplate = restTemplate;
         this.accountCenterUrl = accountCenterUrl;

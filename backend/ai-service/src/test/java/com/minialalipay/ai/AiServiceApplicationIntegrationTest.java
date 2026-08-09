@@ -17,7 +17,8 @@ import static org.assertj.core.api.Assertions.assertThat;
  * AI 服务 Spring Boot 真实启动集成测试。
  */
 @SpringBootTest(webEnvironment = SpringBootTest.WebEnvironment.RANDOM_PORT,
-        properties = {"spring.cloud.nacos.discovery.enabled=false"})
+        properties = {"spring.cloud.nacos.discovery.enabled=false",
+                "spring.cloud.loadbalancer.enabled=false"})
 @Import(AiServiceFailingTestController.class)
 class AiServiceApplicationIntegrationTest {
 

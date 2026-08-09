@@ -24,8 +24,9 @@ spring:
     out-of-order: true
 minialalipay:
   internal:
-    account-center-url: ${ACCOUNT_CENTER_INTERNAL_URL:http://localhost:8083}
-    user-center-url: ${USER_CENTER_INTERNAL_URL:http://localhost:8081}
+    # 默认使用服务名，经 Nacos 负载均衡解析实例；直连地址可用对应环境变量覆盖
+    account-center-url: ${ACCOUNT_CENTER_INTERNAL_URL:http://account-center}
+    user-center-url: ${USER_CENTER_INTERNAL_URL:http://user-center}
     # 与 user-center 的 internal.auth.service-token / minialalipay.internal.service-token 保持一致，
     # 否则支付证明验证等内部调用会被拒绝并映射为 PAYMENT_PROOF_INVALID。
     service-token: ${INTERNAL_SERVICE_TOKEN:local-internal-token}
@@ -35,9 +36,10 @@ minialalipay:
   monitoring:
     enabled: ${MONITORING_ENABLED:true}
     health:
-      gateway-url: ${GATEWAY_HEALTH_URL:http://localhost:8080/actuator/health}
-      account-center-url: ${ACCOUNT_CENTER_HEALTH_URL:http://localhost:8083/actuator/health}
-      ai-service-url: ${AI_SERVICE_HEALTH_URL:http://localhost:8084/actuator/health}
+      # 健康探针默认经 Nacos 负载均衡访问各服务 Actuator；直连地址可用对应环境变量覆盖
+      gateway-url: ${GATEWAY_HEALTH_URL:http://minialalipay-gateway/actuator/health}
+      account-center-url: ${ACCOUNT_CENTER_HEALTH_URL:http://account-center/actuator/health}
+      ai-service-url: ${AI_SERVICE_HEALTH_URL:http://ai-service/actuator/health}
       timeout-ms: ${MONITORING_HEALTH_TIMEOUT_MS:800}
     outbox:
       fixed-delay-ms: ${MONITORING_OUTBOX_FIXED_DELAY_MS:1000}

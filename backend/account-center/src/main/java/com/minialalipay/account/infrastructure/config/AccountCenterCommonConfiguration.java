@@ -5,8 +5,10 @@ import com.minialalipay.common.error.CommonExceptionMapper;
 import com.minialalipay.common.idempotency.IdempotencyKeyValidator;
 import com.minialalipay.common.trace.RequestIdGenerator;
 import org.springframework.boot.web.servlet.FilterRegistrationBean;
+import org.springframework.cloud.client.loadbalancer.LoadBalanced;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
+import org.springframework.web.client.RestClient;
 import org.springframework.web.client.RestTemplate;
 
 /**
@@ -49,9 +51,24 @@ public class AccountCenterCommonConfiguration {
         return registration;
     }
 
-    /** @return 用于调用其他微服务（如 user-center）的 RestTemplate */
+    /**
+     * @return 带负载均衡的 RestTemplate，用于调用其他微服务（如 user-center）；
+     * URL 主机名（如 http://user-center）经 Spring Cloud LoadBalancer 解析为 Nacos 实例
+     */
+    @LoadBalanced
     @Bean
     public RestTemplate restTemplate() {
         return new RestTemplate();
+    }
+
+    /**
+     * @return 带负载均衡的 RestClient 构建器，用于调用其他微服务（如 user-center）；
+     * Spring Cloud LoadBalancer 只装饰标注 {@link LoadBalanced} 的 RestClient.Builder Bean，
+     * 注入方必须使用该限定符，否则服务名 URL 会被当作普通域名走 DNS 解析
+     */
+    @LoadBalanced
+    @Bean
+    public RestClient.Builder loadBalancedRestClientBuilder() {
+        return RestClient.builder();
     }
 }

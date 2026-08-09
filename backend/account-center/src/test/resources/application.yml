@@ -6,6 +6,10 @@ spring:
     driver-class-name: org.h2.Driver
   flyway:
     enabled: false
+  cloud:
+    # 测试不依赖 Nacos 实例解析，关闭负载均衡保证服务名地址不被拦截
+    loadbalancer:
+      enabled: false
 mybatis:
   configuration:
     map-underscore-to-camel-case: true

@@ -8,6 +8,10 @@ docker compose -f deploy/docker-compose.yml up -d
 
 该配置启动 MySQL 8.4、Redis 7、Seata 2.0 协调器和 Nacos。Seata 当前采用文件存储，仅用于本地基础框架验证；在启用资金能力前，生产环境必须切换为数据库存储的协调器。MySQL 初始化脚本会按限界上下文创建独立 Schema，默认账号仅限本地开发使用。
 
+## 生产环境部署
+
+服务器部署（Docker Compose 编排后端 5 个服务与 Nginx 前端入口）的编排文件、构建上传脚本与部署手册位于 [`production/`](production/README.md)。本目录其余内容仅服务于本地开发，不用于生产。
+
 ## Seata 事务协调接入说明
 
 `business-center` 与 `account-center` 通过 Seata TCC 编排转账资金分支。客户端按以下条件定位 TC：

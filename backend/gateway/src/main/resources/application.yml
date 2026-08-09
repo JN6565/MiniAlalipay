@@ -18,7 +18,7 @@ spring:
       routes:
         # ========== 用户中心路由 ==========
         - id: user-center-auth
-          uri: ${USER_CENTER_URI:http://localhost:8081}
+          uri: ${USER_CENTER_URI:lb://user-center}
           predicates:
             - Path=/api/v1/auth/**
           filters:
@@ -29,7 +29,7 @@ spring:
                 redis-rate-limiter.burstCapacity: 10
                 redis-rate-limiter.requestedTokens: 1
         - id: user-center-api
-          uri: ${USER_CENTER_URI:http://localhost:8081}
+          uri: ${USER_CENTER_URI:lb://user-center}
           predicates:
             - Path=/api/v1/users/**,/api/v1/contacts/**,/api/v1/friends/**,/api/v1/identity/**
           filters:
@@ -41,7 +41,7 @@ spring:
                 redis-rate-limiter.requestedTokens: 1
         # 支付密码校验使用更严格的用户维度限流
         - id: user-center-password
-          uri: ${USER_CENTER_URI:http://localhost:8081}
+          uri: ${USER_CENTER_URI:lb://user-center}
           predicates:
             - Path=/api/v1/payment-password/**
           filters:
@@ -53,7 +53,7 @@ spring:
                 redis-rate-limiter.requestedTokens: 1
         # B 端用户管理（列表/冻结/解冻）由用户中心提供，仅系统管理员可访问（网关角色门禁见 AuthenticationGlobalFilter）
         - id: user-center-admin-users
-          uri: ${USER_CENTER_URI:http://localhost:8081}
+          uri: ${USER_CENTER_URI:lb://user-center}
           predicates:
             - Path=/api/v1/admin/**
           filters:
@@ -65,9 +65,10 @@ spring:
                 redis-rate-limiter.requestedTokens: 1
 
         # ========== 业务中心路由（仅已实现 Controller 的操作） ==========
-        # 本地开发使用直连；生产环境通过 BUSINESS_CENTER_URI 环境变量设为 lb://business-center
+        # 默认经 Nacos 负载均衡（lb://business-center）；Nacos 不可达时可通过
+        # BUSINESS_CENTER_URI 环境变量回退直连地址（如 http://localhost:8082）
         - id: business-center-transfers
-          uri: ${BUSINESS_CENTER_URI:http://localhost:8082}
+          uri: ${BUSINESS_CENTER_URI:lb://business-center}
           predicates:
             - Path=/api/v1/transfers/**
           filters:
@@ -80,7 +81,7 @@ spring:
         # ---- 以下路由已列入契约但对应 Controller 尚未实现，暂禁用 ----
         # 二维码非资金来源订单已实现；确认与支付仍由业务中心受控返回依赖不可用。
         - id: business-center-qr-pay
-          uri: ${BUSINESS_CENTER_URI:http://localhost:8082}
+          uri: ${BUSINESS_CENTER_URI:lb://business-center}
           predicates:
             - Path=/api/v1/qr-pay/**
           filters:
@@ -92,7 +93,7 @@ spring:
                 redis-rate-limiter.requestedTokens: 1
         # C2C 令牌交换与匿名落地页：IP 维度限流，防链接扫描与预取；必须位于 p2p-collections 通配路由之前
         - id: business-center-p2p-collections-token
-          uri: ${BUSINESS_CENTER_URI:http://localhost:8082}
+          uri: ${BUSINESS_CENTER_URI:lb://business-center}
           predicates:
             - Path=/api/v1/p2p-collections/by-token,/api/v1/p2p-collections/token-exchanges
           filters:
@@ -103,7 +104,7 @@ spring:
                 redis-rate-limiter.burstCapacity: 10
                 redis-rate-limiter.requestedTokens: 1
         - id: business-center-p2p-collections
-          uri: ${BUSINESS_CENTER_URI:http://localhost:8082}
+          uri: ${BUSINESS_CENTER_URI:lb://business-center}
           predicates:
             - Path=/api/v1/p2p-collections/**
           filters:
@@ -115,7 +116,7 @@ spring:
                 redis-rate-limiter.requestedTokens: 1
         # transactions → 王钧平 阶段四已完成，Controller 待补充
         - id: business-center-recharges
-          uri: ${BUSINESS_CENTER_URI:http://localhost:8082}
+          uri: ${BUSINESS_CENTER_URI:lb://business-center}
           predicates:
             - Path=/api/v1/recharges/**
           filters:
@@ -126,7 +127,7 @@ spring:
                 redis-rate-limiter.burstCapacity: 10
                 redis-rate-limiter.requestedTokens: 1
         - id: business-center-refunds
-          uri: ${BUSINESS_CENTER_URI:http://localhost:8082}
+          uri: ${BUSINESS_CENTER_URI:lb://business-center}
           predicates:
             - Path=/api/v1/refunds/**
           filters:
@@ -137,7 +138,7 @@ spring:
                 redis-rate-limiter.burstCapacity: 10
                 redis-rate-limiter.requestedTokens: 1
         - id: business-center-manual-cases
-          uri: ${BUSINESS_CENTER_URI:http://localhost:8082}
+          uri: ${BUSINESS_CENTER_URI:lb://business-center}
           predicates:
             - Path=/api/v1/manual-cases/**
           filters:
@@ -148,7 +149,7 @@ spring:
                 redis-rate-limiter.burstCapacity: 20
                 redis-rate-limiter.requestedTokens: 1
         - id: business-center-transfer-drafts
-          uri: ${BUSINESS_CENTER_URI:http://localhost:8082}
+          uri: ${BUSINESS_CENTER_URI:lb://business-center}
           predicates:
             - Path=/api/v1/transfer-drafts/**
           filters:
@@ -159,7 +160,7 @@ spring:
                 redis-rate-limiter.burstCapacity: 60
                 redis-rate-limiter.requestedTokens: 1
         - id: business-center-confirmations
-          uri: ${BUSINESS_CENTER_URI:http://localhost:8082}
+          uri: ${BUSINESS_CENTER_URI:lb://business-center}
           predicates:
             - Path=/api/v1/confirmations/**
           filters:
@@ -171,7 +172,7 @@ spring:
                 redis-rate-limiter.requestedTokens: 1
         # 信用运维任务由账户中心拥有，必须先于通配 ops 路由匹配
         - id: account-center-credit-ops
-          uri: ${ACCOUNT_CENTER_URI:http://localhost:8083}
+          uri: ${ACCOUNT_CENTER_URI:lb://account-center}
           predicates:
             - Path=/api/v1/ops/credit/**
           filters:
@@ -183,7 +184,7 @@ spring:
                 redis-rate-limiter.requestedTokens: 1
         # 监控运维路由：实时指标、告警处置、日报、数据质量、指标口径由业务中心提供；必须位于 credit-ops 之后。
         - id: business-center-ops
-          uri: ${BUSINESS_CENTER_URI:http://localhost:8082}
+          uri: ${BUSINESS_CENTER_URI:lb://business-center}
           predicates:
             - Path=/api/v1/ops/**
           filters:
@@ -196,7 +197,7 @@ spring:
 
         # ========== 账户中心路由（仅已实现 Controller 的操作） ==========
         - id: account-center
-          uri: ${ACCOUNT_CENTER_URI:http://localhost:8083}
+          uri: ${ACCOUNT_CENTER_URI:lb://account-center}
           predicates:
             - Path=/api/v1/accounts/**,/api/v1/credit/**,/api/v1/bills/**,/api/v1/bank-cards/**,/api/v1/bank-card-registrations/**
           filters:
@@ -209,7 +210,7 @@ spring:
 
         # ========== AI 服务路由 ==========
         - id: ai-service
-          uri: ${AI_SERVICE_URI:http://localhost:8084}
+          uri: ${AI_SERVICE_URI:lb://ai-service}
           predicates:
             - Path=/api/v1/agent/**
           filters:
@@ -228,7 +229,7 @@ spring:
 # ========== 阶段二受控鉴权（dev/test profile 显式启用） ==========
 gateway:
   authentication:
-    user-center-uri: ${USER_CENTER_URI:http://localhost:8081}
+    user-center-uri: ${USER_CENTER_URI:lb://user-center}
     service-token: ${INTERNAL_AUTH_SERVICE_TOKEN:local-internal-token}
     stub:
       enabled: ${GATEWAY_AUTH_STUB_ENABLED:true}

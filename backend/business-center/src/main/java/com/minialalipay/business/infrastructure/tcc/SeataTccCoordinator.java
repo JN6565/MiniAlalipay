@@ -7,6 +7,7 @@ import com.minialalipay.business.domain.transaction.FundTransaction;
 import com.minialalipay.business.domain.transaction.TransactionStatus;
 import com.minialalipay.business.domain.transaction.TransactionType;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
+import org.springframework.cloud.client.loadbalancer.LoadBalanced;
 import org.springframework.context.annotation.Primary;
 import org.springframework.stereotype.Component;
 import org.springframework.web.client.RestClient;
@@ -31,7 +32,7 @@ public class SeataTccCoordinator implements TccCoordinatorPort {
 
     public SeataTccCoordinator(BusinessStore store, SecurityMaterialPort secure,
                                SeataGlobalTransactionExecutor executor, HttpTccCoordinator httpFallback,
-                               RestClient.Builder builder,
+                               @LoadBalanced RestClient.Builder builder,
                                @org.springframework.beans.factory.annotation.Value("${minialalipay.internal.account-center-url}")
                                String accountBaseUrl) {
         this.store = store;

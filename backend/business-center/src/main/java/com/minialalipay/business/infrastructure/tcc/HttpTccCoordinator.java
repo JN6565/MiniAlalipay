@@ -6,6 +6,7 @@ import com.minialalipay.business.application.port.SecurityMaterialPort;
 import com.minialalipay.business.domain.transaction.FundTransaction;
 import com.minialalipay.business.domain.transaction.TransactionStatus;
 import org.springframework.beans.factory.annotation.Value;
+import org.springframework.cloud.client.loadbalancer.LoadBalanced;
 import org.springframework.stereotype.Component;
 import org.springframework.web.client.RestClient;
 
@@ -23,7 +24,7 @@ public class HttpTccCoordinator implements TccCoordinatorPort {
     private final SecurityMaterialPort secure;
     private final RestClient accountClient;
 
-    public HttpTccCoordinator(BusinessStore store, SecurityMaterialPort secure, RestClient.Builder builder,
+    public HttpTccCoordinator(BusinessStore store, SecurityMaterialPort secure, @LoadBalanced RestClient.Builder builder,
                               @Value("${minialalipay.internal.account-center-url}") String accountBaseUrl) {
         this.store = store; this.secure = secure; this.accountClient = builder.baseUrl(accountBaseUrl).build();
     }

@@ -1,0 +1,159 @@
+# 生产环境编排：5 个后端服务 + Nginx 统一入口。
+#
+# 部署前提：
+# 1. 服务器（121.43.51.164）上 MySQL、Redis、Nacos 已在运行（本地开发期即连远端库，
+#    Flyway 迁移已就绪），本编排不重复部署这些基础设施；
+# 2. 各服务未在此处覆盖的配置沿用代码内默认值（见各服务 application.yml），
+#    需要覆盖的变量写入同级 .env 文件（模板见 .env.example）；
+# 3. Seata TC 默认由服务器已有实例提供（经 Nacos SEATA_GROUP 发现）；若 Nacos 中没有
+#    seata-server，用 --profile seata 启动本编排内置的 TC：
+#        docker compose --profile seata up -d
+#
+# 服务间调用经 Nacos 负载均衡（服务名解析），容器需与 Nacos 网络可达；
+# 容器注册到 Nacos 的是 compose 网络 IP，同一编排内互相可达。
+
+x-backend-common: &backend-common
+  restart: unless-stopped
+  env_file: .env
+  # 容器内无需暴露端口：对外仅 Nginx 80/81，服务间走 compose 网络 + Nacos 注册 IP
+  expose: []
+  networks:
+    - minialalipay
+
+services:
+  gateway:
+    <<: *backend-common
+    build:
+      context: .
+      dockerfile: Dockerfile.backend
+      args:
+        JAR_FILE: jars/gateway.jar
+    image: minialalipay/gateway:latest
+    container_name: minialalipay-gateway
+    # 网关为流量入口，堆预算 512m
+    environment:
+      JAVA_TOOL_OPTIONS: ${GATEWAY_JAVA_OPTS:--Xms256m -Xmx512m -Dfile.encoding=UTF-8}
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://localhost:8080/actuator/health"]
+      interval: 30s
+      timeout: 5s
+      retries: 5
+      start_period: 60s
+
+  user-center:
+    <<: *backend-common
+    build:
+      context: .
+      dockerfile: Dockerfile.backend
+      args:
+        JAR_FILE: jars/user-center.jar
+    image: minialalipay/user-center:latest
+    container_name: minialalipay-user-center
+    environment:
+      JAVA_TOOL_OPTIONS: ${USER_CENTER_JAVA_OPTS:--Xms256m -Xmx512m -Dfile.encoding=UTF-8}
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://localhost:8081/actuator/health"]
+      interval: 30s
+      timeout: 5s
+      retries: 5
+      start_period: 60s
+
+  business-center:
+    <<: *backend-common
+    build:
+      context: .
+      dockerfile: Dockerfile.backend
+      args:
+        JAR_FILE: jars/business-center.jar
+    image: minialalipay/business-center:latest
+    container_name: minialalipay-business-center
+    # 资金编排与 TCC 分支较多，堆预算 640m
+    environment:
+      JAVA_TOOL_OPTIONS: ${BUSINESS_CENTER_JAVA_OPTS:--Xms320m -Xmx640m -Dfile.encoding=UTF-8}
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://localhost:8082/actuator/health"]
+      interval: 30s
+      timeout: 5s
+      retries: 5
+      start_period: 90s
+
+  account-center:
+    <<: *backend-common
+    build:
+      context: .
+      dockerfile: Dockerfile.backend
+      args:
+        JAR_FILE: jars/account-center.jar
+    image: minialalipay/account-center:latest
+    container_name: minialalipay-account-center
+    # 账本与余额写入热点服务，堆预算 640m
+    environment:
+      JAVA_TOOL_OPTIONS: ${ACCOUNT_CENTER_JAVA_OPTS:--Xms320m -Xmx640m -Dfile.encoding=UTF-8}
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://localhost:8083/actuator/health"]
+      interval: 30s
+      timeout: 5s
+      retries: 5
+      start_period: 90s
+
+  ai-service:
+    <<: *backend-common
+    build:
+      context: .
+      dockerfile: Dockerfile.backend
+      args:
+        JAR_FILE: jars/ai-service.jar
+    image: minialalipay/ai-service:latest
+    container_name: minialalipay-ai-service
+    environment:
+      JAVA_TOOL_OPTIONS: ${AI_SERVICE_JAVA_OPTS:--Xms256m -Xmx512m -Dfile.encoding=UTF-8}
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://localhost:8084/actuator/health"]
+      interval: 30s
+      timeout: 5s
+      retries: 5
+      start_period: 60s
+
+  # Seata 事务协调器（TC）：仅当 Nacos SEATA_GROUP 中尚无 seata-server 时启用。
+  # 经环境变量以 Spring Boot 松散绑定覆盖 TC 注册中心配置，使其注册到同一 Nacos，
+  # 供 business-center/account-center 的 Seata 客户端按分组发现。
+  seata-server:
+    image: seataio/seata-server:2.0.0
+    container_name: minialalipay-seata
+    profiles: ["seata"]
+    restart: unless-stopped
+    environment:
+      SEATA_PORT: 8091
+      STORE_MODE: file
+      SEATA_REGISTRY_TYPE: nacos
+      SEATA_REGISTRY_NACOS_APPLICATION: seata-server
+      SEATA_REGISTRY_NACOS_SERVER_ADDR: ${NACOS_SERVER_ADDR:-121.43.51.164:8848}
+      SEATA_REGISTRY_NACOS_GROUP: SEATA_GROUP
+      SEATA_REGISTRY_NACOS_CLUSTER: default
+      SEATA_REGISTRY_NACOS_NAMESPACE: ${NACOS_NAMESPACE:-}
+      SEATA_REGISTRY_NACOS_USERNAME: ${NACOS_USERNAME:-nacos}
+      SEATA_REGISTRY_NACOS_PASSWORD: ${NACOS_PASSWORD:-nacos}
+      SEATA_CONFIG_TYPE: file
+    networks:
+      - minialalipay
+
+  nginx:
+    image: nginx:1.27-alpine
+    container_name: minialalipay-nginx
+    restart: unless-stopped
+    ports:
+      # 80 = C 端 H5，81 = B 端管理端；网关 8080 不对公网暴露，统一经 Nginx 反代
+      - "80:80"
+      - "81:81"
+    volumes:
+      - ./nginx/nginx.conf:/etc/nginx/nginx.conf:ro
+      - ./web/h5:/usr/share/nginx/html/h5:ro
+      - ./web/admin:/usr/share/nginx/html/admin:ro
+    depends_on:
+      - gateway
+    networks:
+      - minialalipay
+
+networks:
+  minialalipay:
+    driver: bridge

@@ -5,6 +5,7 @@ import com.minialalipay.business.domain.transaction.BusinessErrorCode;
 import com.minialalipay.common.error.BusinessException;
 import com.minialalipay.common.error.CommonErrorCode;
 import org.springframework.beans.factory.annotation.Value;
+import org.springframework.cloud.client.loadbalancer.LoadBalanced;
 import org.springframework.stereotype.Component;
 import org.springframework.web.client.HttpClientErrorException;
 import org.springframework.web.client.RestClient;
@@ -13,7 +14,7 @@ import org.springframework.web.client.RestClient;
 @Component
 public class AccountDirectoryHttpAdapter implements AccountDirectoryPort {
     private final RestClient client;
-    public AccountDirectoryHttpAdapter(RestClient.Builder builder,
+    public AccountDirectoryHttpAdapter(@LoadBalanced RestClient.Builder builder,
                                        @Value("${minialalipay.internal.account-center-url}") String baseUrl) {
         this.client = builder.baseUrl(baseUrl).build();
     }

@@ -32,7 +32,7 @@ public class UserCenterIdentityClient implements UserCenterIdentityPort {
     private final String userCenterUrl;
 
     public UserCenterIdentityClient(RestTemplate restTemplate,
-                                    @Value("${minialalipay.internal.user-center-url:http://localhost:8081}") String userCenterUrl) {
+                                    @Value("${minialalipay.internal.user-center-url:http://user-center}") String userCenterUrl) {
         this.restTemplate = restTemplate;
         this.userCenterUrl = userCenterUrl;
     }

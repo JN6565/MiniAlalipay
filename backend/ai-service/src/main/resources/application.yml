@@ -80,13 +80,15 @@ ai:
   client:
     mock-mode: ${AI_CLIENT_MOCK_MODE:false}
     timeout-ms: 3000
-    # AI 服务通过网关(localhost:8080)调用下游，由网关完成鉴权、限流和审计。
+    # AI 服务统一通过网关调用下游，由网关完成鉴权、限流和审计。
+    # 基址默认使用网关服务名 minialalipay-gateway，经 Nacos 负载均衡解析实例；
+    # 直连地址可用 AI_GATEWAY_BASE_URL 覆盖（避免与网关自身的 USER_CENTER_URI 等变量重名）。
     user-center:
-      base-url: ${USER_CENTER_URI:http://localhost:8080}
+      base-url: ${AI_GATEWAY_BASE_URL:http://minialalipay-gateway}
     business-center:
-      base-url: ${BUSINESS_CENTER_URI:http://localhost:8080}
+      base-url: ${AI_GATEWAY_BASE_URL:http://minialalipay-gateway}
     account-center:
-      base-url: ${ACCOUNT_CENTER_URI:http://localhost:8080}
+      base-url: ${AI_GATEWAY_BASE_URL:http://minialalipay-gateway}
   mcp:
     tool-timeout: 3s
     max-retries: 1

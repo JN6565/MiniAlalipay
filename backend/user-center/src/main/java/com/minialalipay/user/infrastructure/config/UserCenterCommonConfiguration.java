@@ -5,6 +5,7 @@ import com.minialalipay.common.error.CommonExceptionMapper;
 import com.minialalipay.common.idempotency.IdempotencyKeyValidator;
 import com.minialalipay.common.trace.RequestIdGenerator;
 import org.springframework.boot.web.servlet.FilterRegistrationBean;
+import org.springframework.cloud.client.loadbalancer.LoadBalanced;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.web.client.RestTemplate;
@@ -64,10 +65,16 @@ public class UserCenterCommonConfiguration {
     }
 
     /**
-     * 注册 RestTemplate，用于调用其他微服务。
+     * 注册带负载均衡的 RestTemplate，用于调用其他微服务。
      *
-     * @return RestTemplate 实例
+     * <p>请求 URL 中的主机名（如 {@code http://account-center/...}）会被
+     * Spring Cloud LoadBalancer 解析为 Nacos 注册的健康实例，部署多实例时无需
+     * 修改地址。测试环境关闭负载均衡（spring.cloud.loadbalancer.enabled=false）后
+     * 退化为普通 RestTemplate，直连地址仍然可用。</p>
+     *
+     * @return 负载均衡 RestTemplate 实例
      */
+    @LoadBalanced
     @Bean
     public RestTemplate restTemplate() {
         return new RestTemplate();
