@@ -1,4 +1,5 @@
 import { gatewayRequest } from './request';
+import { createRequestId } from '../utils/requestId';
 
 /**
  * B 端监控运维、人工工单与演示任务网关服务。
@@ -270,7 +271,7 @@ function writeAction<T>(url: string, data: Record<string, unknown>): Promise<Api
   return gatewayRequest<ApiResponse<T>>(url, {
     method: 'POST',
     data,
-    headers: { 'Idempotency-Key': crypto.randomUUID() },
+    headers: { 'Idempotency-Key': createRequestId() },
   });
 }
 
