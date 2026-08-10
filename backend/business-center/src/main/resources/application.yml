@@ -10,20 +10,23 @@ spring:
     driver-class-name: com.mysql.cj.jdbc.Driver
   data:
     redis:
-      host: ${REDIS_HOST:localhost}
+      host: ${REDIS_HOST:121.43.51.164}
       port: ${REDIS_PORT:6379}
+      password: teamuser2026
   flyway:
     enabled: true
     locations: classpath:db/migration
     baseline-on-migrate: true
-    # 线上数据库包含已部署但当前仓库缺失的历史迁移；忽略这类缺失记录，仍校验本地迁移并继续执行新增迁移。
-    ignore-migration-patterns: '*:missing'
+    # 注意：Flyway 10 社区版不支持 ignore-migration-patterns（实测对 *:missing 无效）。
+    # 远程库若出现本仓库缺失的已应用迁移（如队友分支先行应用），必须补充占位迁移文件
+    # 并用 scripts/validate-flyway.ps1 -Repair 对齐校验和，禁止依赖该忽略配置。
     default-schema: ${BUSINESS_DB_SCHEMA:business_db}
     out-of-order: true
 minialalipay:
   internal:
-    account-center-url: ${ACCOUNT_CENTER_INTERNAL_URL:http://localhost:8083}
-    user-center-url: ${USER_CENTER_INTERNAL_URL:http://localhost:8081}
+    # 默认使用服务名，经 Nacos 负载均衡解析实例；直连地址可用对应环境变量覆盖
+    account-center-url: ${ACCOUNT_CENTER_INTERNAL_URL:http://account-center}
+    user-center-url: ${USER_CENTER_INTERNAL_URL:http://user-center}
     # 与 user-center 的 internal.auth.service-token / minialalipay.internal.service-token 保持一致，
     # 否则支付证明验证等内部调用会被拒绝并映射为 PAYMENT_PROOF_INVALID。
     service-token: ${INTERNAL_SERVICE_TOKEN:local-internal-token}
@@ -33,9 +36,10 @@ minialalipay:
   monitoring:
     enabled: ${MONITORING_ENABLED:true}
     health:
-      gateway-url: ${GATEWAY_HEALTH_URL:http://localhost:8080/actuator/health}
-      account-center-url: ${ACCOUNT_CENTER_HEALTH_URL:http://localhost:8083/actuator/health}
-      ai-service-url: ${AI_SERVICE_HEALTH_URL:http://localhost:8084/actuator/health}
+      # 健康探针默认经 Nacos 负载均衡访问各服务 Actuator；直连地址可用对应环境变量覆盖
+      gateway-url: ${GATEWAY_HEALTH_URL:http://minialalipay-gateway/actuator/health}
+      account-center-url: ${ACCOUNT_CENTER_HEALTH_URL:http://account-center/actuator/health}
+      ai-service-url: ${AI_SERVICE_HEALTH_URL:http://ai-service/actuator/health}
       timeout-ms: ${MONITORING_HEALTH_TIMEOUT_MS:800}
     outbox:
       fixed-delay-ms: ${MONITORING_OUTBOX_FIXED_DELAY_MS:1000}

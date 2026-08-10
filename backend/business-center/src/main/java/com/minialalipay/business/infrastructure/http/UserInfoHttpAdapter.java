@@ -4,6 +4,7 @@ import com.minialalipay.business.application.port.UserInfoPort;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Value;
+import org.springframework.cloud.client.loadbalancer.LoadBalanced;
 import org.springframework.stereotype.Component;
 import org.springframework.web.client.RestClient;
 import org.springframework.web.client.RestClientResponseException;
@@ -22,7 +23,7 @@ public class UserInfoHttpAdapter implements UserInfoPort {
     private final String serviceToken;
 
     public UserInfoHttpAdapter(
-            RestClient.Builder builder,
+            @LoadBalanced RestClient.Builder builder,
             @Value("${minialalipay.internal.user-center-url}") String baseUrl,
             @Value("${minialalipay.internal.service-token:}") String serviceToken
     ) {

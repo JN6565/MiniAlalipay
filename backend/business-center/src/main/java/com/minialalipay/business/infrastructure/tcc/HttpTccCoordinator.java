@@ -6,6 +6,7 @@ import com.minialalipay.business.application.port.SecurityMaterialPort;
 import com.minialalipay.business.domain.transaction.FundTransaction;
 import com.minialalipay.business.domain.transaction.TransactionStatus;
 import org.springframework.beans.factory.annotation.Value;
+import org.springframework.cloud.client.loadbalancer.LoadBalanced;
 import org.springframework.stereotype.Component;
 import org.springframework.web.client.RestClient;
 
@@ -23,7 +24,7 @@ public class HttpTccCoordinator implements TccCoordinatorPort {
     private final SecurityMaterialPort secure;
     private final RestClient accountClient;
 
-    public HttpTccCoordinator(BusinessStore store, SecurityMaterialPort secure, RestClient.Builder builder,
+    public HttpTccCoordinator(BusinessStore store, SecurityMaterialPort secure, @LoadBalanced RestClient.Builder builder,
                               @Value("${minialalipay.internal.account-center-url}") String accountBaseUrl) {
         this.store = store; this.secure = secure; this.accountClient = builder.baseUrl(accountBaseUrl).build();
     }
@@ -75,6 +76,28 @@ public class HttpTccCoordinator implements TccCoordinatorPort {
         }
         store.updateTccGlobal(a.xid(), "COMMITTING", "{\"result\":\"CONFIRMED\"}", null, Instant.now());
         finalizeSuccess(transaction, a);
+    }
+
+    /**
+     * 复核人工态交易：转回在途态后用原稳定分支键重新驱动 TCC 并重新核验资金事实。
+     *
+     * <p>人工态不是终态：事实核验规则修复后，存量误判交易的资金事实其实一致，
+     * 重驱后参与者屏障幂等不重复动账，事实一致即发布终态并自动处置工单。
+     * 按工单原因选择恢复路径：取消事实不一致继续补偿，其余正向完成；
+     * 事实仍不一致时协调器会再次将其转回人工态，真实异常仍由人工处置。</p>
+     */
+    @Override
+    public void recheckManualReview(FundTransaction supplied) {
+        FundTransaction transaction = store.findTransaction(supplied.getTransactionId())
+                .map(BusinessStore.FundTransactionRecord::transaction).orElse(supplied);
+        if (transaction.getStatus() != TransactionStatus.MANUAL_REVIEW) return;
+        String reason = store.findActiveManualCase(transaction.getTransactionId())
+                .map(BusinessStore.ManualCaseRecord::reasonCode).orElse("");
+        long version = transaction.getVersion();
+        transaction.resumeFromManualReview(reason.startsWith("CANCEL"), Instant.now());
+        // CAS 落库失败说明已有其他恢复线程接管，不得重复驱动资金操作。
+        if (!store.updateTransaction(transaction, version, secure.newId(), Instant.now())) return;
+        startOrResume(transaction);
     }
 
     private void recharge(FundTransaction transaction, Artifacts a) {
@@ -285,7 +308,9 @@ public class HttpTccCoordinator implements TccCoordinatorPort {
 
     private void requireManualReview(FundTransaction transaction, Artifacts a, String reason, Facts facts) {
         Instant now = Instant.now();
-        String caseId = secure.newId();
+        // 复核后再次进入人工态时复用已有活动工单：人工工单按交易唯一，重复新建会违反活动主体唯一约束。
+        String caseId = store.findActiveManualCase(transaction.getTransactionId())
+                .map(BusinessStore.ManualCaseRecord::caseId).orElseGet(secure::newId);
         try {
             accountClient.post().uri("/internal/v1/reconciliation-diffs")
                     .body(new ReconciliationDiffCommand(secure.newId(), transaction.getTransactionId(), reason,

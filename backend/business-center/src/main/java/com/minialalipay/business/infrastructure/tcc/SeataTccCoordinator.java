@@ -4,8 +4,10 @@ import com.minialalipay.business.application.port.BusinessStore;
 import com.minialalipay.business.application.port.SecurityMaterialPort;
 import com.minialalipay.business.application.port.TccCoordinatorPort;
 import com.minialalipay.business.domain.transaction.FundTransaction;
+import com.minialalipay.business.domain.transaction.TransactionStatus;
 import com.minialalipay.business.domain.transaction.TransactionType;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
+import org.springframework.cloud.client.loadbalancer.LoadBalanced;
 import org.springframework.context.annotation.Primary;
 import org.springframework.stereotype.Component;
 import org.springframework.web.client.RestClient;
@@ -30,7 +32,7 @@ public class SeataTccCoordinator implements TccCoordinatorPort {
 
     public SeataTccCoordinator(BusinessStore store, SecurityMaterialPort secure,
                                SeataGlobalTransactionExecutor executor, HttpTccCoordinator httpFallback,
-                               RestClient.Builder builder,
+                               @LoadBalanced RestClient.Builder builder,
                                @org.springframework.beans.factory.annotation.Value("${minialalipay.internal.account-center-url}")
                                String accountBaseUrl) {
         this.store = store;
@@ -78,6 +80,27 @@ public class SeataTccCoordinator implements TccCoordinatorPort {
                         Instant.now().plusSeconds(10), Instant.now());
             }
         }
+    }
+
+    /**
+     * 复核人工态交易：转回在途态后按原协调路径重新驱动并重新核验资金事实。
+     *
+     * <p>人工态不是终态，事实一致时应自动收敛。按工单原因选择恢复路径：
+     * 取消事实不一致转补偿态，其余转处理中；事实仍不一致时由原路径再次处置，
+     * TRANSFER 走 Seata 分支，其余业务类型委托 HTTP 协调器。</p>
+     */
+    @Override
+    public void recheckManualReview(FundTransaction supplied) {
+        FundTransaction transaction = store.findTransaction(supplied.getTransactionId())
+                .map(BusinessStore.FundTransactionRecord::transaction).orElse(supplied);
+        if (transaction.getStatus() != TransactionStatus.MANUAL_REVIEW) return;
+        String reason = store.findActiveManualCase(transaction.getTransactionId())
+                .map(BusinessStore.ManualCaseRecord::reasonCode).orElse("");
+        long version = transaction.getVersion();
+        transaction.resumeFromManualReview(reason.startsWith("CANCEL"), Instant.now());
+        // CAS 落库失败说明已有其他恢复线程接管，不得重复驱动资金操作。
+        if (!store.updateTransaction(transaction, version, secure.newId(), Instant.now())) return;
+        startOrResume(transaction);
     }
 
     private void finalizeSuccess(FundTransaction transaction, String businessXid) {

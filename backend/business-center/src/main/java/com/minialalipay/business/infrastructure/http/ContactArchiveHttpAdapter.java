@@ -4,6 +4,7 @@ import com.minialalipay.business.application.port.ContactArchivePort;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Value;
+import org.springframework.cloud.client.loadbalancer.LoadBalanced;
 import org.springframework.scheduling.annotation.Async;
 import org.springframework.stereotype.Component;
 import org.springframework.web.client.RestClient;
@@ -24,7 +25,7 @@ public class ContactArchiveHttpAdapter implements ContactArchivePort {
     private final String serviceToken;
 
     public ContactArchiveHttpAdapter(
-            RestClient.Builder builder,
+            @LoadBalanced RestClient.Builder builder,
             @Value("${minialalipay.internal.user-center-url}") String baseUrl,
             @Value("${minialalipay.internal.service-token:}") String serviceToken
     ) {

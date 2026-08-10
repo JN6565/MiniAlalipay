@@ -267,6 +267,80 @@ class HttpTccCoordinatorTest {
         server.verify();
     }
 
+    @Test
+    void 人工态花呗交易复核事实一致时直接发布成功() {
+        BusinessStore store = mock(BusinessStore.class);
+        FundTransaction transaction = creditTransaction();
+        transaction.requireManualReview(Instant.parse("2026-08-04T08:01:00Z"));
+        when(store.findTransaction(transaction.getTransactionId()))
+                .thenReturn(Optional.of(new BusinessStore.FundTransactionRecord(transaction, null)));
+        when(store.findActiveManualCase(transaction.getTransactionId()))
+                .thenReturn(Optional.of(new BusinessStore.ManualCaseRecord("01K1CASE02GH3JK4MN5PQRST", "SUCCESS_FACT_MISMATCH")));
+        when(store.updateTransaction(any(), eq(1L), any(), any(Instant.class))).thenReturn(true);
+        RestClient.Builder builder = RestClient.builder();
+        MockRestServiceServer server = MockRestServiceServer.bindTo(builder).build();
+        server.expect(once(), requestTo("http://account/internal/v1/credit-accounts/by-user/payer-user"))
+                .andExpect(method(HttpMethod.GET))
+                .andRespond(withSuccess("{\"creditAccountId\":\"01K1CREDIT02GH3JK4MN5PQRST\",\"userId\":\"payer-user\",\"status\":\"ACTIVE\",\"version\":0}", MediaType.APPLICATION_JSON));
+        // 重驱复用原稳定分支键，参与者屏障幂等不重复动账
+        expectPost(server, "/internal/v1/tcc/credit-pay/try");
+        expectPost(server, "/internal/v1/tcc/balance/payee/try");
+        expectPost(server, "/internal/v1/tcc/credit-ledger/try");
+        expectPost(server, "/internal/v1/tcc/credit-pay/confirm");
+        expectPost(server, "/internal/v1/tcc/balance/payee/confirm");
+        expectPost(server, "/internal/v1/tcc/credit-ledger/confirm");
+        expectFacts(server, transaction, successFacts());
+
+        new HttpTccCoordinator(store, new SecureMaterialService(), builder, "http://account")
+                .recheckManualReview(transaction);
+
+        assertThat(transaction.getStatus()).isEqualTo(TransactionStatus.SUCCESS);
+        verify(store).finalizeTransaction(eq(transaction), eq(2L),
+                eq("tcc:" + transaction.getTransactionId()), eq("SUCCESS"),
+                any(), any(Instant.class));
+        server.verify();
+    }
+
+    @Test
+    void 人工态交易复核事实仍不一致时复用已有工单转回人工态() {
+        BusinessStore store = mock(BusinessStore.class);
+        FundTransaction transaction = creditTransaction();
+        transaction.requireManualReview(Instant.parse("2026-08-04T08:01:00Z"));
+        when(store.findTransaction(transaction.getTransactionId()))
+                .thenReturn(Optional.of(new BusinessStore.FundTransactionRecord(transaction, null)));
+        when(store.findActiveManualCase(transaction.getTransactionId()))
+                .thenReturn(Optional.of(new BusinessStore.ManualCaseRecord("01K1CASE02GH3JK4MN5PQRST", "SUCCESS_FACT_MISMATCH")));
+        when(store.updateTransaction(any(), eq(1L), any(), any(Instant.class))).thenReturn(true);
+        RestClient.Builder builder = RestClient.builder();
+        MockRestServiceServer server = MockRestServiceServer.bindTo(builder).build();
+        server.expect(once(), requestTo("http://account/internal/v1/credit-accounts/by-user/payer-user"))
+                .andExpect(method(HttpMethod.GET))
+                .andRespond(withSuccess("{\"creditAccountId\":\"01K1CREDIT02GH3JK4MN5PQRST\",\"userId\":\"payer-user\",\"status\":\"ACTIVE\",\"version\":0}", MediaType.APPLICATION_JSON));
+        expectPost(server, "/internal/v1/tcc/credit-pay/try");
+        expectPost(server, "/internal/v1/tcc/balance/payee/try");
+        expectPost(server, "/internal/v1/tcc/credit-ledger/try");
+        expectPost(server, "/internal/v1/tcc/credit-pay/confirm");
+        expectPost(server, "/internal/v1/tcc/balance/payee/confirm");
+        expectPost(server, "/internal/v1/tcc/credit-ledger/confirm");
+        expectFacts(server, transaction, "{\"successConsistent\":false,\"cancelConsistent\":false,"
+                + "\"accountsConfirmed\":true,\"ledgerConfirmed\":true,\"freezeConfirmed\":true,"
+                + "\"ledgerPosted\":false,\"accountsCancelled\":false,\"ledgerCancelled\":false,"
+                + "\"noActiveFreeze\":false}");
+        // 差异登记必须携带复用的既有工单号，不得新建重复工单
+        server.expect(once(), requestTo("http://account/internal/v1/reconciliation-diffs"))
+                .andExpect(method(HttpMethod.POST))
+                .andExpect(jsonPath("$.manualCaseId").value("01K1CASE02GH3JK4MN5PQRST"))
+                .andRespond(withSuccess());
+
+        new HttpTccCoordinator(store, new SecureMaterialService(), builder, "http://account")
+                .recheckManualReview(transaction);
+
+        assertThat(transaction.getStatus()).isEqualTo(TransactionStatus.MANUAL_REVIEW);
+        verify(store).moveToManualReview(eq(transaction), eq(2L), eq("tcc:" + transaction.getTransactionId()),
+                any(), eq("01K1CASE02GH3JK4MN5PQRST"), eq("SUCCESS_FACT_MISMATCH"), any(Instant.class));
+        server.verify();
+    }
+
     private static FundTransaction creditPayTransaction() {
         return FundTransaction.accept(CREDIT_PAY_TX, TransactionType.CREDIT_PAY, SourceType.QR_PAY_ORDER,
                 QR_ORDER_ID, "payer-user", CREDIT_ACCOUNT_ID, MERCHANT_ACCOUNT_ID,

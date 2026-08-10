@@ -4,6 +4,7 @@ import com.minialalipay.business.application.port.CreditAccountDirectoryPort;
 import com.minialalipay.business.domain.transaction.BusinessErrorCode;
 import com.minialalipay.common.error.BusinessException;
 import org.springframework.beans.factory.annotation.Value;
+import org.springframework.cloud.client.loadbalancer.LoadBalanced;
 import org.springframework.stereotype.Component;
 import org.springframework.web.client.RestClient;
 
@@ -13,7 +14,7 @@ public class CreditAccountDirectoryHttpAdapter implements CreditAccountDirectory
     private final RestClient client;
 
     /** 创建信用账户内部目录 HTTP 适配器。 */
-    public CreditAccountDirectoryHttpAdapter(RestClient.Builder builder,
+    public CreditAccountDirectoryHttpAdapter(@LoadBalanced RestClient.Builder builder,
                                               @Value("${minialalipay.internal.account-center-url}") String baseUrl) {
         this.client = builder.baseUrl(baseUrl).build();
     }

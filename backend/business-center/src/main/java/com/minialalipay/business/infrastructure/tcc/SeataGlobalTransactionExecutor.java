@@ -3,6 +3,7 @@ package com.minialalipay.business.infrastructure.tcc;
 import io.seata.core.context.RootContext;
 import io.seata.spring.annotation.GlobalTransactional;
 import org.springframework.beans.factory.annotation.Value;
+import org.springframework.cloud.client.loadbalancer.LoadBalanced;
 import org.springframework.stereotype.Component;
 import org.springframework.web.client.RestClient;
 
@@ -16,7 +17,7 @@ import org.springframework.web.client.RestClient;
 public class SeataGlobalTransactionExecutor {
     private final RestClient accountClient;
 
-    public SeataGlobalTransactionExecutor(RestClient.Builder builder,
+    public SeataGlobalTransactionExecutor(@LoadBalanced RestClient.Builder builder,
                                           @Value("${minialalipay.internal.account-center-url}") String accountBaseUrl) {
         this.accountClient = builder.baseUrl(accountBaseUrl).build();
     }

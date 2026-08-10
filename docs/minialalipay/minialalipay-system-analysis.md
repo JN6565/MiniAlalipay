@@ -1501,13 +1501,19 @@ flowchart TD
 | `POST /internal/v1/tcc/credit-repay/{action}` | `business-center` -> `account-center` | `action` 为 `try/confirm/cancel`；Try 冻结还款余额，Confirm 扣减余额、减少应收并恢复额度，Cancel 释放余额；按 `xid + CREDIT_REPAY + credit_account_id` 幂等并持久化空回滚屏障 |
 | `POST /internal/v1/tcc/credit-refund/{action}` | `business-center` -> `account-center` | 仅用于原 `CREDIT_PAY` 的全额且未还款信用退款冲正；请求只传原信用消费、原交易与收款账户，账户中心锁定 `credit_purchase` 并冻结收款用户余额，Confirm 冲销消费明细/应收/账单、恢复额度并将消费转 `REVERSED`；按 `xid + CREDIT_REFUND + original_transaction_id` 幂等并持久化空回滚屏障 |
 | `POST /internal/v1/tcc/refund-ledger/{action}` | `business-center` -> `account-center` | 退款专用账本分支；`payerAccountId` 与 `creditAccountId` 二选一指定贷方科目；Try 创建引用原凭证且 `reversal_reason=BUSINESS_REFUND` 的 `REFUND` 预记账凭证，Confirm 验平后过账并写 Outbox，Cancel 只取消未过账凭证；按 `xid + REFUND_LEDGER + voucher_id` 幂等 |
-| `GET /internal/v1/transaction-facts/{transactionId}` | `business-center` -> `account-center` | 返回余额、冻结、TCC 分支和账本的脱敏布尔事实，终态发布器不得根据超时猜测成功 |
+| `GET /internal/v1/transaction-facts/{transactionId}` | `business-center` -> `account-center` | 返回余额、冻结、TCC 分支和账本的脱敏布尔事实，终态发布器不得根据超时猜测成功；核验规则按资金路径选择：余额转账查付款余额冻结与 `LEDGER` 账本分支，花呗信用支付查 `credit_freeze` 额度冻结与 `CREDIT_PAY_LEDGER` 账本分支，两套规则互斥，识别依据是交易是否存在 `CREDIT_PAY` 账户分支 |
 | `POST /internal/v1/reconciliation-diffs` | `business-center` -> `account-center` | 按业务日期、交易和差异类型幂等追加证据；只写 `ledger_db.reconciliation_diff`，不得直接改账 |
 
 终态发布时，`fund_transaction` 状态、`tcc_global` 终态和业务 Outbox 必须在同一
 `business_db` 本地事务内提交。事实不一致时还需在同一事务创建活动 `manual_case`；
 跨服务写入的 `reconciliation_diff` 只保存预期与实际证据，后续修复必须创建冲正凭证，
 禁止覆盖历史凭证或直接调整余额。
+
+人工态（`MANUAL_REVIEW`）不是终态，恢复任务必须定期复核：按工单原因把交易转回在途态
+（取消事实不一致转 `COMPENSATING`，其余转 `PROCESSING`），用原稳定分支键重新驱动 TCC
+并重新读取资金事实；事实一致时直接发布终态并在同一事务把对应 `manual_case` 置为 `RESOLVED`，
+来源订单投影允许从 `MANUAL_REVIEW` 更新为终态；事实仍不一致时保持人工态，同一交易的活动工单
+唯一，复核再次进入人工态时复用既有工单而非新建。
 
 ### 9.8 交互式支付统一资金活动流程图
 
@@ -2579,8 +2585,8 @@ erDiagram
 | PUT | `/api/v1/payment-password` | 首次注册/登录用户 | 设置独立 6 位支付密码 | 已设置时拒绝覆盖；只存强哈希 |
 | PATCH | `/api/v1/payment-password` | 登录用户 | 验证登录密码后修改支付密码 | 原子更新并撤销全部活动确认令牌 |
 | POST | `/api/v1/payment-password/verify` | 登录用户 | 校验支付密码并签发短期凭证 | 错误次数原子累加与锁定 |
-| GET | `/api/v1/users/search?q=` | 登录用户 | 搜索脱敏收款人 | 只读，最多返回 10 项 |
-| GET | `/api/v1/contacts` | 登录用户 | 查询成功转账历史生成的常用收款人 | 次数、最近成功时间和置顶排序；游标分页 |
+| GET | `/api/v1/users/search?q=` | 登录用户 | 搜索收款人，返回脱敏真实姓名与脱敏手机号 | 只读，最多返回 10 项；明文姓名与完整手机号不出服务边界 |
+| GET | `/api/v1/contacts` | 登录用户 | 查询成功转账历史生成的常用收款人，返回脱敏展示名与脱敏手机号 | 次数、最近成功时间和置顶排序；游标分页 |
 | PATCH | `/api/v1/contacts/{payeeUserId}` | 登录用户 | 设置已有常用收款人的置顶、隐藏或备注 | 只能修改成功转账生成的记录；`version` CAS |
 | GET | `/api/v1/accounts/me` | 登录用户 | 查询本人账户和实时余额 | 不使用过期缓存代替资金事实 |
 | GET | `/api/v1/accounts/me/entries` | 登录用户 | 查询本人账本明细 | `cursor` + `limit<=100` |

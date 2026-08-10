@@ -24,9 +24,9 @@ mybatis:
   mapper-locations: classpath:mapper/*.xml
   configuration:
     map-underscore-to-camel-case: true
-# 账户中心配置
+# 账户中心配置：默认使用服务名，经 Nacos 负载均衡解析实例；直连地址可用 ACCOUNT_CENTER_URL 覆盖
 account-center:
-  url: ${ACCOUNT_CENTER_URL:http://localhost:8083}
+  url: ${ACCOUNT_CENTER_URL:http://account-center}
 internal:
   auth:
     # 内部接口服务令牌，必须与 business-center/account-center 的同名配置一致

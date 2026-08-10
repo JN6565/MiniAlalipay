@@ -33,6 +33,17 @@ public interface CreditFreezeMapper {
             @Param("creditAccountId") String creditAccountId);
 
     /**
+     * 根据交易 ID 查询冻结记录，供终态事实核验使用。
+     *
+     * <p>信用支付每笔交易至多一条冻结记录；Try 未实际冻结额度时（如空回滚）无记录。</p>
+     *
+     * @param transactionId 统一交易 ID
+     * @return 冻结记录 PO，未找到时返回 null
+     */
+    @Select("SELECT * FROM account_db.credit_freeze WHERE transaction_id = #{transactionId}")
+    CreditFreezePO findByTransactionId(@Param("transactionId") String transactionId);
+
+    /**
      * 插入冻结记录。
      *
      * @param po 冻结记录持久化对象

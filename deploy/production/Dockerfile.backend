@@ -1,0 +1,17 @@
+# 后端通用运行镜像：只含 JRE，不含构建工具；jar 由本地 mvn package 产出后经构建参数注入。
+# 构建上下文为 deploy/production 上传目录根，JAR_FILE 指向 jars/ 下的 fat jar。
+FROM eclipse-temurin:21-jre-alpine
+
+# 由 docker-compose 的 build.args 指定具体服务的 jar 路径
+ARG JAR_FILE
+
+# 统一复制到固定路径，避免镜像内残留服务名等构建信息
+COPY ${JAR_FILE} /app/app.jar
+
+WORKDIR /app
+
+# JVM 参数（堆大小、字符集等）通过环境变量 JAVA_TOOL_OPTIONS 注入，
+# 由 docker-compose 按服务内存预算分别设置
+ENV TZ=Asia/Shanghai
+
+ENTRYPOINT ["java", "-jar", "/app/app.jar"]

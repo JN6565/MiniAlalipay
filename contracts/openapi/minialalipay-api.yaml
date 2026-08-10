@@ -3500,7 +3500,10 @@ components:
       required: [userId, nickname]
       properties:
         userId: { type: string, description: 用户 ID }
+        accountNumber: { type: string, description: 系统账户号 }
         nickname: { type: string, description: 用户昵称 }
+        maskedRealName: { type: string, description: 脱敏真实姓名，保留首字符其余以星号代替（如 张飞 -> 张*），仅用于转账收款人确认展示；未绑定身份时不返回 }
+        identityStatus: { type: string, description: 身份状态（如 VERIFIED、UNVERIFIED） }
         phoneTail: { type: string, description: 手机号后四位，脱敏展示 }
         maskedPhone: { type: string, description: 脱敏手机号，保留前 3 位和后 4 位，中间以 **** 代替，如 138****9150 }
     AgentSessionSummary:
@@ -3975,8 +3978,8 @@ components:
         successCount: { type: integer, format: int64, minimum: 0 }
         lastSuccessAt: { type: string, format: date-time, nullable: true }
         pinned: { type: boolean }
-        payeeNickname: { type: string, nullable: true, description: 收款人昵称；收款人不存在或非 ACTIVE 时为 null，前端自行降级展示 }
-        payeeAccountNumber: { type: string, nullable: true, description: 收款人系统账户号；收款人不存在或非 ACTIVE 时为 null }
+        payeeName: { type: string, nullable: true, description: 收款人脱敏展示名，真实姓名优先、未绑定身份时降级昵称，保留首字符其余以星号代替；收款人不存在时为 *** }
+        accountNumber: { type: string, nullable: true, description: 收款人系统账户号；收款人不存在时为空字符串 }
         maskedPhone: { type: string, nullable: true, description: 收款人脱敏手机号，保留前 3 位和后 4 位，中间以 **** 代替，如 138****9150 }
         phoneTail: { type: string, nullable: true, description: 收款人手机尾号（4 位），脱敏手机号缺失时的降级展示 }
     UpdateContactRequest:

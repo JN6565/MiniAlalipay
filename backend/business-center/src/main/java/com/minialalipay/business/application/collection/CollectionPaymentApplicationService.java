@@ -21,6 +21,8 @@ import com.minialalipay.business.domain.transaction.TransactionType;
 import com.minialalipay.common.error.BusinessException;
 import com.minialalipay.common.error.CommonErrorCode;
 import com.minialalipay.common.idempotency.IdempotencyKeyValidator;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Service;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.transaction.annotation.Transactional;
@@ -37,6 +39,7 @@ import java.util.Base64;
  */
 @Service
 public class CollectionPaymentApplicationService {
+    private static final Logger log = LoggerFactory.getLogger(CollectionPaymentApplicationService.class);
     private final CollectionStore collections;
     private final BusinessStore business;
     private final PaymentProofPort proofs;
@@ -175,7 +178,16 @@ public class CollectionPaymentApplicationService {
                 userId, order.getPayerAccountId(), order.getPayeeAccountId(), fundingSource, order.getAmountFen(),
                 idempotencyKey, "LOW", validTraceId(traceId), now);
         business.createTransaction(transaction, requestHash, security.newId(), now);
-        afterCommit(() -> coordinator.startOrResume(transaction));
+        afterCommit(() -> {
+            // 受理事务已提交，资金协调失败不得反向污染客户端结果：
+            // 此时正确的客户端事实就是已受理（PROCESSING），异常交易由恢复扫描用相同稳定分支键继续驱动。
+            try {
+                coordinator.startOrResume(transaction);
+            } catch (RuntimeException coordinationFailure) {
+                log.error("C2C 受理后启动资金协调失败，等待恢复扫描接管: transactionId={}",
+                        transaction.getTransactionId(), coordinationFailure);
+            }
+        });
         return transaction;
     }
 

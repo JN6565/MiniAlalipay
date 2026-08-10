@@ -15,10 +15,10 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.time.Instant;
+import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
-import java.util.stream.Collectors;
 import java.nio.charset.StandardCharsets;
 import java.util.Base64;
 import org.springframework.dao.DataIntegrityViolationException;
@@ -115,12 +115,16 @@ public class LedgerApplicationService {
                 .toList();
         if (userIds.isEmpty()) return Map.of();
 
-        return userIds.stream()
-                .collect(Collectors.toMap(
-                        uid -> uid,
-                        uid -> userInfoPort.findUserInfo(uid),
-                        (a, b) -> a
-                ));
+        // 逐个查询并容忍 null：用户中心不可用或查无此人时降级为缺失条目，
+        // 展示层对缺失键回退为空名称；不得用 Collectors.toMap，其值为 null 时会抛 NPE
+        Map<String, UserInfoPort.UserInfo> result = new HashMap<>();
+        for (String uid : userIds) {
+            UserInfoPort.UserInfo info = userInfoPort.findUserInfo(uid);
+            if (info != null) {
+                result.put(uid, info);
+            }
+        }
+        return result;
     }
 
     private LedgerEntryDTO toDto(LedgerEntry.WithCounterparty wc,

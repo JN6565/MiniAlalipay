@@ -31,6 +31,12 @@ public class CreditFreezeRepositoryImpl implements CreditFreezeRepository {
     }
 
     @Override
+    public Optional<CreditFreeze> findByTransactionId(String transactionId) {
+        CreditFreezePO po = creditFreezeMapper.findByTransactionId(transactionId);
+        return Optional.ofNullable(po).map(this::toDomain);
+    }
+
+    @Override
     public void save(CreditFreeze freeze) {
         CreditFreezePO existing = creditFreezeMapper.findByTransactionIdAndAccountId(
                 freeze.getTransactionId(), freeze.getCreditAccountId());

@@ -82,12 +82,16 @@ public interface CreditPurchaseMapper {
      * <p>仅当数据库中的 version 与传入的 version 一致时才更新，
      * 更新成功后 version 自增 1。</p>
      *
+     * <p>未还金额 outstanding_fen 是数据库生成列
+     * （amount_fen - repaid_fen - refunded_fen），由 MySQL 自动计算，
+     * 禁止在 UPDATE 中显式赋值，否则触发 MySQL 3105 错误。</p>
+     *
      * @param po 包含最新字段值及当前版本号的消费明细 PO
      * @return 受影响行数，0 表示版本号不匹配（并发冲突）
      */
     @Update("UPDATE ledger_db.credit_purchase "
             + "SET repaid_fen = #{repaidFen}, refunded_fen = #{refundedFen}, "
-            + "outstanding_fen = #{outstandingFen}, refund_transaction_id = #{refundTransactionId}, "
+            + "refund_transaction_id = #{refundTransactionId}, "
             + "billing_status = #{billingStatus}, version = version + 1, updated_at = #{updatedAt} "
             + "WHERE purchase_id = #{purchaseId} AND version = #{version}")
     int updateByCas(CreditPurchasePO po);

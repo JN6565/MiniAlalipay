@@ -107,6 +107,24 @@ public final class FundTransaction {
         }
         status = TransactionStatus.MANUAL_REVIEW; version++; updatedAt = now;
     }
+    /**
+     * 人工态交易转回在途态，供恢复任务用原稳定分支键重新驱动 TCC 并重新核验资金事实。
+     *
+     * <p>系统分析状态机允许 {@code MANUAL_REVIEW -> PROCESSING}。按工单原因选择恢复路径：
+     * 取消事实不一致（{@code cancelPath=true}）转回 {@link TransactionStatus#COMPENSATING} 继续补偿；
+     * 其余原因（成功事实不一致或差异写入失败）转回 {@link TransactionStatus#PROCESSING} 正向完成。
+     * 事实仍不一致时协调器会再次将其转回人工态，不影响真实异常场景的人工处置。</p>
+     *
+     * @param cancelPath 是否按取消补偿路径恢复
+     * @param now 状态变更时间
+     */
+    public void resumeFromManualReview(boolean cancelPath, Instant now) {
+        if (status != TransactionStatus.MANUAL_REVIEW) {
+            throw new IllegalStateException("仅人工复核中的交易可以重新核验");
+        }
+        status = cancelPath ? TransactionStatus.COMPENSATING : TransactionStatus.PROCESSING;
+        version++; updatedAt = Objects.requireNonNull(now);
+    }
     private void transition(TransactionStatus expected, TransactionStatus target, Instant now) {
         if (status != expected) throw new IllegalStateException("交易状态不允许该操作");
         status = target; version++; updatedAt = Objects.requireNonNull(now);

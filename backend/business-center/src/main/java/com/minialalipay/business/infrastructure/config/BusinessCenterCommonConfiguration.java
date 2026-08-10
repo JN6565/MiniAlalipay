@@ -7,8 +7,10 @@ import com.minialalipay.common.error.CommonExceptionMapper;
 import com.minialalipay.common.trace.RequestIdGenerator;
 import com.minialalipay.common.idempotency.IdempotencyKeyValidator;
 import org.springframework.boot.web.servlet.FilterRegistrationBean;
+import org.springframework.cloud.client.loadbalancer.LoadBalanced;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
+import org.springframework.web.client.RestClient;
 
 /**
  * 业务中心跨子域共享的技术配置，不承载交易、风控或资金领域规则。
@@ -54,5 +56,16 @@ public class BusinessCenterCommonConfiguration {
         registration.setOrder(1);
         registration.setName("userContextFilter");
         return registration;
+    }
+
+    /**
+     * @return 带负载均衡的 RestClient 构建器，用于调用其他微服务（如 account-center、user-center）；
+     * Spring Cloud LoadBalancer 只装饰标注 {@link LoadBalanced} 的 RestClient.Builder Bean，
+     * 注入方必须使用该限定符，否则服务名 URL 会被当作普通域名走 DNS 解析
+     */
+    @LoadBalanced
+    @Bean
+    public RestClient.Builder loadBalancedRestClientBuilder() {
+        return RestClient.builder();
     }
 }

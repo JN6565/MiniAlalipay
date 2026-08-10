@@ -1,8 +1,10 @@
 package com.minialalipay.gateway.auth;
 
 import com.minialalipay.gateway.filter.GatewayAuthContext;
+import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
+import org.springframework.cloud.client.loadbalancer.reactive.ReactorLoadBalancerExchangeFilterFunction;
 import org.springframework.stereotype.Component;
 import org.springframework.http.HttpStatus;
 import org.springframework.web.server.ResponseStatusException;
@@ -35,9 +37,14 @@ public final class UserCenterAuthenticationAdapter implements GatewayAuthenticat
 
     public UserCenterAuthenticationAdapter(
             WebClient.Builder builder,
-            @Value("${gateway.authentication.user-center-uri:http://localhost:8081}") String userCenterUri,
+            ObjectProvider<ReactorLoadBalancerExchangeFilterFunction> loadBalancerFilter,
+            @Value("${gateway.authentication.user-center-uri:lb://user-center}") String userCenterUri,
             @Value("${gateway.authentication.service-token:local-internal-token}") String serviceToken) {
-        this.webClient = builder.baseUrl(userCenterUri).build();
+        // 默认基址为 lb://user-center，经 Nacos 负载均衡解析实例；直连 http:// 地址经该过滤器原样透传。
+        // 测试上下文可能不注册负载均衡过滤器，缺失时退回普通 WebClient，保证直连地址可用。
+        WebClient.Builder configured = builder.baseUrl(userCenterUri);
+        loadBalancerFilter.ifAvailable(filter -> configured.filter(filter));
+        this.webClient = configured.build();
         this.serviceToken = serviceToken;
     }
 

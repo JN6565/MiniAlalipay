@@ -6,8 +6,11 @@ import com.minialalipay.common.context.UserContextFilter;
 import com.minialalipay.common.error.CommonExceptionMapper;
 import com.minialalipay.common.trace.RequestIdGenerator;
 import org.springframework.boot.web.servlet.FilterRegistrationBean;
+import org.springframework.cloud.client.loadbalancer.LoadBalanced;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
+import org.springframework.context.annotation.Primary;
+import org.springframework.web.client.RestClient;
 
 import java.time.Clock;
 
@@ -61,5 +64,28 @@ public class AiServiceCommonConfiguration {
         registration.setOrder(1);
         registration.setName("userContextFilter");
         return registration;
+    }
+
+    /**
+     * @return 通用 RestClient 构建器（主 Bean），供 Spring AI 等调用外部互联网地址的组件使用；
+     * 自定义的 RestClient.Builder Bean 会使 Boot 默认构建器因 {@code @ConditionalOnMissingBean}
+     * 退让，若不补此普通构建器，Spring AI 将注入到负载均衡构建器，把 api.deepseek.com 等
+     * 外部域名当作服务名经 Nacos 解析而失败；内部服务名调用必须显式使用 {@link LoadBalanced} 限定符
+     */
+    @Bean
+    @Primary
+    public RestClient.Builder restClientBuilder() {
+        return RestClient.builder();
+    }
+
+    /**
+     * @return 带负载均衡的 RestClient 构建器，用于经网关调用其他微服务；
+     * Spring Cloud LoadBalancer 只装饰标注 {@link LoadBalanced} 的 RestClient.Builder Bean，
+     * 注入方必须使用该限定符，否则服务名 URL 会被当作普通域名走 DNS 解析
+     */
+    @LoadBalanced
+    @Bean
+    public RestClient.Builder loadBalancedRestClientBuilder() {
+        return RestClient.builder();
     }
 }

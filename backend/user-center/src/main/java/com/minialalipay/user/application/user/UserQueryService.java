@@ -67,12 +67,13 @@ public class UserQueryService {
         // 2. 规范化关键词
         String normalizedKeyword = keyword.trim();
 
-        // 3. 调用仓储搜索用户；对外只返回脱敏手机号，完整手机号不出服务边界
+        // 3. 调用仓储搜索用户；真实姓名与手机号均为敏感信息，在服务边界经 NameMasker/PhoneMasker 脱敏后下发，明文不出服务边界
         return userRepository.searchByKeyword(normalizedKeyword, currentUserId, 20).stream()
                 .map(user -> new UserSearchResult(
                         user.getUserId(),
                         user.getAccountNumber(),
                         user.getNickname(),
+                        NameMasker.mask(user.getRealName()),
                         user.getIdentityStatus(),
                         user.getPhoneTail(),
                         PhoneMasker.mask(user.getPhoneNumber())

@@ -4,6 +4,7 @@ import com.minialalipay.account.application.credit.PaymentProofPort;
 import com.minialalipay.account.domain.credit.CreditErrorCode;
 import com.minialalipay.common.error.BusinessException;
 import org.springframework.beans.factory.annotation.Value;
+import org.springframework.cloud.client.loadbalancer.LoadBalanced;
 import org.springframework.stereotype.Component;
 import org.springframework.web.client.RestClient;
 import org.springframework.web.client.RestClientException;
@@ -16,8 +17,8 @@ public class PaymentProofHttpAdapter implements PaymentProofPort {
     private final String serviceToken;
 
     public PaymentProofHttpAdapter(
-            RestClient.Builder builder,
-            @Value("${minialalipay.internal.user-center-url:http://localhost:8081}") String userCenterUrl,
+            @LoadBalanced RestClient.Builder builder,
+            @Value("${minialalipay.internal.user-center-url:http://user-center}") String userCenterUrl,
             @Value("${minialalipay.internal.service-token:}") String serviceToken
     ) {
         this.client = builder.baseUrl(userCenterUrl).build();

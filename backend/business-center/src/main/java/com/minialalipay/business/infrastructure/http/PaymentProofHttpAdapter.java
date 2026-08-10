@@ -6,6 +6,7 @@ import com.minialalipay.common.error.BusinessException;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import org.springframework.beans.factory.annotation.Value;
+import org.springframework.cloud.client.loadbalancer.LoadBalanced;
 import org.springframework.stereotype.Component;
 import org.springframework.web.client.RestClient;
 import org.springframework.web.client.RestClientResponseException;
@@ -16,7 +17,7 @@ public class PaymentProofHttpAdapter implements PaymentProofPort {
     private final RestClient client;
     private final String serviceToken;
     private final ObjectMapper objectMapper = new ObjectMapper();
-    public PaymentProofHttpAdapter(RestClient.Builder builder,
+    public PaymentProofHttpAdapter(@LoadBalanced RestClient.Builder builder,
                                    @Value("${minialalipay.internal.user-center-url}") String baseUrl,
                                    @Value("${minialalipay.internal.service-token:}") String serviceToken) {
         this.client = builder.baseUrl(baseUrl).build();

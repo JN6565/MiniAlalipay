@@ -6,6 +6,10 @@ spring:
     driver-class-name: org.h2.Driver
   flyway:
     enabled: false
+  cloud:
+    # 测试使用 localhost 直连 stub 地址，关闭负载均衡避免主机名被当作服务名解析
+    loadbalancer:
+      enabled: false
 minialalipay:
   monitoring:
     enabled: false
@@ -15,6 +19,13 @@ minialalipay:
   recovery:
     fixed-delay-ms: 3600000
     initial-delay-ms: 3600000
+    manual-review-fixed-delay-ms: 3600000
+    manual-review-initial-delay-ms: 3600000
+management:
+  health:
+    # 单元测试不连接 Redis，Redis 可用性不属于本测试的健康语义
+    redis:
+      enabled: false
 # 单元测试不启动 Seata TM/RM，避免测试上下文连接远端 TC。
 seata:
   enabled: false
