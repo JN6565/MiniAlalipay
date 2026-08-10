@@ -48,8 +48,9 @@ $stage = Join-Path $PSScriptRoot "stage"
 # 后端 5 个可部署服务（platform-common 为公共库，不独立部署）
 $services = @("gateway", "user-center", "business-center", "account-center", "ai-service")
 
-Write-Host "==> 清理暂存目录 $stage" -ForegroundColor Cyan
-Remove-Item $stage -Recurse -Force -ErrorAction SilentlyContinue
+# 暂存目录不全量清空：跳过前端/后端构建时需要复用上次产物，
+# 否则会把空目录上传到服务器，导致 Nginx 找不到 index.html 返回 403
+Write-Host "==> 准备暂存目录 $stage（保留已有产物）" -ForegroundColor Cyan
 New-Item -ItemType Directory -Path (Join-Path $stage "jars") -Force | Out-Null
 New-Item -ItemType Directory -Path (Join-Path $stage "web\h5") -Force | Out-Null
 New-Item -ItemType Directory -Path (Join-Path $stage "web\admin") -Force | Out-Null
@@ -98,10 +99,20 @@ if (-not $SkipFrontend) {
         }
         $dist = Join-Path $projDir "dist"
         if (-not (Test-Path $dist)) { throw "$($proj.Name) 未产出 dist 目录" }
-        Copy-Item "$dist\*" (Join-Path $stage "web\$($proj.Target)") -Recurse -Force
+        # 重建前先清空对应产物目录，避免残留旧版文件
+        $targetDir = Join-Path $stage "web\$($proj.Target)"
+        Remove-Item $targetDir -Recurse -Force -ErrorAction SilentlyContinue
+        New-Item -ItemType Directory -Path $targetDir -Force | Out-Null
+        Copy-Item "$dist\*" $targetDir -Recurse -Force
     }
 } else {
-    Write-Host "==> 跳过前端构建；若 stage/web 为空请先去掉 -SkipFrontend 执行一次" -ForegroundColor Yellow
+    # 跳过前端构建时复用上次产物；若产物不存在必须全量构建，禁止上传空目录
+    foreach ($t in @("h5", "admin")) {
+        if (-not (Test-Path (Join-Path $stage "web\$t\index.html"))) {
+            throw "stage\web\$t 缺少 index.html，不能使用 -SkipFrontend 上传；请去掉 -SkipFrontend 重新运行"
+        }
+    }
+    Write-Host "==> 跳过前端构建，复用 stage/web 中的上次产物" -ForegroundColor Yellow
 }
 
 # ---------- 4. 上传 ----------
