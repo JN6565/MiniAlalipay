@@ -80,7 +80,7 @@ public interface LanguageModelPort {
      *
      * @param messages 完整对话消息列表（含 system、user、assistant、tool results）
      * @param tools 当前可用工具定义（来自 ToolCatalog，排除 HIGH_RISK_WRITE）
-     * @return {@link AgentDecision.ToolCall} 或 {@link AgentDecision.FinalReply}
+     * @return 单个工具调用、独立只读工具批次或最终回复
      */
     default AgentDecision agentStep(List<ChatMessage> messages,
                                     List<ToolCatalog.ToolDefinition> tools) {
@@ -101,7 +101,7 @@ public interface LanguageModelPort {
      * @param toolCallId 上一次工具调用的 ID
      * @param toolName 上一次工具调用的工具名
      * @param actualResult 工具执行的真实结果 JSON
-     * @return {@link AgentDecision.ToolCall} 或 {@link AgentDecision.FinalReply}
+     * @return 单个工具调用、独立只读工具批次或最终回复
      */
     default AgentDecision agentStepWithToolResult(
             List<ChatMessage> messages,

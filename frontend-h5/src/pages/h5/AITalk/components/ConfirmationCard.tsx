@@ -1,8 +1,14 @@
-import React, { useState, useCallback, useMemo } from 'react';
+import React, { useState, useCallback, useEffect, useMemo, useRef } from 'react';
 import { Button, Toast } from 'antd-mobile';
 import PasswordInput from '@/components/h5/PasswordInput';
 import { ConfirmationMessage } from '../types';
-import { updateDraft } from '@/services/transfer';
+import { getMyAccount } from '@/services/account';
+import { updateDraft, validateDraft } from '@/services/transfer';
+import {
+  MAX_TRANSFER_AMOUNT_FEN,
+  getTransferAmountError,
+  parseYuanToFen,
+} from '../utils/transferAmountValidation';
 
 interface Props {
   message: ConfirmationMessage;
@@ -62,35 +68,92 @@ const ConfirmationCard: React.FC<Props> = ({ message, onConfirm, onCancel }) => 
   const [submitting, setSubmitting] = useState(false);
   const [updating, setUpdating] = useState(false);
   const [localVersion, setLocalVersion] = useState(message.version ?? 0);
+  const syncedAmountFenRef = useRef(message.amountFen ?? 0);
+  const amountSyncPromiseRef = useRef<Promise<number | null> | null>(null);
+  const [availableBalanceFen, setAvailableBalanceFen] = useState<number | null>(null);
+  const [balanceLoading, setBalanceLoading] = useState(true);
+  const [balanceLoadFailed, setBalanceLoadFailed] = useState(false);
   // 记录用户最后手动修改的字段，防止双向联动覆盖用户输入
   const [lastEditedField, setLastEditedField] = useState<'payee' | 'phone' | null>(null);
 
-  const amountFen = Math.round(parseFloat(amountYuan || '0') * 100);
+  const parsedAmountFen = parseYuanToFen(amountYuan);
+  const amountFen = parsedAmountFen ?? 0;
+  const isTransfer = message.cardType === 'transfer';
+  const amountError = isTransfer
+    ? getTransferAmountError(parsedAmountFen, availableBalanceFen)
+    : (parsedAmountFen == null || parsedAmountFen <= 0 ? '请输入有效金额' : null);
+
+  /** 实时查询本人可用余额；确认前会再次回源，避免使用过期页面状态。 */
+  const loadAvailableBalance = useCallback(async () => {
+    setBalanceLoading(true);
+    setBalanceLoadFailed(false);
+    try {
+      const account = await getMyAccount() as any;
+      const availableFen = Number(account.availableFen);
+      if (!Number.isSafeInteger(availableFen) || availableFen < 0) {
+        throw new Error('余额数据格式无效');
+      }
+      setAvailableBalanceFen(availableFen);
+      return availableFen;
+    } catch (error) {
+      setAvailableBalanceFen(null);
+      setBalanceLoadFailed(true);
+      throw error;
+    } finally {
+      setBalanceLoading(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    if (!isTransfer) {
+      setBalanceLoading(false);
+      return;
+    }
+    loadAvailableBalance().catch(() => {
+      // 卡片内展示失败状态，用户可主动重试。
+    });
+  }, [isTransfer, loadAvailableBalance]);
 
   // 当前选中收款人的手机号
   const selectedPayee = payeeOptions.find((o) => o.id === selectedPayeeId);
   const displayPhone = selectedPayee?.maskedPhone || selectedPayee?.phoneTail || '';
 
   /** 同步金额变更到后端草稿 */
-  const syncAmountToDraft = useCallback(async (newAmountFen: number) => {
-    if (!message.draftId || updating) return;
+  const syncAmountToDraft = useCallback((newAmountFen: number): Promise<number | null> => {
+    if (!message.draftId) return Promise.resolve(null);
+    if (amountSyncPromiseRef.current) return amountSyncPromiseRef.current;
+
     setUpdating(true);
-    try {
-      const result = await updateDraft(message.draftId, {
-        amountFen: newAmountFen,
-        version: localVersion,
-      }) as any;
-      setLocalVersion(result.version);
-    } catch (err: any) {
-      Toast.show({ content: err?.message || '更新草稿失败' });
-    } finally {
-      setUpdating(false);
-    }
-  }, [message.draftId, localVersion, updating]);
+    const syncPromise = (async () => {
+      try {
+        const updatedDraft = await updateDraft(message.draftId, {
+          amountFen: newAmountFen,
+          version: localVersion,
+        }) as any;
+        // 修改金额会使原校验结果失效，必须重新完成服务端余额、限额和风控预检。
+        const validation = await validateDraft(message.draftId, updatedDraft.version) as any;
+        setLocalVersion(validation.version);
+        syncedAmountFenRef.current = newAmountFen;
+        return validation.version as number;
+      } catch (err: any) {
+        Toast.show({ content: err?.message || '更新草稿失败' });
+        return null;
+      } finally {
+        setUpdating(false);
+      }
+    })();
+    amountSyncPromiseRef.current = syncPromise;
+    syncPromise.finally(() => {
+      if (amountSyncPromiseRef.current === syncPromise) {
+        amountSyncPromiseRef.current = null;
+      }
+    });
+    return syncPromise;
+  }, [message.draftId, localVersion]);
 
   /** 金额失焦时同步 */
   const handleAmountBlur = () => {
-    if (amountFen > 0 && amountFen !== message.amountFen) {
+    if (!amountError && amountFen !== syncedAmountFenRef.current && !updating) {
       syncAmountToDraft(amountFen);
     }
   };
@@ -115,13 +178,13 @@ const ConfirmationCard: React.FC<Props> = ({ message, onConfirm, onCancel }) => 
     }
   };
 
-  const handleConfirmClick = () => {
+  const handleConfirmClick = async () => {
     if (!selectedPayeeId) {
       Toast.show({ content: '请选择收款人' });
       return;
     }
-    if (!amountFen || amountFen <= 0) {
-      Toast.show({ content: '请输入有效金额' });
+    if (amountError) {
+      Toast.show({ content: amountError });
       return;
     }
     if (!password || password.length !== 6) {
@@ -129,12 +192,38 @@ const ConfirmationCard: React.FC<Props> = ({ message, onConfirm, onCancel }) => 
       return;
     }
     setSubmitting(true);
-    onConfirm(message.draftId, selectedPayeeId, amountFen, password, localVersion)
-      .catch(() => {})
-      .finally(() => {
-        setSubmitting(false);
-        setPassword('');
-      });
+    try {
+      if (isTransfer) {
+        let latestBalanceFen: number;
+        try {
+          latestBalanceFen = await loadAvailableBalance();
+        } catch {
+          Toast.show({ content: '余额查询失败，暂不能确认转账' });
+          return;
+        }
+        const latestAmountError = getTransferAmountError(amountFen, latestBalanceFen);
+        if (latestAmountError) {
+          Toast.show({ content: latestAmountError });
+          return;
+        }
+      }
+
+      let versionToConfirm = localVersion;
+      if (amountSyncPromiseRef.current) {
+        const syncedVersion = await amountSyncPromiseRef.current;
+        if (syncedVersion == null) return;
+        versionToConfirm = syncedVersion;
+      }
+      if (amountFen !== syncedAmountFenRef.current) {
+        const nextVersion = await syncAmountToDraft(amountFen);
+        if (nextVersion == null) return;
+        versionToConfirm = nextVersion;
+      }
+      await onConfirm(message.draftId, selectedPayeeId, amountFen, password, versionToConfirm);
+    } finally {
+      setSubmitting(false);
+      setPassword('');
+    }
   };
 
   return (
@@ -218,12 +307,33 @@ const ConfirmationCard: React.FC<Props> = ({ message, onConfirm, onCancel }) => 
           <input
             className="ai-field-input ai-field-amount"
             type="number"
+            min="0.01"
+            max={isTransfer ? MAX_TRANSFER_AMOUNT_FEN / 100 : undefined}
+            step="0.01"
+            inputMode="decimal"
             placeholder="0.00"
             value={amountYuan}
             onChange={(e) => setAmountYuan(e.target.value)}
             onBlur={handleAmountBlur}
             disabled={updating}
           />
+          {isTransfer && (
+            <div className="ai-field-balance">
+              {balanceLoading && '正在查询可用余额'}
+              {!balanceLoading && balanceLoadFailed && (
+                <button type="button" onClick={() => loadAvailableBalance().catch(() => {})}>
+                  余额查询失败，重新查询
+                </button>
+              )}
+              {!balanceLoading && availableBalanceFen != null && (
+                <>可用余额 ¥{(availableBalanceFen / 100).toLocaleString('zh-CN', {
+                  minimumFractionDigits: 2,
+                  maximumFractionDigits: 2,
+                })}</>
+              )}
+            </div>
+          )}
+          {amountError && <div className="ai-field-error">{amountError}</div>}
         </div>
 
         {/* 支付密码 */}
@@ -242,8 +352,13 @@ const ConfirmationCard: React.FC<Props> = ({ message, onConfirm, onCancel }) => 
               color="primary"
               size="middle"
               onClick={handleConfirmClick}
-              loading={submitting || updating}
-              disabled={!selectedPayeeId || !amountFen || amountFen <= 0 || password.length !== 6}
+              loading={submitting || updating || balanceLoading}
+              disabled={
+                !selectedPayeeId
+                || !!amountError
+                || (isTransfer && (balanceLoadFailed || balanceLoading))
+                || password.length !== 6
+              }
             >
               确认转账
             </Button>
