@@ -139,6 +139,13 @@ export default [
         auth: true,
       },
       {
+        path: '/h5/profile/edit',
+        component: '@/pages/h5/ProfileEdit',
+        exact: true,
+        title: '个人资料',
+        auth: true,
+      },
+      {
         path: '/h5/qr-pay/receipt/:id',
         component: '@/pages/h5/QrPayReceipt',
         exact: true,

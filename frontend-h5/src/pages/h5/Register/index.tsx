@@ -3,6 +3,7 @@ import { history } from '@umijs/max';
 import { Toast } from 'antd-mobile';
 import { register } from '@/services/auth';
 import { ApiError } from '@/services/request';
+import { seedNicknamePreference } from '@/utils/profile';
 import './index.less';
 
 type FieldName = 'phoneNumber' | 'nickname' | 'loginPassword' |
@@ -58,7 +59,8 @@ const RegisterPage: React.FC = () => {
       localStorage.setItem('accessToken', result.accessToken);
       localStorage.setItem('userId', result.userId);
       localStorage.setItem('accountNumber', result.accountNumber);
-      localStorage.setItem('nickname', result.nickname);
+      // 昵称为浏览器本地展示偏好：仅首次初始化时用服务端昵称填充，保留用户本地编辑
+      seedNicknamePreference(result.nickname);
       Toast.show({ icon: 'success', content: `注册成功，账户号：${result.accountNumber}`, duration: 3000 });
       history.replace('/h5/home');
     } catch (error: any) {

@@ -5,12 +5,14 @@ import { ScanCodeOutline } from 'antd-mobile-icons';
 import * as accountService from '@/services/account';
 import * as creditService from '@/services/credit';
 import { useTabActiveRefresh } from '@/utils/useTabActiveRefresh';
+import { getAvatarDisplay, getProfilePreference } from '@/utils/profile';
 import { TabActiveContext } from '@/layouts/H5Layout/TabViews';
 import { POLL_INTERVAL } from '@/constants';
 import './index.less';
 
 const HomePage: React.FC = () => {
-  const nickname = localStorage.getItem('nickname') || '用户';
+  const profilePreference = getProfilePreference();
+  const nickname = profilePreference.nickname;
   const [loading, setLoading] = useState(true);
   const [account, setAccount] = useState<accountService.AccountInfo | null>(null);
   const [credit, setCredit] = useState<creditService.CreditSummary | null>(null);
@@ -110,7 +112,13 @@ const HomePage: React.FC = () => {
       <div className="header">
         <div className="header-row">
           <div className="hi">
-            <div className="avatar">👤</div>
+            <div className="avatar">
+              {profilePreference.avatarDataUrl ? (
+                <img src={profilePreference.avatarDataUrl} alt="头像" />
+              ) : (
+                getAvatarDisplay(profilePreference.avatarCode)
+              )}
+            </div>
             <span>{nickname}</span>
           </div>
           <div className="header-btns">

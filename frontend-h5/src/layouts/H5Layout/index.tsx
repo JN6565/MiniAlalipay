@@ -95,6 +95,7 @@ function getPageTitle(pathname: string): string {
     '/h5/contacts': '联系人',
     '/h5/friend-requests': '新朋友',
     '/h5/profile': '我的',
+    '/h5/profile/edit': '个人资料',
     '/h5/scan': '扫一扫',
     '/h5/collection': '收款',
     '/h5/collection/pay': '付款',

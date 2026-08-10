@@ -2,10 +2,12 @@ import React from 'react';
 import { history } from '@umijs/max';
 import { Toast, Dialog } from 'antd-mobile';
 import { clearSession } from '@/services/request';
+import { getAvatarDisplay, getProfilePreference } from '@/utils/profile';
 import './index.less';
 
 const SettingsPage: React.FC = () => {
-  const nickname = localStorage.getItem('nickname') || '用户';
+  const profilePreference = getProfilePreference();
+  const nickname = profilePreference.nickname;
 
   const handleLogout = async () => {
     const result = await Dialog.confirm({
@@ -23,7 +25,13 @@ const SettingsPage: React.FC = () => {
     <div className="settings-page">
       {/* 用户信息 */}
       <div className="settings-user">
-        <div className="avatar">👤</div>
+        <div className="avatar">
+          {profilePreference.avatarDataUrl ? (
+            <img src={profilePreference.avatarDataUrl} alt="头像" />
+          ) : (
+            getAvatarDisplay(profilePreference.avatarCode)
+          )}
+        </div>
         <div className="user-info">
           <div className="name">{nickname}</div>
           <div className="id">ID: ****</div>

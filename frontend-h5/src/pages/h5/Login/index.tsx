@@ -3,6 +3,7 @@ import { history, useSearchParams } from '@umijs/max';
 import { Toast } from 'antd-mobile';
 import { login } from '@/services/auth';
 import { ApiError } from '@/services/request';
+import { seedNicknamePreference } from '@/utils/profile';
 import './index.less';
 
 const LoginPage: React.FC = () => {
@@ -57,7 +58,8 @@ const LoginPage: React.FC = () => {
       localStorage.setItem('accessToken', result.accessToken);
       localStorage.setItem('userId', result.userId);
       localStorage.setItem('accountNumber', result.accountNumber);
-      localStorage.setItem('nickname', result.nickname || result.accountNumber);
+      // 昵称为浏览器本地展示偏好：仅首次登录时用服务端昵称初始化，保留用户本地编辑
+      seedNicknamePreference(result.nickname, result.accountNumber);
 
       // 显示登录成功提示
       Toast.show({ content: '登录成功', icon: 'success' });
