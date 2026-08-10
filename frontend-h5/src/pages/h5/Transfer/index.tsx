@@ -5,6 +5,7 @@ import { Form, Input, Button, Toast, SearchBar, Avatar, List, Divider } from 'an
 import { UserOutline, DownOutline } from 'antd-mobile-icons';
 import * as userService from '@/services/user';
 import * as transferService from '@/services/transfer';
+import { getBankCards, type BankCard } from '@/services/bankCard';
 import { AmountInput } from '@/components/h5/AmountInput';
 import './index.less';
 
@@ -20,6 +21,11 @@ const TransferPage: React.FC = () => {
   const [contactsLoading, setContactsLoading] = useState(false);
   const [showRecentTransfers, setShowRecentTransfers] = useState(true);
   const [recentExpanded, setRecentExpanded] = useState(false);
+  // 支付来源：BALANCE（默认）或 BANK_CARD
+  const [fundingSource, setFundingSource] = useState<'BALANCE' | 'BANK_CARD'>('BALANCE');
+  const [bankCards, setBankCards] = useState<BankCard[]>([]);
+  const [selectedCardId, setSelectedCardId] = useState<string | null>(null);
+  const [showCardPicker, setShowCardPicker] = useState(false);
 
   // 收款人展示名：搜索结果优先展示服务端脱敏后的真实姓名（用于收款确认），未绑定身份时降级为昵称；
   // 姓名与手机号脱敏均在服务端完成，前端不再重复脱敏
@@ -32,6 +38,11 @@ const TransferPage: React.FC = () => {
     if (payee.phoneTail) return `尾号 ${payee.phoneTail}`;
     return payee.accountNumber ? `尾号 ${payee.accountNumber.slice(-4)}` : '';
   };
+
+  // 加载银行卡列表（用于支付来源选择）
+  useEffect(() => {
+    getBankCards().then(setBankCards).catch(() => {});
+  }, []);
 
   // 加载常用联系人（最近转账）
   useEffect(() => {
@@ -126,9 +137,12 @@ const TransferPage: React.FC = () => {
 
       // 后端草稿接口仅返回 payeeUserId，收款人昵称和账号通过路由 state 携带给确认页展示；
       // 确认令牌、支付密码等敏感信息不得进入 URL，这里仅传展示用的公开信息
+      // 携带支付来源和收款人信息到确认页
       history.push(`/h5/transfer/confirm?draftId=${draft.draftId}`, {
         payeeNickname: selectedPayee.nickname,
         payeeAccountNumber: selectedPayee.accountNumber,
+        fundingSource,
+        cardId: fundingSource === 'BANK_CARD' ? selectedCardId : undefined,
       });
     } catch (error: any) {
       Toast.show({ icon: 'fail', content: error.message || '创建失败' });
@@ -238,6 +252,67 @@ const TransferPage: React.FC = () => {
           <Button size="small" fill="none" onClick={() => setSelectedPayee(null)}>
             更换
           </Button>
+        </div>
+      )}
+
+      {/* 支付来源选择 */}
+      <div className="funding-source-section">
+        <div className="section-label">支付方式</div>
+        <div className="funding-source-options">
+          <div
+            className={`funding-option ${fundingSource === 'BALANCE' ? 'active' : ''}`}
+            onClick={() => { setFundingSource('BALANCE'); setSelectedCardId(null); }}
+          >
+            账户余额
+          </div>
+          <div
+            className={`funding-option ${fundingSource === 'BANK_CARD' ? 'active' : ''}`}
+            onClick={() => {
+              setFundingSource('BANK_CARD');
+              if (bankCards.length > 0 && !selectedCardId) {
+                setSelectedCardId(bankCards[0].cardId);
+              }
+              if (bankCards.length > 0) setShowCardPicker(true);
+            }}
+          >
+            银行卡
+          </div>
+        </div>
+        {fundingSource === 'BANK_CARD' && selectedCardId && (
+          <div
+            className="selected-card-display"
+            onClick={() => setShowCardPicker(true)}
+          >
+            {(() => {
+              const card = bankCards.find(c => c.cardId === selectedCardId);
+              return card ? `${card.bankName}（尾号 ${card.cardLast4}）` : '请选择银行卡';
+            })()}
+            <DownOutline />
+          </div>
+        )}
+        {fundingSource === 'BANK_CARD' && bankCards.length === 0 && (
+          <div className="no-cards-hint">暂无银行卡，请先绑定</div>
+        )}
+      </div>
+
+      {/* 银行卡选择弹窗 */}
+      {showCardPicker && (
+        <div className="card-picker-mask" onClick={() => setShowCardPicker(false)}>
+          <div className="card-picker-popup" onClick={e => e.stopPropagation()}>
+            <div className="card-picker-header">
+              <span>选择银行卡</span>
+              <span onClick={() => setShowCardPicker(false)}>✕</span>
+            </div>
+            {bankCards.map(card => (
+              <div
+                key={card.cardId}
+                className={`card-picker-item ${card.cardId === selectedCardId ? 'active' : ''}`}
+                onClick={() => { setSelectedCardId(card.cardId); setShowCardPicker(false); }}
+              >
+                {card.bankName}（尾号 {card.cardLast4}）
+              </div>
+            ))}
+          </div>
         </div>
       )}
 

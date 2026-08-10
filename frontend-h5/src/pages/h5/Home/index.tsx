@@ -177,9 +177,9 @@ const HomePage: React.FC = () => {
           <div className="func-icon" style={{ background: '#e6fffb' }}>📈</div>
           <span>分析</span>
         </div>
-        <div className="func-item" onClick={() => history.push('/h5/recharge')}>
+        <div className="func-item" onClick={() => history.push('/h5/wallet')}>
           <div className="func-icon" style={{ background: '#f5f5f5' }}>🏦</div>
-          <span>充值</span>
+          <span>充值提现</span>
         </div>
         <div className="func-item" onClick={() => history.push('/h5/bank-cards')}>
           <div className="func-icon" style={{ background: '#f5f5f5' }}>💳</div>

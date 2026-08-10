@@ -1,0 +1,156 @@
+.bank-card-operate-page {
+  padding: 16px;
+  min-height: 100%;
+  background: #f5f6f8;
+}
+
+// 充值目标：账户余额卡片
+.operate-target-card {
+  background: linear-gradient(135deg, #1677ff, #4096ff);
+  border-radius: 12px;
+  color: #fff;
+  padding: 20px 16px;
+  margin-bottom: 12px;
+
+  .target-label {
+    font-size: 13px;
+    opacity: 0.9;
+  }
+
+  .target-balance {
+    font-size: 28px;
+    font-weight: 600;
+    margin: 6px 0 4px;
+  }
+
+  .target-hint {
+    font-size: 12px;
+    opacity: 0.75;
+  }
+}
+
+// 付款来源行：银行卡仅作付款方式，不展示卡内余额
+.operate-source-row {
+  background: #fff;
+  border-radius: 12px;
+  padding: 14px 16px;
+  margin-bottom: 12px;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+
+  .source-label {
+    font-size: 14px;
+    color: #666;
+  }
+
+  .source-value {
+    font-size: 14px;
+    color: #333;
+    font-weight: 500;
+  }
+}
+
+.operate-form {
+  background: #fff;
+  border-radius: 12px;
+  padding: 16px;
+  margin-bottom: 20px;
+
+  .form-label {
+    font-size: 14px;
+    color: #666;
+    margin-bottom: 8px;
+  }
+
+  .amount-input-wrapper {
+    margin-bottom: 4px;
+  }
+
+  .form-hint {
+    font-size: 12px;
+    color: #999;
+    margin-top: 4px;
+
+    &.warning {
+      color: #ff8f1f;
+    }
+
+    &.link {
+      color: #1677ff;
+      cursor: pointer;
+    }
+  }
+}
+
+.operate-submit {
+  margin-top: 8px;
+}
+
+/* 支付密码弹窗 */
+.password-popup {
+  .popup-title {
+    font-size: 18px;
+    font-weight: 600;
+    text-align: center;
+    margin-bottom: 20px;
+    color: #333;
+  }
+
+  .popup-summary {
+    background: #f5f6f8;
+    border-radius: 8px;
+    padding: 14px 16px;
+    margin-bottom: 20px;
+
+    .summary-row {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      padding: 4px 0;
+
+      &:not(:last-child) {
+        border-bottom: 1px solid #eee;
+        padding-bottom: 10px;
+        margin-bottom: 6px;
+      }
+    }
+
+    .summary-label {
+      font-size: 13px;
+      color: #999;
+    }
+
+    .summary-value {
+      font-size: 14px;
+      color: #333;
+      font-weight: 500;
+
+      &.amount {
+        color: #ff4d4f;
+        font-size: 18px;
+        font-weight: 600;
+      }
+    }
+  }
+
+  .popup-password {
+    margin-bottom: 20px;
+
+    .password-field {
+      --font-size: 18px;
+      --text-align: center;
+      letter-spacing: 8px;
+      padding: 12px 0;
+      border-bottom: 2px solid #eee;
+
+      &:focus-within {
+        border-bottom-color: #1677ff;
+      }
+    }
+  }
+
+  .popup-actions {
+    padding: 0 4px;
+  }
+}

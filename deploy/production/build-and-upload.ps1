@@ -60,7 +60,13 @@ Write-Host "==> 复制部署配置（compose / Dockerfile / nginx / .env 模板�
 Copy-Item (Join-Path $PSScriptRoot "docker-compose.yml") $stage
 Copy-Item (Join-Path $PSScriptRoot "Dockerfile.backend") $stage
 Copy-Item (Join-Path $PSScriptRoot ".env.example") $stage
-Copy-Item (Join-Path $PSScriptRoot "nginx") (Join-Path $stage "nginx") -Recurse
+# HTTPS 一键启用脚本（服务器侧生成自签证书、重写 CORS、重建 nginx/gateway）
+Copy-Item (Join-Path $PSScriptRoot "enable-https.sh") $stage
+# nginx 配置目录：先清空再整体复制，避免重复运行时 PowerShell 把源目录嵌套进已有目标（stage\nginx\nginx）；
+# 证书只在服务器生成，本地 nginx 目录不含 certs，清空无风险
+$nginxStage = Join-Path $stage "nginx"
+Remove-Item $nginxStage -Recurse -Force -ErrorAction SilentlyContinue
+Copy-Item (Join-Path $PSScriptRoot "nginx") $nginxStage -Recurse
 
 # ---------- 2. 后端构建 ----------
 if (-not $SkipBackend) {

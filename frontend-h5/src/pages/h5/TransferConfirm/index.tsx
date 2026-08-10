@@ -18,7 +18,11 @@ const TransferConfirmPage: React.FC = () => {
   const navState = (location.state || {}) as {
     payeeNickname?: string;
     payeeAccountNumber?: string;
+    fundingSource?: string;
+    cardId?: string;
   };
+  const fundingSource = navState.fundingSource || 'BALANCE';
+  const cardId = navState.cardId;
   const [loading, setLoading] = useState(false);
   const [draftLoading, setDraftLoading] = useState(true);
   const [draft, setDraft] = useState<transferService.TransferDraft | null>(null);
@@ -83,37 +87,53 @@ const TransferConfirmPage: React.FC = () => {
 
     setLoading(true);
     try {
-      // 1. 验证支付密码并签发一次性支付证明（TRANSFER_CONFIRM 用途）
-      const { paymentProof } = await paymentPasswordService.issuePaymentProof(password);
+      if (fundingSource === 'BANK_CARD' && cardId) {
+        // 银行卡支付：使用合并接口（验密即支付），一次请求完成密码验证 + 确认 + 提交
+        const result = await transferService.submitTransferWithPassword(
+          draftId!,
+          validatedVersion!,
+          password,
+          undefined,
+          fundingSource,
+          cardId,
+        );
+        history.push(`/h5/transfer/result/${result.transactionId}`, {
+          payeeNickname: navState.payeeNickname,
+          initialResult: result,
+        });
+      } else {
+        // 账户余额支付：原有三步流程
+        // 1. 验证支付密码并签发一次性支付证明（TRANSFER_CONFIRM 用途）
+        const { paymentProof } = await paymentPasswordService.issuePaymentProof(password);
 
-      // 2. 用支付证明签发一次性确认令牌；令牌不得写入日志、URL 或浏览器存储
-      let currentVersion = validatedVersion!;
-      let confirmResult: transferService.IssuedConfirmation;
-      try {
-        confirmResult = await transferService.issueConfirmation(draftId!, paymentProof, currentVersion);
-      } catch (confirmError: any) {
-        // 版本冲突时重新读取草稿获取最新版本并重试一次
-        if (confirmError.status === 409 && confirmError.code === 'VERSION_CONFLICT') {
-          const freshDraft = await transferService.getDraft(draftId!);
-          currentVersion = freshDraft.version;
+        // 2. 用支付证明签发一次性确认令牌；令牌不得写入日志、URL 或浏览器存储
+        let currentVersion = validatedVersion!;
+        let confirmResult: transferService.IssuedConfirmation;
+        try {
           confirmResult = await transferService.issueConfirmation(draftId!, paymentProof, currentVersion);
-        } else {
-          throw confirmError;
+        } catch (confirmError: any) {
+          // 版本冲突时重新读取草稿获取最新版本并重试一次
+          if (confirmError.status === 409 && confirmError.code === 'VERSION_CONFLICT') {
+            const freshDraft = await transferService.getDraft(draftId!);
+            currentVersion = freshDraft.version;
+            confirmResult = await transferService.issueConfirmation(draftId!, paymentProof, currentVersion);
+          } else {
+            throw confirmError;
+          }
         }
+
+        // 3. 提交转账
+        const result = await transferService.submitTransfer({
+          draftId: draftId!,
+          confirmationToken: confirmResult!.confirmationToken,
+        });
+
+        // 跳转到结果页
+        history.push(`/h5/transfer/result/${result.transactionId}`, {
+          payeeNickname: navState.payeeNickname,
+          initialResult: result,
+        });
       }
-
-      // 3. 提交转账
-      const result = await transferService.submitTransfer({
-        draftId: draftId!,
-        confirmationToken: confirmResult!.confirmationToken,
-      });
-
-      // 跳转到结果页；后端状态接口不含收款人昵称，通过路由 state 携带展示；
-      // 同时携带提交接口返回的初始数据，后端不可用时降级展示
-      history.push(`/h5/transfer/result/${result.transactionId}`, {
-        payeeNickname: navState.payeeNickname,
-        initialResult: result,
-      });
     } catch (error: any) {
       Toast.show({ icon: 'fail', content: error.message || '转账失败' });
     } finally {
@@ -182,6 +202,11 @@ const TransferConfirmPage: React.FC = () => {
         <div className="confirm-row">
           <span className="confirm-label">备注</span>
           <span className="confirm-value">{draft?.remark || '无'}</span>
+        </div>
+
+        <div className="confirm-row">
+          <span className="confirm-label">支付方式</span>
+          <span className="confirm-value">{fundingSource === 'BANK_CARD' ? '银行卡' : '账户余额'}</span>
         </div>
 
         <div className="confirm-row">

@@ -12,3 +12,4 @@ spring:
         password: ${NACOS_PASSWORD:nacos}
         namespace: ${NACOS_NAMESPACE:}
         group: DEFAULT_GROUP
+

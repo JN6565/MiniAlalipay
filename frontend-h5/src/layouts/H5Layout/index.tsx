@@ -90,7 +90,7 @@ function getPageTitle(pathname: string): string {
     '/h5/settings/privacy-policy': '隐私政策',
     '/h5/transfer': '转账',
     '/h5/transfer/confirm': '确认转账',
-    '/h5/recharge': '充值',
+    '/h5/wallet': '充值提现',
     '/h5/ai-talk': 'AI助手',
     '/h5/contacts': '联系人',
     '/h5/friend-requests': '新朋友',
@@ -114,6 +114,14 @@ function getPageTitle(pathname: string): string {
   // 精确匹配
   if (titleMap[pathname]) {
     return titleMap[pathname];
+  }
+
+  // 银行卡充值/提现页带路径参数：充值/提现针对账户余额，标题直接体现业务动作
+  if (/^\/h5\/bank-cards\/[^/]+\/recharge$/.test(pathname)) {
+    return '充值';
+  }
+  if (/^\/h5\/bank-cards\/[^/]+\/withdraw$/.test(pathname)) {
+    return '提现';
   }
 
   // 银行卡详情页带路径参数，无法精确命中，统一展示「卡片详情」

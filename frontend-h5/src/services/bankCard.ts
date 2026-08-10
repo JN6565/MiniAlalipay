@@ -24,6 +24,8 @@ export interface BankCard {
   holderMasked: string;
   idCardMasked: string;
   phoneMasked: string;
+  /** 虚拟余额（分），充值增加、提现/支付扣减，与账户余额独立。 */
+  balanceFen: number;
   isDefault: boolean;
   status: BankCardStatus;
   boundAt: string;
@@ -88,6 +90,69 @@ export const setDefaultBankCard = (cardId: string): Promise<BankCard> =>
 // 解绑银行卡（软删为 UNBOUND 终态）
 export const unbindBankCard = (cardId: string): Promise<void> =>
   unwrap(request.delete<void>(`/api/v1/bank-cards/${cardId}`));
+
+/** 查询银行卡虚拟余额（分）。 */
+export const getBankCardBalance = (cardId: string): Promise<{ balanceFen: number }> =>
+  unwrap(request.get<{ balanceFen: number }>(`/api/v1/bank-cards/${cardId}/balance`));
+
+/** 生成 UUID v4 作为幂等键。 */
+const generateIdempotencyKey = (): string =>
+  'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, (c) => {
+    const r = (Math.random() * 16) | 0;
+    return (c === 'x' ? r : (r & 0x3) | 0x8).toString(16);
+  });
+
+/** 银行卡充值请求：金额（分）+ 支付密码 + 幂等键。 */
+export interface BankCardRechargePayload {
+  amountFen: number;
+  paymentPassword: string;
+  idempotencyKey?: string;
+}
+
+/** 银行卡提现请求：金额（分）+ 支付密码 + 幂等键。 */
+export interface BankCardWithdrawPayload {
+  amountFen: number;
+  paymentPassword: string;
+  idempotencyKey?: string;
+}
+
+/** 发起银行卡充值：银行卡虚拟余额减少，账户余额同步增加。 */
+export const rechargeBankCard = (cardId: string, payload: BankCardRechargePayload): Promise<any> =>
+  unwrap(request.post(`/api/v1/bank-cards/${cardId}/recharge`, {
+    amountFen: payload.amountFen,
+    paymentPassword: payload.paymentPassword,
+    idempotencyKey: payload.idempotencyKey || generateIdempotencyKey(),
+  }));
+
+/** 发起银行卡提现：银行卡虚拟余额增加，账户余额同步减少。 */
+export const withdrawBankCard = (cardId: string, payload: BankCardWithdrawPayload): Promise<any> =>
+  unwrap(request.post(`/api/v1/bank-cards/${cardId}/withdraw`, {
+    amountFen: payload.amountFen,
+    paymentPassword: payload.paymentPassword,
+    idempotencyKey: payload.idempotencyKey || generateIdempotencyKey(),
+  }));
+
+/** 银行卡交易明细项：充值/提现历史记录。 */
+export interface BankCardTransaction {
+  transactionId: string;
+  /** BANK_CARD_RECHARGE 充值（卡→账户），BANK_CARD_WITHDRAW 提现（账户→卡）。 */
+  businessType: 'BANK_CARD_RECHARGE' | 'BANK_CARD_WITHDRAW';
+  amountFen: number;
+  status: string;
+  createdAt: string;
+}
+
+/** 查询银行卡交易明细（充值/提现历史），按时间倒序。 */
+export const getBankCardTransactions = (cardId: string, limit = 20): Promise<BankCardTransaction[]> =>
+  unwrap(request.get<BankCardTransaction[]>(`/api/v1/bank-cards/${cardId}/transactions`, {
+    params: { limit },
+  }));
+
+/** 将分转换为元字符串展示，如 123456 → "1,234.56"。 */
+export const formatBalance = (balanceFen: number): string => {
+  const yuan = (balanceFen / 100).toFixed(2);
+  return yuan.replace(/\B(?=(\d{3})+(?!\d))/g, ',');
+};
 
 /** 前端 BIN 字典：与后端字典保持主要银行一致，用于输入时实时识别发卡行。 */
 export const BIN_TABLE: Array<{ bin: string; bankCode: string; bankName: string; cardType: BankCardType }> = [

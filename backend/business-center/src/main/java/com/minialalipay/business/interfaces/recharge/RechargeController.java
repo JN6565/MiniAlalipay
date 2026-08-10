@@ -20,10 +20,13 @@ import org.springframework.web.bind.annotation.RestController;
 import java.time.Instant;
 
 /**
- * 受控模拟充值订单 API。
+ * 受控模拟充值订单 API（测试专用，C 端入口已下线）。
  *
  * <p>登录用户只能创建和查询本人订单；写操作要求 {@code X-Request-Id} 与 {@code Idempotency-Key}。
  * 模拟渠道在创建请求内自动确认；接口返回处理中或成功状态，最终以账户余额和账本事实为准。</p>
+ *
+ * <p>模拟充值不符合真实资金流转，H5 端已移除对应页面与入口，本接口仅保留供测试环境
+ * 演示资金注入；真实充值请使用银行卡充值接口 {@code /api/v1/bank-cards/{cardId}/recharge}。</p>
  */
 @RestController
 @RequestMapping("/api/v1/recharges")

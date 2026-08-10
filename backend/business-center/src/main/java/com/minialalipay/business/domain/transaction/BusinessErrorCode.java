@@ -55,7 +55,8 @@ public enum BusinessErrorCode implements ErrorCode {
     /** 指定的统计范围不被支持。 */ RANGE_NOT_SUPPORTED("RANGE_NOT_SUPPORTED", "不支持该统计范围", 400),
     /** 原交易不支持受控退款。 */ REFUND_NOT_ALLOWED("REFUND_NOT_ALLOWED", "当前交易不支持受控退款", 422),
     /** 原交易已存在退款订单。 */ REFUND_ALREADY_EXISTS("REFUND_ALREADY_EXISTS", "该交易已经存在退款订单", 409),
-    /** 分页游标无效或已过期。 */ INVALID_CURSOR("INVALID_CURSOR", "分页游标无效", 400);
+    /** 分页游标无效或已过期。 */ INVALID_CURSOR("INVALID_CURSOR", "分页游标无效", 400),
+    /** 银行卡不存在或不属于当前用户。 */ BANK_CARD_NOT_FOUND("BANK_CARD_NOT_FOUND", "银行卡不存在", 404);
 
     private final String code; private final String message; private final int httpStatus;
     BusinessErrorCode(String code, String message, int httpStatus) {

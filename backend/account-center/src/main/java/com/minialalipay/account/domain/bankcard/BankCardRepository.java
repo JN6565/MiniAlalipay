@@ -61,4 +61,14 @@ public interface BankCardRepository {
      * @return 是否更新成功；false 表示版本冲突，调用方应抛出版本冲突错误
      */
     boolean updateByCas(BankCard card, long expectedVersion);
+
+    /**
+     * 余额 CAS 更新：仅当数据库版本与期望版本一致时更新余额字段，成功后版本自增。
+     * 用于充值/提现等余额变更操作，防止并发修改破坏余额不变量。
+     *
+     * @param card 已变更余额的银行卡聚合
+     * @param expectedVersion 更新前读取到的版本号
+     * @return 是否更新成功；false 表示版本冲突
+     */
+    boolean updateBalanceByCas(BankCard card, long expectedVersion);
 }

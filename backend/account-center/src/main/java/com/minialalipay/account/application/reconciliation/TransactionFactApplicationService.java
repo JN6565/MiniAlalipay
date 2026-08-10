@@ -44,6 +44,13 @@ public class TransactionFactApplicationService {
         if (branches.hasAccountBranch(transactionId, TccBranchType.CREDIT_PAY)) {
             return inspectCreditPay(transactionId);
         }
+        // 银行卡提现/充值：无复式账本分支，按各自规则集核验
+        if (branches.hasAccountBranch(transactionId, TccBranchType.BANK_CARD_WITHDRAW)) {
+            return inspectBankCardWithdraw(transactionId);
+        }
+        if (branches.hasAccountBranch(transactionId, TccBranchType.BANK_CARD_RECHARGE)) {
+            return inspectBankCardRecharge(transactionId);
+        }
         return inspectBalanceTransfer(transactionId);
     }
 
@@ -81,6 +88,39 @@ public class TransactionFactApplicationService {
         return new TransactionFacts(accountsConfirmed && ledgerConfirmed && freezeConfirmed && ledgerPosted,
                 accountsCancelled && ledgerCancelled && noActiveFreeze, accountsConfirmed, ledgerConfirmed,
                 freezeConfirmed, ledgerPosted, accountsCancelled, ledgerCancelled, noActiveFreeze);
+    }
+
+    /**
+     * 银行卡提现事实：付款余额冻结 + 银行卡提现分支到位，无复式账本。
+     *
+     * <p>成功事实要求付款余额冻结已确认（扣减）且银行卡提现分支已确认；
+     * 取消事实要求余额冻结已释放且银行卡分支已取消。</p>
+     */
+    private TransactionFacts inspectBankCardWithdraw(String transactionId) {
+        boolean accountsConfirmed = branches.allAccountBranches(transactionId, TccBranchStatus.CONFIRMED, 2);
+        boolean freezeConfirmed = freezes.transactionFreezeIs(transactionId, FreezeStatus.CONFIRMED);
+        boolean accountsCancelled = branches.allAccountBranches(transactionId, TccBranchStatus.CANCELLED, 2);
+        boolean noActiveFreeze = freezes.transactionHasNoActiveFreeze(transactionId);
+        // 银行卡提现无复式账本，ledgerConfirmed/ledgerPosted 始终为 true（不需要）
+        return new TransactionFacts(accountsConfirmed && freezeConfirmed,
+                accountsCancelled && noActiveFreeze, accountsConfirmed, true,
+                freezeConfirmed, true, accountsCancelled, true, noActiveFreeze);
+    }
+
+    /**
+     * 银行卡充值事实：银行卡充值分支 + 收款余额分支到位，无复式账本。
+     *
+     * <p>成功事实要求银行卡充值分支已确认（扣减）且收款余额分支已确认（入账）；
+     * 取消事实要求两个分支均已取消。</p>
+     */
+    private TransactionFacts inspectBankCardRecharge(String transactionId) {
+        boolean accountsConfirmed = branches.allAccountBranches(transactionId, TccBranchStatus.CONFIRMED, 2);
+        boolean accountsCancelled = branches.allAccountBranches(transactionId, TccBranchStatus.CANCELLED, 2);
+        boolean noActiveFreeze = freezes.transactionHasNoActiveFreeze(transactionId);
+        // 银行卡充值无复式账本和无余额冻结，相关字段始终为 true（不需要）
+        return new TransactionFacts(accountsConfirmed,
+                accountsCancelled && noActiveFreeze, accountsConfirmed, true,
+                true, true, accountsCancelled, true, noActiveFreeze);
     }
 
     /**
