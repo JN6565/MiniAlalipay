@@ -1,18 +1,21 @@
 package com.minialalipay.gateway.auth;
 
 import com.minialalipay.gateway.filter.GatewayAuthContext;
+import jakarta.annotation.PostConstruct;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.cloud.client.loadbalancer.reactive.ReactorLoadBalancerExchangeFilterFunction;
-import org.springframework.stereotype.Component;
 import org.springframework.http.HttpStatus;
-import org.springframework.web.server.ResponseStatusException;
+import org.springframework.stereotype.Component;
 import org.springframework.web.reactive.function.client.WebClient;
+import org.springframework.web.server.ResponseStatusException;
 import reactor.core.publisher.Mono;
 
-import java.util.Set;
 import java.time.Duration;
+import java.util.Set;
 
 /**
  * 用户中心会话认证适配器。
@@ -32,20 +35,38 @@ import java.time.Duration;
 @Component
 @ConditionalOnProperty(name = "gateway.authentication.stub-enabled", havingValue = "false", matchIfMissing = true)
 public final class UserCenterAuthenticationAdapter implements GatewayAuthenticationPort {
+
+    private static final Logger log = LoggerFactory.getLogger(UserCenterAuthenticationAdapter.class);
+
     private final WebClient webClient;
     private final String serviceToken;
+    private final String userCenterUri;
 
     public UserCenterAuthenticationAdapter(
             WebClient.Builder builder,
             ObjectProvider<ReactorLoadBalancerExchangeFilterFunction> loadBalancerFilter,
             @Value("${gateway.authentication.user-center-uri:lb://user-center}") String userCenterUri,
             @Value("${gateway.authentication.service-token:local-internal-token}") String serviceToken) {
-        // 默认基址为 lb://user-center，经 Nacos 负载均衡解析实例；直连 http:// 地址经该过滤器原样透传。
-        // 测试上下文可能不注册负载均衡过滤器，缺失时退回普通 WebClient，保证直连地址可用。
+        // 默认基址为 lb://user-center，经 Nacos 负载均衡解析实例；直连 http:// 地址不添加负载均衡过滤器，
+        // 否则 ReactorLoadBalancerExchangeFilterFunction 会把 http:// 的 hostname 当成 Nacos 服务名去查找，导致 503。
         WebClient.Builder configured = builder.baseUrl(userCenterUri);
-        loadBalancerFilter.ifAvailable(filter -> configured.filter(filter));
+        if (userCenterUri.startsWith("lb://")) {
+            loadBalancerFilter.ifAvailable(filter -> {
+                log.info("使用 lb:// 协议，已添加 ReactorLoadBalancerExchangeFilterFunction");
+                configured.filter(filter);
+            });
+        } else {
+            log.info("使用直连地址 {}，跳过负载均衡过滤器", userCenterUri);
+        }
         this.webClient = configured.build();
         this.serviceToken = serviceToken;
+        this.userCenterUri = userCenterUri;
+    }
+
+    @PostConstruct
+    void logConfiguration() {
+        log.info("UserCenterAuthenticationAdapter 已激活: userCenterUri={}, serviceToken={}",
+                userCenterUri, serviceToken != null ? "***" : "null");
     }
 
     @Override
@@ -57,10 +78,13 @@ public final class UserCenterAuthenticationAdapter implements GatewayAuthenticat
                 .retrieve()
                 .bodyToMono(IntrospectionResponse.class)
                 .timeout(Duration.ofSeconds(2))
+                .doOnNext(resp -> log.debug("用户中心会话校验响应: active={}, userId={}", resp.active(), resp.userId()))
                 .filter(IntrospectionResponse::active)
                 .filter(response -> response.userId() != null && !response.userId().isBlank())
                 .map(response -> new GatewayAuthContext(response.userId(), response.roles()))
                 // 基础设施故障与无效令牌必须区分，避免把用户中心故障伪装成登录过期。
+                .doOnError(error -> log.warn("用户中心会话校验失败: userCenterUri={}, error={}",
+                        userCenterUri, error.toString()))
                 .onErrorMap(error -> new ResponseStatusException(
                         HttpStatus.SERVICE_UNAVAILABLE, "用户中心会话校验暂不可用", error));
     }
