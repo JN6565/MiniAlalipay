@@ -30,6 +30,8 @@ public class BankCard {
     private final String holderMasked;
     private final String idCardMasked;
     private final String phoneMasked;
+    /** 虚拟余额（分），与账户余额独立，充值增加、提现/支付扣减。 */
+    private long balanceFen;
     private boolean isDefault;
     private BankCardStatus status;
     private Instant unboundAt;
@@ -41,7 +43,7 @@ public class BankCard {
     public BankCard(String cardId, String userId, String accountId, String bankCode, String bankName,
                     BankCardType cardType, String cardBin, String cardLast4,
                     String holderMasked, String idCardMasked, String phoneMasked,
-                    boolean isDefault, BankCardStatus status, Instant unboundAt,
+                    long balanceFen, boolean isDefault, BankCardStatus status, Instant unboundAt,
                     long version, Instant createdAt, Instant updatedAt) {
         this.cardId = cardId;
         this.userId = userId;
@@ -54,6 +56,7 @@ public class BankCard {
         this.holderMasked = holderMasked;
         this.idCardMasked = idCardMasked;
         this.phoneMasked = phoneMasked;
+        this.balanceFen = balanceFen;
         this.isDefault = isDefault;
         this.status = status;
         this.unboundAt = unboundAt;
@@ -88,7 +91,7 @@ public class BankCard {
                 bankInfo.cardType(), fullCardNumber.substring(0, 6),
                 fullCardNumber.substring(fullCardNumber.length() - 4),
                 SensitiveMask.maskName(holderName), SensitiveMask.maskIdCard(idCard),
-                SensitiveMask.maskPhone(phone), isDefault, BankCardStatus.ACTIVE, null,
+                SensitiveMask.maskPhone(phone), 0L, isDefault, BankCardStatus.ACTIVE, null,
                 0L, now, now);
     }
 
@@ -110,9 +113,13 @@ public class BankCard {
      * 解绑：状态置为 UNBOUND 终态并记录解绑时间。
      *
      * @throws BusinessException 已是 UNBOUND 终态时抛出 BANK_CARD_ALREADY_UNBOUND
+     * @throws BusinessException 余额未清零时抛出 BANK_CARD_HAS_BALANCE
      */
     public void unbind(Instant now) {
         requireActive();
+        if (balanceFen > 0) {
+            throw new BusinessException(BankCardErrorCode.BANK_CARD_HAS_BALANCE);
+        }
         this.status = BankCardStatus.UNBOUND;
         this.isDefault = false;
         this.unboundAt = now;
@@ -137,6 +144,8 @@ public class BankCard {
     public String getHolderMasked() { return holderMasked; }
     public String getIdCardMasked() { return idCardMasked; }
     public String getPhoneMasked() { return phoneMasked; }
+    /** 获取银行卡虚拟余额（分）。 */
+    public long getBalanceFen() { return balanceFen; }
     public boolean isDefault() { return isDefault; }
     public BankCardStatus getStatus() { return status; }
     public Instant getUnboundAt() { return unboundAt; }
@@ -147,5 +156,51 @@ public class BankCard {
     /** 仓储 CAS 更新成功后同步内存版本号，避免后续操作基于过期版本。 */
     public void updateVersion(long newVersion) {
         this.version = newVersion;
+    }
+
+    /**
+     * 充值增加余额；只允许 ACTIVE 状态。
+     *
+     * @param amountFen 充值金额（分），必须大于 0
+     * @param now 操作时间
+     * @throws BusinessException 余额不足或状态异常
+     */
+    public void recharge(long amountFen, Instant now) {
+        requireActive();
+        if (amountFen <= 0) {
+            throw new IllegalArgumentException("充值金额必须大于 0");
+        }
+        this.balanceFen += amountFen;
+        this.updatedAt = now;
+    }
+
+    /**
+     * 提现扣减余额；只允许 ACTIVE 状态且余额充足。
+     *
+     * @param amountFen 提现金额（分），必须大于 0
+     * @param now 操作时间
+     * @throws BusinessException 余额不足或状态异常
+     */
+    public void withdraw(long amountFen, Instant now) {
+        requireActive();
+        if (amountFen <= 0) {
+            throw new IllegalArgumentException("提现金额必须大于 0");
+        }
+        if (balanceFen < amountFen) {
+            throw new BusinessException(BankCardErrorCode.BANK_CARD_INSUFFICIENT_BALANCE);
+        }
+        this.balanceFen -= amountFen;
+        this.updatedAt = now;
+    }
+
+    /**
+     * 支付扣减余额；只允许 ACTIVE 状态且余额充足。
+     *
+     * @param amountFen 支付金额（分），必须大于 0
+     * @param now 操作时间
+     * @throws BusinessException 余额不足或状态异常
+     */
+    public void deductForPayment(long amountFen, Instant now) {
+        withdraw(amountFen, now);
     }
 }

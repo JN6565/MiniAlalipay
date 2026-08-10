@@ -62,13 +62,13 @@ public class BankCardRepositoryImpl implements BankCardRepository {
     public void save(BankCard card) {
         jdbcTemplate.update("INSERT INTO account_db.bank_card "
                         + "(card_id,user_id,account_id,bank_code,bank_name,card_type,card_bin,card_last4,"
-                        + "holder_masked,id_card_masked,phone_masked,is_default,status,unbound_at,"
+                        + "holder_masked,id_card_masked,phone_masked,balance_fen,is_default,status,unbound_at,"
                         + "version,created_at,updated_at) "
-                        + "VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
+                        + "VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
                 card.getCardId(), card.getUserId(), card.getAccountId(), card.getBankCode(),
                 card.getBankName(), card.getCardType().name(), card.getCardBin(), card.getCardLast4(),
                 card.getHolderMasked(), card.getIdCardMasked(), card.getPhoneMasked(),
-                card.isDefault(), card.getStatus().name(), toTimestamp(card.getUnboundAt()),
+                card.getBalanceFen(), card.isDefault(), card.getStatus().name(), toTimestamp(card.getUnboundAt()),
                 card.getVersion(), toTimestamp(card.getCreatedAt()), toTimestamp(card.getUpdatedAt()));
     }
 
@@ -85,12 +85,32 @@ public class BankCardRepositoryImpl implements BankCardRepository {
         return updated == 1;
     }
 
+    /**
+     * 乐观锁更新银行卡余额；用于充值、提现和支付扣减。
+     *
+     * @param card 已变更余额的银行卡聚合
+     * @param expectedVersion 更新前读取到的版本号
+     * @return 是否更新成功；false 表示版本冲突
+     */
+    @Override
+    public boolean updateBalanceByCas(BankCard card, long expectedVersion) {
+        int updated = jdbcTemplate.update("UPDATE account_db.bank_card SET "
+                        + "balance_fen = ?, version = version + 1, updated_at = ? "
+                        + "WHERE card_id = ? AND version = ?",
+                card.getBalanceFen(), toTimestamp(card.getUpdatedAt()), card.getCardId(), expectedVersion);
+        if (updated == 1) {
+            card.updateVersion(expectedVersion + 1);
+        }
+        return updated == 1;
+    }
+
     private BankCard mapCard(ResultSet rs, int rowNum) throws SQLException {
         return new BankCard(rs.getString("card_id"), rs.getString("user_id"),
                 rs.getString("account_id"), rs.getString("bank_code"), rs.getString("bank_name"),
                 BankCardType.valueOf(rs.getString("card_type")), rs.getString("card_bin"),
                 rs.getString("card_last4"), rs.getString("holder_masked"),
                 rs.getString("id_card_masked"), rs.getString("phone_masked"),
+                rs.getLong("balance_fen"),
                 rs.getBoolean("is_default"), BankCardStatus.valueOf(rs.getString("status")),
                 instantOrNull(rs, "unbound_at"), rs.getLong("version"),
                 instant(rs, "created_at"), instant(rs, "updated_at"));

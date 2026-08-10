@@ -68,6 +68,16 @@ public interface BusinessStore {
     /** 获取指定交易的 TCC 恢复重试次数，无记录返回 0。 */
     int getTccRetryCount(String transactionId);
 
+    /**
+     * 查询指定银行卡的交易历史（充值/提现），按创建时间倒序。
+     *
+     * @param userId 当前用户 ID，确保只能查看本人交易
+     * @param cardId 银行卡 ID
+     * @param limit  最大返回条数
+     * @return 交易列表（只读）
+     */
+    List<FundTransactionRecord> findBankCardTransactions(String userId, String cardId, int limit);
+
     /** 交易与请求摘要的持久化查询结果。 */
     record FundTransactionRecord(FundTransaction transaction, byte[] requestHash) { }
     /** 活动人工工单摘要：工单号与进入人工态的原因码。 */

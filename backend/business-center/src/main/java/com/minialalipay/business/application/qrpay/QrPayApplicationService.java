@@ -237,8 +237,25 @@ public class QrPayApplicationService {
     @Transactional
     public IssuedConfirmation issueConfirmation(String userId, String orderId, String bootstrapSessionId,
                                                 long version, String paymentProof, FundingSource fundingSource) {
+        return issueConfirmation(userId, orderId, bootstrapSessionId, version, paymentProof, fundingSource, null);
+    }
+
+    /**
+     * 校验支付证明并为绑定 H5 会话的付款人签发二维码确认令牌。
+     *
+     * <p>余额支付锁定付款人普通账户；Mini 花呗信用支付锁定信用账户且要求账户 ACTIVE；
+     * 银行卡支付需指定 cardId 并校验银行卡归属。</p>
+     */
+    @Transactional
+    public IssuedConfirmation issueConfirmation(String userId, String orderId, String bootstrapSessionId,
+                                                long version, String paymentProof, FundingSource fundingSource,
+                                                String cardId) {
         requirePaymentDependencies();
-        if (fundingSource != FundingSource.BALANCE && fundingSource != FundingSource.MINI_CREDIT) {
+        if (fundingSource != FundingSource.BALANCE && fundingSource != FundingSource.MINI_CREDIT
+                && fundingSource != FundingSource.BANK_CARD) {
+            throw new BusinessException(BusinessErrorCode.FUNDING_SOURCE_NOT_ALLOWED);
+        }
+        if (fundingSource == FundingSource.BANK_CARD && (cardId == null || cardId.isBlank())) {
             throw new BusinessException(BusinessErrorCode.FUNDING_SOURCE_NOT_ALLOWED);
         }
         QrPayOrder order = requiredOrder(orderId);
@@ -262,10 +279,10 @@ public class QrPayApplicationService {
         routeOnRiskVerdict(SubjectType.QR_PAY_ORDER.name(), order, expectedVersion);
         String rawToken = security.newConfirmationToken();
         Confirmation confirmation = Confirmation.issue(security.newId(), security.digest(rawToken), SubjectType.QR_PAY_ORDER,
-                orderId, subjectHash(order, fundingSource, proof.payPasswordVersion()), userId, proof.paymentProofId(),
+                orderId, subjectHash(order, fundingSource, proof.payPasswordVersion(), cardId), userId, proof.paymentProofId(),
                 proof.payPasswordVersion(), fundingSource, clock.instant());
         businessStore.replaceQrPayConfirmation(confirmation, expectedVersion, order);
-        return new IssuedConfirmation(rawToken, "sha256:" + java.util.HexFormat.of().formatHex(subjectHash(order, fundingSource, proof.payPasswordVersion())),
+        return new IssuedConfirmation(rawToken, "sha256:" + java.util.HexFormat.of().formatHex(subjectHash(order, fundingSource, proof.payPasswordVersion(), cardId)),
                 confirmation.getExpiresAt());
     }
 
@@ -281,6 +298,7 @@ public class QrPayApplicationService {
             if (!"ACTIVE".equals(credit.status())) throw new BusinessException(BusinessErrorCode.ACCOUNT_UNAVAILABLE);
             return credit.creditAccountId();
         }
+        // BALANCE 和 BANK_CARD 均使用用户普通账户
         var payer = accounts.resolvePersonalAccount(userId);
         if (!"ACTIVE".equals(payer.status())) throw new BusinessException(BusinessErrorCode.ACCOUNT_UNAVAILABLE);
         return payer.accountId();
@@ -312,6 +330,17 @@ public class QrPayApplicationService {
     @Transactional
     public FundTransaction pay(String userId, String orderId, String bootstrapSessionId, String confirmationToken,
                                String idempotencyKey, String traceId) {
+        return pay(userId, orderId, bootstrapSessionId, confirmationToken, idempotencyKey, traceId, null);
+    }
+
+    /**
+     * 原子受理二维码支付；同一来源订单只能形成一笔统一资金交易。
+     *
+     * <p>fundingSource 为 BANK_CARD 时，cardId 必须与确认阶段一致。</p>
+     */
+    @Transactional
+    public FundTransaction pay(String userId, String orderId, String bootstrapSessionId, String confirmationToken,
+                               String idempotencyKey, String traceId, String cardId) {
         requirePaymentDependencies();
         if (!keyValidator.isValid(idempotencyKey)) throw new BusinessException(CommonErrorCode.INVALID_REQUEST);
         QrPayOrder order = requiredOrder(orderId);
@@ -321,7 +350,7 @@ public class QrPayApplicationService {
         Confirmation confirmation = businessStore.findConfirmationForUpdate(tokenDigest)
                 .orElseThrow(() -> new BusinessException(BusinessErrorCode.CONFIRMATION_MISMATCH));
         // 资金来源绑定在确认摘要中，付款受理据此反推统一交易类型，不接受客户端再次覆盖。
-        FundingSource fundingSource = resolveFundingSource(order, confirmation);
+        FundingSource fundingSource = resolveFundingSource(order, confirmation, cardId);
         TransactionType transactionType = fundingSource == FundingSource.MINI_CREDIT
                 ? TransactionType.CREDIT_PAY : TransactionType.QR_PAY;
         var repeated = businessStore.findByIdempotency(userId, transactionType, idempotencyKey).orElse(null);
@@ -334,7 +363,7 @@ public class QrPayApplicationService {
         if (confirmation.getSubjectType() != SubjectType.QR_PAY_ORDER || !confirmation.getSubjectId().equals(orderId)
                 || !confirmation.getPayerUserId().equals(userId)
                 || !Arrays.equals(confirmation.getSubjectHash(), subjectHash(order, fundingSource,
-                confirmation.getPayPasswordVersion()))) {
+                confirmation.getPayPasswordVersion(), cardId))) {
             throw new BusinessException(BusinessErrorCode.CONFIRMATION_STALE);
         }
         if (paymentProofs.currentPayPasswordVersion(userId) != confirmation.getPayPasswordVersion()) {
@@ -354,9 +383,16 @@ public class QrPayApplicationService {
         try { order.acceptByFundTransaction(expectedVersion, transactionId, now); }
         catch (IllegalStateException invalid) { throw new BusinessException(BusinessErrorCode.ORDER_STATE_INVALID); }
         if (!store.update(order, expectedVersion)) throw new BusinessException(BusinessErrorCode.VERSION_CONFLICT);
-        FundTransaction transaction = FundTransaction.accept(transactionId, transactionType, SourceType.QR_PAY_ORDER,
-                orderId, userId, order.getPayerAccountId(), order.getPayeeAccountId(), fundingSource, order.getAmountFen(),
-                idempotencyKey, "LOW", validTraceId(traceId), now);
+        FundTransaction transaction;
+        if (fundingSource == FundingSource.BANK_CARD) {
+            transaction = FundTransaction.acceptBankCardOperation(transactionId, transactionType, SourceType.QR_PAY_ORDER,
+                    orderId, userId, order.getPayeeAccountId(), cardId, fundingSource, order.getAmountFen(),
+                    idempotencyKey, "LOW", validTraceId(traceId), now);
+        } else {
+            transaction = FundTransaction.accept(transactionId, transactionType, SourceType.QR_PAY_ORDER,
+                    orderId, userId, order.getPayerAccountId(), order.getPayeeAccountId(), fundingSource, order.getAmountFen(),
+                    idempotencyKey, "LOW", validTraceId(traceId), now);
+        }
         businessStore.createTransaction(transaction, requestHash, security.newId(), now);
         store.appendOrderEvent(new QrPayOrderEvent(security.newId(), orderId, transactionId, QrPayOrderStatus.PROCESSING.name(), now));
         afterCommit(() -> coordinator.startOrResume(transaction));
@@ -364,13 +400,17 @@ public class QrPayApplicationService {
     }
 
     /** 从确认摘要反推出已授权的资金来源，防止支付请求覆盖用户在确认阶段的选择。 */
-    private FundingSource resolveFundingSource(QrPayOrder order, Confirmation confirmation) {
+    private FundingSource resolveFundingSource(QrPayOrder order, Confirmation confirmation, String cardId) {
         long passwordVersion = confirmation.getPayPasswordVersion();
-        if (Arrays.equals(confirmation.getSubjectHash(), subjectHash(order, FundingSource.BALANCE, passwordVersion))) {
+        if (Arrays.equals(confirmation.getSubjectHash(), subjectHash(order, FundingSource.BALANCE, passwordVersion, null))) {
             return FundingSource.BALANCE;
         }
-        if (Arrays.equals(confirmation.getSubjectHash(), subjectHash(order, FundingSource.MINI_CREDIT, passwordVersion))) {
+        if (Arrays.equals(confirmation.getSubjectHash(), subjectHash(order, FundingSource.MINI_CREDIT, passwordVersion, null))) {
             return FundingSource.MINI_CREDIT;
+        }
+        if (cardId != null && Arrays.equals(confirmation.getSubjectHash(),
+                subjectHash(order, FundingSource.BANK_CARD, passwordVersion, cardId))) {
+            return FundingSource.BANK_CARD;
         }
         throw new BusinessException(BusinessErrorCode.CONFIRMATION_STALE);
     }
@@ -432,9 +472,14 @@ public class QrPayApplicationService {
     }
 
     private byte[] subjectHash(QrPayOrder order, FundingSource fundingSource, long payPasswordVersion) {
+        return subjectHash(order, fundingSource, payPasswordVersion, null);
+    }
+
+    private byte[] subjectHash(QrPayOrder order, FundingSource fundingSource, long payPasswordVersion, String cardId) {
         return security.digest(order.getOrderId() + "\n" + order.getVersion() + "\n" + order.getPayeeUserId() + "\n"
                 + order.getPayeeAccountId() + "\n" + order.getPayerUserId() + "\n" + order.getPayerAccountId() + "\n"
-                + order.getAmountFen() + "\n" + fundingSource.name() + "\n" + payPasswordVersion);
+                + order.getAmountFen() + "\n" + fundingSource.name() + "\n" + payPasswordVersion + "\n"
+                + (cardId != null ? cardId : ""));
     }
 
     private void requirePaymentDependencies() {

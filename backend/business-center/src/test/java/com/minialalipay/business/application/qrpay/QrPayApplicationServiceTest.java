@@ -132,7 +132,7 @@ class QrPayApplicationServiceTest {
             byte[] digest = invocation.getArgument(0);
             return java.util.Optional.of(new Confirmation("confirmation-1", digest,
                     com.minialalipay.business.domain.confirmation.SubjectType.QR_PAY_ORDER, created.order().getOrderId(),
-                    security.digest(created.order().getOrderId() + "\n3\n" + "payee-1\naccount-payee-1\npayer-1\naccount-payer-1\n100\nBALANCE\n3"),
+                    security.digest(created.order().getOrderId() + "\n3\n" + "payee-1\naccount-payee-1\npayer-1\naccount-payer-1\n100\nBALANCE\n3\n"),
                     "payer-1", "proof-id", 3,
                     com.minialalipay.business.domain.confirmation.ConfirmationStatus.ACTIVE, NOW.plusSeconds(120), null, NOW));
         });

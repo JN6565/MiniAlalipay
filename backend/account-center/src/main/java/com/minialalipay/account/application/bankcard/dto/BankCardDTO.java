@@ -14,6 +14,7 @@ import java.time.Instant;
  * @param holderMasked 持卡人姓名掩码
  * @param idCardMasked 身份证号掩码
  * @param phoneMasked 预留手机号掩码
+ * @param balanceFen 虚拟余额（分），与账户余额独立
  * @param isDefault 是否默认卡，同一用户至多一张
  * @param status 绑定状态：ACTIVE 已绑定，UNBOUND 已解绑
  * @param boundAt 绑定时间
@@ -27,6 +28,7 @@ public record BankCardDTO(
         String holderMasked,
         String idCardMasked,
         String phoneMasked,
+        long balanceFen,
         boolean isDefault,
         String status,
         Instant boundAt

@@ -278,8 +278,8 @@ public class BankCardApplicationService {
     private BankCardDTO toDTO(BankCard card) {
         return new BankCardDTO(card.getCardId(), card.getBankCode(), card.getBankName(),
                 card.getCardType().name(), card.getCardLast4(), card.getHolderMasked(),
-                card.getIdCardMasked(), card.getPhoneMasked(), card.isDefault(),
-                card.getStatus().name(), card.getCreatedAt());
+                card.getIdCardMasked(), card.getPhoneMasked(), card.getBalanceFen(),
+                card.isDefault(), card.getStatus().name(), card.getCreatedAt());
     }
 
     /** 沿用账户中心既有 ID 约定：26 位字符串。 */

@@ -10,5 +10,7 @@ public enum TccBranchType {
     /** Mini 花呗还款余额分支。 */ CREDIT_REPAY,
     /** 充值入账分支。 */ RECHARGE,
     /** 信用支付退款冲正分支（核销消费明细与应收）。 */ REFUND,
-    /** 退款专用复式账本凭证。 */ REFUND_LEDGER
+    /** 退款专用复式账本凭证。 */ REFUND_LEDGER,
+    /** 银行卡充值分支。 */ BANK_CARD_RECHARGE,
+    /** 银行卡提现分支。 */ BANK_CARD_WITHDRAW
 }

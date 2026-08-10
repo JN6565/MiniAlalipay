@@ -138,10 +138,10 @@ public class JdbcBusinessStore implements BusinessStore, OpsTransactionQueryPort
 
     @Override
     public void createTransaction(FundTransaction t, byte[] requestHash, String eventId, Instant now) {
-        jdbc.update("INSERT INTO business_db.fund_transaction (transaction_id,business_type,source_type,source_order_id,initiator_user_id,payer_account_id,payee_account_id,funding_source,related_transaction_id,amount_fen,idempotency_key,status,risk_level,trace_id,version,created_at,updated_at) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
+        jdbc.update("INSERT INTO business_db.fund_transaction (transaction_id,business_type,source_type,source_order_id,initiator_user_id,payer_account_id,payee_account_id,funding_source,related_transaction_id,bank_card_id,amount_fen,idempotency_key,status,risk_level,trace_id,version,created_at,updated_at) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
                 t.getTransactionId(), t.getBusinessType().name(), t.getSourceType().name(), t.getSourceOrderId(),
                 t.getInitiatorUserId(), t.getPayerAccountId(), t.getPayeeAccountId(), t.getFundingSource().name(),
-                t.getRelatedTransactionId(),
+                t.getRelatedTransactionId(), t.getBankCardId(),
                 t.getAmountFen(), t.getIdempotencyKey(), t.getStatus().name(), t.getRiskLevel(),
                 t.getTraceId(), t.getVersion(), t.getCreatedAt(), t.getUpdatedAt());
         jdbc.update("INSERT INTO business_db.idempotency_record (record_id,principal_key,api_scope,idempotency_key,request_digest,resource_type,resource_id,status,expires_at,created_at,updated_at) VALUES (?,?,?,?,?,'FUND_TRANSACTION',?,'COMPLETED',?,?,?)",
@@ -241,6 +241,15 @@ public class JdbcBusinessStore implements BusinessStore, OpsTransactionQueryPort
         Integer count = jdbc.query("SELECT COALESCE(MAX(retry_count),0) FROM business_db.tcc_global WHERE transaction_id=?",
                 rs -> rs.next() ? rs.getInt(1) : 0, transactionId);
         return count == null ? 0 : count;
+    }
+
+    @Override
+    public List<FundTransactionRecord> findBankCardTransactions(String userId, String cardId, int limit) {
+        return jdbc.query("SELECT t.*,NULL AS request_hash FROM business_db.fund_transaction t "
+                        + "WHERE t.initiator_user_id=? AND t.bank_card_id=? "
+                        + "AND t.business_type IN ('BANK_CARD_RECHARGE','BANK_CARD_WITHDRAW') "
+                        + "ORDER BY t.created_at DESC LIMIT ?",
+                (rs, n) -> transactionRecord(rs), userId, cardId, limit);
     }
 
     private void appendOutbox(FundTransaction t, String eventId, String type, Instant now) {
@@ -434,7 +443,7 @@ public class JdbcBusinessStore implements BusinessStore, OpsTransactionQueryPort
                 r.getString("payer_account_id"), r.getString("payee_account_id"), FundingSource.valueOf(r.getString("funding_source")),
                 r.getLong("amount_fen"), r.getString("idempotency_key"), TransactionStatus.valueOf(r.getString("status")),
                 r.getString("risk_level"), r.getString("trace_id"), r.getLong("version"), instant(r,"created_at"), instant(r,"updated_at"),
-                r.getString("related_transaction_id"));
+                r.getString("related_transaction_id"), r.getString("bank_card_id"));
         return new FundTransactionRecord(t, r.getBytes("request_hash"));
     }
 

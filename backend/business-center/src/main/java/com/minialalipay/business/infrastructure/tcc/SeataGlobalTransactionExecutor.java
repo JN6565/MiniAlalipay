@@ -10,7 +10,7 @@ import org.springframework.web.client.RestClient;
 /**
  * Seata 全局事务执行器。
  *
- * <p>该类只负责在全局事务内请求账户中心注册转账 TCC 分支。业务主单已经在调用前提交，
+ * <p>该类只负责在全局事务内请求账户中心注册 TCC 分支。业务主单已经在调用前提交，
  * 不属于 Seata 分支；只有本方法正常返回时 TC 才会发起 Confirm，异常则发起 Cancel。</p>
  */
 @Component
@@ -33,18 +33,86 @@ public class SeataGlobalTransactionExecutor {
         if (xid == null || xid.isBlank()) {
             throw new IllegalStateException("Seata 全局事务 XID 未建立");
         }
+        // 银行卡转账：注册银行卡余额扣减分支（替代付款方账户余额冻结）
+        if (request.bankCardId() != null && !request.bankCardId().isBlank()) {
+            accountClient.post()
+                    .uri("/internal/v1/seata-tcc/bank-card-balance/withdraw/try")
+                    .header(RootContext.KEY_XID, xid)
+                    .body(new BankCardWithdrawTryRequest(
+                            request.businessXid(), request.transactionId(),
+                            request.payerUserId(), request.bankCardId(), request.amountFen()))
+                    .retrieve()
+                    .toBodilessEntity();
+        } else {
+            // 普通余额转账：冻结付款方账户余额
+            accountClient.post()
+                    .uri("/internal/v1/seata-tcc/transfer/try")
+                    .header(RootContext.KEY_XID, xid)
+                    .body(request)
+                    .retrieve()
+                    .toBodilessEntity();
+        }
+    }
+
+    /**
+     * 注册银行卡充值组合 TCC 分支：银行卡余额扣减 + 收款方账户余额入账。
+     *
+     * @param request 稳定业务分支参数；重试时不得改变
+     */
+    @GlobalTransactional(name = "minialalipay-bank-card-recharge-tcc", timeoutMills = 30000, rollbackFor = Exception.class)
+    public void executeBankCardRecharge(BankCardRechargeRequest request) {
+        String xid = RootContext.getXID();
+        if (xid == null || xid.isBlank()) {
+            throw new IllegalStateException("Seata 全局事务 XID 未建立");
+        }
+        // 组合端点：同时注册银行卡扣减分支和收款账户入账分支
         accountClient.post()
-                .uri("/internal/v1/seata-tcc/transfer/try")
+                .uri("/internal/v1/seata-tcc/bank-card-recharge/try")
                 .header(RootContext.KEY_XID, xid)
                 .body(request)
                 .retrieve()
                 .toBodilessEntity();
     }
 
-    /** 转账 TCC 的完整稳定参数，技术 XID 不进入该对象。 */
+    /**
+     * 注册银行卡提现组合 TCC 分支：付款方账户余额冻结 + 银行卡余额增加。
+     *
+     * @param request 稳定业务分支参数；重试时不得改变
+     */
+    @GlobalTransactional(name = "minialalipay-bank-card-withdraw-tcc", timeoutMills = 30000, rollbackFor = Exception.class)
+    public void executeBankCardWithdraw(BankCardWithdrawRequest request) {
+        String xid = RootContext.getXID();
+        if (xid == null || xid.isBlank()) {
+            throw new IllegalStateException("Seata 全局事务 XID 未建立");
+        }
+        // 组合端点：同时注册付款账户冻结分支和银行卡入账分支
+        accountClient.post()
+                .uri("/internal/v1/seata-tcc/bank-card-withdraw/try")
+                .header(RootContext.KEY_XID, xid)
+                .body(request)
+                .retrieve()
+                .toBodilessEntity();
+    }
+
+    /** 转账 TCC 的完整稳定参数，技术 XID 不进入该对象。bankCardId 可选，非空时走银行卡扣减分支。 */
     public record TransferTccRequest(String businessXid, String transactionId,
                                      String payerAccountId, String payeeAccountId, long amountFen,
                                      String payerFreezeId, String payeeReservationId,
                                      String voucherId, long debitEntryId, long creditEntryId,
-                                     String ledgerEventId, String traceId) { }
+                                     String ledgerEventId, String traceId,
+                                     String payerUserId, String bankCardId) { }
+
+    /** 银行卡充值 TCC 的完整稳定参数，包含账户入账所需标识。 */
+    public record BankCardRechargeRequest(String businessXid, String transactionId,
+                                          String userId, String accountId, String cardId,
+                                          long amountFen, String reservationId) { }
+
+    /** 银行卡提现 TCC 的完整稳定参数，包含账户冻结所需标识。 */
+    public record BankCardWithdrawRequest(String businessXid, String transactionId,
+                                          String userId, String accountId, String cardId,
+                                          long amountFen, String freezeId) { }
+
+    /** 银行卡转账（QR_PAY 银行卡支付）时注册银行卡扣减分支的请求体。 */
+    private record BankCardWithdrawTryRequest(String businessXid, String transactionId,
+                                               String userId, String cardId, long amountFen) { }
 }

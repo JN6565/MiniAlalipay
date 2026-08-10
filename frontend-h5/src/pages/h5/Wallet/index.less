@@ -1,0 +1,162 @@
+.wallet-page {
+  min-height: 100vh;
+  background: #f5f6f8;
+  padding: 12px;
+  box-sizing: border-box;
+}
+
+.wallet-loading {
+  display: flex;
+  justify-content: center;
+  padding-top: 120px;
+}
+
+// 账户余额卡片
+.wallet-account-card {
+  background: linear-gradient(135deg, #1677ff, #4096ff);
+  border-radius: 12px;
+  color: #fff;
+  padding: 16px;
+
+  .account-title {
+    font-size: 13px;
+    opacity: 0.85;
+  }
+
+  .account-available {
+    font-size: 32px;
+    font-weight: 600;
+    margin: 6px 0 12px;
+  }
+
+  .account-cols {
+    display: flex;
+    gap: 32px;
+
+    > div {
+      display: flex;
+      flex-direction: column;
+      font-size: 12px;
+
+      span {
+        opacity: 0.85;
+      }
+
+      b {
+        margin-top: 2px;
+        font-size: 14px;
+      }
+    }
+  }
+}
+
+// 区块标题
+.wallet-section-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin: 16px 4px 8px;
+  font-size: 15px;
+  font-weight: 600;
+
+  .wallet-section-link {
+    font-size: 12px;
+    font-weight: 400;
+    color: #1677ff;
+  }
+}
+
+// 无卡空态
+.wallet-empty {
+  background: #fff;
+  border-radius: 12px;
+  text-align: center;
+  padding: 32px 16px;
+
+  .empty-icon {
+    font-size: 36px;
+  }
+
+  p {
+    margin: 8px 0 4px;
+    color: #333;
+  }
+
+  .empty-hint {
+    color: #999;
+    font-size: 12px;
+    margin-bottom: 12px;
+  }
+}
+
+// 银行卡列表
+.wallet-card-list {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.wallet-card-item {
+  border-radius: 12px;
+  color: #fff;
+  padding: 14px 16px;
+
+  .card-head {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+
+    .bank-name {
+      font-size: 15px;
+      font-weight: 600;
+    }
+
+    .card-number {
+      font-size: 12px;
+      opacity: 0.85;
+      flex: 1;
+    }
+
+    .default-badge {
+      font-size: 10px;
+      border: 1px solid rgba(255, 255, 255, 0.7);
+      border-radius: 8px;
+      padding: 1px 6px;
+    }
+  }
+
+  .card-balance {
+    margin: 10px 0 12px;
+    font-size: 12px;
+    opacity: 0.9;
+
+    b {
+      font-size: 16px;
+      margin-left: 4px;
+    }
+  }
+
+  .card-actions {
+    display: flex;
+    gap: 10px;
+
+    .card-action-btn {
+      flex: 1;
+      --border-color: rgba(255, 255, 255, 0.8);
+      --text-color: #fff;
+      --background-color: transparent;
+    }
+  }
+}
+
+// 资金渠道说明
+.wallet-tips {
+  margin-top: 16px;
+  padding: 0 4px;
+
+  p {
+    margin: 4px 0;
+    font-size: 12px;
+    color: #999;
+  }
+}

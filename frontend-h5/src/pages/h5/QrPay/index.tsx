@@ -5,6 +5,7 @@ import * as qrPayService from '@/services/qrPay';
 import * as paymentPasswordService from '@/services/paymentPassword';
 import * as accountService from '@/services/account';
 import * as creditService from '@/services/credit';
+import { getBankCards, formatBalance, type BankCard } from '@/services/bankCard';
 import { AmountDisplay } from '@/components/h5/AmountDisplay';
 import { PasswordInput } from '@/components/h5/PasswordInput';
 import { formatCountdown } from '@/utils/format';
@@ -17,7 +18,9 @@ const QrPayPage: React.FC = () => {
   const [order, setOrder] = useState<qrPayService.QrPayOrder | null>(null);
   const [account, setAccount] = useState<accountService.AccountInfo | null>(null);
   const [credit, setCredit] = useState<creditService.CreditSummary | null>(null);
-  const [fundingSource, setFundingSource] = useState<'BALANCE' | 'MINI_CREDIT' | null>(null);
+  const [fundingSource, setFundingSource] = useState<'BALANCE' | 'MINI_CREDIT' | 'BANK_CARD' | null>(null);
+  const [bankCards, setBankCards] = useState<BankCard[]>([]);
+  const [selectedCardId, setSelectedCardId] = useState<string | null>(null);
   const [password, setPassword] = useState('');
   const [countdown, setCountdown] = useState(0);
 
@@ -52,15 +55,19 @@ const QrPayPage: React.FC = () => {
       const scanned = await qrPayService.markScanned(exchanged.qrOrderId).catch(() => exchanged);
       setOrder(scanned);
 
-      const [accountResult, creditResult] = await Promise.allSettled([
+      const [accountResult, creditResult, bankCardsResult] = await Promise.allSettled([
         accountService.getMyAccount(),
         creditService.getCreditSummary(),
+        getBankCards(),
       ]);
       if (accountResult.status === 'fulfilled') {
         setAccount(accountResult.value as unknown as accountService.AccountInfo);
       }
       if (creditResult.status === 'fulfilled') {
         setCredit(creditResult.value as unknown as creditService.CreditSummary);
+      }
+      if (bankCardsResult.status === 'fulfilled') {
+        setBankCards(bankCardsResult.value as unknown as BankCard[]);
       }
     } catch (error: any) {
       Toast.show({ content: error.message || '订单无效', icon: 'fail' });
@@ -88,7 +95,12 @@ const QrPayPage: React.FC = () => {
       );
       const { confirmationToken } = await qrPayService.createConfirmation(
         order!.qrOrderId,
-        { version: order!.version, paymentProof, fundingSource },
+        {
+          version: order!.version,
+          paymentProof,
+          fundingSource,
+          cardId: fundingSource === 'BANK_CARD' ? selectedCardId || undefined : undefined,
+        },
       );
 
       const result = await qrPayService.submitPayment(order!.qrOrderId, {
@@ -117,8 +129,11 @@ const QrPayPage: React.FC = () => {
   }
 
   const selectFundingSource = (value: string | number) => {
-    setFundingSource(value as 'BALANCE' | 'MINI_CREDIT');
+    setFundingSource(value as 'BALANCE' | 'MINI_CREDIT' | 'BANK_CARD');
     setPassword('');
+    if (value === 'BANK_CARD' && bankCards.length > 0 && !selectedCardId) {
+      setSelectedCardId(bankCards[0].cardId);
+    }
   };
 
   return (
@@ -159,6 +174,31 @@ const QrPayPage: React.FC = () => {
             <div className="funding-option">
               <Radio value="MINI_CREDIT">
                 Mini 花呗（可用 <AmountDisplay amountFen={credit?.availableFen || 0} size="small" />）
+              </Radio>
+            </div>
+            <div className="funding-option">
+              <Radio value="BANK_CARD">
+                银行卡
+                {bankCards.length > 0 && selectedCardId && (
+                  <span className="card-brief">
+                    {bankCards.find(c => c.cardId === selectedCardId)?.bankName}
+                    （尾号 {bankCards.find(c => c.cardId === selectedCardId)?.cardLast4}）
+                  </span>
+                )}
+                {bankCards.length > 0 && (
+                  <select
+                    className="card-select"
+                    value={selectedCardId || ''}
+                    onClick={e => e.stopPropagation()}
+                    onChange={e => setSelectedCardId(e.target.value)}
+                  >
+                    {bankCards.map(card => (
+                      <option key={card.cardId} value={card.cardId}>
+                        {card.bankName}（尾号 {card.cardLast4}，余额 ¥{formatBalance(card.balanceFen || 0)}）
+                      </option>
+                    ))}
+                  </select>
+                )}
               </Radio>
             </div>
           </div>

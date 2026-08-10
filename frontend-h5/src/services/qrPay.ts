@@ -48,7 +48,8 @@ export const createConfirmation = (
   params: {
     version: number;
     paymentProof: string;
-    fundingSource: 'BALANCE' | 'MINI_CREDIT';
+    fundingSource: 'BALANCE' | 'MINI_CREDIT' | 'BANK_CARD';
+    cardId?: string;
   },
 ) : Promise<{ confirmationToken: string; expiresAt: string }> => {
   return request.post<{ confirmationToken: string; expiresAt: string }>(

@@ -899,6 +899,7 @@ erDiagram
 | `holder_masked` | `VARCHAR(64)` | 必填 | 持卡人姓名掩码，如 张*三 |
 | `id_card_masked` | `VARCHAR(32)` | 必填 | 身份证号掩码 |
 | `phone_masked` | `VARCHAR(16)` | 必填 | 预留手机号掩码，如 138****5678 |
+| `balance_fen` | `BIGINT UNSIGNED` | `0` | 虚拟余额（分），充值扣减、提现增加，与账户余额独立；单笔限额 0.01–50000.00 元，日累计充值/提现各 50000.00 元 |
 | `is_default` | `TINYINT(1)` | `0` | 是否默认卡，同一用户至多一张，应用层条件更新保证 |
 | `status` | `VARCHAR(16)` | `ACTIVE` | `ACTIVE` 已绑定，`UNBOUND` 已解绑（终态） |
 | `unbound_at` | `DATETIME(3)` | 可空 | 解绑时间 |
@@ -910,6 +911,61 @@ erDiagram
 **键与索引**：索引 `(user_id,status)`，服务卡列表与重复绑卡校验。
 
 **写入规则**：绑卡只插入不更新；重复绑卡（同用户 BIN+尾号已 ACTIVE）与默认卡唯一性由应用层条件校验保证，因解绑后允许重绑，唯一索引无法用简单列组合表达；设默认与解绑一律走乐观锁 CAS，解绑默认卡后递补最早活动卡为默认。
+
+### 6.9 `bank_card_recharge_order`
+
+**功能与归属**：归属 `account_db`，由 `account-center` 银行卡充值模块写入。记录银行卡虚拟余额充值订单，与 Seata TCC 全局事务关联。
+
+| 字段 | 类型 | 必填/默认 | 功能 |
+| --- | --- | --- | --- |
+| `recharge_order_id` | `CHAR(26)` | PK，必填 | 充值订单 ID，26 位 ULID |
+| `user_id` | `CHAR(26)` | 必填 | 充值用户 ID |
+| `card_id` | `CHAR(26)` | 必填 | 目标银行卡 ID |
+| `amount_fen` | `BIGINT UNSIGNED` | 必填 | 充值金额（分），CHECK 约束 1–500000000 |
+| `status` | `VARCHAR(32)` | `PENDING` | 订单状态：`PENDING`/`PROCESSING`/`SUCCESS`/`FAILED`/`CANCELLED` |
+| `idempotency_key` | `VARCHAR(64)` | 必填 | 幂等键，唯一索引防重复充值 |
+| `transaction_id` | `CHAR(26)` | 可空 | 关联交易 ID，Seata 全局事务标识 |
+| `version` | `BIGINT UNSIGNED` | `0` | 乐观锁版本 |
+| `created_at` | `DATETIME(3)` | 必填 | 创建时间 |
+| `updated_at` | `DATETIME(3)` | 必填 | 最近变更时间 |
+
+**键与索引**：唯一索引 `uk_idempotency(idempotency_key)`；索引 `idx_user_status(user_id, status)`、`idx_card(card_id)`。
+
+### 6.10 `bank_card_withdraw_order`
+
+**功能与归属**：归属 `account_db`，由 `account-center` 银行卡提现模块写入。记录银行卡虚拟余额提现订单。
+
+| 字段 | 类型 | 必填/默认 | 功能 |
+| --- | --- | --- | --- |
+| `withdraw_order_id` | `CHAR(26)` | PK，必填 | 提现订单 ID，26 位 ULID |
+| `user_id` | `CHAR(26)` | 必填 | 提现用户 ID |
+| `card_id` | `CHAR(26)` | 必填 | 源银行卡 ID |
+| `amount_fen` | `BIGINT UNSIGNED` | 必填 | 提现金额（分），CHECK 约束 1–500000000 |
+| `status` | `VARCHAR(32)` | `PENDING` | 订单状态：`PENDING`/`PROCESSING`/`SUCCESS`/`FAILED`/`CANCELLED` |
+| `idempotency_key` | `VARCHAR(64)` | 必填 | 幂等键，唯一索引防重复提现 |
+| `transaction_id` | `CHAR(26)` | 可空 | 关联交易 ID，Seata 全局事务标识 |
+| `version` | `BIGINT UNSIGNED` | `0` | 乐观锁版本 |
+| `created_at` | `DATETIME(3)` | 必填 | 创建时间 |
+| `updated_at` | `DATETIME(3)` | 必填 | 最近变更时间 |
+
+**键与索引**：唯一索引 `uk_idempotency(idempotency_key)`；索引 `idx_user_status(user_id, status)`、`idx_card(card_id)`。
+
+### 6.11 `bank_card_daily_usage`
+
+**功能与归属**：归属 `account_db`，由 `account-center` 银行卡限额模块写入。按用户、银行卡、日期记录当日累计充值/提现金额，用于严格限额校验。
+
+| 字段 | 类型 | 必填/默认 | 功能 |
+| --- | --- | --- | --- |
+| `usage_id` | `CHAR(26)` | PK，必填 | 用量记录 ID |
+| `user_id` | `CHAR(26)` | 必填 | 用户 ID |
+| `card_id` | `CHAR(26)` | 必填 | 银行卡 ID |
+| `usage_date` | `DATE` | 必填 | 使用日期 |
+| `recharge_total_fen` | `BIGINT UNSIGNED` | `0` | 当日累计充值金额（分） |
+| `withdraw_total_fen` | `BIGINT UNSIGNED` | `0` | 当日累计提现金额（分） |
+| `created_at` | `DATETIME(3)` | 必填 | 创建时间 |
+| `updated_at` | `DATETIME(3)` | 必填 | 最近变更时间 |
+
+**键与索引**：唯一索引 `uk_user_card_date(user_id, card_id, usage_date)`，保证同一用户同一张卡每天只有一行记录；索引 `idx_date(usage_date)`。
 
 ## 7. 信用应收、账单与还款表
 

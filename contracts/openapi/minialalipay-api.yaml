@@ -343,6 +343,111 @@ paths:
         '401': { $ref: '#/components/responses/Unauthorized' }
         '404': { $ref: '#/components/responses/NotFound' }
         '409': { $ref: '#/components/responses/Conflict' }
+  /api/v1/bank-cards/{cardId}/balance:
+    get:
+      summary: 查询银行卡虚拟余额
+      operationId: getBankCardBalance
+      x-client-scope: C
+      parameters:
+        - $ref: '#/components/parameters/RequestIdHeader'
+        - name: cardId
+          in: path
+          required: true
+          schema: { type: string, minLength: 1, maxLength: 26 }
+      responses:
+        '200':
+          description: 返回银行卡虚拟余额（分）
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/ApiResponse'
+                  - type: object
+                    required: [data]
+                    properties:
+                      data:
+                        type: object
+                        required: [balanceFen]
+                        properties:
+                          balanceFen: { type: integer, format: int64, description: 虚拟余额（分） }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '404': { $ref: '#/components/responses/NotFound' }
+  /api/v1/bank-cards/{cardId}/recharge:
+    post:
+      summary: 银行卡充值（银行卡给账户充钱，虚拟余额 → 账户余额）
+      description: |
+        通过 Seata TCC 全局事务将银行卡虚拟余额扣减并增加到账户余额（银行卡给账户充钱）。单笔 0.01–50000.00 元，日累计充值 50000.00 元，且不超过银行卡当前虚拟余额。
+        paymentPassword 属敏感字段，只允许出现在请求体，不得进入日志、URL、浏览器存储或埋点。
+      operationId: rechargeBankCard
+      x-client-scope: C
+      parameters:
+        - $ref: '#/components/parameters/RequestIdHeader'
+        - $ref: '#/components/parameters/IdempotencyKeyHeader'
+        - name: cardId
+          in: path
+          required: true
+          schema: { type: string, minLength: 1, maxLength: 26 }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              required: [amountFen, paymentPassword]
+              properties:
+                amountFen: { type: integer, format: int64, minimum: 1, maximum: 500000000, description: 充值金额（分），单笔 1–500000000 } 
+                paymentPassword: { type: string, pattern: '^\d{6}$', writeOnly: true, description: 六位数字支付密码 }
+      responses:
+        '200':
+          description: 充值成功
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ApiResponse' }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '422': { $ref: '#/components/responses/UnprocessableEntity' }
+        '429': { $ref: '#/components/responses/TooManyRequests' }
+        '503': { $ref: '#/components/responses/ServiceUnavailable' }
+  /api/v1/bank-cards/{cardId}/withdraw:
+    post:
+      summary: 银行卡提现（账户给银行卡充钱，账户余额 → 虚拟余额）
+      description: |
+        通过 Seata TCC 全局事务将账户余额提现到银行卡虚拟余额（账户给银行卡充钱）。单笔 0.01–50000.00 元，日累计提现 50000.00 元。
+        paymentPassword 属敏感字段，只允许出现在请求体，不得进入日志、URL、浏览器存储或埋点。
+      operationId: withdrawBankCard
+      x-client-scope: C
+      parameters:
+        - $ref: '#/components/parameters/RequestIdHeader'
+        - $ref: '#/components/parameters/IdempotencyKeyHeader'
+        - name: cardId
+          in: path
+          required: true
+          schema: { type: string, minLength: 1, maxLength: 26 }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              required: [amountFen, paymentPassword]
+              properties:
+                amountFen: { type: integer, format: int64, minimum: 1, maximum: 500000000, description: 提现金额（分），单笔 1–500000000 } 
+                paymentPassword: { type: string, pattern: '^\d{6}$', writeOnly: true, description: 六位数字支付密码 }
+      responses:
+        '200':
+          description: 提现成功
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ApiResponse' }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '422': { $ref: '#/components/responses/UnprocessableEntity' }
+        '429': { $ref: '#/components/responses/TooManyRequests' }
+        '503': { $ref: '#/components/responses/ServiceUnavailable' }
   /api/v1/transfer-drafts:
     post:
       summary: 创建主动转账草稿
@@ -3672,7 +3777,7 @@ components:
         phone: { type: string, minLength: 11, maxLength: 11, description: 预留手机号，11 位 }
     BankCard:
       type: object
-      required: [cardId, bankCode, bankName, cardType, cardLast4, holderMasked, idCardMasked, phoneMasked, isDefault, status, boundAt]
+      required: [cardId, bankCode, bankName, cardType, cardLast4, holderMasked, idCardMasked, phoneMasked, balanceFen, isDefault, status, boundAt]
       properties:
         cardId: { type: string, description: 银行卡 ID，26 位字符串 }
         bankCode: { type: string, description: 银行编码，如 ICBC、CMB }
@@ -3682,6 +3787,7 @@ components:
         holderMasked: { type: string, description: 持卡人姓名掩码，如 张*三 }
         idCardMasked: { type: string, description: 身份证号掩码 }
         phoneMasked: { type: string, description: 预留手机号掩码，如 138****5678 }
+        balanceFen: { type: integer, format: int64, description: 虚拟余额（分），充值增加、提现/支付扣减，与账户余额独立 }
         isDefault: { type: boolean, description: 是否默认卡，同一用户至多一张 }
         status: { type: string, enum: [ACTIVE, UNBOUND], description: ACTIVE 已绑定，UNBOUND 已解绑（终态） }
         boundAt: { type: string, format: date-time, description: 绑定时间 }
@@ -3854,6 +3960,8 @@ components:
         draftId: { type: string, minLength: 1, maxLength: 26 }
         version: { type: integer, format: int64, minimum: 0, description: 风控预检返回的草稿 CAS 版本。 }
         paymentPassword: { type: string, pattern: '^\d{6}$', description: 六位数字支付密码，属敏感字段，不得进入 URL、日志或浏览器存储。 }
+        fundingSource: { type: string, enum: [BALANCE, BANK_CARD], description: 支付资金来源，缺省为 BALANCE；BANK_CARD 时必须同时指定 cardId }
+        cardId: { type: string, minLength: 1, maxLength: 26, description: 银行卡 ID，仅 fundingSource=BANK_CARD 时必填 }
     TransferDraft:
       type: object
       additionalProperties: false
@@ -4015,8 +4123,13 @@ components:
           description: 用户中心签发的一次性支付证明，绑定付款密码版本；不得写入日志、URL 或持久化字段。
         fundingSource:
           type: string
-          enum: [BALANCE, MINI_CREDIT]
-          description: 本次确认绑定的资金来源；MINI_CREDIT 由服务端从登录会话派生信用账户，客户端不可指定账户。令牌与双方身份、金额、资金来源和支付密码版本绑定。
+          enum: [BALANCE, MINI_CREDIT, BANK_CARD]
+          description: 本次确认绑定的资金来源；MINI_CREDIT 由服务端从登录会话派生信用账户，客户端不可指定账户；BANK_CARD 时必须同时指定 cardId。令牌与双方身份、金额、资金来源和支付密码版本绑定。
+        cardId:
+          type: string
+          minLength: 1
+          maxLength: 26
+          description: 银行卡 ID，仅 fundingSource=BANK_CARD 时必填。
     PayScenarioOrderRequest:
       type: object
       additionalProperties: false

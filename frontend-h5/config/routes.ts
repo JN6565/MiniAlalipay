@@ -209,10 +209,10 @@ export default [
         auth: true,
       },
       {
-        path: '/h5/recharge',
-        component: '@/pages/h5/Recharge',
+        path: '/h5/wallet',
+        component: '@/pages/h5/Wallet',
         exact: true,
-        title: '充值',
+        title: '充值提现',
         auth: true,
       },
       {
@@ -234,6 +234,20 @@ export default [
         component: '@/pages/h5/BankCardDetail',
         exact: true,
         title: '卡片详情',
+        auth: true,
+      },
+      {
+        path: '/h5/bank-cards/:id/recharge',
+        component: '@/pages/h5/BankCardRecharge',
+        exact: true,
+        title: '充值',
+        auth: true,
+      },
+      {
+        path: '/h5/bank-cards/:id/withdraw',
+        component: '@/pages/h5/BankCardWithdraw',
+        exact: true,
+        title: '提现',
         auth: true,
       },
       {

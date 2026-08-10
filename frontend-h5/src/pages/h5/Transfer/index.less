@@ -157,3 +157,110 @@
   opacity: 0.5;
   cursor: not-allowed;
 }
+
+/* 支付来源选择 */
+.funding-source-section {
+  background: white;
+  padding: 16px 20px;
+  margin-bottom: 12px;
+}
+
+.funding-source-options {
+  display: flex;
+  gap: 12px;
+}
+
+.funding-option {
+  flex: 1;
+  padding: 10px 0;
+  text-align: center;
+  border: 1px solid #ddd;
+  border-radius: 8px;
+  font-size: 14px;
+  color: #666;
+  cursor: pointer;
+  transition: all 0.2s;
+
+  &.active {
+    border-color: #1677ff;
+    color: #1677ff;
+    background: #f0f7ff;
+    font-weight: 500;
+  }
+}
+
+.selected-card-display {
+  margin-top: 10px;
+  padding: 10px 12px;
+  background: #f7f8fa;
+  border-radius: 8px;
+  font-size: 14px;
+  color: #333;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  cursor: pointer;
+}
+
+.no-cards-hint {
+  margin-top: 8px;
+  font-size: 12px;
+  color: #999;
+}
+
+/* 银行卡选择弹窗 */
+.card-picker-mask {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: rgba(0, 0, 0, 0.4);
+  z-index: 1000;
+  display: flex;
+  align-items: flex-end;
+}
+
+.card-picker-popup {
+  width: 100%;
+  background: white;
+  border-radius: 16px 16px 0 0;
+  padding: 16px 20px 32px;
+  max-height: 60vh;
+  overflow-y: auto;
+}
+
+.card-picker-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  font-size: 16px;
+  font-weight: 600;
+  margin-bottom: 16px;
+
+  span:last-child {
+    font-size: 18px;
+    color: #999;
+    cursor: pointer;
+    padding: 4px 8px;
+  }
+}
+
+.card-picker-item {
+  padding: 14px 12px;
+  border-radius: 8px;
+  font-size: 14px;
+  color: #333;
+  cursor: pointer;
+  transition: background 0.2s;
+
+  &:active {
+    background: #f5f5f5;
+  }
+
+  &.active {
+    background: #f0f7ff;
+    color: #1677ff;
+    font-weight: 500;
+  }
+}

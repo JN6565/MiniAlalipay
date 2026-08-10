@@ -1,0 +1,4 @@
+-- 扩展 business_type 列长度以支持 BANK_CARD_WITHDRAW（18 字符）。
+-- 原 VARCHAR(16) 仅够容纳 BANK_CARD_RECHARGE（16 字符），提现类型超出导致 DataIntegrityViolationException。
+ALTER TABLE business_db.fund_transaction
+MODIFY COLUMN business_type VARCHAR(32) NOT NULL COMMENT '业务类型：TRANSFER/QR_PAY/RECHARGE/REFUND/CREDIT_PAY/COLLECTION/BANK_CARD_RECHARGE/BANK_CARD_WITHDRAW';
