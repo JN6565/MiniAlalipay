@@ -98,10 +98,25 @@ const RechargePage: React.FC = () => {
         <div className="amount-input">
           <span className="currency">¥</span>
           <Input
-            type="number"
+            type="text"
+            inputMode="decimal"
             placeholder="请输入充值金额"
             value={amount}
-            onChange={(value) => setAmount(value)}
+            onChange={(value) => {
+              // 只允许数字和小数点
+              const cleaned = value.replace(/[^\d.]/g, '');
+              // 防止多个小数点
+              const parts = cleaned.split('.');
+              if (parts.length > 2) return;
+              // 限制两位小数
+              if (parts[1] && parts[1].length > 2) return;
+              // 处理前导零：保留 "0" 和 "0.x" 的情况
+              let formatted = cleaned;
+              if (cleaned.length > 1 && cleaned[0] === '0' && cleaned[1] !== '.') {
+                formatted = cleaned.replace(/^0+/, '') || '0';
+              }
+              setAmount(formatted);
+            }}
           />
         </div>
 

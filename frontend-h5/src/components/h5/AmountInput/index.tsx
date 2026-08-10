@@ -22,6 +22,18 @@ export const AmountInput: React.FC<AmountInputProps> = ({
   label,
 }) => {
   const [error, setError] = useState<string | null>(null);
+  // 内部字符串状态，保留用户输入的中间状态（如 "3."）
+  const [inputStr, setInputStr] = useState<string>(value?.toString() || '');
+
+  // 当外部 value 变化时同步（如预设金额选择）
+  React.useEffect(() => {
+    const newStr = value?.toString() || '';
+    // 只在数值实际变化时同步，避免覆盖用户正在输入的内容
+    const currentNum = parseFloat(inputStr);
+    if (value !== currentNum) {
+      setInputStr(newStr);
+    }
+  }, [value]);
 
   const handleChange = (val: string) => {
     // 只允许数字和小数点
@@ -34,7 +46,16 @@ export const AmountInput: React.FC<AmountInputProps> = ({
     // 限制两位小数
     if (parts[1] && parts[1].length > 2) return;
 
-    const numVal = parseFloat(cleaned);
+    // 处理前导零：保留 "0" 和 "0.x" 的情况，其他情况去掉前导零
+    let formatted = cleaned;
+    if (cleaned.length > 1 && cleaned[0] === '0' && cleaned[1] !== '.') {
+      formatted = cleaned.replace(/^0+/, '') || '0';
+    }
+
+    // 更新显示的字符串
+    setInputStr(formatted);
+
+    const numVal = parseFloat(formatted);
 
     if (isNaN(numVal)) {
       onChange?.(0);
@@ -61,7 +82,7 @@ export const AmountInput: React.FC<AmountInputProps> = ({
         <Input
           type="text"
           inputMode="decimal"
-          value={value?.toString() || ''}
+          value={inputStr}
           onChange={handleChange}
           placeholder={placeholder}
           disabled={disabled}
