@@ -3793,6 +3793,8 @@ flowchart TB
     Tempo --> Grafana
 ```
 
+C 端 H5 经 Nginx 443（TLS）提供，80 仅做 301 跳转：扫码页需调用摄像头 API（getUserMedia），浏览器规定该 API 只能在安全上下文（HTTPS/localhost）下使用。当前演示环境无域名，使用自签证书（SAN 绑定公网 IP），桌面 Chrome/Edge 与安卓 Chrome 跳过告警后可用，iPhone Safari 与微信内置浏览器暂不可用；后续接入正式域名证书后消除该限制。B 端管理端无摄像头需求，保持 81 端口 HTTP。证书与私钥只在服务器存放，不入库。
+
 ### 19.3 环境划分
 
 | 环境 | 用途 | 数据 |
