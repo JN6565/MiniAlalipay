@@ -16,7 +16,9 @@ import org.springframework.stereotype.Service;
 
 import java.time.Instant;
 import java.util.*;
-import java.util.function.Consumer;
+import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
 
 /**
  * Agent ReAct 主循环编排器。
@@ -48,6 +50,7 @@ public class AgentLoop {
     private final InjectionDetector injectionDetector;
     private final ResultInterpreter resultInterpreter;
     private final TransferFlowAutoAdvance flowAutoAdvance;
+    private final MultiQueryToolPlanner multiQueryToolPlanner;
 
     public AgentLoop(
             LanguageModelPort languageModelPort,
@@ -56,7 +59,8 @@ public class AgentLoop {
             ToolPolicyService toolPolicy,
             ToolAuditService toolAudit,
             InjectionDetector injectionDetector,
-            ResultInterpreter resultInterpreter
+            ResultInterpreter resultInterpreter,
+            MultiQueryToolPlanner multiQueryToolPlanner
     ) {
         this.languageModelPort = languageModelPort;
         this.toolCatalog = toolCatalog;
@@ -66,6 +70,7 @@ public class AgentLoop {
         this.injectionDetector = injectionDetector;
         this.resultInterpreter = resultInterpreter;
         this.flowAutoAdvance = new TransferFlowAutoAdvance(resultInterpreter);
+        this.multiQueryToolPlanner = multiQueryToolPlanner;
     }
 
     /**
@@ -146,6 +151,13 @@ public class AgentLoop {
      * @return 执行结果
      */
     public AgentResult execute(AgentContext context) {
+        List<AgentDecision.ToolCall> plannedQueries = multiQueryToolPlanner.plan(context.userMessage());
+        if (!plannedQueries.isEmpty()) {
+            log.info("识别到多查询请求，执行并行工具批次: tools={}",
+                    plannedQueries.stream().map(AgentDecision.ToolCall::toolName).toList());
+            return executeReadOnlyBatch(plannedQueries, context, 0, 1);
+        }
+
         List<ChatMessage> messages = buildInitialMessages(context);
         List<ToolCatalog.ToolDefinition> availableTools = getAvailableTools();
         List<String> executedTools = new ArrayList<>();
@@ -169,6 +181,23 @@ public class AgentLoop {
             // 调用 LLM agentStep
             AgentDecision decision = languageModelPort.agentStep(messages, availableTools);
             totalTokens += decision.estimatedTokens();
+
+            if (decision instanceof AgentDecision.ToolCalls toolCalls) {
+                if (isIndependentReadOnlyBatch(toolCalls.calls())) {
+                    return executeReadOnlyBatch(
+                            toolCalls.calls(), context, totalTokens, iteration + 1);
+                }
+                // 有顺序依赖或副作用的多个调用禁止并发，仅处理第一项并让下一轮重新规划。
+                log.warn("模型返回不可并行的工具批次，降级为串行处理: tools={}",
+                        toolCalls.calls().stream().map(AgentDecision.ToolCall::toolName).toList());
+                if (toolCalls.calls().isEmpty()) {
+                    return new AgentResult("未识别到可执行的工具，请重新描述您的需求。",
+                            executedTools, accumulatedSlots, totalTokens, iteration + 1,
+                            pendingTextBuilder.length() > 0 ? pendingTextBuilder.toString() : null,
+                            toolResults);
+                }
+                decision = toolCalls.calls().get(0);
+            }
 
             if (decision instanceof AgentDecision.FinalReply finalReply) {
                 // 文本工具调用解析：LLM 有时会以文本形式输出工具调用（如 [TOOL_CALL:toolName]{args}）
@@ -407,6 +436,82 @@ public class AgentLoop {
                 .toList();
     }
 
+    /** 判断一个工具批次是否全部为相互独立的只读查询。 */
+    private boolean isIndependentReadOnlyBatch(List<AgentDecision.ToolCall> calls) {
+        return calls != null && calls.size() > 1 && calls.stream().allMatch(call ->
+                toolCatalog.lookup(call.toolName())
+                        .map(tool -> tool.riskLevel() == ToolRiskLevel.READ_ONLY)
+                        .orElse(false));
+    }
+
+    /**
+     * 并行执行独立只读查询，并直接基于工具解释结果生成确定性回复。
+     *
+     * <p>回复不再经过模型二次改写，避免模型添加工具结果中不存在的金额、状态或时间。
+     * 单个工具失败不会取消其他查询，最终逐项展示成功或失败事实。</p>
+     */
+    private AgentResult executeReadOnlyBatch(
+            List<AgentDecision.ToolCall> calls,
+            AgentContext context,
+            int totalTokens,
+            int iterationCount
+    ) {
+        LinkedHashMap<String, AgentDecision.ToolCall> uniqueCalls = new LinkedHashMap<>();
+        for (AgentDecision.ToolCall call : calls) {
+            uniqueCalls.putIfAbsent(call.toolName(), call);
+        }
+
+        if (!isIndependentReadOnlyBatch(new ArrayList<>(uniqueCalls.values()))) {
+            return new AgentResult("未识别到可并行执行的查询，请重新描述您的需求。",
+                    List.of(), Map.of(), totalTokens, iterationCount);
+        }
+
+        if (context.callback() != null) {
+            uniqueCalls.values().forEach(call ->
+                    context.callback().onToolCall(call.toolName(), "running"));
+        }
+
+        List<ToolExecutionResult> executionResults;
+        // 每个任务使用独立虚拟线程，避免慢查询阻塞同批次的其他工具。
+        try (ExecutorService executor = Executors.newVirtualThreadPerTaskExecutor()) {
+            List<CompletableFuture<ToolExecutionResult>> futures = uniqueCalls.values().stream()
+                    .map(call -> CompletableFuture.supplyAsync(
+                            () -> executeToolCall(call, context, new HashMap<>()), executor))
+                    .toList();
+            executionResults = futures.stream().map(CompletableFuture::join).toList();
+        }
+
+        List<String> executedTools = new ArrayList<>();
+        Map<String, Object> accumulatedSlots = new LinkedHashMap<>();
+        List<ToolResultRecord> toolResults = new ArrayList<>();
+        List<String> factSummaries = new ArrayList<>();
+        int index = 0;
+        for (AgentDecision.ToolCall call : uniqueCalls.values()) {
+            ToolResult toolResult = executionResults.get(index++).toolResult();
+            String status = toolResult.isSuccess() ? "success" : "failed";
+            String summary = toolResult.isSuccess()
+                    ? resultInterpreter.interpret(call.toolName(), toolResult)
+                    : (toolResult.errorMessage() != null && !toolResult.errorMessage().isBlank()
+                            ? toolResult.errorMessage()
+                            : resultInterpreter.interpret(call.toolName(), toolResult));
+            Map<String, Object> data = toolResult.data() == null
+                    ? Map.of() : new HashMap<>(toolResult.data());
+
+            if (context.callback() != null) {
+                context.callback().onToolResult(call.toolName(), status, summary, data);
+            }
+            executedTools.add(call.toolName());
+            accumulatedSlots.put(call.toolName(), data);
+            toolResults.add(new ToolResultRecord(call.toolName(), status, summary, data));
+            factSummaries.add("- " + summary);
+        }
+
+        String finalContent = "已处理 " + executedTools.size() + " 项查询：\n"
+                + String.join("\n", factSummaries);
+        return new AgentResult(finalContent, executedTools, accumulatedSlots,
+                totalTokens, iterationCount, null, toolResults);
+    }
+
     /**
      * 执行单个工具调用，包含安全检查和审计。
      */
@@ -586,7 +691,8 @@ public class AgentLoop {
 
         // 余额工具 vs 花呗/信用关键词
         if ("get_balance".equals(toolName)
-                && containsAny(lower, "花呗", "信用额度", "额度")) {
+                && containsAny(lower, "花呗", "信用额度", "额度")
+                && !containsAny(lower, "余额", "多少钱", "账户资金")) {
             return "用户询问的是花呗/信用额度，应该使用 get_credit_summary 工具，而非 get_balance（余额查询）。";
         }
 
@@ -599,7 +705,8 @@ public class AgentLoop {
 
         // 交易明细 vs 花呗账单关键词
         if ("list_transactions".equals(toolName)
-                && containsAny(lower, "花呗账单", "花呗的账单", "信用账单")) {
+                && containsAny(lower, "花呗账单", "花呗的账单", "信用账单")
+                && !containsAny(lower, "交易记录", "交易明细", "流水", "查交易")) {
             return "用户询问的是花呗账单，应该使用 list_credit_bills 工具，而非 list_transactions（交易明细）。";
         }
 

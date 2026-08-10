@@ -77,7 +77,8 @@ public class ResultInterpreter {
      */
     private String interpretSuccess(String toolName, Map<String, Object> data) {
         String status = (String) data.get("status");
-        if (status != null) {
+        // 账户摘要中的 ACTIVE 是账户状态，不是资金交易终态，不能走交易状态分支。
+        if (status != null && !("get_account_summary".equals(toolName) && "ACTIVE".equals(status))) {
             // 不可被解释为成功的终态
             if (STATUS_PROCESSING.equals(status)) {
                 return switch (toolName) {
@@ -115,28 +116,32 @@ public class ResultInterpreter {
         return switch (toolName) {
             case "search_payees" -> {
                 Object users = data.get("users");
-                int count = (users instanceof java.util.List<?> list) ? list.size() : 0;
-                yield count > 0
-                        ? "为您找到 " + count + " 位候选收款人。"
-                        : "未找到匹配的收款人，请尝试其他搜索条件。";
+                if (!(users instanceof java.util.List<?> list)) {
+                    yield "收款人查询成功，但返回数据不完整，请稍后重试。";
+                }
+                yield list.isEmpty()
+                        ? "未找到匹配的收款人，请尝试其他搜索条件。"
+                        : "为您找到 " + list.size() + " 位候选收款人。";
             }
             case "get_balance" -> {
                 Object fen = data.get("availableFen");
-                long amount = (fen instanceof Number n) ? n.longValue() : 0L;
-                yield "您当前账户可用余额为 " + formatFen(amount) + " 元。";
+                yield fen instanceof Number n
+                        ? "您当前账户可用余额为 " + formatFen(n.longValue()) + " 元。"
+                        : "余额查询成功，但返回数据不完整，请稍后重试。";
             }
             case "get_account_summary" -> {
                 Object fen = data.get("availableFen");
-                long amount = (fen instanceof Number n) ? n.longValue() : 0L;
-                yield "您的账户状态正常，可用余额 " + formatFen(amount) + " 元。";
+                yield fen instanceof Number n
+                        ? "您的账户可用余额为 " + formatFen(n.longValue()) + " 元。"
+                        : "账户摘要查询成功，但返回数据不完整，请稍后重试。";
             }
             case "get_credit_summary" -> {
                 Object used = data.get("usedFen");
                 Object total = data.get("totalLimitFen");
-                long usedFen = (used instanceof Number n) ? n.longValue() : 0L;
-                long totalFen = (total instanceof Number n) ? n.longValue() : 500_000L;
-                yield "您的 Mini 花呗总额度 " + formatFen(totalFen)
-                        + " 元，已用 " + formatFen(usedFen) + " 元。";
+                yield used instanceof Number usedNumber && total instanceof Number totalNumber
+                        ? "您的 Mini 花呗总额度 " + formatFen(totalNumber.longValue())
+                            + " 元，已用 " + formatFen(usedNumber.longValue()) + " 元。"
+                        : "花呗额度查询成功，但返回数据不完整，请稍后重试。";
             }
             case "submit_confirmed_transfer" ->
                     "转账成功！资金已从您的账户扣除。";
@@ -149,22 +154,27 @@ public class ResultInterpreter {
             case "validate_transfer_draft" ->
                     "转账信息校验通过，可以提交。";
             case "prepare_confirmation_card" ->
-                    "请核对以下信息后完成支付：\n"
-                            + "收款人: " + data.getOrDefault("payeeNickname", "")
-                            + "\n金额: " + formatFen(data.get("amountFen")) + " 元";
+                    data.get("payeeNickname") != null && data.get("amountFen") instanceof Number
+                            ? "请核对以下信息后完成支付：\n"
+                                + "收款人: " + data.get("payeeNickname")
+                                + "\n金额: " + formatFen(data.get("amountFen")) + " 元"
+                            : "确认信息返回不完整，暂不能展示确认卡片。";
             case "list_transactions" -> {
                 // GAP-1：根据筛选参数生成更精确的结果解释
                 Object items = data.get("items");
-                int count = (items instanceof java.util.List<?> list) ? list.size() : 0;
+                if (!(items instanceof java.util.List<?> list)) {
+                    yield "交易明细查询成功，但返回数据不完整，请稍后重试。";
+                }
                 String direction = (String) data.get("direction");
                 String filterDesc = direction != null
                         ? ("IN".equals(direction) ? "收入" : "支出") : "";
-                yield count > 0
-                        ? "为您找到 " + count + " 条" + filterDesc + "交易明细。"
+                yield !list.isEmpty()
+                        ? "为您找到 " + list.size() + " 条" + filterDesc + "交易明细。"
                         : (filterDesc.isEmpty() ? "暂无交易记录。" : "暂无" + filterDesc + "交易记录。");
             }
-            case "list_credit_bills" ->
-                    "以下是您的花呗账单。";
+            case "list_credit_bills" -> data.get("bills") instanceof java.util.List<?>
+                    ? "以下是您的花呗账单。"
+                    : "花呗账单查询成功，但返回数据不完整，请稍后重试。";
             case "get_transaction_status" -> {
                 Object s = data.get("status");
                 yield s != null ? "该笔交易当前状态: " + s : "未能获取交易状态。";
