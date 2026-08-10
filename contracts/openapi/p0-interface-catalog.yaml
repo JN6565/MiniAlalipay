@@ -34,6 +34,7 @@ operations:
   - {method: PUT, path: /api/v1/payment-password, operationId: setPaymentPassword, owner: user-center, clientScope: C, idempotency: REQUIRED}
   - {method: PATCH, path: /api/v1/payment-password, operationId: changePaymentPassword, owner: user-center, clientScope: C, idempotency: REQUIRED}
   - {method: POST, path: /api/v1/payment-password/verify, operationId: verifyPaymentPassword, owner: user-center, clientScope: C, idempotency: REQUIRED}
+  - {method: GET, path: /api/v1/users/me, operationId: getMyProfile, owner: user-center, clientScope: C, idempotency: READ_ONLY}
   - {method: GET, path: /api/v1/users/search, operationId: searchUsers, owner: user-center, clientScope: C, idempotency: READ_ONLY}
   - {method: GET, path: /api/v1/contacts, operationId: listContacts, owner: user-center, clientScope: C, idempotency: READ_ONLY}
   - {method: PATCH, path: '/api/v1/contacts/{payeeUserId}', operationId: updateContact, owner: user-center, clientScope: C, idempotency: VERSION_CAS}

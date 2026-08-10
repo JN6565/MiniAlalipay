@@ -553,6 +553,23 @@ paths:
         '401': { $ref: '#/components/responses/Unauthorized' }
         '404': { $ref: '#/components/responses/NotFound' }
         '409': { $ref: '#/components/responses/Conflict' }
+  /api/v1/users/me:
+    get:
+      summary: 查询当前登录用户的最小资料投影
+      description: 返回本人账户名、昵称、脱敏手机号和脱敏真实姓名；完整手机号与真实姓名不出用户中心边界。
+      operationId: getMyProfile
+      x-client-scope: C
+      parameters:
+        - $ref: '#/components/parameters/RequestIdHeader'
+      responses:
+        '200':
+          description: 返回当前登录用户资料
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/UserMeResponse' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '500': { $ref: '#/components/responses/InternalError' }
   /api/v1/users/search:
     get:
       summary: 按手机号搜索用户（用于转账收款人查找）
@@ -3494,6 +3511,24 @@ components:
       properties:
         thresholdValue: { type: integer, format: int64, minimum: 0 }
         version: { type: integer, format: int64, minimum: 0 }
+    UserMe:
+      type: object
+      additionalProperties: false
+      required: [userId, accountNumber, nickname, createdAt]
+      properties:
+        userId: { type: string, description: 当前登录用户 ID }
+        accountNumber: { type: string, description: 当前用户的系统账户名，可用于登录 }
+        nickname: { type: string, description: 用户昵称 }
+        maskedPhone: { type: [string, 'null'], description: 脱敏手机号，未登记时为空 }
+        maskedRealName: { type: [string, 'null'], description: 脱敏真实姓名，未绑定身份时为空 }
+        createdAt: { type: string, format: date-time, description: 用户注册时间 }
+    UserMeResponse:
+      allOf:
+        - $ref: '#/components/schemas/ApiResponse'
+        - type: object
+          required: [data]
+          properties:
+            data: { $ref: '#/components/schemas/UserMe' }
     UserSearchResult:
       type: object
       additionalProperties: false

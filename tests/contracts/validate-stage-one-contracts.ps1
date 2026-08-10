@@ -44,7 +44,7 @@ $operations = foreach ($line in $operationLines) {
     }
 }
 
-Assert-Contract ($operations.Count -eq 80) "P0 操作数量应为 80，实际为 $($operations.Count)"
+Assert-Contract ($operations.Count -eq 85) "P0 操作数量应为 85，实际为 $($operations.Count)"
 Assert-Contract (($operations | Group-Object Method, Path | Where-Object Count -gt 1).Count -eq 0) '方法与路径存在重复'
 Assert-Contract (($operations | Group-Object OperationId | Where-Object Count -gt 1).Count -eq 0) 'operationId 存在重复'
 Assert-Contract (($operations | Where-Object Owner -notin @('gateway', 'user-center', 'business-center', 'account-center', 'ai-service')).Count -eq 0) '存在未知服务所有者'

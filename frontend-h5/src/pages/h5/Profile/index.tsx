@@ -4,16 +4,19 @@ import { Toast, Dialog } from 'antd-mobile';
 import { clearSession } from '@/services/request';
 import * as userService from '@/services/user';
 import { getIdentity } from '@/services/identity';
+import { formatAccountName } from '@/utils/profile';
 import './index.less';
 
 const ProfilePage: React.FC = () => {
   const nickname = localStorage.getItem('nickname') || '用户';
+  const [accountNumber, setAccountNumber] = useState(localStorage.getItem('accountNumber') || '');
   const [maskedPhone, setMaskedPhone] = useState<string>('');
   /** 是否已绑定身份（identityStatus 为 VERIFIED），接口失败时保持未绑定展示。 */
   const [identityBound, setIdentityBound] = useState(false);
 
   useEffect(() => {
     userService.getMyInfo().then(info => {
+      if (info.accountNumber) setAccountNumber(info.accountNumber);
       setMaskedPhone(info.maskedPhone || '');
     }).catch(() => {});
     getIdentity().then(info => {
@@ -41,6 +44,7 @@ const ProfilePage: React.FC = () => {
         <div className="user-info">
           <div className="name">{nickname}</div>
           {identityBound && <div className="identity-status">已绑定身份</div>}
+          <div className="account-name">{formatAccountName(accountNumber)}</div>
           <div className="id">{maskedPhone || '加载中...'}</div>
         </div>
         <span className="arrow">›</span>
