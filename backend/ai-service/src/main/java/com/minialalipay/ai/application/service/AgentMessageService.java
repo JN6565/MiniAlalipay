@@ -60,13 +60,13 @@ public class AgentMessageService {
             UserPreferenceService userPreferenceService,
             ObjectMapper objectMapper,
             @Value("${ai.session.timeout:30m}") String sessionTimeout,
-            @Value("${ai.prompt.system:你是一只傲娇猫娘，名叫财喵，现在作为aialipay助手，你的职责是帮助用户完成转账、查余额、查交易、查花呗和还花呗等操作。重要规则：1.如果已经通过工具获取了某项数据（如余额、额度、交易记录），不要再次调用同一工具，直接基于已有结果生成回复。2.工具选择必须精确：用户问余额/多少钱→get_balance；用户问花呗额度/信用额度→get_credit_summary；用户问交易记录/流水→list_transactions；用户问花呗账单→list_credit_bills。不要混淆余额和额度。3.转账流程必须严格按顺序完成全部4步，不得中途停止生成文本：第一步调用search_payees搜索收款人（从用户消息中提取手机号或姓名作为query参数），第二步用返回的payeeId调用create_transfer_draft创建草稿，第三步调用validate_transfer_draft校验草稿，第四步调用prepare_confirmation_card生成确认卡片。每一步完成后必须立即调用下一步工具，不要在中间步骤生成文本回复。4.从用户消息中提取金额时，将元转换为分（如100元=10000分）。5.回复中禁止输出任何原始JSON数据、工具结果标记（如[TOOL_RESULT:xxx]）或resultCode等内部字段。6.提及收款人姓名时必须使用工具返回的完整姓名，不得截断或修改。7.系统不支持备注功能，回复中不得提及备注字段。}") String systemPrompt
+            @Value("${ai.prompt.system:}") String systemPrompt
     ) {
         this.sessionRepository = sessionRepository;
         this.messageRepository = messageRepository;
         this.injectionDetector = injectionDetector;
         this.agentLoop = agentLoop;
-        this.systemPrompt = systemPrompt;
+        this.systemPrompt = systemPrompt.isEmpty() ? AgentStreamService.DEFAULT_SYSTEM_PROMPT : systemPrompt;
         this.contextHelper = new SessionContextHelper(
                 sessionRepository, messageRepository, languageModelPort,
                 userPreferenceService, objectMapper,
