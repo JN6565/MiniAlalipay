@@ -1,4 +1,4 @@
-import { history, useLocation } from 'umi';
+﻿import { history, useLocation } from 'umi';
 import { Toast } from 'antd-mobile';
 import { useCallback, useEffect, useState } from 'react';
 import * as accountService from '@/services/account';
@@ -147,11 +147,16 @@ const WalletPage = () => {
         </div>
       )}
 
-      {/* 资金渠道说明 */}
-      <div className="wallet-tips">
-        <p>· 充值：银行卡余额转入账户余额</p>
-        <p>· 提现：账户余额转入银行卡余额</p>
-        <p>· 他人转账与银行卡充值是账户资金流入的全部渠道</p>
+      {/* 余额变动明细入口（替换原资金渠道说明）：查看直接影响可用余额的流水 */}
+      <div className="wallet-balance-entry" onClick={() => history.push('/h5/wallet/balance-entries')}>
+        <div className="balance-entry-icon">
+          <IconSet name="receipt" size={16} color="#fff" />
+        </div>
+        <div className="balance-entry-text">
+          <div className="balance-entry-title">余额变动明细</div>
+          <div className="balance-entry-sub">查看余额收支流水</div>
+        </div>
+        <IconSet name="chevronRight" size={14} color="var(--h5-text-3)" />
       </div>
     </div>
   );

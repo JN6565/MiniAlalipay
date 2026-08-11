@@ -1,4 +1,4 @@
-/* 首页（V2.1 重设计）：柔渐变头图 + 头像昵称（进个人详情）+ 设置入口，
+﻿/* 首页（V2.1 重设计）：柔渐变头图 + 头像昵称（进个人详情）+ 设置入口，
    快捷宫格（两行 x 4 共 8 入口，品牌渐变图标底）+ 花呗摘要 + 生活服务区；总资产收敛至钱包页。
    配色一律引用 --h5-* 设计令牌（见 src/overrides.css）。 */
 
@@ -116,8 +116,6 @@
         /* 银行卡绿渐变 */
         &.green { background: linear-gradient(135deg, #12b76a 0%, #4ade80 100%); }
 
-        /* 招财喵粉色渐变：与 AI 对话页品牌点缀色同源 */
-        &.aipink { background: linear-gradient(135deg, #ff8fb0 0%, #ffccd9 100%); }
       }
 
       span { font-size: 12px; color: var(--h5-text); }
@@ -201,6 +199,27 @@
       padding: 8px 18px;
       border-radius: 999px;
       box-shadow: 0 5px 12px rgba(90, 108, 255, 0.3);
+    }
+  }
+
+  /* ===== 财喵卡片：复用花呗摘要卡结构，品牌色换为蓝色系 ===== */
+  .aimao-card {
+    .aimao-brand {
+      color: var(--h5-primary);
+      font-weight: 600;
+    }
+
+    .aimao-title {
+      font-size: 18px;
+      font-weight: 700;
+      color: var(--h5-text);
+      margin: 4px 0;
+    }
+
+    /* 「去使用」按钮：品牌渐变蓝，与花呗紫蓝按钮区分 */
+    .aimao-btn {
+      background: var(--h5-grad-brand);
+      box-shadow: 0 5px 12px rgba(37, 108, 255, 0.3);
     }
   }
 }

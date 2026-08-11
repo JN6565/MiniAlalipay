@@ -594,7 +594,7 @@ const AITalkPage: React.FC = () => {
       if (msg.kind === 'error') {
         return (
           <div className="ai-message ai-message-assistant">
-            <div className="ai-assistant-orb" />
+            <div className="ai-assistant-orb" aria-hidden="true">🐱</div>
             <div className="ai-message-body">
               <div className="ai-message-content ai-error">
                 <span className="ai-error-icon">!</span>
@@ -623,7 +623,7 @@ const AITalkPage: React.FC = () => {
 
   return (
     <div className="ai-talk-page">
-      {/* 顶部操作栏（参考 DeepSeek：菜单 + 标题 + 新对话） */}
+      {/* 顶部唯一信息栏：历史会话 + 财喵品牌/当前主题 + 新对话 */}
       <div className="ai-top-bar">
         <button
           type="button"
@@ -635,9 +635,10 @@ const AITalkPage: React.FC = () => {
         </button>
         <div className="ai-top-title-block">
           <div className="ai-top-title">
-            <IconSet name="ai" size={15} color="#8fc2ff" />
-            <span className="ai-top-title-text">{sessionTitle}</span>
+            <span className="ai-top-cat" aria-hidden="true">🐱</span>
+            <span className="ai-top-title-text">财喵</span>
           </div>
+          <div className="ai-top-subtitle">{sessionTitle}</div>
         </div>
         <button
           type="button"

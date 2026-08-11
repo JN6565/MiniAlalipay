@@ -1,21 +1,21 @@
-/* AI 对话页：招财喵淡粉轻语风格（上粉下白淡渐变 + 白底气泡 + 粉色点缀），
+/* AI 对话页：财喵蓝色轻语风格（上淡蓝下白渐变 + 白底气泡 + 蓝色点缀），
    局部令牌桥接全局 --h5-* 设计令牌。 */
 
 /* ==================== 设计令牌 ==================== */
 :root {
-  /* 页面基底：上粉下白纵向淡渐变，桥接主题令牌（theme/index.ts 的 h5Gradients.aiDeep 同源） */
+  /* 页面基底：上淡蓝下白纵向淡渐变，桥接主题令牌（theme/index.ts 的 h5Gradients.aiDeep 同源） */
   --ai-deep: var(--h5-grad-ai-deep);
   --ai-bg: var(--h5-bg);
   --ai-bg-elev: var(--h5-card-bg);
   --ai-bg-message: var(--h5-fill);
   --ai-bg-message-hover: var(--h5-divider);
-  /* 用户气泡：白底 + 粉色描边（描边在气泡选择器内声明） */
-  --ai-bg-user: #ffffff;
+  /* 用户气泡：蓝色渐变底 + 白字（品牌主色） */
+  --ai-bg-user: linear-gradient(135deg, #256cff 0%, #4d9bff 100%);
   --ai-text: var(--h5-text);
   --ai-text-secondary: var(--h5-text-2);
   --ai-text-muted: var(--h5-text-3);
   --ai-border: var(--h5-divider);
-  /* 品牌点缀：招财喵粉（桥接全局 --h5-ai-pink-*，仅本页使用） */
+  /* 品牌点缀：财喵蓝（桥接全局 --h5-ai-pink-*，仅本页使用） */
   --ai-brand: var(--h5-ai-pink-deep);
   --ai-brand-soft: var(--h5-ai-pink-soft);
   --ai-danger: var(--h5-danger);
@@ -40,7 +40,7 @@
      确保最后一条消息不被输入栏与 TabBar 遮挡 */
   padding-bottom: calc(150px + env(safe-area-inset-bottom, 0px));
 
-  /* 基底层：上粉下白淡渐变 */
+  /* 基底层：上淡蓝下白淡渐变 */
   &::before {
     content: '';
     position: fixed;
@@ -50,15 +50,15 @@
     pointer-events: none;
   }
 
-  /* 柔光层：右上淡粉 + 左下极淡粉两个低透明度 radial 光斑，提升空间层次 */
+  /* 柔光层：右上淡蓝 + 左下极淡蓝两个低透明度 radial 光斑，提升空间层次 */
   &::after {
     content: '';
     position: fixed;
     inset: 0;
     z-index: -1;
     background:
-      radial-gradient(520px 400px at 88% -4%, rgba(255, 143, 176, 0.16) 0%, rgba(255, 143, 176, 0) 62%),
-      radial-gradient(480px 420px at 6% 104%, rgba(255, 204, 217, 0.24) 0%, rgba(255, 204, 217, 0) 60%);
+      radial-gradient(520px 400px at 88% -4%, rgba(37, 108, 255, 0.14) 0%, rgba(37, 108, 255, 0) 62%),
+      radial-gradient(480px 420px at 6% 104%, rgba(143, 194, 255, 0.22) 0%, rgba(143, 194, 255, 0) 60%);
     pointer-events: none;
   }
 }
@@ -71,7 +71,7 @@
   padding: 10px 14px;
   padding-top: calc(10px + env(safe-area-inset-top, 0px));
   /* sticky 在滚动容器 .h5-content 内可靠工作；半透明白磨砂底 + 模糊，
-     与淡粉背景衔接，避免滚过内容时标题与气泡重叠不可读 */
+     与淡蓝背景衔接，避免滚过内容时标题与气泡重叠不可读 */
   background: rgba(255, 255, 255, 0.72);
   backdrop-filter: blur(10px);
   -webkit-backdrop-filter: blur(10px);
@@ -109,18 +109,35 @@
 .ai-top-title {
   display: inline-flex;
   align-items: center;
-  gap: 6px;
+  justify-content: center;
+  gap: 5px;
   max-width: 100%;
-  font-size: 14px;
-  font-weight: 600;
-  color: var(--ai-text);
+  font-size: 16px;
+  font-weight: 700;
   line-height: 1.2;
 
   .ai-top-title-text {
     overflow: hidden;
     text-overflow: ellipsis;
     white-space: nowrap;
+    color: var(--h5-primary);
   }
+}
+
+.ai-top-cat {
+  font-size: 15px;
+  line-height: 1;
+}
+
+/* 财喵主标题下方的当前对话主题副行（小灰字） */
+.ai-top-subtitle {
+  margin-top: 1px;
+  font-size: 11px;
+  color: var(--ai-text-muted);
+  line-height: 1.3;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 /* ==================== 消息流 ==================== */
@@ -135,35 +152,18 @@
 }
 
 .ai-welcome-orb {
-  position: relative;
   width: 52px;
   height: 52px;
   margin: 0 auto 12px;
   border-radius: 50%;
-  background: radial-gradient(circle at 32% 28%, #ffd9e4 0%, var(--h5-ai-pink-brand) 48%, var(--h5-ai-pink-deep) 100%);
-  /* 外圈粉色柔光，与多层背景的柔光光斑呼应 */
-  box-shadow: 0 0 34px rgba(255, 143, 176, 0.55), 0 0 0 7px rgba(255, 143, 176, 0.1);
-
-  /* 猫耳：左右两块旋转 45° 的圆角方块，与招财喵形象呼应 */
-  &::before,
-  &::after {
-    content: '';
-    position: absolute;
-    top: -4px;
-    width: 12px;
-    height: 12px;
-    background: var(--h5-ai-pink-brand);
-    border-radius: 3px;
-    transform: rotate(45deg);
-  }
-
-  &::before {
-    left: 6px;
-  }
-
-  &::after {
-    right: 6px;
-  }
+  background: var(--h5-ai-pink-soft);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 26px;
+  line-height: 1;
+  /* 外圈蓝色柔光，与多层背景的柔光光斑呼应 */
+  box-shadow: 0 0 34px rgba(22, 119, 255, 0.35), 0 0 0 7px rgba(22, 119, 255, 0.08);
 }
 
 .ai-welcome-title {
@@ -192,7 +192,7 @@
   display: inline-flex;
   align-items: center;
   padding: 6px 12px;
-  border: 1px solid rgba(255, 143, 176, 0.35);
+  border: 1px solid rgba(22, 119, 255, 0.3);
   border-radius: 14px;
   background: rgba(255, 255, 255, 0.8);
   color: var(--ai-text);
@@ -201,7 +201,7 @@
 
   &:active {
     background: var(--ai-brand-soft);
-    border-color: rgba(255, 143, 176, 0.55);
+    border-color: rgba(22, 119, 255, 0.5);
   }
 }
 
@@ -221,35 +221,19 @@
   justify-content: flex-start;
 }
 
-/* AI 气泡前的小 Orb 头像：粉色渐变 + 猫耳，与欢迎区 Orb 同源 */
+/* AI 气泡前的小 Orb 头像：淡蓝圆底承载猫 emoji，与欢迎区 Orb 同源 */
 .ai-assistant-orb {
-  position: relative;
   width: 24px;
   height: 24px;
   border-radius: 50%;
-  background: radial-gradient(circle at 32% 28%, #ffd9e4, var(--h5-ai-pink-deep));
+  background: var(--h5-ai-pink-soft);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 13px;
+  line-height: 1;
   flex: none;
   margin-top: 2px;
-
-  &::before,
-  &::after {
-    content: '';
-    position: absolute;
-    top: -2px;
-    width: 6px;
-    height: 6px;
-    background: var(--h5-ai-pink-brand);
-    border-radius: 1.5px;
-    transform: rotate(45deg);
-  }
-
-  &::before {
-    left: 3px;
-  }
-
-  &::after {
-    right: 3px;
-  }
 }
 
 .ai-message-body {
@@ -276,10 +260,10 @@
 }
 
 .ai-message-user .ai-message-content {
-  /* 白底 + 粉色描边：与淡粉背景区分层次，粉色阴影呼应品牌点缀 */
+  /* 蓝色渐变底 + 白字：品牌主色气泡，与淡蓝背景形成层次 */
   background: var(--ai-bg-user);
-  color: var(--ai-text);
-  border: 1px solid rgba(255, 143, 176, 0.4);
+  color: #fff;
+  border: none;
   border-radius: 14px 4px 14px 14px;
   box-shadow: var(--h5-shadow-ai);
 }
@@ -289,8 +273,8 @@
   color: var(--ai-text);
   border: 1px solid rgba(232, 238, 247, 0.9);
   border-radius: 4px 14px 14px 14px;
-  /* 淡粉系柔和投影，代替旧版深色投影，避免在浅底上发闷 */
-  box-shadow: 0 2px 10px rgba(255, 143, 176, 0.1);
+  /* 淡蓝系柔和投影，代替旧版深色投影，避免在浅底上发闷 */
+  box-shadow: 0 2px 10px rgba(22, 119, 255, 0.08);
 }
 
 .ai-message-time {
@@ -510,7 +494,7 @@
 
   &--active {
     color: var(--ai-brand);
-    background: rgba(255, 143, 176, 0.16);
+    background: rgba(22, 119, 255, 0.12);
   }
 }
 
@@ -639,25 +623,55 @@ body.ai-keyboard-open .ai-input-area {
 
 .ai-input-wrapper {
   flex: 1;
-  background: rgba(255, 255, 255, 0.92);
+  /* 半透明磨砂底 + 模糊，与顶部导航栏一致的 blur 效果 */
+  background: rgba(255, 255, 255, 0.72);
+  backdrop-filter: blur(10px);
+  -webkit-backdrop-filter: blur(10px);
   border: 1px solid rgba(232, 238, 247, 0.9);
   border-radius: 22px;
-  padding: 8px 14px;
-  min-height: 36px;
+  padding: 5px 6px 5px 8px;
+  min-height: 40px;
   display: flex;
   align-items: center;
+  gap: 4px;
   box-shadow: var(--h5-shadow-ai);
   transition: border-color 0.18s, box-shadow 0.18s;
 
-  /* 点击/聚焦反馈：描边转品牌粉 + 投影加深，明确输入激活态 */
+  /* 点击/聚焦反馈：描边转品牌蓝 + 投影加深，明确输入激活态 */
   &:focus-within {
-    border-color: rgba(255, 143, 176, 0.55);
-    box-shadow: 0 6px 20px rgba(255, 143, 176, 0.26);
+    border-color: rgba(22, 119, 255, 0.5);
+    box-shadow: 0 6px 20px rgba(22, 119, 255, 0.2);
+  }
+}
+
+/* 胶囊内图标按钮：左侧加号与右侧语音 */
+.ai-input-icon-btn {
+  flex: none;
+  width: 28px;
+  height: 28px;
+  border: none;
+  background: transparent;
+  color: var(--ai-text-muted);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  padding: 0;
+  border-radius: 50%;
+
+  &:active {
+    color: var(--ai-brand);
+  }
+
+  &:disabled {
+    cursor: default;
+    opacity: 0.72;
   }
 }
 
 .ai-input {
-  width: 100%;
+  flex: 1;
+  min-width: 0;
   background: transparent;
   border: none;
   outline: none;
@@ -683,7 +697,7 @@ body.ai-keyboard-open .ai-input-area {
   height: 36px;
   border: none;
   border-radius: 50%;
-  background: rgba(255, 143, 176, 0.12);
+  background: rgba(22, 119, 255, 0.1);
   color: var(--ai-text-muted);
   display: flex;
   align-items: center;
@@ -696,10 +710,10 @@ body.ai-keyboard-open .ai-input-area {
   }
 
   &--ready {
-    /* 就绪态：招财喵粉色渐变，与页面品牌点缀一致 */
+    /* 就绪态：财喵蓝色渐变，与页面品牌点缀一致 */
     background: linear-gradient(135deg, var(--h5-ai-pink-deep) 0%, var(--h5-ai-pink-mid) 100%);
     color: #fff;
-    box-shadow: 0 4px 10px rgba(255, 143, 176, 0.4);
+    box-shadow: 0 4px 10px rgba(22, 119, 255, 0.35);
   }
 
   &:active:not(:disabled) {
@@ -802,7 +816,7 @@ body.ai-keyboard-open .ai-input-area {
 
   .ai-card-bar-fill {
     height: 100%;
-    /* 进度条：招财喵粉色渐变，与页面品牌点缀一致 */
+    /* 进度条：财喵蓝色渐变，与页面品牌点缀一致 */
     background: linear-gradient(90deg, var(--h5-ai-pink-deep), var(--h5-ai-pink-mid));
     border-radius: 3px;
     transition: width 0.6s ease;
@@ -903,7 +917,7 @@ body.ai-keyboard-open .ai-input-area {
 .ai-card-spinner {
   width: 14px;
   height: 14px;
-  border: 2px solid rgba(255, 143, 176, 0.2);
+  border: 2px solid rgba(22, 119, 255, 0.2);
   border-top-color: var(--ai-brand);
   border-radius: 50%;
   animation: spin 0.8s linear infinite;
@@ -935,8 +949,8 @@ body.ai-keyboard-open .ai-input-area {
   text-align: center;
 
   .ai-card-icon {
-    background: var(--h5-ai-pink-soft);
-    color: var(--h5-ai-pink-deep);
+    background: #f1efff;
+    color: var(--h5-accent-violet);
   }
 
   .ai-card-label {
@@ -980,13 +994,13 @@ body.ai-keyboard-open .ai-input-area {
   padding: 10px 14px;
   border: none;
   border-radius: 18px;
-  /* 招财喵粉色渐变：会话抽屉属于 AI 对话页专属组件，使用页内品牌色 */
+  /* 财喵蓝色渐变：会话抽屉属于 AI 对话页专属组件，使用页内品牌色 */
   background: linear-gradient(135deg, var(--h5-ai-pink-deep) 0%, var(--h5-ai-pink-mid) 100%);
   color: #fff;
   font-size: 13px;
   font-weight: 600;
   cursor: pointer;
-  box-shadow: 0 5px 12px rgba(255, 143, 176, 0.28);
+  box-shadow: 0 5px 12px rgba(37, 108, 255, 0.3);
   box-sizing: border-box;
   transition: opacity 0.15s;
 
@@ -1179,7 +1193,7 @@ body.ai-keyboard-open .ai-input-area {
   max-width: 340px;
   border: 1px solid var(--ai-border);
   box-sizing: border-box;
-  /* 确认卡主按钮跟随页内品牌点缀色（粉） */
+  /* 确认卡主按钮跟随页内品牌点缀色（蓝） */
   --adm-color-primary: var(--h5-ai-pink-deep);
 }
 
@@ -1300,7 +1314,7 @@ body.ai-keyboard-open .ai-input-area {
   .adm-button-primary {
     background: linear-gradient(135deg, var(--h5-ai-pink-deep) 0%, var(--h5-ai-pink-mid) 100%);
     border: none;
-    box-shadow: 0 4px 10px rgba(255, 143, 176, 0.3);
+    box-shadow: 0 4px 10px rgba(37, 108, 255, 0.28);
   }
 }
 

@@ -38,7 +38,7 @@ const StreamingBubble: React.FC<Props> = ({ message, onFeedbackChange, onRegener
 
   return (
     <div className="ai-message ai-message-assistant">
-      <div className="ai-assistant-orb" />
+      <div className="ai-assistant-orb" aria-hidden="true">🐱</div>
       <div className="ai-message-body">
         {/* 思考过程折叠面板 */}
         <ThinkingBubble thinking={message.thinking ?? ''} seconds={seconds} />

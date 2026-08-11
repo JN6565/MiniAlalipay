@@ -43,7 +43,7 @@ export type StreamMessageParams = SendMessageParams;
 const AI_REQUEST_TIMEOUT_MS = 60000;
 
 /**
- * 发送消息给招财喵（同步接口）。
+ * 发送消息给财喵（同步接口）。
  * 统一走 axios 封装：自动注入 Authorization / X-Request-Id，401 自动跳登录，错误抛出 ApiError。
  */
 export async function sendMessage(params: SendMessageParams): Promise<SendMessageResult> {
@@ -51,7 +51,7 @@ export async function sendMessage(params: SendMessageParams): Promise<SendMessag
 }
 
 /**
- * 流式发送消息给招财喵（SSE 接口）。
+ * 流式发送消息给财喵（SSE 接口）。
  * 使用 fetch + ReadableStream 消费 POST 响应的 SSE 流。
  * EventSource 不支持 POST，因此使用原生 fetch。
  *

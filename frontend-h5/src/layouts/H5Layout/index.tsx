@@ -28,7 +28,7 @@ const H5Layout: React.FC = () => {
     document.title = title || 'MiniAlalipay';
   }, [location.pathname]);
 
-  // 判断是否显示返回按钮（招财喵、联系人不显示）
+  // 判断是否显示返回按钮（财喵、联系人不显示）
   const showBack = location.pathname !== '/h5/home' &&
                    location.pathname !== '/h5/login' &&
                    location.pathname !== '/h5/ai-talk' &&
@@ -36,8 +36,9 @@ const H5Layout: React.FC = () => {
                    location.pathname !== '/h5/profile' &&
                    location.pathname !== '/h5/scan';
 
-  // 判断是否显示导航栏标题（首页、我的、扫码不显示）
+  // 财喵页面自带历史会话/标题/新会话三列导航，布局层不得重复渲染第二个标题栏。
   const showTitle = location.pathname !== '/h5/home' &&
+                    location.pathname !== '/h5/ai-talk' &&
                     location.pathname !== '/h5/profile' &&
                     location.pathname !== '/h5/scan';
 
@@ -94,7 +95,7 @@ function getPageTitle(pathname: string): string {
     '/h5/transfer': '转账',
     '/h5/transfer/confirm': '确认转账',
     '/h5/wallet': '钱包',
-    '/h5/ai-talk': '招财喵',
+    '/h5/ai-talk': '财喵',
     '/h5/contacts': '联系人',
     '/h5/friend-requests': '新朋友',
     '/h5/profile': '我的',
@@ -107,6 +108,8 @@ function getPageTitle(pathname: string): string {
     '/h5/credit/bills': '账单',
     '/h5/credit/repay': '还款',
     '/h5/account/transactions': '账单',
+    '/h5/account/analytics': '分析',
+    '/h5/wallet/balance-entries': '余额变动明细',
     '/h5/recharge': '充值',
     '/h5/withdraw': '提现',
     '/h5/payment-password/setup': '设置支付密码',

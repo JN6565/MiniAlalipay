@@ -1,12 +1,13 @@
-import React, { useEffect, useMemo, useState } from 'react';
+﻿import React, { useEffect, useMemo, useState } from 'react';
 import { history } from 'umi';
 import { Toast } from 'antd-mobile';
+import dayjs from 'dayjs';
 import * as accountService from '@/services/account';
 import * as bankCardService from '@/services/bankCard';
-import { formatAmount, formatTime } from '@/utils/format';
+import { formatAmount } from '@/utils/format';
 import { MonthGroupList, EmptyState, Skeleton, IconSet } from '@/components/h5/common';
 import type { IconName } from '@/components/h5/common/IconSet';
-import AnalyticsPanel from './AnalyticsPanel';
+import { mergeUniqueTransactions, projectBankCardTransaction } from './viewModel';
 import './index.less';
 
 /** 业务类型：由账本摘要（memo）关键词推导，后端已脱敏的语义事实。 */
@@ -24,22 +25,56 @@ const getBizType = (memo: string | null) => {
 };
 
 /**
- * 账单分类筛选（V2.1）：单行横向滑动胶囊，单选。
- * 分类语义（前端按账本 memo 关键词归类，与列表图标归类规则保持一致）：
- * - 全部：不过滤，天然包含花呗、银行卡等全部收支分录；
- * - 收入/支出：按收支方向过滤；
- * - 银行卡 / 充值提现：同义合并，均为银行卡资金流转（memo 含充值/提现）；
- * - 花呗：memo 含花呗/还款/消费；转账：memo 含转账；
- * - 扫码支付：memo 含支付/收款/扫码。
+ * 全局账单主标题：按 memo 关键词 + 收支方向组合生成（设计方案 1.3）。
+ * 花呗付款方的信用应收分录展示为消费，收款方的余额负债分录展示为扫码收款。
+ */
+const getTxTitle = (memo: string | null, direction: 'IN' | 'OUT'): string => {
+  const m = memo?.trim() || '';
+  if (m.includes('充值')) return '银行卡充值';
+  if (m.includes('提现')) return '银行卡提现';
+  if (m.includes('花呗还款') || m.includes('还款')) return '花呗还款';
+  if ((m.includes('花呗') || m.includes('信用支付')) && direction === 'OUT') return '花呗消费';
+  if (m.includes('转账')) {
+    if (m.includes('银行卡')) return '银行卡转账';
+    return direction === 'IN' ? '转账收款' : '转账';
+  }
+  if (m.includes('支付') || m.includes('收款') || m.includes('扫码')) {
+    if (direction === 'IN') return '扫码收款';
+    if (m.includes('银行卡')) return '银行卡扫码支付';
+    return '扫码支付';
+  }
+  return accountService.getLedgerEntryTitle({ memo });
+};
+
+/** 资金渠道标签：BALANCE 不展示（默认），银行卡/花呗展示小标签（设计方案 1.3）。 */
+const getChannelTag = (memo: string | null): { label: string; cls: string } | null => {
+  const m = memo?.trim() || '';
+  if (m.includes('花呗') || m.includes('信用支付')) return { label: '花呗', cls: 'credit' };
+  if (m.includes('银行卡')) return { label: '银行卡', cls: 'bank' };
+  return null;
+};
+
+/** 智能时间格式：当天 HH:mm，当年 MM-DD HH:mm，跨年 YYYY-MM-DD。 */
+const formatTxTime = (dateStr: string): string => {
+  const t = dayjs(dateStr);
+  if (!t.isValid()) return dateStr;
+  const now = dayjs();
+  if (t.isSame(now, 'day')) return t.format('HH:mm');
+  if (t.isSame(now, 'year')) return t.format('MM-DD HH:mm');
+  return t.format('YYYY-MM-DD');
+};
+
+/**
+ * 账单分类筛选：单行横向滑动胶囊，单选。
+ * 分类语义（前端按账本 memo 关键词归类，与列表图标归类规则保持一致）。
  */
 export const TX_CATEGORIES: { key: string; label: string; match: (tx: accountService.Transaction) => boolean }[] = [
   { key: 'all', label: '全部', match: () => true },
   { key: 'income', label: '收入', match: (tx) => tx.direction === 'IN' },
   { key: 'expense', label: '支出', match: (tx) => tx.direction === 'OUT' },
   { key: 'bank', label: '银行卡', match: (tx) => /充值|提现/.test(tx.memo || '') },
-  { key: 'credit', label: '花呗', match: (tx) => /花呗|还款|消费/.test(tx.memo || '') },
+  { key: 'credit', label: '花呗', match: (tx) => /花呗|还款|信用支付/.test(tx.memo || '') },
   { key: 'transfer', label: '转账', match: (tx) => (tx.memo || '').includes('转账') },
-  { key: 'fund', label: '充值提现', match: (tx) => /充值|提现/.test(tx.memo || '') },
   { key: 'qrpay', label: '扫码支付', match: (tx) => /支付|收款|扫码/.test(tx.memo || '') },
 ];
 
@@ -49,9 +84,11 @@ export const TX_CATEGORIES: { key: string; label: string; match: (tx: accountSer
  * 银行卡充值/提现与银行卡出资的转账/扫码支付的 TCC 只移动卡虚拟余额与账户余额，
  * 不写账本分录（无复式账本，见系统分析 9.2），账本明细接口天然不含这些记录；
  * 这里把银行卡流水投影成与账本分录同形状的行，合并后在「全部」及对应分类下可见。
- * 只取成功终态；投影行 entryId 固定为 0，列表 key 使用交易 ID 区分。
+ * 只取成功终态；投影行 entryId 固定为 0，合并时使用交易 ID 去重。
+ *
+ * 余额变动明细页（BalanceEntries）复用本投影逻辑。
  */
-const loadBankCardTransactions = async (): Promise<accountService.Transaction[]> => {
+export const loadBankCardTransactions = async (): Promise<accountService.Transaction[]> => {
   try {
     const cards = await bankCardService.getBankCards();
     const lists = await Promise.all(
@@ -59,29 +96,7 @@ const loadBankCardTransactions = async (): Promise<accountService.Transaction[]>
     );
     return lists.flat()
       .filter((tx) => tx.status === 'SUCCESS')
-      .map((tx) => {
-        // 账户视角收支：充值是卡→账户（入账）；提现、银行卡出资的转账/扫码支付
-        // 均为资金离开账户（出账）
-        const isIn = tx.businessType === 'BANK_CARD_RECHARGE';
-        const memo =
-          tx.businessType === 'BANK_CARD_RECHARGE'
-            ? '银行卡充值'
-            : tx.businessType === 'TRANSFER'
-              ? '银行卡转账'
-              : tx.businessType === 'QR_PAY'
-                ? '银行卡扫码支付'
-                : '银行卡提现';
-        return {
-          entryId: 0,
-          transactionId: tx.transactionId,
-          amountFen: tx.amountFen,
-          direction: isIn ? 'IN' : 'OUT',
-          memo,
-          counterpartyName: '',
-          balanceAfterFen: null,
-          createdAt: tx.createdAt,
-        };
-      });
+      .map(projectBankCardTransaction);
   } catch {
     // 银行卡流水加载失败只影响该部分投影，不阻断账本账单展示
     return [];
@@ -89,32 +104,34 @@ const loadBankCardTransactions = async (): Promise<accountService.Transaction[]>
 };
 
 /**
- * 账单页（原明细页）：V2.1 双 Tab 结构——
- * 「账单」分类胶囊筛选 + 月分组列表；「分析」汇总指标 + 分类占比 + 趋势 + 交易对象排行。
+ * 全局账单页：用户维度全渠道交易流水（余额/银行卡/花呗）。
+ * 分析功能已迁移为独立页 /h5/account/analytics，本页仅保留账单列表。
+ *
+ * 交易状态标签说明：账本明细接口仅返回成功终态分录，无 PROCESSING 等中间态数据源，
+ * 故不渲染状态标签（设计方案 1.3 的状态规则保留给后续接入 fund_transaction 时使用）。
  */
 const TransactionsPage: React.FC = () => {
-  const [tab, setTab] = useState<'bills' | 'analytics'>('bills');
   const [loading, setLoading] = useState(true);
+  const [loadingMore, setLoadingMore] = useState(false);
   const [transactions, setTransactions] = useState<accountService.Transaction[]>([]);
   const [category, setCategory] = useState('all');
+  const [nextCursor, setNextCursor] = useState<string | null>(null);
+  const sentinelRef = React.useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     let cancelled = false;
     const load = async () => {
       setLoading(true);
       try {
-        // 一次性拉取全部分录（含花呗、银行卡等），分类筛选在前端完成；
-        // 条数从 50 提升到 100，减少筛选后列表过短的问题
+        // 首屏按设计使用 50 条游标分页；银行卡流水仅在首屏补充一次。
         const [data, bankCardItems] = await Promise.all([
-          accountService.getTransactions({ pageSize: 100 }),
+          accountService.getTransactions({ pageSize: 50 }),
           loadBankCardTransactions(),
         ]);
         if (!cancelled) {
-          // 账本分录与银行卡充值/提现投影按创建时间倒序合并
-          const merged = [...(data.items || []), ...bankCardItems].sort((a, b) =>
-            (b.createdAt || '').localeCompare(a.createdAt || ''),
-          );
-          setTransactions(merged);
+          // 全局账单按交易号唯一；同一交易的多科目分录不得重复展示。
+          setTransactions(mergeUniqueTransactions(data.items || [], bankCardItems));
+          setNextCursor(data.nextCursor);
         }
       } catch (error: any) {
         Toast.show({ content: error?.message || '当前网络环境较差，数据暂未返回，请稍后重试', icon: 'fail' });
@@ -130,99 +147,124 @@ const TransactionsPage: React.FC = () => {
     };
   }, []);
 
+  /** 按服务端不透明游标加载下一页账本分录。 */
+  const loadMore = React.useCallback(async () => {
+    if (!nextCursor || loadingMore) return;
+    setLoadingMore(true);
+    try {
+      const data = await accountService.getTransactions({ cursor: nextCursor, pageSize: 50 });
+      setTransactions((current) => mergeUniqueTransactions(current, data.items || []));
+      setNextCursor(data.nextCursor);
+    } catch (error: any) {
+      Toast.show({ content: error?.message || '加载更多账单失败，请稍后重试', icon: 'fail' });
+    } finally {
+      setLoadingMore(false);
+    }
+  }, [loadingMore, nextCursor]);
+
   // 分类筛选：全部不过滤；收入/支出按方向；其余业务分类按 memo 关键词
   const visible = useMemo(() => {
     const filter = TX_CATEGORIES.find((c) => c.key === category) || TX_CATEGORIES[0];
     return transactions.filter(filter.match);
   }, [transactions, category]);
 
+  useEffect(() => {
+    const node = sentinelRef.current;
+    if (!node || !nextCursor || loadingMore) return undefined;
+    const observer = new IntersectionObserver(
+      (entries) => {
+        if (entries.some((entry) => entry.isIntersecting)) void loadMore();
+      },
+      { rootMargin: '160px' },
+    );
+    observer.observe(node);
+    return () => observer.disconnect();
+  }, [loadMore, loadingMore, nextCursor, visible.length]);
+
   return (
     <div className="transactions-page">
-      {/* 顶部双 Tab：账单 / 分析 */}
-      <div className="tx-top-tabs">
-        {([['bills', '账单'], ['analytics', '分析']] as const).map(([key, label]) => (
-          <div
-            key={key}
-            className={`tx-top-tab${tab === key ? ' active' : ''}`}
-            onClick={() => setTab(key)}
-          >
-            <span className="tx-top-tab-text">{label}</span>
-            {tab === key && <span className="tx-top-tab-bar" />}
+      <div className="tx-bills-body">
+        {/* 分类筛选胶囊：横向滑动单选，覆盖全部/收支方向/业务分类 */}
+        <div className="tx-chips-scroll">
+          <div className="tx-chips tx-chips-inline">
+            {TX_CATEGORIES.map((item) => (
+              <span
+                key={item.key}
+                className={`tx-chip${category === item.key ? ' active' : ''}`}
+                onClick={() => setCategory(item.key)}
+              >
+                {item.label}
+              </span>
+            ))}
           </div>
-        ))}
-      </div>
+        </div>
 
-      {tab === 'analytics' ? (
-        <AnalyticsPanel />
-      ) : (
-        <div className="tx-bills-body">
-          {/* 分类筛选胶囊：横向滑动单选，覆盖全部/收支方向/业务分类 */}
-          <div className="tx-chips-scroll">
-            <div className="tx-chips tx-chips-inline">
-              {TX_CATEGORIES.map((item) => (
-                <span
-                  key={item.key}
-                  className={`tx-chip${category === item.key ? ' active' : ''}`}
-                  onClick={() => setCategory(item.key)}
-                >
-                  {item.label}
-                </span>
-              ))}
-            </div>
-          </div>
-
-          {loading ? (
-            <>
+        {loading ? (
+          <>
+            <Skeleton variant="card" height={110} />
+            <div style={{ marginTop: 10 }}>
               <Skeleton variant="card" height={110} />
-              <div style={{ marginTop: 10 }}>
-                <Skeleton variant="card" height={110} />
-              </div>
-            </>
-          ) : visible.length === 0 ? (
+            </div>
+          </>
+        ) : visible.length === 0 ? (
+          <>
             <EmptyState
               icon={<IconSet name="receipt" size={30} color="var(--h5-primary)" />}
-              text={category === 'all' ? '暂无交易记录' : '该分类下暂无账单'}
-              hint="充值、转账、花呗消费、扫码支付完成后将在这里展示"
+              text={category === 'all' ? '暂无交易记录' : '正在查找该分类账单'}
+              hint={nextCursor ? '继续加载历史账单中…' : '充值、转账、花呗消费、扫码支付完成后将在这里展示'}
             />
-          ) : (
+            {nextCursor && <div ref={sentinelRef} className="tx-sentinel">加载中…</div>}
+          </>
+        ) : (
+          <>
             <MonthGroupList
               items={visible}
-              getKey={(tx) => `${tx.entryId}-${tx.transactionId}`}
+              getKey={(tx) => tx.transactionId}
               renderItem={(tx) => {
-                const biz = getBizType(tx.memo);
-                const clickable = tx.memo?.includes('转账');
-                const party = tx.counterpartyName
-                  ? tx.direction === 'IN'
-                    ? `来自 ${tx.counterpartyName}`
-                    : `转给 ${tx.counterpartyName}`
-                  : accountService.getLedgerEntryTitle(tx);
-                return (
-                  <div
-                    className="tx-row"
-                    onClick={() => clickable && history.push(`/h5/transfer/result/${tx.transactionId}`)}
-                  >
-                    <div className="tx-icon">
-                      <IconSet name={biz.icon} size={15} color="var(--h5-primary)" />
+              const biz = getBizType(tx.memo);
+              const clickable = tx.memo?.includes('转账');
+              const channel = getChannelTag(tx.memo);
+              const party = tx.counterpartyName
+                ? tx.direction === 'IN'
+                  ? `来自 ${tx.counterpartyName}`
+                  : `转给 ${tx.counterpartyName}`
+                : null;
+              return (
+                <div
+                  className="tx-row"
+                  onClick={() => clickable && history.push(`/h5/transfer/result/${tx.transactionId}`)}
+                >
+                  <div className="tx-icon">
+                    <IconSet name={biz.icon} size={15} color="var(--h5-primary)" />
+                  </div>
+                  <div className="tx-main">
+                    <div className="tx-title">
+                      <span className="tx-title-text">{getTxTitle(tx.memo, tx.direction)}</span>
+                      {channel && <span className={`tx-channel-tag ${channel.cls}`}>{channel.label}</span>}
                     </div>
-                    <div className="tx-main">
-                      <div className="tx-title">{biz.label} · {party}</div>
-                      <div className="tx-sub">
-                        {formatTime(tx.createdAt, 'YYYY-MM-DD HH:mm')}
-                        {tx.balanceAfterFen !== null && (
-                          <span className="tx-balance"> · 余额 ¥{formatAmount(tx.balanceAfterFen)}</span>
-                        )}
-                      </div>
-                    </div>
-                    <div className={`tx-amount ${tx.direction === 'IN' ? 'amount-in' : ''}`}>
-                      {tx.direction === 'IN' ? '+' : '−'}¥{formatAmount(tx.amountFen)}
+                    {party && <div className="tx-party">{party}</div>}
+                    <div className="tx-sub">
+                      {formatTxTime(tx.createdAt)}
+                      {tx.balanceAfterFen !== null && (
+                        <span className="tx-balance"> · 余额 ¥{formatAmount(tx.balanceAfterFen)}</span>
+                      )}
                     </div>
                   </div>
-                );
+                  <div className={`tx-amount ${tx.direction === 'IN' ? 'amount-in' : ''}`}>
+                    {tx.direction === 'IN' ? '+' : '−'}¥{formatAmount(tx.amountFen)}
+                  </div>
+                </div>
+              );
               }}
             />
-          )}
-        </div>
-      )}
+            {nextCursor && (
+              <div ref={sentinelRef} className="tx-sentinel">
+                {loadingMore ? '加载中…' : '继续上滑加载更多'}
+              </div>
+            )}
+          </>
+        )}
+      </div>
     </div>
   );
 };

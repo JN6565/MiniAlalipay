@@ -1,9 +1,10 @@
-import React, { useEffect, useRef, useState } from 'react';
+﻿import React, { useEffect, useRef, useState } from 'react';
 import { Toast } from 'antd-mobile';
 import { Axis, Canvas, Chart, Interval, Line, Point, Tooltip } from '@antv/f2';
 import * as accountService from '@/services/account';
 import { formatAmount } from '@/utils/format';
 import { Skeleton, IconSet } from '@/components/h5/common';
+import './index.less';
 
 // F2 的 Canvas/Chart 是 F-engine 组件，仅用于构造 F2 渲染树，不由 React DOM 直接渲染。
 const F2Canvas = Canvas as unknown as React.ComponentType<any>;
@@ -34,7 +35,7 @@ interface CategorySlice {
 }
 
 /**
- * 账单页「分析」Tab（V2.1 重设计）：
+ * 独立分析页（原账单页「分析」Tab，V2.1 设计完整保留）：
  * 收支汇总三卡 + 指标双卡（日均支出/收支比）+ 支出分类占比环形图 + 收支趋势折线 + 交易对象排行。
  * 汇总/趋势/交易对象来自后端分析接口；分类占比由前端拉取账本分录（limit 100）
  * 按 memo 归类聚合（后端未提供分类维度，不新增接口）。

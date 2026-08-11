@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+﻿import React, { useState, useEffect } from 'react';
 import { history } from 'umi';
 import { Toast } from 'antd-mobile';
 import * as creditService from '@/services/credit';
@@ -10,10 +10,10 @@ import './index.less';
 
 /**
  * 快捷功能入口（V2.1 定稿）：两行 x 4 共 8 个入口。
- * 第一行为高频资金动作（扫一扫/收款/转账/钱包），第二行为资产与智能入口（账单/银行卡/花呗/招财喵）。
+ * 第一行为高频资金动作（扫一扫/收款/转账/钱包），第二行为资产与智能入口（账单/银行卡/花呗/分析）。
  * tint 决定图标底色渐变（见 index.less 的 quick-icon 色系 class）。
  */
-const QUICK_ACTIONS: { label: string; icon: IconName; path: string; tint?: 'brand' | 'orange' | 'green' | 'credit' | 'aipink' }[] = [
+const QUICK_ACTIONS: { label: string; icon: IconName; path: string; tint?: 'brand' | 'orange' | 'green' | 'credit' }[] = [
   { label: '扫一扫', icon: 'scan', path: '/h5/scan' },
   { label: '收款', icon: 'collect', path: '/h5/collection' },
   { label: '转账', icon: 'transfer', path: '/h5/transfer' },
@@ -21,7 +21,7 @@ const QUICK_ACTIONS: { label: string; icon: IconName; path: string; tint?: 'bran
   { label: '账单', icon: 'receipt', path: '/h5/account/transactions', tint: 'orange' },
   { label: '银行卡', icon: 'card', path: '/h5/bank-cards', tint: 'green' },
   { label: '花呗', icon: 'huabei', path: '/h5/credit', tint: 'credit' },
-  { label: '招财喵', icon: 'ai', path: '/h5/ai-talk', tint: 'aipink' },
+  { label: '分析', icon: 'chart', path: '/h5/account/analytics' },
 ];
 
 /** 生活服务区：仅 UI 占位，点击提示功能开发中，不做路由与后端。 */
@@ -129,6 +129,16 @@ const HomePage: React.FC = () => {
             </div>
           </div>
           <div className="credit-btn">去还款</div>
+        </div>
+
+        {/* 财喵卡片：AI 资金助手入口，样式与花呗摘要卡一致（「财喵」标识蓝色） */}
+        <div className="credit-card aimao-card" onClick={() => history.push('/h5/ai-talk')}>
+          <div className="credit-left">
+            <div className="credit-label"><span className="aimao-brand">财喵</span> · AI 资金助手</div>
+            <div className="aimao-title">你好，我是财喵</div>
+            <div className="credit-sub">问余额、查账单、帮我转账</div>
+          </div>
+          <div className="credit-btn aimao-btn">去使用</div>
         </div>
 
         {/* 生活服务区：占位入口，点击仅提示开发中 */}

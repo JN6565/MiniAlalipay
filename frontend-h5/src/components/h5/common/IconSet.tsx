@@ -1,4 +1,4 @@
-import React from 'react';
+﻿import React from 'react';
 
 /**
  * H5 V2 统一自绘 SVG 图标集（IconSet）。
@@ -22,7 +22,9 @@ export type IconName =
   | 'setting' | 'card' | 'receipt' | 'chart' | 'plus' | 'close' | 'check'
   | 'send' | 'camera' | 'keyboard' | 'clock' | 'qr' | 'drawer' | 'lock'
   /* AI Talk 交互补充图标 */
-  | 'copy' | 'refresh' | 'thumbUp' | 'thumbDown';
+  | 'copy' | 'refresh' | 'thumbUp' | 'thumbDown'
+  /* 财喵输入栏（豆包式）补充图标 */
+  | 'mic' | 'arrowUp';
 
 /** 图标 path 数据：与设计稿 ICON_PATHS 完全一致，逐条搬入不得改动。 */
 const ICON_PATHS: Record<IconName, React.ReactNode> = {
@@ -253,6 +255,15 @@ const ICON_PATHS: Record<IconName, React.ReactNode> = {
       <path d="M17 4.6H7.8a2.2 2.2 0 0 0-2.16 1.76l-1.1 5.4a2.2 2.2 0 0 0 2.16 2.64h4.6l-.8 3.7a1.7 1.7 0 0 0 3 1.3L17 13.4" />
     </>
   ),
+  /* ---- 财喵输入栏（豆包式）补充 ---- */
+  mic: (
+    <>
+      <rect x="9.2" y="3.6" width="5.6" height="10" rx="2.8" />
+      <path d="M5.8 11.6a6.2 6.2 0 0 0 12.4 0" />
+      <path d="M12 17.8v2.6M8.8 20.4h6.4" />
+    </>
+  ),
+  arrowUp: <path d="M12 19V5.5M6.5 11 12 5.5 17.5 11" />,
 };
 
 export interface IconSetProps {

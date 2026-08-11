@@ -107,7 +107,7 @@ export default [
         path: '/h5/ai-talk',
         component: '@/pages/h5/AITalk',
         exact: true,
-        title: '招财喵',
+        title: '财喵',
         auth: true,
       },
       {
@@ -181,6 +181,13 @@ export default [
         auth: true,
       },
       {
+        path: '/h5/account/analytics',
+        component: '@/pages/h5/Analytics',
+        exact: true,
+        title: '分析',
+        auth: true,
+      },
+      {
         path: '/h5/recharge',
         component: '@/pages/h5/BankCardRecharge',
         exact: true,
@@ -227,6 +234,13 @@ export default [
         component: '@/pages/h5/Wallet',
         exact: true,
         title: '充值提现',
+        auth: true,
+      },
+      {
+        path: '/h5/wallet/balance-entries',
+        component: '@/pages/h5/BalanceEntries',
+        exact: true,
+        title: '余额变动明细',
         auth: true,
       },
       {

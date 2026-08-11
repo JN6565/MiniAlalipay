@@ -1,4 +1,4 @@
-.wallet-page {
+﻿.wallet-page {
   min-height: 100vh;
   background: var(--h5-bg);
   padding-bottom: 24px;
@@ -103,18 +103,48 @@
   padding: 0 12px;
 }
 
-/* ===== 资金渠道说明 ===== */
-.wallet-tips {
+/* ===== 余额变动明细入口：与银行卡列表卡片风格一致的白色圆角卡片 ===== */
+.wallet-balance-entry {
+  display: flex;
+  align-items: center;
+  gap: 12px;
   margin: 12px 12px 0;
-  padding: 10px 14px;
+  padding: 14px;
   background: var(--h5-card-bg);
   border-radius: var(--h5-radius-card);
   box-shadow: var(--h5-shadow-card);
+  cursor: pointer;
+  -webkit-tap-highlight-color: transparent;
 
-  p {
-    margin: 3px 0;
-    font-size: 11px;
-    line-height: 1.7;
-    color: var(--h5-text-3);
+  &:active {
+    opacity: 0.85;
+  }
+
+  .balance-entry-icon {
+    width: 34px;
+    height: 34px;
+    border-radius: 50%;
+    background: var(--h5-grad-brand);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    flex: none;
+  }
+
+  .balance-entry-text {
+    flex: 1;
+    min-width: 0;
+
+    .balance-entry-title {
+      font-size: 14px;
+      font-weight: 600;
+      color: var(--h5-text);
+    }
+
+    .balance-entry-sub {
+      margin-top: 2px;
+      font-size: 11px;
+      color: var(--h5-text-3);
+    }
   }
 }

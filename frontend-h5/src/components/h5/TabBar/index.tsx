@@ -13,7 +13,7 @@ interface TabItem {
 /** 四个 Tab 页配置，顺序即展示顺序（图标为 V2 设计稿定稿自绘 SVG）。 */
 const TAB_ITEMS: TabItem[] = [
   { path: '/h5/home', icon: 'home', label: '首页' },
-  { path: '/h5/ai-talk', icon: 'ai', label: '招财喵' },
+  { path: '/h5/ai-talk', icon: 'ai', label: '财喵' },
   { path: '/h5/contacts', icon: 'contacts', label: '联系人' },
   { path: '/h5/profile', icon: 'me', label: '我的' },
 ];

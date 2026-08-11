@@ -12,7 +12,7 @@ interface Props {
 /**
  * 底部输入栏。
  *
- * <p>包含输入框 + 附件按钮 + 发送按钮。支持回车发送、Shift+回车换行。</p>
+ * <p>包含附件、语音、文本输入和发送按钮。支持回车发送、Shift+回车换行。</p>
  */
 const InputBar: React.FC<Props> = ({
   value,
@@ -77,12 +77,21 @@ const InputBar: React.FC<Props> = ({
 
   return (
     <div className="ai-input-bar">
-      {/* 输入区：附件 + 输入框 + 发送按钮 */}
+      {/* 输入区：附件 + 输入框 + 语音 + 发送按钮；附件和语音在当前版本仅作入口占位。 */}
       <div className="ai-input-row">
         <div className="ai-input-wrapper">
+          <button
+            type="button"
+            className="ai-input-icon-btn"
+            aria-label="添加附件（暂未开放）"
+            title="添加附件（暂未开放）"
+            disabled
+          >
+            <IconSet name="plus" size={18} />
+          </button>
           <textarea
             className="ai-input"
-            placeholder="和招财喵说点什么…"
+            placeholder="发消息或按住说话..."
             value={value}
             onChange={(e) => onChange(e.target.value)}
             onKeyDown={handleKeyDown}
@@ -91,6 +100,15 @@ const InputBar: React.FC<Props> = ({
             rows={1}
             disabled={loading}
           />
+          <button
+            type="button"
+            className="ai-input-icon-btn"
+            aria-label="语音输入（暂未开放）"
+            title="语音输入（暂未开放）"
+            disabled
+          >
+            <IconSet name="mic" size={18} />
+          </button>
         </div>
 
         <button
@@ -104,7 +122,7 @@ const InputBar: React.FC<Props> = ({
           {loading ? (
             <span className="ai-send-spinner" />
           ) : (
-            <IconSet name="send" size={15} />
+            <IconSet name="arrowUp" size={17} />
           )}
         </button>
       </div>

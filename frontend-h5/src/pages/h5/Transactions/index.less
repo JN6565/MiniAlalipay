@@ -1,47 +1,10 @@
-.transactions-page {
+﻿.transactions-page {
   min-height: 100vh;
   background: var(--h5-bg);
   box-sizing: border-box;
 }
 
-/* ===== 顶部双 Tab：账单 / 分析 ===== */
-.tx-top-tabs {
-  display: flex;
-  justify-content: center;
-  gap: 32px;
-  background: var(--h5-card-bg);
-  border-bottom: 1px solid var(--h5-divider);
-  padding-top: 4px;
-
-  .tx-top-tab {
-    text-align: center;
-    padding-bottom: 8px;
-    cursor: pointer;
-    -webkit-tap-highlight-color: transparent;
-
-    .tx-top-tab-text {
-      font-size: 15px;
-      font-weight: 400;
-      color: var(--h5-text-3);
-    }
-
-    .tx-top-tab-bar {
-      display: block;
-      width: 18px;
-      height: 3px;
-      border-radius: 2px;
-      background: var(--h5-grad-brand);
-      margin: 5px auto 0;
-    }
-
-    &.active .tx-top-tab-text {
-      font-weight: 700;
-      color: var(--h5-text);
-    }
-  }
-}
-
-/* ===== 筛选胶囊（账单方向 / 分析时间范围共用） ===== */
+/* ===== 筛选胶囊 ===== */
 .tx-chips {
   display: flex;
   gap: 8px;
@@ -93,6 +56,13 @@
   padding: 12px;
 }
 
+.tx-sentinel {
+  padding: 14px 0 4px;
+  text-align: center;
+  color: var(--h5-text-3);
+  font-size: 12px;
+}
+
 /* ===== 账单行 ===== */
 .tx-row {
   display: flex;
@@ -121,13 +91,48 @@
   }
 
   .tx-title {
+    display: flex;
+    align-items: center;
+    gap: 6px;
     font-size: 13.5px;
     font-weight: 600;
     color: var(--h5-text);
+    margin-bottom: 2px;
+
+    .tx-title-text {
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+  }
+
+  /* 资金渠道小标签：银行卡蓝 / 花呗紫 */
+  .tx-channel-tag {
+    flex: none;
+    font-size: 10px;
+    font-weight: 600;
+    line-height: 1;
+    padding: 3px 6px;
+    border-radius: 6px;
+
+    &.bank {
+      color: var(--h5-primary);
+      background: var(--h5-primary-bg);
+    }
+
+    &.credit {
+      color: var(--h5-accent-violet);
+      background: rgba(122, 108, 255, 0.1);
+    }
+  }
+
+  .tx-party {
+    font-size: 12px;
+    color: var(--h5-text-2);
+    margin-bottom: 2px;
     white-space: nowrap;
     overflow: hidden;
     text-overflow: ellipsis;
-    margin-bottom: 2px;
   }
 
   .tx-sub {
@@ -145,270 +150,10 @@
     font-variant-numeric: tabular-nums;
     color: var(--h5-text);
     flex-shrink: 0;
-  }
-}
 
-/* ===== 分析 Tab ===== */
-.analytics-panel {
-  padding: 12px;
-}
-
-/* 指标双卡：日均支出 / 收支比 */
-.analytics-metrics {
-  display: flex;
-  gap: 8px;
-  margin-bottom: 10px;
-
-  .metric-cell {
-    flex: 1;
-    display: flex;
-    align-items: center;
-    gap: 10px;
-    background: var(--h5-card-bg);
-    border-radius: var(--h5-radius-card);
-    box-shadow: var(--h5-shadow-card);
-    padding: 12px;
-
-    .metric-icon {
-      width: 30px;
-      height: 30px;
-      border-radius: 10px;
-      background: var(--h5-primary-bg);
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      flex: none;
-    }
-
-    .metric-body {
-      min-width: 0;
-
-      .metric-value {
-        font-size: 16px;
-        font-weight: 800;
-        font-variant-numeric: tabular-nums;
-        color: var(--h5-text);
-      }
-
-      .metric-label {
-        margin-top: 2px;
-        font-size: 11px;
-        color: var(--h5-text-3);
-        white-space: nowrap;
-        overflow: hidden;
-        text-overflow: ellipsis;
-      }
-    }
-  }
-}
-
-/* 支出分类占比：环形图 + 图例左右排布 */
-.category-ratio {
-  display: flex;
-  align-items: center;
-  gap: 12px;
-
-  .category-donut {
-    width: 128px;
-    height: 128px;
-    flex: none;
-
-    canvas {
-      display: block;
-      width: 128px;
-      height: 128px;
-    }
-  }
-
-  .category-legend {
-    flex: 1;
-    min-width: 0;
-
-    .legend-row {
-      display: flex;
-      align-items: center;
-      gap: 6px;
-      padding: 3px 0;
-      font-size: 12px;
-      color: var(--h5-text-2);
-
-      .legend-color {
-        width: 8px;
-        height: 8px;
-        border-radius: 50%;
-        flex: none;
-      }
-
-      .legend-name {
-        flex: 1;
-        min-width: 0;
-        white-space: nowrap;
-        overflow: hidden;
-        text-overflow: ellipsis;
-      }
-
-      .legend-amount {
-        font-variant-numeric: tabular-nums;
-        color: var(--h5-text);
-      }
-
-      .legend-percent {
-        width: 34px;
-        text-align: right;
-        color: var(--h5-text-3);
-        flex: none;
-      }
-    }
-  }
-}
-
-.analytics-summary {
-  display: flex;
-  gap: 8px;
-  margin-bottom: 10px;
-
-  .summary-cell {
-    flex: 1;
-    background: var(--h5-card-bg);
-    border-radius: var(--h5-radius-card);
-    box-shadow: var(--h5-shadow-card);
-    padding: 12px 10px;
-    text-align: center;
-
-    .summary-label {
-      font-size: 11px;
-      color: var(--h5-text-3);
-    }
-
-    .summary-value {
-      margin-top: 4px;
-      font-size: 15px;
-      font-weight: 800;
-      font-variant-numeric: tabular-nums;
-      color: var(--h5-text);
-
-      &.in {
-        color: var(--h5-amount-in);
-      }
-
-      &.out {
-        color: var(--h5-text);
-      }
-
-      &.balance {
-        color: var(--h5-success);
-      }
-    }
-  }
-}
-
-.analytics-card {
-  background: var(--h5-card-bg);
-  border-radius: var(--h5-radius-card);
-  box-shadow: var(--h5-shadow-card);
-  padding: 14px;
-  margin-bottom: 10px;
-
-  .analytics-card-title {
-    display: flex;
-    align-items: center;
-    gap: 5px;
-    font-size: 14px;
-    font-weight: 700;
-    color: var(--h5-text);
-    margin-bottom: 10px;
-
-    &.plain {
-      gap: 0;
-    }
-  }
-}
-
-.trend-chart {
-  width: 100%;
-  min-height: 200px;
-
-  canvas {
-    display: block;
-    width: 100%;
-    height: 180px;
-  }
-}
-
-.trend-legend {
-  display: flex;
-  justify-content: center;
-  gap: 20px;
-  color: var(--h5-text-2);
-  font-size: 12px;
-  margin-top: 6px;
-
-  span {
-    display: inline-flex;
-    align-items: center;
-    gap: 5px;
-  }
-
-  .legend-dot {
-    width: 8px;
-    height: 8px;
-    border-radius: 50%;
-  }
-
-  .income-dot {
-    background: var(--h5-primary);
-  }
-
-  .expense-dot {
-    background: #9db8e0;
-  }
-}
-
-.chart-empty {
-  padding: 30px 0;
-  text-align: center;
-  font-size: 13px;
-  color: var(--h5-text-3);
-}
-
-/* 交易对象分布占比条 */
-.payee-bar {
-  margin-bottom: 10px;
-
-  &:last-child {
-    margin-bottom: 0;
-  }
-
-  .payee-bar-head {
-    display: flex;
-    justify-content: space-between;
-    font-size: 12px;
-    color: var(--h5-text-2);
-    margin-bottom: 4px;
-
-    .payee-name {
-      white-space: nowrap;
-      overflow: hidden;
-      text-overflow: ellipsis;
-      margin-right: 8px;
-    }
-
-    .payee-amount {
-      font-variant-numeric: tabular-nums;
-      flex-shrink: 0;
-    }
-  }
-
-  .payee-bar-track {
-    height: 6px;
-    border-radius: 3px;
-    background: var(--h5-fill);
-    overflow: hidden;
-
-    .payee-bar-fill {
-      height: 100%;
-      border-radius: 3px;
-      background: var(--h5-grad-brand);
+    /* 收入金额绿色强调 */
+    &.amount-in {
+      color: var(--h5-amount-in);
     }
   }
 }

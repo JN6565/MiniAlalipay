@@ -1,4 +1,9 @@
+import type { AxiosResponse } from 'axios';
 import request from './request';
+
+/** 请求拦截器已拆包 ApiResponse，这里把 axios 静态类型收敛为真实业务数据类型。 */
+const unwrap = <T>(promise: Promise<AxiosResponse<T>>): Promise<T> =>
+  promise as unknown as Promise<T>;
 
 export interface AccountInfo {
   accountId: string;
@@ -29,6 +34,11 @@ interface LedgerEntryResponse {
   counterpartyName: string;
   balanceAfterFen: number | null;
   createdAt: string;
+}
+
+export interface TransactionPage {
+  items: Transaction[];
+  nextCursor: string | null;
 }
 
 interface LedgerEntryPageResponse {
@@ -67,20 +77,20 @@ export interface AnalyticsData {
 
 // 查询本人账户
 export const getMyAccount = () => {
-  return request.get<AccountInfo>('/api/v1/accounts/me');
+  return unwrap(request.get<AccountInfo>('/api/v1/accounts/me'));
 };
 
 // 查询交易明细 - 使用账本明细接口
 export const getTransactions = (params: {
-  page?: number;
+  cursor?: string | null;
   pageSize?: number;
   direction?: 'IN' | 'OUT';
   status?: string;
-}) => {
-  return request.get<LedgerEntryPageResponse>(
+} = {}): Promise<TransactionPage> => {
+  return unwrap(request.get<LedgerEntryPageResponse>(
     '/api/v1/accounts/me/entries',
-    { params: { limit: params.pageSize || 20 } },
-  ).then((page) => ({
+    { params: { cursor: params.cursor || undefined, limit: params.pageSize || 20 } },
+  )).then((page) => ({
     ...page,
     items: page.items
       .map((entry) => ({
@@ -93,7 +103,7 @@ export const getTransactions = (params: {
 
 // 查询资产分析
 export const getAnalytics = (range: '7d' | '30d' = '7d') => {
-  return request.get<AnalyticsData>('/api/v1/accounts/me/analytics', {
+  return unwrap(request.get<AnalyticsData>('/api/v1/accounts/me/analytics', {
     params: { range },
-  });
+  }));
 };

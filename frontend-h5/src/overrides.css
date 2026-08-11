@@ -12,15 +12,15 @@
   --h5-grad-credit: linear-gradient(135deg, #7b6cff 0%, #4a8dff 100%);
   /* 头部柔渐变：首页/转账/收款等页面头部背景（V2 设计稿定稿） */
   --h5-grad-soft: linear-gradient(160deg, #2f74ff 0%, #4d9bff 55%, #6fb6ff 100%);
-  /* 招财喵（AI Talk）淡粉轻语底：上粉下白纵向渐变，与 src/theme/index.ts 的 h5Gradients.aiDeep 同源 */
-  --h5-grad-ai-deep: linear-gradient(180deg, #ffe3ea 0%, #ffccd9 30%, #fff7fa 65%, #ffffff 100%);
-  /* 招财喵粉色点缀色组：仅用于 AI 对话页品牌点缀，与 theme/index.ts 的 h5AiPink 同源 */
-  --h5-ai-pink-deep: #ff8fb0;
-  --h5-ai-pink-brand: #ffa5bf;
-  --h5-ai-pink-mid: #ffccd9;
-  --h5-ai-pink-soft: #ffe4ec;
-  --h5-ai-pink-wash: #fff6f9;
-  --h5-shadow-ai: 0 4px 16px rgba(255, 143, 176, 0.18);
+  /* 财喵（AI Talk）蓝色轻语底：上淡蓝下白纵向渐变，与 src/theme/index.ts 的 h5Gradients.aiDeep 同源 */
+  --h5-grad-ai-deep: linear-gradient(180deg, #dcebff 0%, #e8f2ff 30%, #f7faff 65%, #ffffff 100%);
+  /* 财喵蓝色点缀色组：仅用于 AI 对话页品牌点缀，与 theme/index.ts 的 h5AiPink 同源 */
+  --h5-ai-pink-deep: #1677ff;
+  --h5-ai-pink-brand: #4285ff;
+  --h5-ai-pink-mid: #8fc2ff;
+  --h5-ai-pink-soft: #e3efff;
+  --h5-ai-pink-wash: #f5f9ff;
+  --h5-shadow-ai: 0 4px 16px rgba(22, 119, 255, 0.16);
 
   /* 状态色：业务结果表达（成功/警告/错误）与收入金额色 */
   --h5-success: #16b387;

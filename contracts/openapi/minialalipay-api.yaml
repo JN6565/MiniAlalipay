@@ -1,7 +1,7 @@
 openapi: 3.1.0
 info:
   title: MiniAlalipay API
-  version: 0.2.0
+  version: 0.2.1
   description: MiniAlalipay 对外 HTTP 契约。业务操作只有在本文件中具备完整 Schema 后才允许实现。
 servers:
   - url: http://localhost:8080
@@ -3411,33 +3411,6 @@ components:
         creditEntryId: { type: integer, format: int64, minimum: 1 }
         eventId: { type: string, minLength: 26, maxLength: 26 }
         traceId: { type: string, pattern: '^[a-fA-F0-9]{32}$' }
-    CreditPayLedgerTccCommand:
-      type: object
-      additionalProperties: false
-      required: [xid, transactionId, creditAccountId, payeeAccountId, amountFen, voucherId, debitEntryId, creditEntryId, eventId, traceId]
-      properties:
-        xid:
-          type: string
-          minLength: 1
-          maxLength: 128
-          description: TCC 全局事务标识；同一分支重试时保持不变。
-        transactionId: { type: string, minLength: 26, maxLength: 26 }
-        creditAccountId:
-          type: string
-          minLength: 26
-          maxLength: 26
-          description: 付款人的信用账户，只用于派生信用应收资产科目。
-        payeeAccountId:
-          type: string
-          minLength: 26
-          maxLength: 26
-          description: 收款用户的普通余额账户；账户中心派生其余额负债科目。
-        amountFen: { type: integer, format: int64, minimum: 1, description: 金额，单位为分。 }
-        voucherId: { type: string, minLength: 26, maxLength: 26 }
-        debitEntryId: { type: integer, format: int64, minimum: 1 }
-        creditEntryId: { type: integer, format: int64, minimum: 1 }
-        eventId: { type: string, minLength: 26, maxLength: 26 }
-        traceId: { type: string, pattern: '^[a-fA-F0-9]{32}$' }
     TraceSpan:
       type: object
       additionalProperties: false
@@ -4001,7 +3974,7 @@ components:
     LedgerEntry:
       type: object
       additionalProperties: false
-      required: [entryId, transactionId, direction, amountFen, memo, createdAt]
+      required: [entryId, transactionId, direction, amountFen, memo, counterpartyName, createdAt]
       properties:
         entryId:
           type: integer
@@ -4026,6 +3999,10 @@ components:
           type: [string, 'null']
           maxLength: 255
           description: 已脱敏的分录摘要。
+        counterpartyName:
+          type: string
+          maxLength: 128
+          description: 交易对方脱敏展示名称；无法解析或交易不存在用户对方时返回空字符串。
         balanceAfterFen:
           type: [integer, 'null']
           format: int64
@@ -4091,14 +4068,6 @@ components:
         subjectId: { type: string, minLength: 1, maxLength: 26 }
         subjectVersion: { type: integer, format: int64, minimum: 0 }
         paymentProof: { type: string, minLength: 1, maxLength: 256, description: 用户中心签发的一次性短期支付密码证明，不得记录日志。 }
-    IssueCollectionConfirmationRequest:
-      type: object
-      additionalProperties: false
-      required: [version, paymentProof, fundingSource]
-      properties:
-        version: { type: integer, format: int64, minimum: 0, description: C2C 订单的 CAS 版本。 }
-        paymentProof: { type: string, minLength: 1, maxLength: 256, description: 用户中心签发的一次性支付密码证明，不得记录日志。 }
-        fundingSource: { type: string, enum: [BALANCE, MINI_CREDIT], description: 用户在付款页明确选择的资金来源。 }
     SubmitTransferRequest:
       type: object
       additionalProperties: false
@@ -4155,20 +4124,6 @@ components:
         - type: object
           required: [data]
           properties: { data: { $ref: '#/components/schemas/TransferDraft' } }
-    CollectionRequestResponse:
-      type: object
-      additionalProperties: false
-      required: [requestId, amountFen, status, expiresAt, version]
-      properties:
-        requestId: { type: string }
-        amountFen: { type: integer, format: int64, minimum: 1, maximum: 5000000 }
-        subject: { type: string, nullable: true, maxLength: 50 }
-        status: { type: string, enum: [OPEN, PROCESSING, SUCCESS, CANCELLED, MANUAL_REVIEW, EXPIRED] }
-        activeOrderId: { type: string, nullable: true }
-        transactionId: { type: string, nullable: true }
-        expiresAt: { type: string, format: date-time }
-        version: { type: integer, format: int64, minimum: 0 }
-        collectionUrl: { type: string, nullable: true, description: 收款二维码引导地址，仅创建响应携带；令牌服务端只存摘要不可重读 }
     CollectionRequestOrderItem:
       type: object
       additionalProperties: false
