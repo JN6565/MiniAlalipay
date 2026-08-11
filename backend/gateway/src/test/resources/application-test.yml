@@ -1,5 +1,5 @@
 # 网关集成测试配置：关闭 Nacos 与负载均衡，Redis 限流器由测试替身接管。
-# 认证由测试中的 @MockBean GatewayAuthenticationPort 接管，不调用真实 user-center。
+# 路由集成测试使用 @MockBean GatewayAuthenticationPort 接管认证；健康检查走白名单，不访问 user-center。
 spring:
   cloud:
     nacos:

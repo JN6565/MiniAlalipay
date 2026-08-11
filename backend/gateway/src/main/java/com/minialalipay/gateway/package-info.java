@@ -9,8 +9,16 @@
  * <h3>主要入口</h3>
  * <ul>
  *   <li>{@link com.minialalipay.gateway.GatewayApplication} — 应用启动入口</li>
- *   <li>{@link com.minialalipay.gateway.controller.HealthController} — 健康检查</li>
+ *   <li>{@link com.minialalipay.gateway.interfaces.controller.HealthController} — 健康检查</li>
  * </ul>
+ *
+ * <h3>分层边界</h3>
+ * <ul>
+ *   <li>{@code interfaces} — HTTP Controller、全局过滤器和协议异常处理</li>
+ *   <li>{@code application} — 认证端口与可信认证上下文</li>
+ *   <li>{@code infrastructure} — 用户中心适配器、缓存、JWT、审计和 Spring 配置</li>
+ * </ul>
+ * <p>网关不持有业务领域模型，因此不建立账户、交易或 Agent 的 {@code domain} 包。</p>
  *
  * <h3>允许依赖</h3>
  * <ul>

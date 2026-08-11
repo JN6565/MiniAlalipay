@@ -1,7 +1,7 @@
 package com.minialalipay.gateway;
 
-import com.minialalipay.gateway.auth.GatewayAuthenticationPort;
-import com.minialalipay.gateway.filter.GatewayAuthContext;
+import com.minialalipay.gateway.application.port.GatewayAuthenticationPort;
+import com.minialalipay.gateway.application.security.GatewayAuthContext;
 import org.junit.jupiter.api.AfterAll;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;

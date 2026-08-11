@@ -1,12 +1,13 @@
 package com.minialalipay.gateway;
 
 import com.minialalipay.common.trace.RequestIdGenerator;
+import com.minialalipay.gateway.infrastructure.config.CorsProperties;
+import com.minialalipay.gateway.infrastructure.config.GatewayAuthenticationProperties;
 import org.springframework.boot.SpringApplication;
 import org.springframework.boot.autoconfigure.SpringBootApplication;
 import org.springframework.cloud.client.discovery.EnableDiscoveryClient;
 import org.springframework.boot.context.properties.EnableConfigurationProperties;
 import org.springframework.context.annotation.Bean;
-import com.minialalipay.gateway.config.CorsProperties;
 
 /**
  * MiniAlalipay API 网关启动入口。
@@ -22,12 +23,13 @@ import com.minialalipay.gateway.config.CorsProperties;
  *
  * <h3>启用的配置属性</h3>
  * <ul>
- *   <li>{@link com.minialalipay.gateway.config.CorsProperties} — CORS 跨域配置</li>
+ *   <li>{@link com.minialalipay.gateway.infrastructure.config.CorsProperties} — CORS 跨域配置</li>
+ *   <li>{@link com.minialalipay.gateway.infrastructure.config.GatewayAuthenticationProperties} — 鉴权配置</li>
  * </ul>
  */
 @SpringBootApplication
 @EnableDiscoveryClient
-@EnableConfigurationProperties({CorsProperties.class})
+@EnableConfigurationProperties({CorsProperties.class, GatewayAuthenticationProperties.class})
 public class GatewayApplication {
 
     public static void main(String[] args) {
