@@ -404,6 +404,53 @@ paths:
                           balanceFen: { type: integer, format: int64, description: 虚拟余额（分） }
         '401': { $ref: '#/components/responses/Unauthorized' }
         '404': { $ref: '#/components/responses/NotFound' }
+  /api/v1/bank-cards/{cardId}/transactions:
+    get:
+      summary: 查询银行卡流水（卡视角：充值/提现与银行卡出资的转账/扫码支付）
+      description: |
+        返回本人指定银行卡关联的资金交易流水，按创建时间倒序。
+        银行卡出资的转账/扫码支付不写账本分录，卡流水是其 C 端可见性的事实来源。
+      operationId: listBankCardTransactions
+      x-client-scope: C
+      parameters:
+        - $ref: '#/components/parameters/RequestIdHeader'
+        - name: cardId
+          in: path
+          required: true
+          schema: { type: string, minLength: 1, maxLength: 128 }
+        - name: limit
+          in: query
+          required: false
+          schema: { type: integer, default: 20, minimum: 1, maximum: 50, description: 最大返回条数 }
+      responses:
+        '200':
+          description: 返回卡流水列表
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/ApiResponse'
+                  - type: object
+                    required: [data]
+                    properties:
+                      data:
+                        type: array
+                        items:
+                          type: object
+                          required: [transactionId, businessType, amountFen, status, createdAt]
+                          properties:
+                            transactionId: { type: string, description: 统一资金交易 ID }
+                            businessType:
+                              type: string
+                              enum: [BANK_CARD_RECHARGE, BANK_CARD_WITHDRAW, TRANSFER, QR_PAY]
+                              description: |
+                                业务类型：充值（卡→账户）、提现（账户→卡），
+                                或银行卡出资的转账/扫码支付（资金从卡直接扣减）
+                            amountFen: { type: integer, format: int64, description: 交易金额（分） }
+                            status: { type: string, description: 交易状态（PROCESSING/SUCCESS/CANCELLED 等） }
+                            createdAt: { type: string, format: date-time, description: 交易受理时间 }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '404': { $ref: '#/components/responses/NotFound' }
   /api/v1/bank-cards/{cardId}/recharge:
     post:
       summary: 银行卡充值（银行卡给账户充钱，虚拟余额 → 账户余额）

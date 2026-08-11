@@ -69,7 +69,8 @@ public interface BusinessStore {
     int getTccRetryCount(String transactionId);
 
     /**
-     * 查询指定银行卡的交易历史（充值/提现），按创建时间倒序。
+     * 查询指定银行卡的交易历史（充值/提现与银行卡出资的转账/扫码支付），按创建时间倒序。
+     * 银行卡出资的转账/扫码支付不写账本分录，本流水是其 C 端可见性的事实来源。
      *
      * @param userId 当前用户 ID，确保只能查看本人交易
      * @param cardId 银行卡 ID

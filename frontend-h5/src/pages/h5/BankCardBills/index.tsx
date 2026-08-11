@@ -14,9 +14,9 @@ import './index.less';
 /** 账单条目：卡内余额视角；amountFen 可选，非成功交易不传以不计入汇总。 */
 interface BillItem extends MonthGroupItem {
   transactionId: string;
-  businessType: 'BANK_CARD_RECHARGE' | 'BANK_CARD_WITHDRAW';
+  businessType: 'BANK_CARD_RECHARGE' | 'BANK_CARD_WITHDRAW' | 'TRANSFER' | 'QR_PAY';
   status: string;
-  /** 卡内余额视角：提现 = 资金流入卡（IN），充值 = 资金流出卡（OUT）。 */
+  /** 卡内余额视角：提现 = 资金流入卡（IN）；充值与银行卡出资的转账/扫码支付 = 资金流出卡（OUT）。 */
   direction: 'IN' | 'OUT';
 }
 
@@ -29,8 +29,9 @@ const TX_STATUS_LABEL: Record<string, string> = {
 };
 
 /**
- * 银行卡账单页：卡内余额视角的充值/提现历史，按月分组 + 方向筛选。
- * 符号约定：提现为资金流入卡（+），充值为资金流出卡（−）；
+ * 银行卡账单页：卡内余额视角的流水历史（充值/提现/银行卡出资的转账与扫码支付），
+ * 按月分组 + 方向筛选。
+ * 符号约定：提现为资金流入卡（+），充值与银行卡出资的转账/扫码支付为资金流出卡（−）；
  * 非成功交易余额未变动，金额置灰且不计入月度汇总。
  */
 const BankCardBillsPage = () => {
@@ -56,7 +57,7 @@ const BankCardBillsPage = () => {
         setBills(
           (txList || []).map((tx) => ({
             ...tx,
-            // 充值 = 卡付钱给账户（OUT）；提现 = 账户付钱给卡（IN）
+            // 充值/银行卡出资转账/扫码支付 = 卡付钱（OUT）；提现 = 账户付钱给卡（IN）
             direction: tx.businessType === 'BANK_CARD_WITHDRAW' ? 'IN' : 'OUT',
             // 仅成功交易计入月度汇总（余额真实变动）
             amountFen: tx.status === 'SUCCESS' ? tx.amountFen : undefined,
@@ -124,7 +125,7 @@ const BankCardBillsPage = () => {
         <EmptyState
           icon={<IconSet name="receipt" size={40} color="var(--h5-text-3)" />}
           text="暂无账单记录"
-          hint="充值、提现完成后将在这里展示"
+          hint="充值、提现或银行卡出资支付完成后将在这里展示"
         />
       ) : (
         <MonthGroupList
@@ -132,27 +133,36 @@ const BankCardBillsPage = () => {
           getKey={(b) => b.transactionId}
           renderItem={(b) => {
             const isSuccess = b.status === 'SUCCESS';
-            const isRecharge = b.businessType === 'BANK_CARD_RECHARGE';
+            const isWithdraw = b.businessType === 'BANK_CARD_WITHDRAW';
+            // 标题与图标按业务类型区分；除提现外均为资金流出卡（充值/转账/扫码支付）
+            const title =
+              b.businessType === 'BANK_CARD_RECHARGE'
+                ? '充值到账户余额'
+                : b.businessType === 'TRANSFER'
+                  ? '银行卡转账'
+                  : b.businessType === 'QR_PAY'
+                    ? '银行卡扫码支付'
+                    : '提现到账';
             return (
               <div className="bill-row">
                 <div className="bill-icon">
                   <IconSet
-                    name={isRecharge ? 'send' : 'wallet'}
+                    name={isWithdraw ? 'wallet' : b.businessType === 'BANK_CARD_RECHARGE' ? 'send' : 'transfer'}
                     size={15}
                     color="var(--h5-primary)"
                   />
                 </div>
                 <div className="bill-main">
                   <div className="bill-title">
-                    {isRecharge ? '充值到账户余额' : '提现到账'}
+                    {title}
                     {!isSuccess && (
                       <span className="bill-status">{TX_STATUS_LABEL[b.status] || b.status}</span>
                     )}
                   </div>
                   <div className="bill-time">{formatTime(b.createdAt, 'YYYY-MM-DD HH:mm')}</div>
                 </div>
-                <div className={`bill-amount${isSuccess ? (isRecharge ? ' amount-out' : ' amount-in') : ' muted'}`}>
-                  {isRecharge ? '−' : '+'}¥{formatBalance(b.amountFen || 0)}
+                <div className={`bill-amount${isSuccess ? (isWithdraw ? ' amount-in' : ' amount-out') : ' muted'}`}>
+                  {isWithdraw ? '+' : '−'}¥{formatBalance(b.amountFen || 0)}
                 </div>
               </div>
             );

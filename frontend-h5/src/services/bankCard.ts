@@ -148,17 +148,20 @@ export const withdrawBankCard = (cardId: string, payload: BankCardWithdrawPayloa
     idempotencyKey: payload.idempotencyKey || generateIdempotencyKey(),
   }));
 
-/** 银行卡交易明细项：充值/提现历史记录。 */
+/** 银行卡交易明细项：卡视角流水，含充值/提现与银行卡出资的转账/扫码支付。 */
 export interface BankCardTransaction {
   transactionId: string;
-  /** BANK_CARD_RECHARGE 充值（卡→账户），BANK_CARD_WITHDRAW 提现（账户→卡）。 */
-  businessType: 'BANK_CARD_RECHARGE' | 'BANK_CARD_WITHDRAW';
+  /**
+   * BANK_CARD_RECHARGE 充值（卡→账户），BANK_CARD_WITHDRAW 提现（账户→卡），
+   * TRANSFER/QR_PAY 为银行卡出资的转账/扫码支付（资金从卡直接扣减，不占账户余额）。
+   */
+  businessType: 'BANK_CARD_RECHARGE' | 'BANK_CARD_WITHDRAW' | 'TRANSFER' | 'QR_PAY';
   amountFen: number;
   status: string;
   createdAt: string;
 }
 
-/** 查询银行卡交易明细（充值/提现历史），按时间倒序。 */
+/** 查询银行卡交易明细（卡视角流水），按时间倒序。 */
 export const getBankCardTransactions = (cardId: string, limit = 20): Promise<BankCardTransaction[]> =>
   unwrap(request.get<BankCardTransaction[]>(`/api/v1/bank-cards/${cardId}/transactions`, {
     params: { limit },

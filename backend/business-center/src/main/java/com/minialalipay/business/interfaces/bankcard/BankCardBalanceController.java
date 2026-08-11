@@ -119,7 +119,7 @@ public class BankCardBalanceController {
     }
 
     /**
-     * 查询银行卡交易明细（充值/提现历史），按创建时间倒序。
+     * 查询银行卡交易明细（卡视角流水：充值/提现与银行卡出资的转账/扫码支付），按创建时间倒序。
      *
      * @param userId 网关从会话解析的用户 ID
      * @param cardId 银行卡 ID
@@ -167,8 +167,9 @@ public class BankCardBalanceController {
     /**
      * 银行卡交易明细项。
      *
-     * <p>包含交易 ID、业务类型（充值/提现）、金额、状态和创建时间。
-     * 充值表示银行卡给账户充钱，提现表示账户余额转到银行卡。</p>
+     * <p>包含交易 ID、业务类型（充值/提现/银行卡出资的转账/扫码支付）、金额、状态和创建时间。
+     * 充值表示银行卡给账户充钱，提现表示账户余额转到银行卡；银行卡出资的转账/扫码支付
+     * 从卡虚拟余额直接扣减，不写账本分录。</p>
      */
     public record TransactionHistoryItem(String transactionId, String businessType, long amountFen,
                                           String status, String createdAt) {

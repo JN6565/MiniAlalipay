@@ -44,11 +44,11 @@ export const TX_CATEGORIES: { key: string; label: string; match: (tx: accountSer
 ];
 
 /**
- * 加载银行卡充值/提现流水并映射为账单展示项。
+ * 加载银行卡流水并映射为账单展示项。
  *
- * 银行卡充值/提现的 TCC 只移动卡虚拟余额与账户余额，不写账本分录（无复式账本，
- * 见系统分析 9.2），账本明细接口天然不含这两类记录；这里把银行卡流水投影成
- * 与账本分录同形状的行，合并后在「全部」「银行卡/充值提现」分类下可见。
+ * 银行卡充值/提现与银行卡出资的转账/扫码支付的 TCC 只移动卡虚拟余额与账户余额，
+ * 不写账本分录（无复式账本，见系统分析 9.2），账本明细接口天然不含这些记录；
+ * 这里把银行卡流水投影成与账本分录同形状的行，合并后在「全部」及对应分类下可见。
  * 只取成功终态；投影行 entryId 固定为 0，列表 key 使用交易 ID 区分。
  */
 const loadBankCardTransactions = async (): Promise<accountService.Transaction[]> => {
@@ -59,17 +59,29 @@ const loadBankCardTransactions = async (): Promise<accountService.Transaction[]>
     );
     return lists.flat()
       .filter((tx) => tx.status === 'SUCCESS')
-      .map((tx) => ({
-        entryId: 0,
-        transactionId: tx.transactionId,
-        amountFen: tx.amountFen,
-        // 充值是卡→账户（资金流入账户），提现是账户→卡（资金流出账户）
-        direction: tx.businessType === 'BANK_CARD_RECHARGE' ? 'IN' : 'OUT',
-        memo: tx.businessType === 'BANK_CARD_RECHARGE' ? '银行卡充值' : '银行卡提现',
-        counterpartyName: '',
-        balanceAfterFen: null,
-        createdAt: tx.createdAt,
-      }));
+      .map((tx) => {
+        // 账户视角收支：充值是卡→账户（入账）；提现、银行卡出资的转账/扫码支付
+        // 均为资金离开账户（出账）
+        const isIn = tx.businessType === 'BANK_CARD_RECHARGE';
+        const memo =
+          tx.businessType === 'BANK_CARD_RECHARGE'
+            ? '银行卡充值'
+            : tx.businessType === 'TRANSFER'
+              ? '银行卡转账'
+              : tx.businessType === 'QR_PAY'
+                ? '银行卡扫码支付'
+                : '银行卡提现';
+        return {
+          entryId: 0,
+          transactionId: tx.transactionId,
+          amountFen: tx.amountFen,
+          direction: isIn ? 'IN' : 'OUT',
+          memo,
+          counterpartyName: '',
+          balanceAfterFen: null,
+          createdAt: tx.createdAt,
+        };
+      });
   } catch {
     // 银行卡流水加载失败只影响该部分投影，不阻断账本账单展示
     return [];

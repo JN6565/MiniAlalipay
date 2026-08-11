@@ -245,9 +245,11 @@ public class JdbcBusinessStore implements BusinessStore, OpsTransactionQueryPort
 
     @Override
     public List<FundTransactionRecord> findBankCardTransactions(String userId, String cardId, int limit) {
+        // 银行卡视角流水除充值/提现外，还包含银行卡出资的转账/扫码支付：
+        // 后者不写账本分录（无复式账本），若不在此投影会在 C 端账单与卡账单中双双缺失。
         return jdbc.query("SELECT t.*,NULL AS request_hash FROM business_db.fund_transaction t "
                         + "WHERE t.initiator_user_id=? AND t.bank_card_id=? "
-                        + "AND t.business_type IN ('BANK_CARD_RECHARGE','BANK_CARD_WITHDRAW') "
+                        + "AND t.business_type IN ('BANK_CARD_RECHARGE','BANK_CARD_WITHDRAW','TRANSFER','QR_PAY') "
                         + "ORDER BY t.created_at DESC LIMIT ?",
                 (rs, n) -> transactionRecord(rs), userId, cardId, limit);
     }

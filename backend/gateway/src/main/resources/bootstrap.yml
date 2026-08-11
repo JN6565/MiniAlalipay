@@ -7,7 +7,6 @@ spring:
       discovery:
         # 当前网关不注册自身实例，但仍可通过 Nacos 解析下游 lb:// 路由；如 Nacos 的 gRPC 端口(9848)
         # 不可达导致启动失败，可通过 NACOS_REGISTER_ENABLED=false 保持关闭注册。
-        register-enabled: false
         server-addr: ${NACOS_SERVER_ADDR:121.43.51.164:8848}
         username: ${NACOS_USERNAME:nacos}
         password: ${NACOS_PASSWORD:nacos}

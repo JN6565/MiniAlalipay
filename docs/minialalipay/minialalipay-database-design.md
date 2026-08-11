@@ -1400,14 +1400,15 @@ MVP 退款仅支持单笔全额受控虚拟退款，不接入真实支付通道�
 | 字段 | 类型 | 必填/默认 | 功能 |
 | --- | --- | --- | --- |
 | `transaction_id` | `CHAR(26)` | PK，必填 | 统一资金交易 ID |
-| `business_type` | `VARCHAR(16)` | 必填 | `TRANSFER/QR_PAY/CREDIT_PAY/CREDIT_REPAY/RECHARGE/REFUND` |
+| `business_type` | `VARCHAR(16)` | 必填 | `TRANSFER/QR_PAY/CREDIT_PAY/CREDIT_REPAY/RECHARGE/REFUND/BANK_CARD_RECHARGE/BANK_CARD_WITHDRAW` |
 | `source_type` | `VARCHAR(32)` | 必填 | 草稿或订单来源类型 |
 | `source_order_id` | `CHAR(26)` | 必填 | 来源对象 ID |
 | `initiator_user_id` | `CHAR(26)` | 必填 | 原始登录发起人，恢复任务沿用 |
-| `payer_account_id` | `CHAR(26)` | 可空 | 付款账户；充值为空 |
+| `payer_account_id` | `CHAR(26)` | 可空 | 付款账户；充值与银行卡出资交易为空 |
 | `payee_account_id` | `CHAR(26)` | 必填 | 收款或入账账户 |
-| `funding_source` | `VARCHAR(16)` | 必填 | `BALANCE/MINI_CREDIT/SYSTEM_ISSUANCE` |
+| `funding_source` | `VARCHAR(16)` | 必填 | `BALANCE/MINI_CREDIT/SYSTEM_ISSUANCE/BANK_CARD` |
 | `related_transaction_id` | `CHAR(26)` | 可空 | 退款关联原支付，其余为空 |
+| `bank_card_id` | `CHAR(26)` | 可空 | 银行卡出资/充值/提现关联的银行卡 ID |
 | `amount_fen` | `BIGINT UNSIGNED` | 必填 | 交易金额 `1..5000000` |
 | `idempotency_key` | `VARCHAR(64)` | 必填 | 调用方幂等键 |
 | `status` | `VARCHAR(32)` | `PROCESSING` | `PROCESSING/COMPENSATING/MANUAL_REVIEW/SUCCESS/REVERSED/CANCELLED` |
@@ -1419,7 +1420,7 @@ MVP 退款仅支持单笔全额受控虚拟退款，不接入真实支付通道�
 
 **键与索引**：UK `(source_type,source_order_id)`、UK `(initiator_user_id,business_type,idempotency_key)`；索引 `(status,updated_at)`、`(payee_account_id,created_at)`、`(created_at)`。`(created_at)` 由 `V202608071800` 新增，支撑运营交易列表「创建时间倒序」分页（交易 ID 为随机 base32 非时间有序，不作为排序依据）。
 
-**写入规则**：业务类型必须匹配来源类型。转账可来自转账草稿、个人收款码或固定金额收款请求，但资金来源只能是 `BALANCE`；普通动态扫码的 `QR_PAY` 只能来自动态扫码订单且使用余额；动态扫码、个人收款码和固定金额收款请求均可在用户明确选择 Mini 花呗时创建 `CREDIT_PAY`，资金来源必须为 `MINI_CREDIT`。充值强制 `SYSTEM_ISSUANCE` 且付款账户为空；其他业务双方账户非空且不同；退款必须关联原交易。
+**写入规则**：业务类型必须匹配来源类型。转账可来自转账草稿、个人收款码或固定金额收款请求，资金来源为 `BALANCE` 或银行卡出资 `BANK_CARD`；普通动态扫码的 `QR_PAY` 只能来自动态扫码订单，资金来源为 `BALANCE` 或 `BANK_CARD`；动态扫码、个人收款码和固定金额收款请求均可在用户明确选择 Mini 花呗时创建 `CREDIT_PAY`，资金来源必须为 `MINI_CREDIT`。充值强制 `SYSTEM_ISSUANCE` 且付款账户为空；银行卡出资的转账/扫码支付与银行卡充值/提现从银行卡虚拟余额扣款，付款账户必须为空；其余业务双方账户非空且不同；退款必须关联原交易。联合约束定义见迁移 `V202608111530__fix_fund_transaction_constraints_for_bank_card_funded_pay.sql`。
 
 ### 9.8 `qr_pay_order`
 

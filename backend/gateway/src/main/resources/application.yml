@@ -240,12 +240,14 @@ spring:
         - DedupeResponseHeader=Access-Control-Allow-Origin Access-Control-Allow-Credentials
 
 # ========== 阶段二受控鉴权（dev/test profile 显式启用） ==========
+# 鉴权桩默认关闭：真实登录会话必须回源用户中心校验（UserCenterAuthenticationAdapter），
+# 桩开启时只放行固定演示令牌，会把登录发放的 UUID 会话令牌全部拒为 401，导致登录后立即弹回登录页。
 gateway:
   authentication:
     user-center-uri: ${USER_CENTER_URI:lb://user-center}
     service-token: ${INTERNAL_AUTH_SERVICE_TOKEN:local-internal-token}
     stub:
-      enabled: ${GATEWAY_AUTH_STUB_ENABLED:true}
+      enabled: ${GATEWAY_AUTH_STUB_ENABLED:false}
       token: ${GATEWAY_AUTH_STUB_TOKEN:any}
       principal-id: ${GATEWAY_AUTH_STUB_PRINCIPAL:dev-user-001}
       roles: ${GATEWAY_AUTH_STUB_ROLES:USER}
