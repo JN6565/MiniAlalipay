@@ -6,9 +6,9 @@ import { formatAmount, maskAccount } from '@/utils/format';
 import { fetchAvailableFen } from '@/utils/balanceConfirm';
 import { MonthGroupList, EmptyState, Skeleton, RevealToggle, IconSet } from '@/components/h5/common';
 import type { IconName } from '@/components/h5/common/IconSet';
-import { loadBankCardTransactions } from '@/pages/h5/Transactions';
 import {
   isBalanceChangingTransaction,
+  loadBankCardTransactions,
   mergeUniqueTransactions,
 } from '@/pages/h5/Transactions/viewModel';
 import './index.less';
@@ -24,10 +24,6 @@ const ENTRY_CATEGORIES: { key: string; label: string; match: (tx: accountService
   { key: 'all', label: '全部', match: () => true },
   { key: 'income', label: '收入', match: (tx) => tx.direction === 'IN' },
   { key: 'expense', label: '支出', match: (tx) => tx.direction === 'OUT' },
-  { key: 'fund', label: '充值提现', match: (tx) => /充值|提现/.test(tx.memo || '') },
-  { key: 'transfer', label: '转账', match: (tx) => (tx.memo || '').includes('转账') },
-  { key: 'qrpay', label: '扫码', match: (tx) => /扫码|支付|收款/.test(tx.memo || '') },
-  { key: 'repay', label: '花呗还款', match: (tx) => (tx.memo || '').includes('花呗还款') },
 ];
 
 /** 列表图标：与账单页同源的业务归类。 */
@@ -181,7 +177,7 @@ const BalanceEntriesPage: React.FC = () => {
       </div>
 
       <div className="be-body">
-        {/* 筛选胶囊：横向滑动单选 */}
+        {/* 余额明细只保留全部、收入、支出；业务类型由列表标题说明。 */}
         <div className="be-chips-scroll">
           <div className="be-chips">
             {ENTRY_CATEGORIES.map((item) => (

@@ -77,6 +77,11 @@ public class JdbcTccBranchRepository implements TccBranchRepository {
                 Integer.class, transactionId, branchType.name(), status.name());
         return count != null && count == 1;
     }
+    @Override public boolean hasLedgerBranch(String transactionId, TccBranchType branchType) {
+        Integer count = jdbcTemplate.queryForObject("SELECT COUNT(*) FROM ledger_db.tcc_branch WHERE transaction_id=? AND branch_type=?",
+                Integer.class, transactionId, branchType.name());
+        return count != null && count > 0;
+    }
 
     private void insert(String table, TccBranch branch) {
         jdbcTemplate.update("INSERT INTO " + table + " (branch_id,xid,branch_type,resource_id,transaction_id,amount_fen,status,rollback_type,barrier_version,created_at,updated_at) "

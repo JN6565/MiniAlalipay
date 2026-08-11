@@ -9,6 +9,7 @@ import static org.springframework.test.web.servlet.request.MockMvcRequestBuilder
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
 import com.minialalipay.account.application.credit.CreditJobService;
+import com.minialalipay.account.application.credit.CreditOpeningService;
 import com.minialalipay.account.application.credit.CreditQueryService;
 import com.minialalipay.account.application.credit.CreditRepaymentService;
 import com.minialalipay.account.application.credit.dto.CreditBillDetailDTO;
@@ -33,6 +34,7 @@ import org.springframework.test.web.servlet.setup.MockMvcBuilders;
 class CreditControllerTest {
 
     private CreditQueryService queryService;
+    private CreditOpeningService openingService;
     private CreditRepaymentService repaymentService;
     private CreditJobService jobService;
     private MockMvc mockMvc;
@@ -40,6 +42,7 @@ class CreditControllerTest {
     @BeforeEach
     void setUp() {
         queryService = mock(CreditQueryService.class);
+        openingService = mock(CreditOpeningService.class);
         repaymentService = mock(CreditRepaymentService.class);
         jobService = mock(CreditJobService.class);
         IdempotencyKeyValidator keyValidator = mock(IdempotencyKeyValidator.class);
@@ -48,7 +51,7 @@ class CreditControllerTest {
         when(requestIdGenerator.resolve(any())).thenReturn("request-credit-001");
 
         CreditController creditController = new CreditController(
-                queryService, repaymentService, keyValidator, requestIdGenerator);
+                queryService, openingService, repaymentService, keyValidator, requestIdGenerator);
         CreditOpsController opsController = new CreditOpsController(
                 jobService, keyValidator, requestIdGenerator);
         mockMvc = MockMvcBuilders.standaloneSetup(creditController, opsController)
@@ -60,7 +63,7 @@ class CreditControllerTest {
     @Test
     void shouldExposeCreditQueries() throws Exception {
         when(queryService.getMyCredit("user-1")).thenReturn(new CreditSummaryDTO(
-                "credit-1", "ACTIVE", 500000, 10000, 0, 490000, 10000, 0, 0));
+                "credit-1", true, "ACTIVE", 500000, 10000, 0, 490000, 10000, 0, 0));
         when(queryService.listCreditPurchases("user-1", "UNBILLED")).thenReturn(List.of());
         when(queryService.listCreditBills("user-1")).thenReturn(List.of());
         when(queryService.getCreditBill("user-1", "bill-1")).thenReturn(new CreditBillDetailDTO(

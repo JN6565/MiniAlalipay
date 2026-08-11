@@ -2,6 +2,7 @@ import React, { useEffect, useState } from 'react';
 import { history } from 'umi';
 import { Toast } from 'antd-mobile';
 import * as creditService from '@/services/credit';
+import * as collectionService from '@/services/collection';
 import { formatAmount } from '@/utils/format';
 import { Skeleton, IconSet } from '@/components/h5/common';
 import { BILL_STATUS_TEXT } from '@/constants';
@@ -16,6 +17,7 @@ const CreditPage: React.FC = () => {
   const [loading, setLoading] = useState(true);
   const [credit, setCredit] = useState<creditService.CreditSummary | null>(null);
   const [bills, setBills] = useState<creditService.CreditBill[]>([]);
+  const [merchantOpened, setMerchantOpened] = useState(false);
 
   useEffect(() => {
     loadData();
@@ -30,6 +32,9 @@ const CreditPage: React.FC = () => {
       // 请求拦截器已拆包 ApiResponse，运行时返回业务数据
       setCredit(creditData as unknown as creditService.CreditSummary);
       setBills((billsData as unknown as creditService.CreditBill[]).slice(0, 3));
+      collectionService.getMyCode().then(code => {
+        setMerchantOpened(!!(code as unknown as collectionService.PersonalCode | null)?.creditCollectionEnabled);
+      }).catch(() => setMerchantOpened(false));
     } catch (error: any) {
       Toast.show({ content: error?.message || '当前网络环境较差，数据暂未返回，请稍后重试', icon: 'fail' });
     } finally {
@@ -49,6 +54,33 @@ const CreditPage: React.FC = () => {
   }
 
   const billedFen = credit?.billedFen || 0;
+  if (!credit?.opened) {
+    return (
+      <div className="credit-page unopened">
+        <div className="credit-hero open-preview">
+          <div className="credit-hero-head">
+            <span className="credit-title">开通 Mini 花呗</span>
+            <span className="credit-status">未开通</span>
+          </div>
+          <div className="credit-due">
+            <div className="due-label">固定虚拟额度</div>
+            <div className="due-value">¥{formatAmount(credit?.totalLimitFen || 500000)}</div>
+            <div className="due-day">开通后可用于扫一扫付款</div>
+          </div>
+        </div>
+        <div className="credit-body">
+          <div className="credit-entry-card">
+            <div className="entry-row" onClick={() => history.push('/h5/credit/open')}>
+              <span className="entry-icon"><IconSet name="huabei" size={16} color="var(--h5-primary)" /></span>
+              <span className="entry-label">立即开通</span>
+              <span className="entry-value">确认后启用付款能力</span>
+              <IconSet name="chevronRight" size={14} color="var(--h5-text-3)" />
+            </div>
+          </div>
+        </div>
+      </div>
+    );
+  }
   const duePayable = billedFen > 0 || (credit?.unbilledFen || 0) > 0;
 
   // 还款日：取最近一张未还清账单的到期日（M月D日）
@@ -107,6 +139,14 @@ const CreditPage: React.FC = () => {
             </span>
             <span className="entry-label">立即还款</span>
             <span className="entry-value">支持余额/银行卡</span>
+            <IconSet name="chevronRight" size={14} color="var(--h5-text-3)" />
+          </div>
+          <div className="entry-row" onClick={() => history.push('/h5/credit/merchant-collection')}>
+            <span className="entry-icon">
+              <IconSet name="qr" size={16} color="var(--h5-primary)" />
+            </span>
+            <span className="entry-label">花呗商户收款码</span>
+            <span className="entry-value">{merchantOpened ? '已开通' : '未开通'}</span>
             <IconSet name="chevronRight" size={14} color="var(--h5-text-3)" />
           </div>
         </div>

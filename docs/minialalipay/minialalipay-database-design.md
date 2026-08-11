@@ -804,6 +804,7 @@ erDiagram
 | `user_id` | `CHAR(26)` | UK，必填 | 信用账户所有者，一个用户最多一行 |
 | `total_limit_fen` | `BIGINT UNSIGNED` | `500000` | 固定 5000 元虚拟授信总额 |
 | `used_fen` | `BIGINT UNSIGNED` | `0` | 已确认但尚未还清或冲销的额度 |
+| `opened_at` | `DATETIME(3)` | 可空 | 用户显式开通 Mini 花呗的时间；为空表示仅预创建、不可信用支付 |
 | `frozen_fen` | `BIGINT UNSIGNED` | `0` | 信用支付 Try 阶段冻结额度 |
 | `status` | `VARCHAR(16)` | `ACTIVE` | `ACTIVE/SUSPENDED/CLOSED` |
 | `suspend_reason` | `VARCHAR(32)` | 可空 | 逾期或人工停用原因 |
@@ -1496,6 +1497,7 @@ MVP 退款仅支持单笔全额受控虚拟退款，不接入真实支付通道�
 | `owner_user_id` | `CHAR(26)` | 必填 | 个人码所有者 |
 | `payee_account_id` | `CHAR(26)` | 必填 | 固定收款账户 |
 | `token_digest` | `BINARY(32)` | 必填 | 码令牌摘要 |
+| `credit_collection_enabled` | `TINYINT(1)` | `0` | 是否已开通 Mini 花呗商户收款码；关闭时个人码和固定请求不允许花呗付款 |
 | `status` | `VARCHAR(16)` | `ACTIVE` | `ACTIVE/REVOKED` |
 | `active_owner_key` | `CHAR(26)` | 生成/可空 | 活动时等于所有者 ID |
 | `version` | `BIGINT UNSIGNED` | `0` | 状态 CAS 版本 |
@@ -1503,9 +1505,9 @@ MVP 退款仅支持单笔全额受控虚拟退款，不接入真实支付通道�
 | `updated_at` | `DATETIME(3)` | 必填 | 最近更新时间 |
 | `revoked_at` | `DATETIME(3)` | 可空 | 撤销时间 |
 
-**键与索引**：UK `(token_digest)`、UK `(active_owner_key)`；索引 `(owner_user_id,created_at)`、`(status,updated_at)`。
+**键与索引**：UK `(token_digest)`、UK `(active_owner_key)`；索引 `(owner_user_id,created_at)`、`(status,updated_at)`、`(owner_user_id,credit_collection_enabled,status)`。
 
-**写入规则**：每用户最多一枚活动码；换码在同一事务撤销旧码并创建新码。
+**写入规则**：每用户最多一枚活动码；换码在同一事务撤销旧码并创建新码。花呗商户收款开通是幂等写操作，换码时继承当前活动码的开关状态。
 
 ### 9.11 `collection_request`
 

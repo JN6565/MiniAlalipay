@@ -35,7 +35,8 @@ class SeataGlobalTransactionExecutorTest {
         MockRestServiceServer server = MockRestServiceServer.bindTo(builder).build();
         SeataGlobalTransactionExecutor executor = new SeataGlobalTransactionExecutor(builder, "http://account");
 
-        // 收款账户、银行卡与收款预占键必须透传给充值组合端点，事实核验才能按充值规则集判定终态
+        // 收款账户、银行卡、收款预占键和账本参数必须透传给充值方向组合端点，
+        // 账户中心据此额外注册收款方可见账本分支，避免“余额已加但 B 明细缺失”。
         server.expect(once(), requestTo("http://account/internal/v1/seata-tcc/bank-card-recharge/try"))
                 .andExpect(method(HttpMethod.POST))
                 .andExpect(header(RootContext.KEY_XID, "mock-xid"))
@@ -43,6 +44,11 @@ class SeataGlobalTransactionExecutorTest {
                 .andExpect(jsonPath("$.accountId").value("payee-account"))
                 .andExpect(jsonPath("$.cardId").value("card-1"))
                 .andExpect(jsonPath("$.reservationId").value("payee-reservation"))
+                .andExpect(jsonPath("$.voucherId").value("voucher-1"))
+                .andExpect(jsonPath("$.debitEntryId").value(11))
+                .andExpect(jsonPath("$.creditEntryId").value(12))
+                .andExpect(jsonPath("$.ledgerEventId").value("ledger-event-1"))
+                .andExpect(jsonPath("$.traceId").value("0123456789abcdef0123456789abcdef"))
                 .andExpect(jsonPath("$.amountFen").value(8800))
                 .andRespond(withSuccess());
 

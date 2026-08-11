@@ -31,4 +31,6 @@ public interface TccBranchRepository {
     boolean ledgerBranchIs(String transactionId, TccBranchStatus status);
     /** 判断指定类型账本分支是否为目标终态。 */
     boolean ledgerBranchIs(String transactionId, TccBranchType branchType, TccBranchStatus status);
+    /** 判断交易是否存在指定账本分支，不限制状态。 */
+    default boolean hasLedgerBranch(String transactionId, TccBranchType branchType) { return false; }
 }

@@ -1,18 +1,20 @@
 package com.minialalipay.account.interfaces.tcc;
 
-import com.minialalipay.account.application.tcc.BalanceTccApplicationService;
 import com.minialalipay.account.application.tcc.SeataBankCardBalanceTccParticipant;
+import com.minialalipay.account.application.tcc.SeataExternalFundingLedgerTccParticipant;
 import com.minialalipay.account.application.tcc.SeataTransferTccParticipant;
 import jakarta.validation.Valid;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.Positive;
 import jakarta.validation.constraints.Size;
+import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.validation.annotation.Validated;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
+import org.springframework.web.server.ResponseStatusException;
 
 /**
  * 银行卡充值 Seata 全局事务 Try 端点：组合银行卡余额扣减与账户余额入账。
@@ -30,11 +32,14 @@ import org.springframework.web.bind.annotation.RestController;
 public class SeataBankCardRechargeTccController {
     private final SeataBankCardBalanceTccParticipant bankCardBalance;
     private final SeataTransferTccParticipant balance;
+    private final SeataExternalFundingLedgerTccParticipant externalFundingLedger;
 
     public SeataBankCardRechargeTccController(SeataBankCardBalanceTccParticipant bankCardBalance,
-                                               SeataTransferTccParticipant balance) {
+                                               SeataTransferTccParticipant balance,
+                                               SeataExternalFundingLedgerTccParticipant externalFundingLedger) {
         this.bankCardBalance = bankCardBalance;
         this.balance = balance;
+        this.externalFundingLedger = externalFundingLedger;
     }
 
     /**
@@ -50,6 +55,13 @@ public class SeataBankCardRechargeTccController {
         // 2. 收款方账户余额入账（Confirm 时增加可用余额）
         balance.tryPayee(null, request.businessXid(), request.transactionId(), request.accountId(),
                 request.amountFen(), request.reservationId());
+        if (request.hasLedgerPayload()) {
+            request.requireCompleteLedgerPayload();
+            // 3. 银行卡出资给他人时额外注册清算账本，确保收款方余额明细有真实贷方分录。
+            externalFundingLedger.tryLedger(null, request.businessXid(), request.transactionId(),
+                    request.accountId(), request.amountFen(), request.voucherId(), request.debitEntryId(),
+                    request.creditEntryId(), request.ledgerEventId(), request.traceId());
+        }
         return ResponseEntity.ok().build();
     }
 
@@ -60,5 +72,34 @@ public class SeataBankCardRechargeTccController {
                           @NotBlank @Size(max = 128) String accountId,
                           @NotBlank @Size(max = 128) String cardId,
                           @Positive long amountFen,
-                          @NotBlank @Size(max = 128) String reservationId) { }
+                          @NotBlank @Size(max = 128) String reservationId,
+                          @Size(max = 128) String voucherId,
+                          long debitEntryId,
+                          long creditEntryId,
+                          @Size(max = 128) String ledgerEventId,
+                          @Size(max = 128) String traceId) {
+
+        /** @return 是否携带银行卡出资转账/扫码所需的账本分支参数。 */
+        boolean hasLedgerPayload() {
+            return hasText(voucherId) || debitEntryId > 0 || creditEntryId > 0
+                    || hasText(ledgerEventId) || hasText(traceId);
+        }
+
+        /**
+         * 校验账本参数完整性。
+         *
+         * <p>普通银行卡充值允许不带账本参数；银行卡出资给他人时必须一次性带齐稳定凭证、
+         * 分录、事件和 Trace 标识，避免只创建余额分支却遗漏收款方明细。</p>
+         */
+        void requireCompleteLedgerPayload() {
+            if (!hasText(voucherId) || debitEntryId <= 0 || creditEntryId <= 0
+                    || !hasText(ledgerEventId) || !hasText(traceId)) {
+                throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "银行卡出资账本参数不完整");
+            }
+        }
+
+        private static boolean hasText(String value) {
+            return value != null && !value.isBlank();
+        }
+    }
 }

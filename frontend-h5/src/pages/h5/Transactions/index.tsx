@@ -3,11 +3,10 @@ import { history } from 'umi';
 import { Toast } from 'antd-mobile';
 import dayjs from 'dayjs';
 import * as accountService from '@/services/account';
-import * as bankCardService from '@/services/bankCard';
 import { formatAmount } from '@/utils/format';
 import { MonthGroupList, EmptyState, Skeleton, IconSet } from '@/components/h5/common';
 import type { IconName } from '@/components/h5/common/IconSet';
-import { mergeUniqueTransactions, projectBankCardTransaction } from './viewModel';
+import { loadBankCardTransactions, mergeUniqueTransactions } from './viewModel';
 import './index.less';
 
 /** 业务类型：由账本摘要（memo）关键词推导，后端已脱敏的语义事实。 */
@@ -72,36 +71,7 @@ export const TX_CATEGORIES: { key: string; label: string; match: (tx: accountSer
   { key: 'all', label: '全部', match: () => true },
   { key: 'income', label: '收入', match: (tx) => tx.direction === 'IN' },
   { key: 'expense', label: '支出', match: (tx) => tx.direction === 'OUT' },
-  { key: 'bank', label: '银行卡', match: (tx) => /充值|提现/.test(tx.memo || '') },
-  { key: 'credit', label: '花呗', match: (tx) => /花呗|还款|信用支付/.test(tx.memo || '') },
-  { key: 'transfer', label: '转账', match: (tx) => (tx.memo || '').includes('转账') },
-  { key: 'qrpay', label: '扫码支付', match: (tx) => /支付|收款|扫码/.test(tx.memo || '') },
 ];
-
-/**
- * 加载银行卡流水并映射为账单展示项。
- *
- * 银行卡充值/提现与银行卡出资的转账/扫码支付的 TCC 只移动卡虚拟余额与账户余额，
- * 不写账本分录（无复式账本，见系统分析 9.2），账本明细接口天然不含这些记录；
- * 这里把银行卡流水投影成与账本分录同形状的行，合并后在「全部」及对应分类下可见。
- * 只取成功终态；投影行 entryId 固定为 0，合并时使用交易 ID 去重。
- *
- * 余额变动明细页（BalanceEntries）复用本投影逻辑。
- */
-export const loadBankCardTransactions = async (): Promise<accountService.Transaction[]> => {
-  try {
-    const cards = await bankCardService.getBankCards();
-    const lists = await Promise.all(
-      cards.map((card) => bankCardService.getBankCardTransactions(card.cardId, 50)),
-    );
-    return lists.flat()
-      .filter((tx) => tx.status === 'SUCCESS')
-      .map(projectBankCardTransaction);
-  } catch {
-    // 银行卡流水加载失败只影响该部分投影，不阻断账本账单展示
-    return [];
-  }
-};
 
 /**
  * 全局账单页：用户维度全渠道交易流水（余额/银行卡/花呗）。
@@ -184,7 +154,7 @@ const TransactionsPage: React.FC = () => {
   return (
     <div className="transactions-page">
       <div className="tx-bills-body">
-        {/* 分类筛选胶囊：横向滑动单选，覆盖全部/收支方向/业务分类 */}
+        {/* 账单只保留全量、收入、支出三类视图；分析功能已迁移到独立页面。 */}
         <div className="tx-chips-scroll">
           <div className="tx-chips tx-chips-inline">
             {TX_CATEGORIES.map((item) => (
@@ -211,7 +181,7 @@ const TransactionsPage: React.FC = () => {
             <EmptyState
               icon={<IconSet name="receipt" size={30} color="var(--h5-primary)" />}
               text={category === 'all' ? '暂无交易记录' : '正在查找该分类账单'}
-              hint={nextCursor ? '继续加载历史账单中…' : '充值、转账、花呗消费、扫码支付完成后将在这里展示'}
+              hint={nextCursor ? '继续加载历史账单中…' : '余额、银行卡、花呗交易完成后将在这里展示'}
             />
             {nextCursor && <div ref={sentinelRef} className="tx-sentinel">加载中…</div>}
           </>
@@ -239,10 +209,12 @@ const TransactionsPage: React.FC = () => {
                   </div>
                   <div className="tx-main">
                     <div className="tx-title">
-                      <span className="tx-title-text">{getTxTitle(tx.memo, tx.direction)}</span>
+                      <span className="tx-title-text">
+                        {getTxTitle(tx.memo, tx.direction)}
+                        {party ? ` · ${party.replace(/^来自 |^转给 /, '')}` : ''}
+                      </span>
                       {channel && <span className={`tx-channel-tag ${channel.cls}`}>{channel.label}</span>}
                     </div>
-                    {party && <div className="tx-party">{party}</div>}
                     <div className="tx-sub">
                       {formatTxTime(tx.createdAt)}
                       {tx.balanceAfterFen !== null && (

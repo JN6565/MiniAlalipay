@@ -1,6 +1,8 @@
 import React, { useEffect, useState } from 'react';
 import { history } from '@umijs/max';
 import * as userService from '@/services/user';
+import * as creditService from '@/services/credit';
+import { formatAmount } from '@/utils/format';
 import { getIdentity } from '@/services/identity';
 import { getProfilePreference } from '@/utils/profile';
 import { AvatarView, IconSet, IconName } from '@/components/h5/common';
@@ -25,6 +27,7 @@ const ProfilePage: React.FC = () => {
   const nickname = profilePreference.nickname;
   const [accountNumber, setAccountNumber] = useState(localStorage.getItem('accountNumber') || '');
   const [maskedPhone, setMaskedPhone] = useState<string>('');
+  const [credit, setCredit] = useState<creditService.CreditSummary | null>(null);
   /** 是否已绑定身份（identityStatus 为 VERIFIED），接口失败时保持未绑定展示。 */
   const [identityBound, setIdentityBound] = useState(false);
 
@@ -35,6 +38,9 @@ const ProfilePage: React.FC = () => {
     }).catch(() => {});
     getIdentity().then(info => {
       setIdentityBound(info.identityStatus === 'VERIFIED');
+    }).catch(() => {});
+    creditService.getCreditSummary().then(data => {
+      setCredit(data as unknown as creditService.CreditSummary);
     }).catch(() => {});
   }, []);
 
@@ -59,6 +65,20 @@ const ProfilePage: React.FC = () => {
 
       {/* 六入口列表 */}
       <div className="mine-body">
+        <div className="mine-credit-card" onClick={() => history.push(credit?.opened ? '/h5/credit' : '/h5/credit/open')}>
+          <div className="mine-credit-icon">
+            <IconSet name="huabei" size={28} color="var(--h5-primary)" />
+          </div>
+          <div className="mine-credit-main">
+            <div className="mine-credit-title">Mini 花呗</div>
+            <div className="mine-credit-desc">
+              {credit?.opened ? '可用于扫一扫付款' : '开通后可用于扫一扫付款'}
+            </div>
+            <div className="mine-credit-limit">固定虚拟额度 ¥{formatAmount(credit?.totalLimitFen || 500000)}</div>
+          </div>
+          <div className="mine-credit-action">{credit?.opened ? '查看' : '立即开通'}</div>
+        </div>
+
         <div className="mine-list">
           {MENU_ITEMS.map((item, index) => (
             <div

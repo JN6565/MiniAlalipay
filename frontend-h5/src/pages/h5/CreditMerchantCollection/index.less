@@ -1,0 +1,127 @@
+.merchant-credit-page {
+  min-height: 100vh;
+  background: var(--h5-bg);
+}
+
+.merchant-hero {
+  min-height: 190px;
+  padding: 42px 18px 58px;
+  background: var(--h5-grad-credit);
+  color: #fff;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.merchant-title {
+  font-size: 22px;
+  font-weight: 800;
+  line-height: 1.35;
+}
+
+.merchant-status {
+  display: inline-block;
+  margin-top: 12px;
+  padding: 3px 10px;
+  border-radius: 12px;
+  background: #ff6b6b;
+  color: #fff;
+  font-size: 12px;
+  font-weight: 700;
+
+  &.opened {
+    background: rgba(255, 255, 255, 0.24);
+  }
+}
+
+.merchant-qr {
+  width: 86px;
+  height: 96px;
+  border-radius: 16px;
+  background: rgba(255, 255, 255, 0.72);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transform: rotate(6deg);
+  box-shadow: 0 14px 26px rgba(22, 45, 132, 0.26);
+}
+
+.merchant-body {
+  margin: -38px 14px 0;
+  padding-bottom: 28px;
+}
+
+.merchant-card {
+  background: #fff;
+  border-radius: var(--h5-radius-card);
+  box-shadow: var(--h5-shadow-card);
+  padding: 14px;
+}
+
+.merchant-desc {
+  font-size: 13px;
+  line-height: 1.65;
+  color: var(--h5-text);
+  padding: 4px 0 12px;
+}
+
+.merchant-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 12px 0;
+  border-top: 1px solid var(--h5-divider);
+}
+
+.merchant-row-icon {
+  width: 34px;
+  height: 34px;
+  border-radius: 50%;
+  background: var(--h5-grad-brand);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex: none;
+}
+
+.merchant-row-main {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+
+.merchant-row-title {
+  font-size: 14px;
+  font-weight: 700;
+  color: var(--h5-text);
+}
+
+.merchant-row-desc {
+  font-size: 11.5px;
+  color: var(--h5-text-3);
+}
+
+.merchant-submit {
+  margin-top: 18px;
+  border-radius: 24px;
+  padding: 13px 0;
+  color: #fff;
+  text-align: center;
+  font-size: 15px;
+  font-weight: 800;
+  background: var(--h5-grad-credit);
+  box-shadow: 0 8px 18px rgba(90, 108, 255, 0.34);
+
+  &.disabled {
+    opacity: 0.55;
+  }
+}
+
+.merchant-link {
+  text-align: center;
+  margin-top: 12px;
+  color: var(--h5-primary);
+  font-size: 13px;
+}

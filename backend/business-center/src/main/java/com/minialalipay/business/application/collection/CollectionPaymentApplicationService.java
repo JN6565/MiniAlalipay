@@ -1,6 +1,7 @@
 package com.minialalipay.business.application.collection;
 
 import com.minialalipay.business.application.port.BusinessStore;
+import com.minialalipay.business.application.port.AccountDirectoryPort;
 import com.minialalipay.business.application.port.CollectionStore;
 import com.minialalipay.business.application.port.PaymentProofPort;
 import com.minialalipay.business.application.port.SecurityMaterialPort;
@@ -42,6 +43,7 @@ public class CollectionPaymentApplicationService {
     private static final Logger log = LoggerFactory.getLogger(CollectionPaymentApplicationService.class);
     private final CollectionStore collections;
     private final BusinessStore business;
+    private final AccountDirectoryPort accounts;
     private final PaymentProofPort proofs;
     private final SecurityMaterialPort security;
     private final TccCoordinatorPort coordinator;
@@ -52,19 +54,22 @@ public class CollectionPaymentApplicationService {
 
     /** 创建 C2C 付款应用服务。 */
     @Autowired
-    public CollectionPaymentApplicationService(CollectionStore collections, BusinessStore business, PaymentProofPort proofs,
+    public CollectionPaymentApplicationService(CollectionStore collections, BusinessStore business, AccountDirectoryPort accounts,
+                                               PaymentProofPort proofs,
                                                SecurityMaterialPort security, TccCoordinatorPort coordinator,
                                                IdempotencyKeyValidator keys,
                                                RiskEvaluationService risk, RiskReviewRouter riskRouter) {
-        this(collections, business, proofs, security, coordinator, keys, risk, riskRouter, Clock.systemUTC());
+        this(collections, business, accounts, proofs, security, coordinator, keys, risk, riskRouter, Clock.systemUTC());
     }
 
-    CollectionPaymentApplicationService(CollectionStore collections, BusinessStore business, PaymentProofPort proofs,
+    CollectionPaymentApplicationService(CollectionStore collections, BusinessStore business, AccountDirectoryPort accounts,
+                                        PaymentProofPort proofs,
                                         SecurityMaterialPort security, TccCoordinatorPort coordinator,
                                         IdempotencyKeyValidator keys, RiskEvaluationService risk,
                                         RiskReviewRouter riskRouter, Clock clock) {
         this.collections = collections;
         this.business = business;
+        this.accounts = accounts;
         this.proofs = proofs;
         this.security = security;
         this.coordinator = coordinator;
@@ -75,23 +80,37 @@ public class CollectionPaymentApplicationService {
     }
 
     /**
-     * 校验支付证明并签发绑定用户所选余额或 Mini 花呗的确认令牌。
+     * 校验支付证明并签发绑定用户所选余额或银行卡的确认令牌。
      *
      * @param userId 服务端认证的付款人
      * @param orderId C2C 来源订单
      * @param sessionId 绑定 H5 会话
      * @param version 客户端读取到的订单版本
      * @param paymentProof 用户中心签发的一次性支付证明
-     * @param fundingSource 用户明确选择的资金来源
+     * @param fundingSource 用户明确选择的资金来源；Mini 花呗仅在收款方已开通商户收款码时允许
+     * @param cardId 银行卡付款时绑定的银行卡 ID，余额付款为空
      * @return 原始确认令牌，仅该响应可见
      */
     @Transactional
     public IssuedConfirmation issueConfirmation(String userId, String orderId, String sessionId, long version,
-                                                String paymentProof, FundingSource fundingSource) {
-        if (fundingSource == null) throw new BusinessException(BusinessErrorCode.FUNDING_SOURCE_NOT_ALLOWED);
+                                                String paymentProof, FundingSource fundingSource, String cardId) {
+        if (fundingSource != FundingSource.BALANCE && fundingSource != FundingSource.BANK_CARD
+                && fundingSource != FundingSource.MINI_CREDIT) {
+            throw new BusinessException(BusinessErrorCode.FUNDING_SOURCE_NOT_ALLOWED);
+        }
+        if (fundingSource == FundingSource.BANK_CARD && (cardId == null || cardId.isBlank())) {
+            throw new BusinessException(BusinessErrorCode.FUNDING_SOURCE_NOT_ALLOWED);
+        }
+        if (fundingSource == FundingSource.MINI_CREDIT && cardId != null && !cardId.isBlank()) {
+            throw new BusinessException(BusinessErrorCode.FUNDING_SOURCE_NOT_ALLOWED);
+        }
         CollectionOrder order = payerOrder(userId, orderId, sessionId);
         if (order.getAmountFen() == null || order.getAmountFen() < 1) {
             throw new BusinessException(BusinessErrorCode.ORDER_NOT_FOUND);
+        }
+        if (fundingSource == FundingSource.MINI_CREDIT) {
+            requireCreditCollectionEnabled(order);
+            accounts.requireCreditPaymentEligible(userId, order.getAmountFen());
         }
         if (order.getVersion() != version) throw new BusinessException(BusinessErrorCode.VERSION_CONFLICT);
         routeOnRiskVerdict(subjectType(order).name(), order, version);
@@ -99,9 +118,9 @@ public class CollectionPaymentApplicationService {
         String rawToken = security.newConfirmationToken();
         Instant now = clock.instant();
         Confirmation confirmation = Confirmation.issue(security.newId(), security.digest(rawToken), subjectType(order), orderId,
-                subjectHash(order, fundingSource), userId, proof.paymentProofId(), proof.payPasswordVersion(), now);
+                subjectHash(order, fundingSource, cardId), userId, proof.paymentProofId(), proof.payPasswordVersion(), now);
         business.replaceCollectionConfirmation(confirmation);
-        return new IssuedConfirmation(rawToken, "sha256:" + java.util.HexFormat.of().formatHex(subjectHash(order, fundingSource)), confirmation.getExpiresAt());
+        return new IssuedConfirmation(rawToken, "sha256:" + java.util.HexFormat.of().formatHex(subjectHash(order, fundingSource, cardId)), confirmation.getExpiresAt());
     }
 
     /**
@@ -131,14 +150,14 @@ public class CollectionPaymentApplicationService {
      */
     @Transactional
     public FundTransaction pay(String userId, String orderId, String sessionId, String confirmationToken,
-                               String idempotencyKey, String traceId) {
+                               String idempotencyKey, String traceId, String cardId) {
         if (!keys.isValid(idempotencyKey)) throw new BusinessException(CommonErrorCode.INVALID_REQUEST);
         CollectionOrder order = payerOrder(userId, orderId, sessionId);
         byte[] tokenDigest = security.digest(confirmationToken);
         byte[] requestHash = security.digest(orderId + "\n" + Base64.getEncoder().encodeToString(tokenDigest));
         Confirmation confirmation = business.findConfirmationForUpdate(tokenDigest)
                 .orElseThrow(() -> new BusinessException(BusinessErrorCode.CONFIRMATION_MISMATCH));
-        FundingSource fundingSource = resolveFundingSource(order, confirmation);
+        FundingSource fundingSource = resolveFundingSource(order, confirmation, cardId);
         TransactionType transactionType = fundingSource == FundingSource.MINI_CREDIT
                 ? TransactionType.CREDIT_PAY : TransactionType.TRANSFER;
         var repeated = business.findByIdempotency(userId, transactionType, idempotencyKey).orElse(null);
@@ -174,9 +193,13 @@ public class CollectionPaymentApplicationService {
         if (!collections.acceptOrderForPayment(order, expectedVersion, processingEvent)) {
             throw new BusinessException(BusinessErrorCode.VERSION_CONFLICT);
         }
-        FundTransaction transaction = FundTransaction.accept(transactionId, transactionType, sourceType, orderId,
-                userId, order.getPayerAccountId(), order.getPayeeAccountId(), fundingSource, order.getAmountFen(),
-                idempotencyKey, "LOW", validTraceId(traceId), now);
+        FundTransaction transaction = fundingSource == FundingSource.BANK_CARD
+                ? FundTransaction.acceptBankCardOperation(transactionId, transactionType, sourceType, orderId,
+                        userId, order.getPayeeAccountId(), cardId, fundingSource, order.getAmountFen(),
+                        idempotencyKey, "LOW", validTraceId(traceId), now)
+                : FundTransaction.accept(transactionId, transactionType, sourceType, orderId,
+                        userId, order.getPayerAccountId(), order.getPayeeAccountId(), fundingSource, order.getAmountFen(),
+                        idempotencyKey, "LOW", validTraceId(traceId), now);
         business.createTransaction(transaction, requestHash, security.newId(), now);
         afterCommit(() -> {
             // 受理事务已提交，资金协调失败不得反向污染客户端结果：
@@ -209,17 +232,34 @@ public class CollectionPaymentApplicationService {
     private SourceType sourceType(CollectionOrder order) {
         return order.getPersonalCodeId() == null ? SourceType.COLLECTION_REQUEST_ORDER : SourceType.PERSONAL_QR_ORDER;
     }
-    private FundingSource resolveFundingSource(CollectionOrder order, Confirmation confirmation) {
-        for (FundingSource source : new FundingSource[] { FundingSource.BALANCE, FundingSource.MINI_CREDIT }) {
-            if (Arrays.equals(confirmation.getSubjectHash(), subjectHash(order, source))) return source;
+    private FundingSource resolveFundingSource(CollectionOrder order, Confirmation confirmation, String cardId) {
+        if (Arrays.equals(confirmation.getSubjectHash(), subjectHash(order, FundingSource.BALANCE, null))) {
+            return FundingSource.BALANCE;
+        }
+        if (Arrays.equals(confirmation.getSubjectHash(), subjectHash(order, FundingSource.MINI_CREDIT, null))) {
+            requireCreditCollectionEnabled(order);
+            return FundingSource.MINI_CREDIT;
+        }
+        if (cardId != null && Arrays.equals(confirmation.getSubjectHash(), subjectHash(order, FundingSource.BANK_CARD, cardId))) {
+            return FundingSource.BANK_CARD;
         }
         return null;
     }
 
-    private byte[] subjectHash(CollectionOrder order, FundingSource fundingSource) {
+    private void requireCreditCollectionEnabled(CollectionOrder order) {
+        boolean enabled = collections.findActiveCode(order.getPayeeUserId())
+                .map(com.minialalipay.business.domain.collection.PersonalCollectionCode::isCreditCollectionEnabled)
+                .orElse(false);
+        if (!enabled) {
+            throw new BusinessException(BusinessErrorCode.FUNDING_SOURCE_NOT_ALLOWED);
+        }
+    }
+
+    private byte[] subjectHash(CollectionOrder order, FundingSource fundingSource, String cardId) {
         return security.digest(order.getOrderId() + "\n" + order.getVersion() + "\n" + order.getPayerUserId() + "\n"
                 + order.getPayerAccountId() + "\n" + order.getPayeeUserId() + "\n" + order.getPayeeAccountId() + "\n"
-                + order.getAmountFen() + "\n" + fundingSource.name() + "\n" + (order.getRequestId() == null ? "" : order.getRequestId()));
+                + order.getAmountFen() + "\n" + fundingSource.name() + "\n" + (order.getRequestId() == null ? "" : order.getRequestId())
+                + "\n" + (cardId == null ? "" : cardId));
     }
     private String validTraceId(String traceId) { return traceId != null && traceId.length() == 32 ? traceId : security.newTraceId(); }
     private static void afterCommit(Runnable action) {

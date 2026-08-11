@@ -16,6 +16,7 @@ import java.util.Optional;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
@@ -86,6 +87,47 @@ class TransactionFactApplicationServiceTest {
         // 余额路径不得触碰信用冻结表
         verifyNoInteractions(creditFreezes);
         verify(freezes).transactionFreezeIs(TX, FreezeStatus.CONFIRMED);
+    }
+
+    @Test
+    void 银行卡出资转账必须等待收款方账本过账后才一致() {
+        TccBranchRepository branches = mock(TccBranchRepository.class);
+        FreezeRecordRepository freezes = mock(FreezeRecordRepository.class);
+        LedgerRepository ledgers = mock(LedgerRepository.class);
+        CreditFreezeRepository creditFreezes = mock(CreditFreezeRepository.class);
+        when(branches.hasAccountBranch(TX, TccBranchType.CREDIT_PAY)).thenReturn(false);
+        when(branches.hasAccountBranch(TX, TccBranchType.BANK_CARD_WITHDRAW)).thenReturn(false);
+        when(branches.hasAccountBranch(TX, TccBranchType.BANK_CARD_RECHARGE)).thenReturn(true);
+        when(branches.allAccountBranches(TX, TccBranchStatus.CONFIRMED, 2)).thenReturn(true);
+        when(branches.hasLedgerBranch(TX, TccBranchType.LEDGER)).thenReturn(true);
+        when(branches.ledgerBranchIs(TX, TccBranchStatus.CONFIRMED)).thenReturn(true);
+        when(ledgers.isPostedAndBalanced(TX)).thenReturn(false);
+
+        var facts = new TransactionFactApplicationService(branches, freezes, ledgers, creditFreezes).inspect(TX);
+
+        assertThat(facts.accountsConfirmed()).isTrue();
+        assertThat(facts.ledgerConfirmed()).isTrue();
+        assertThat(facts.ledgerPosted()).isFalse();
+        assertThat(facts.successConsistent()).isFalse();
+    }
+
+    @Test
+    void 普通银行卡充值仍可不要求账本分支() {
+        TccBranchRepository branches = mock(TccBranchRepository.class);
+        FreezeRecordRepository freezes = mock(FreezeRecordRepository.class);
+        LedgerRepository ledgers = mock(LedgerRepository.class);
+        CreditFreezeRepository creditFreezes = mock(CreditFreezeRepository.class);
+        when(branches.hasAccountBranch(TX, TccBranchType.CREDIT_PAY)).thenReturn(false);
+        when(branches.hasAccountBranch(TX, TccBranchType.BANK_CARD_WITHDRAW)).thenReturn(false);
+        when(branches.hasAccountBranch(TX, TccBranchType.BANK_CARD_RECHARGE)).thenReturn(true);
+        when(branches.allAccountBranches(TX, TccBranchStatus.CONFIRMED, 2)).thenReturn(true);
+        when(branches.hasLedgerBranch(TX, TccBranchType.LEDGER)).thenReturn(false);
+
+        var facts = new TransactionFactApplicationService(branches, freezes, ledgers, creditFreezes).inspect(TX);
+
+        assertThat(facts.successConsistent()).isTrue();
+        assertThat(facts.ledgerPosted()).isTrue();
+        verify(ledgers, never()).isPostedAndBalanced(TX);
     }
 
     private static CreditFreeze creditFreeze(CreditFreezeStatus status) {

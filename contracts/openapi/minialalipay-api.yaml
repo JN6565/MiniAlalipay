@@ -1,7 +1,7 @@
 openapi: 3.1.0
 info:
   title: MiniAlalipay API
-  version: 0.2.1
+  version: 0.2.2
   description: MiniAlalipay 对外 HTTP 契约。业务操作只有在本文件中具备完整 Schema 后才允许实现。
 servers:
   - url: http://localhost:8080
@@ -1302,6 +1302,23 @@ paths:
         '401': { $ref: '#/components/responses/Unauthorized' }
         '404': { $ref: '#/components/responses/NotFound' }
         '500': { $ref: '#/components/responses/InternalError' }
+  /api/v1/credit/open:
+    post:
+      summary: 显式开通本人 Mini 花呗
+      operationId: openMyCredit
+      x-client-scope: C
+      description: 用户必须主动确认开通；开户注册时预创建的信用账户在 opened=false 时不能用于信用支付。重复提交同一语义仅返回已开通事实。
+      parameters:
+        - $ref: '#/components/parameters/RequestIdHeader'
+        - $ref: '#/components/parameters/IdempotencyKeyHeader'
+      responses:
+        '200':
+          description: 返回开通后的额度摘要
+          content: { application/json: { schema: { $ref: '#/components/schemas/CreditSummaryResponse' } } }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '409': { $ref: '#/components/responses/Conflict' }
+        '500': { $ref: '#/components/responses/InternalError' }
   /api/v1/credit/purchases:
     get:
       summary: 查询本人信用消费明细
@@ -1877,6 +1894,21 @@ paths:
         '200': { description: 重复停用返回当前停用事实, content: { application/json: { schema: { $ref: '#/components/schemas/PersonalCollectionCodeResponse' } } } }
         '401': { $ref: '#/components/responses/Unauthorized' }
         '409': { $ref: '#/components/responses/Conflict' }
+  /api/v1/p2p-collections/codes/me/credit-collection/open:
+    post:
+      summary: 开通本人花呗商户收款码
+      operationId: openCreditCollectionCode
+      x-client-scope: C
+      description: 开通后，本人的长期个人收款码和固定金额收款请求可被扫一扫中的 Mini 花呗支付；未开通时仅支持余额和银行卡收款。
+      parameters:
+        - $ref: '#/components/parameters/RequestIdHeader'
+        - $ref: '#/components/parameters/IdempotencyKeyHeader'
+      responses:
+        '200': { description: 返回开通后的个人码状态, content: { application/json: { schema: { $ref: '#/components/schemas/PersonalCollectionCodeResponse' } } } }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409': { $ref: '#/components/responses/Conflict' }
   /api/v1/p2p-collections/requests/{id}:
     get:
       summary: 查询固定金额收款请求和本人付款尝试
@@ -1996,8 +2028,8 @@ paths:
         '404': { $ref: '#/components/responses/NotFound' }
   /api/v1/p2p-collections/orders/{id}/confirmations:
     post:
-      summary: 为 C2C 订单签发余额或 Mini 花呗支付确认令牌
-      description: 服务端绑定双方、订单或请求版本、金额和用户明确选择的 fundingSource；切换资金来源后旧确认令牌失效。
+      summary: 为 C2C 订单签发余额或银行卡支付确认令牌
+      description: 服务端绑定双方、订单或请求版本、金额、用户明确选择的 fundingSource 和银行卡 cardId；切换资金来源或银行卡后旧确认令牌失效。
       operationId: issueCollectionConfirmation
       x-client-scope: C
       parameters:
@@ -2015,8 +2047,8 @@ paths:
         '422': { $ref: '#/components/responses/UnprocessableEntity' }
   /api/v1/p2p-collections/orders/{id}/pay:
     post:
-      summary: 受理 C2C 余额或 Mini 花呗支付
-      description: 消费绑定资金来源的确认令牌并使用来源唯一约束；BALANCE 创建 TRANSFER，MINI_CREDIT 创建 CREDIT_PAY，未知结果不得显示成功。
+      summary: 受理 C2C 余额或银行卡支付
+      description: 消费绑定资金来源的确认令牌并使用来源唯一约束；BALANCE 与 BANK_CARD 均创建 TRANSFER，个人扫码收款不允许使用 MINI_CREDIT，未知结果不得显示成功。
       operationId: payCollectionOrder
       x-client-scope: C
       parameters:
@@ -3074,10 +3106,11 @@ components:
     CreditSummary:
       type: object
       additionalProperties: false
-      required: [creditAccountId, status, totalLimitFen, usedFen, frozenFen, availableFen, unbilledFen, billedFen, overdueFen]
+      required: [creditAccountId, opened, status, totalLimitFen, usedFen, frozenFen, availableFen, unbilledFen, billedFen, overdueFen]
       properties:
-        creditAccountId: { type: string, minLength: 1, maxLength: 26 }
-        status: { type: string, enum: [ACTIVE, SUSPENDED, CLOSED] }
+          creditAccountId: { type: string, minLength: 1, maxLength: 26 }
+          opened: { type: boolean, description: 是否已由用户显式开通 Mini 花呗；false 时禁止信用支付。 }
+          status: { type: string, enum: [ACTIVE, SUSPENDED, CLOSED] }
         totalLimitFen: { type: integer, format: int64, const: 500000, description: 固定虚拟授信总额，单位分。 }
         usedFen: { type: integer, format: int64, minimum: 0 }
         frozenFen: { type: integer, format: int64, minimum: 0 }
@@ -3346,11 +3379,12 @@ components:
     InternalCreditAccountReference:
       type: object
       additionalProperties: false
-      required: [creditAccountId, userId, status, version]
+      required: [creditAccountId, userId, opened, status, version]
       properties:
-        creditAccountId: { type: string, minLength: 26, maxLength: 26 }
-        userId: { type: string, minLength: 26, maxLength: 26 }
-        status: { type: string, enum: [ACTIVE, SUSPENDED, CLOSED] }
+          creditAccountId: { type: string, minLength: 26, maxLength: 26 }
+          userId: { type: string, minLength: 26, maxLength: 26 }
+          opened: { type: boolean, description: 是否已显式开通 Mini 花呗。 }
+          status: { type: string, enum: [ACTIVE, SUSPENDED, CLOSED] }
         version: { type: integer, format: int64, minimum: 0 }
     BalanceTccCommand:
       type: object
@@ -4420,16 +4454,20 @@ components:
       required: [version, paymentProof, fundingSource]
       properties:
         version: { type: integer, format: int64, minimum: 0, description: 订单或请求版本。 }
-        paymentProof:
-          type: string
-          minLength: 1
-          maxLength: 256
-          writeOnly: true
-          description: 用户中心签发的一次性支付证明；不得写入日志、URL 或持久化字段。
-        fundingSource:
-          type: string
-          enum: [BALANCE, MINI_CREDIT]
-          description: C2C 收款仅接受 BALANCE；MINI_CREDIT 会被服务端拒绝，付款账户始终从登录会话派生。
+          paymentProof:
+            type: string
+            minLength: 1
+            maxLength: 256
+            writeOnly: true
+            description: 用户中心签发的一次性支付证明；不得写入日志、URL 或持久化字段。
+          fundingSource:
+            type: string
+            enum: [BALANCE, MINI_CREDIT, BANK_CARD]
+            description: C2C 个人收款资金来源；MINI_CREDIT 仅在付款方 Mini 花呗已开通且可用、收款方已开通花呗商户收款码时允许。令牌与双方身份、金额、资金来源和银行卡 ID 绑定。
+        cardId:
+          type: [string, 'null']
+          maxLength: 26
+          description: 选择 BANK_CARD 时必填的本人银行卡 ID；BALANCE 时为空。
     PayCollectionOrderRequest:
       type: object
       additionalProperties: false
@@ -4441,10 +4479,14 @@ components:
           maxLength: 256
           writeOnly: true
           description: 签发确认时返回的一次性令牌；不得进入 URL、日志或持久化字段。
+        cardId:
+          type: [string, 'null']
+          maxLength: 26
+          description: 银行卡付款时必须与确认阶段绑定的 cardId 一致；余额付款为空。
     CollectionOrder:
       type: object
       additionalProperties: false
-      required: [collectionOrderId, kind, status, version]
+        required: [collectionOrderId, kind, status, version, editable, creditPayAllowed]
       properties:
         collectionOrderId: { type: string, description: C2C 订单 ID。 }
         kind: { type: string, enum: [PERSONAL_QR, FIXED_REQUEST], description: 订单来源类型。 }
@@ -4454,9 +4496,11 @@ components:
         transactionId: { type: [string, 'null'], description: 已受理时的统一资金交易 ID。 }
         expiresAt: { type: [string, 'null'], format: date-time, description: 订单过期时间。 }
         version: { type: integer, format: int64, description: 订单版本，用于 CAS。 }
-        payeeName: { type: [string, 'null'], description: 收款方脱敏姓名。 }
-        payerName: { type: [string, 'null'], description: 付款方脱敏姓名。 }
-        editable: { type: boolean, description: 个人码 DRAFT 订单是否允许锁定金额和备注。 }
+          payeeName: { type: [string, 'null'], description: 收款方脱敏姓名。 }
+          payerName: { type: [string, 'null'], description: 付款方脱敏姓名。 }
+          editable: { type: boolean, description: 个人码 DRAFT 订单是否允许锁定金额和备注。 }
+          creditPayAllowed: { type: boolean, description: 收款方侧是否允许该 C2C 订单使用 Mini 花呗付款。 }
+          creditPayDisabledReason: { type: [string, 'null'], description: 收款方侧不允许 Mini 花呗付款时的展示原因。 }
     CollectionOrderResponse:
       allOf:
         - $ref: '#/components/schemas/ApiResponse'
@@ -4493,13 +4537,14 @@ components:
             data:
               type: [object, 'null']
               additionalProperties: false
-              required: [codeId, status, version]
-              properties:
-                codeId: { type: string, description: 个人码标识。 }
-                status: { type: string, description: 个人码状态。 }
-                collectionUrl: { type: [string, 'null'], description: 引导地址，仅生成响应携带。 }
-                shortCode: { type: [string, 'null'], description: 手动输入收款短码，长期有效，换发后旧码失效。 }
-                version: { type: integer, format: int64, description: 个人码版本，用于 CAS。 }
+                required: [codeId, status, creditCollectionEnabled, version]
+                properties:
+                  codeId: { type: string, description: 个人码标识。 }
+                  status: { type: string, description: 个人码状态。 }
+                  collectionUrl: { type: [string, 'null'], description: 引导地址，仅生成响应携带。 }
+                  shortCode: { type: [string, 'null'], description: 手动输入收款短码，长期有效，换发后旧码失效。 }
+                  creditCollectionEnabled: { type: boolean, description: 是否已开通花呗商户收款码。 }
+                  version: { type: integer, format: int64, description: 个人码版本，用于 CAS。 }
     DecideManualCaseRequest:
       type: object
       additionalProperties: false

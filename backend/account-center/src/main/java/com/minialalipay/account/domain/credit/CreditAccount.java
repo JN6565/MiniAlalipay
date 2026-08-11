@@ -37,6 +37,7 @@ public class CreditAccount {
     private long frozenFen;
     private CreditAccountStatus status;
     private String suspendReason;
+    private Instant openedAt;
     private long version;
     private final Instant createdAt;
     private Instant updatedAt;
@@ -56,9 +57,21 @@ public class CreditAccount {
         this.frozenFen = 0L;
         this.status = CreditAccountStatus.ACTIVE;
         this.suspendReason = null;
+        this.openedAt = now;
         this.version = 0L;
         this.createdAt = Objects.requireNonNull(now, "创建时间不能为空");
         this.updatedAt = now;
+    }
+
+    /**
+     * 注册开户时预创建未开通的 Mini 花呗账户。
+     *
+     * <p>系统仍会为每个用户准备固定演示额度和账本科目，但 {@code openedAt} 为空时禁止信用支付；
+     * 用户必须在前端显式确认开通后，才能使用 Mini 花呗。</p>
+     */
+    public static CreditAccount provisionedUnopened(String creditAccountId, String userId, Instant now) {
+        return new CreditAccount(creditAccountId, userId, FIXED_TOTAL_LIMIT_FEN, 0L, 0L,
+                CreditAccountStatus.ACTIVE, null, null, 0L, now, now);
     }
 
     /**
@@ -81,6 +94,21 @@ public class CreditAccount {
             String suspendReason, long version,
             Instant createdAt, Instant updatedAt
     ) {
+        this(creditAccountId, userId, totalLimitFen, usedFen, frozenFen, status,
+                suspendReason, createdAt, version, createdAt, updatedAt);
+    }
+
+    /**
+     * 从持久化重建额度账户，包含用户是否已显式开通 Mini 花呗的事实。
+     *
+     * @param openedAt 开通时间；为空表示系统预创建但用户尚未开通
+     */
+    public CreditAccount(
+            String creditAccountId, String userId, long totalLimitFen,
+            long usedFen, long frozenFen, CreditAccountStatus status,
+            String suspendReason, Instant openedAt, long version,
+            Instant createdAt, Instant updatedAt
+    ) {
         this.creditAccountId = creditAccountId;
         this.userId = userId;
         this.totalLimitFen = totalLimitFen;
@@ -88,6 +116,7 @@ public class CreditAccount {
         this.frozenFen = frozenFen;
         this.status = status;
         this.suspendReason = suspendReason;
+        this.openedAt = openedAt;
         this.version = version;
         this.createdAt = createdAt;
         this.updatedAt = updatedAt;
@@ -103,6 +132,9 @@ public class CreditAccount {
     public void freeze(long amountFen, Instant now) {
         if (amountFen <= 0) {
             throw new IllegalArgumentException("冻结金额必须为正");
+        }
+        if (!isOpened()) {
+            throw new IllegalStateException("Mini 花呗尚未开通");
         }
         if (status != CreditAccountStatus.ACTIVE) {
             throw new IllegalStateException("信用账户当前不可用");
@@ -200,6 +232,23 @@ public class CreditAccount {
     }
 
     /**
+     * 显式开通 Mini 花呗。
+     *
+     * <p>该动作幂等：已开通账户重复调用不改变开通时间；关闭账户不能重新开通，避免绕过终态约束。</p>
+     *
+     * @param now 开通时间
+     */
+    public void open(Instant now) {
+        if (this.status == CreditAccountStatus.CLOSED) {
+            throw new IllegalStateException("已关闭的 Mini 花呗不可重新开通");
+        }
+        if (this.openedAt == null) {
+            this.openedAt = Objects.requireNonNull(now, "开通时间不能为空");
+            this.updatedAt = now;
+        }
+    }
+
+    /**
      * 关闭信用账户。终态，不可恢复。
      *
      * @param now 当前时间
@@ -218,8 +267,11 @@ public class CreditAccount {
      * @return 仅 ACTIVE 状态返回 true
      */
     public boolean allowsCreditPay() {
-        return this.status == CreditAccountStatus.ACTIVE;
+        return isOpened() && this.status == CreditAccountStatus.ACTIVE;
     }
+
+    /** @return 是否已由用户显式开通 Mini 花呗。 */
+    public boolean isOpened() { return openedAt != null; }
 
     /** @return 可用额度（分）= 总额度 - 已用 - 冻结 */
     public long getAvailableFen() {
@@ -246,6 +298,9 @@ public class CreditAccount {
 
     /** @return 暂停原因，无暂停时为 null */
     public String getSuspendReason() { return suspendReason; }
+
+    /** @return Mini 花呗开通时间；为空表示尚未开通。 */
+    public Instant getOpenedAt() { return openedAt; }
 
     /** @return 乐观锁版本号 */
     public long getVersion() { return version; }

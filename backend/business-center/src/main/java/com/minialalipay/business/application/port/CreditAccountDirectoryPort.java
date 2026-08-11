@@ -10,5 +10,5 @@ public interface CreditAccountDirectoryPort {
     CreditAccountReference resolveCreditAccount(String userId);
 
     /** 账户中心返回的信用账户版本化只读引用。 */
-    record CreditAccountReference(String creditAccountId, String userId, String status, long version) { }
+    record CreditAccountReference(String creditAccountId, String userId, boolean opened, String status, long version) { }
 }

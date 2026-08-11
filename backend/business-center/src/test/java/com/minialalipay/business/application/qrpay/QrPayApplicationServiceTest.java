@@ -157,7 +157,7 @@ class QrPayApplicationServiceTest {
         AccountDirectoryPort accounts = userId ->
                 new AccountDirectoryPort.AccountReference("account-" + userId, userId, "ACTIVE");
         CreditAccountDirectoryPort creditAccounts = userId ->
-                new CreditAccountDirectoryPort.CreditAccountReference("credit-" + userId, userId, "ACTIVE", 0);
+                new CreditAccountDirectoryPort.CreditAccountReference("credit-" + userId, userId, true, "ACTIVE", 0);
         QrPayApplicationService service = new QrPayApplicationService(store, accounts, creditAccounts, security,
                 new IdempotencyKeyValidator(), businessStore, proofs, mock(TccCoordinatorPort.class),
                 null, null, Clock.fixed(NOW, ZoneOffset.UTC));

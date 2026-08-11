@@ -37,10 +37,12 @@
 | V1.15 | 2026-08-08 | 项目组 | 新增银行卡绑定管理能力（卡列表、绑卡、详情、设默认、解绑），状态流转 ACTIVE→UNBOUND |
 | V1.16 | 2026-08-08 | 项目组 | 银行卡注册与绑定流程重构：新增身份绑定、银行卡注册（自动生成卡号）、基于注册记录的绑卡流程，跨服务三要素校验 |
 | V1.17 | 2026-08-08 | 项目组 | 银行卡注册接入三要素交叉校验：须先绑定身份且姓名、身份证哈希、手机号与已绑定身份一致；统一身份证校验口径（格式+出生日期，不做 MOD 11-2 校验码） |
+| V1.18 | 2026-08-11 | 项目组 | 增加 Mini 花呗显式开通事实和花呗商户收款码开关；C2C 花呗支付须同时满足付款方信用可用与收款方已开通 |
 | V1.18 | 2026-08-08 | 项目组 | 完善银行卡绑定全流程：解绑时同步释放注册记录（BOUND → REGISTERED），支持解绑后凭完整卡号与三要素重新绑定；重绑复用现有绑卡接口并生成新绑定记录 |
 | V1.19 | 2026-08-10 | 项目组 | 增加 C 端个人资料展示偏好页：支持修改昵称、预设头像和本地图片头像，仅保存于当前浏览器，不新增用户中心接口、数据库字段或跨端同步语义 |
 | V1.20 | 2026-08-10 | 项目组 | 明确 C 端展示偏好为当前浏览器持久化设置：登出仅清除会话与账户身份，昵称与头像在退出重登后仍保留；重新登录仅首次用服务端昵称初始化 |
 | V1.21 | 2026-08-11 | 项目组 | 对齐 C 端全局账单与余额变动明细：账本明细显式返回脱敏交易对方，账单按统一交易去重并合并银行卡流水，余额明细只保留直接改变账户可用余额的记录 |
+| V1.22 | 2026-08-11 | 项目组 | 修正银行卡出资转账/扫码的收款方账本规则：收款方余额入账必须同步生成可查询账本分录 |
 
 ## 1. 文档目的与范围
 
@@ -1199,9 +1201,9 @@ sequenceDiagram
 转账与扫码支付支持 `fundingSource=BANK_CARD`：必须同时提交本人已绑定银行卡的 `cardId`，资金来源在确认阶段绑定进确认摘要，切换资金来源必须重新验密并签发新令牌。
 
 - 受理层以 `TRANSFER`/`QR_PAY` + 银行卡出资创建统一资金交易：付款账户为空（资金直接从银行卡虚拟余额扣减，不占用付款方账户余额），收款账户为实际收款方账户。
-- TCC 协调走 Seata 全局事务，注册银行卡扣减（BANK_CARD_RECHARGE 分支，Confirm 扣减卡虚拟余额）与收款入账（PAYEE_BALANCE 分支，Confirm 增加收款方余额）两个分支，无复式账本；账户中心事实核验按银行卡充值规则集（两分支到位、无活动冻结）判定终态。
+- TCC 协调走 Seata 全局事务，注册银行卡扣减（BANK_CARD_RECHARGE 分支，Confirm 扣减卡虚拟余额）、收款入账（PAYEE_BALANCE 分支，Confirm 增加收款方余额）与外部出资账本（LEDGER 分支）三个分支。账本借方使用系统发行权益/外部清算科目，贷方使用收款方用户余额负债科目；付款方银行卡扣款不生成付款用户余额分录，只进入付款方银行卡流水与全局账单。
 - 幂等、来源唯一、确认令牌、异步 TCC 与恢复扫描语义与余额出资转账完全一致。
-- 银行卡充值/提现不写账户中心账本分录（`ledger_entry`）；C 端账单页以「账本分录 + 银行卡交易流水（仅 SUCCESS 终态）」按创建时间倒序合并作为展示投影，不复制账本事实到本地缓存，也不因此改变 TCC 与事实核验规则。
+- 银行卡充值/提现不写账户中心账本分录（`ledger_entry`）；银行卡出资转账/扫码必须写收款方可见的 `TRANSFER` 账本分录，保证收款方余额明细与账单来自账本事实。C 端账单页以「账本分录 + 银行卡交易流水（仅 SUCCESS 终态）」按创建时间倒序合并作为展示投影，不复制账本事实到本地缓存。
 - C 端全局账单以 `transaction_id` 保证一笔统一交易只展示一次；同一用户拥有多个会计科目分录时优先展示带 `balance_after_fen` 的用户余额分录，其次展示真实账本分录。余额变动明细只保留直接改变本人账户可用余额的记录：银行卡直接出资的转账/扫码支付仅改变卡虚拟余额，必须排除；信用支付付款方只增加信用应收，必须排除；信用支付收款方的余额入账必须保留。
 
 #### 联系人自动归档
@@ -1524,7 +1526,7 @@ flowchart TD
 | `POST /internal/v1/tcc/credit-repay/{action}` | `business-center` -> `account-center` | `action` 为 `try/confirm/cancel`；Try 冻结还款余额，Confirm 扣减余额、减少应收并恢复额度，Cancel 释放余额；按 `xid + CREDIT_REPAY + credit_account_id` 幂等并持久化空回滚屏障 |
 | `POST /internal/v1/tcc/credit-refund/{action}` | `business-center` -> `account-center` | 仅用于原 `CREDIT_PAY` 的全额且未还款信用退款冲正；请求只传原信用消费、原交易与收款账户，账户中心锁定 `credit_purchase` 并冻结收款用户余额，Confirm 冲销消费明细/应收/账单、恢复额度并将消费转 `REVERSED`；按 `xid + CREDIT_REFUND + original_transaction_id` 幂等并持久化空回滚屏障 |
 | `POST /internal/v1/tcc/refund-ledger/{action}` | `business-center` -> `account-center` | 退款专用账本分支；`payerAccountId` 与 `creditAccountId` 二选一指定贷方科目；Try 创建引用原凭证且 `reversal_reason=BUSINESS_REFUND` 的 `REFUND` 预记账凭证，Confirm 验平后过账并写 Outbox，Cancel 只取消未过账凭证；按 `xid + REFUND_LEDGER + voucher_id` 幂等 |
-| `GET /internal/v1/transaction-facts/{transactionId}` | `business-center` -> `account-center` | 返回余额、冻结、TCC 分支和账本的脱敏布尔事实，终态发布器不得根据超时猜测成功；核验规则按资金路径选择：余额转账查付款余额冻结与 `LEDGER` 账本分支，花呗信用支付查 `credit_freeze` 额度冻结与 `CREDIT_PAY_LEDGER` 账本分支，两套规则互斥，识别依据是交易是否存在 `CREDIT_PAY` 账户分支 |
+| `GET /internal/v1/transaction-facts/{transactionId}` | `business-center` -> `account-center` | 返回余额、冻结、TCC 分支和账本的脱敏布尔事实，终态发布器不得根据超时猜测成功；核验规则按资金路径选择：余额转账查付款余额冻结与 `LEDGER` 账本分支，花呗信用支付查 `credit_freeze` 额度冻结与 `CREDIT_PAY_LEDGER` 账本分支，银行卡出资转账/扫码在 `BANK_CARD_RECHARGE` 与 `PAYEE_BALANCE` 两个账户分支外还必须验证 `LEDGER` 分支和凭证过账，普通银行卡充值仍不要求账本分支 |
 | `POST /internal/v1/reconciliation-diffs` | `business-center` -> `account-center` | 按业务日期、交易和差异类型幂等追加证据；只写 `ledger_db.reconciliation_diff`，不得直接改账 |
 
 终态发布时，`fund_transaction` 状态、`tcc_global` 终态和业务 Outbox 必须在同一
@@ -3358,7 +3360,7 @@ SSE 只在终态发布事务的 Outbox 事件投递后发送 `SUCCESS`。断线�
 2. Try 只做可撤销的冻结/预占，不提前展示成功。
 3. Confirm 和 Cancel 必须幂等，允许协调器无限安全重试。
 4. 任一分支 Confirm 不得直接把主单标记为 `SUCCESS`；业务侧最多记录不可对外展示的 `CONFIRMED_PENDING_FINALIZE` 协调结果。
-5. 全局事务完成回调触发终态发布器。余额交易验证双方余额/冻结，`CREDIT_PAY` 必须同时验证信用额度冻结已确认、信用应收与消费明细已增加、收款用户余额已入账、`CREDIT_PAY_LEDGER` 已过账且借贷平衡，`CREDIT_REPAY` 验证余额、应收、额度与还款分配，`RECHARGE` 验证系统发行权益、目标余额和充值凭证，`REFUND` 验证收款用户余额已扣减、原付款方余额或信用应收/额度已恢复、`REFUND_LEDGER` 反向凭证已过账且借贷平衡；全部类型还必须验证全部 TCC 分支 `CONFIRMED` 和账本平衡，才在 `business_db` 本地事务中 CAS 主单和来源聚合为 `SUCCESS`，并写入 Outbox。
+5. 全局事务完成回调触发终态发布器。余额交易验证双方余额/冻结，银行卡出资转账/扫码验证银行卡扣减、收款余额入账、外部出资 `LEDGER` 凭证已过账，`CREDIT_PAY` 必须同时验证信用额度冻结已确认、信用应收与消费明细已增加、收款用户余额已入账、`CREDIT_PAY_LEDGER` 已过账且借贷平衡，`CREDIT_REPAY` 验证余额、应收、额度与还款分配，`RECHARGE` 验证系统发行权益、目标余额和充值凭证，`REFUND` 验证收款用户余额已扣减、原付款方余额或信用应收/额度已恢复、`REFUND_LEDGER` 反向凭证已过账且借贷平衡；全部类型还必须验证全部 TCC 分支 `CONFIRMED` 和账本平衡，才在 `business_db` 本地事务中 CAS 主单和来源聚合为 `SUCCESS`，并写入 Outbox。
 6. 回调丢失或发布器崩溃时，恢复扫描依据 `PROCESSING + updated_at` 重跑相同校验；重复发布由 CAS 和 Outbox 事件唯一键消除。
 7. 分支状态不明时查询事实，不根据超时猜测结果；SSE、回执和监控均以终态发布后的主单状态为准。
 
@@ -4089,3 +4091,13 @@ P2P Collection 验收映射：
 `/h5/profile/edit` 仅供登录用户调整 C 端当前浏览器的昵称展示和头像。头像可从前端内置选项中选择，也可选择 JPG、PNG 或 WebP 本地图片（不超过 1 MB）；图片读取为 Data URL 后写入浏览器本地展示偏好，不上传、不提供外部 URL、对象存储或服务端图片处理能力。保存时不调用网关接口，不修改 `user_db.app_user`、会话身份、实名状态、联系人投影、账户、交易或账本事实，也不参与跨设备同步。昵称输入限制为去除首尾空白后 1 至 20 个字符，保存成功后返回“我的”页并即时刷新该页展示。
 
 展示偏好（昵称与头像）是当前浏览器内的持久化设置，退出登录与重新登录不清除：登出仅清除会话令牌与账户身份，本地展示偏好原样保留；重新登录时，仅当浏览器从未建立过本地昵称才用服务端昵称初始化，用户已有的本地编辑始终优先。
+
+## 26. C 端个人扫码付款、花呗商户收款与账单边界
+
+个人收款码、固定金额收款请求和 C2C 个人收款订单默认允许 `BALANCE` 与 `BANK_CARD`。收款方开通花呗商户收款码后，同一长期个人码及该用户创建的固定金额收款请求允许付款方选择 `MINI_CREDIT`；未开通时前端置灰 Mini 花呗，后端确认接口收到 `MINI_CREDIT` 必须以资金来源不允许拒绝。
+
+账户中心在开户注册时可预创建信用账户，但 `opened_at` 为空时视为未开通。`POST /api/v1/credit/open` 以幂等方式写入开通事实；内部信用资格预检和 TCC Try 均必须校验已开通、`ACTIVE`、无逾期且额度充足。业务中心在 `personal_collection_code.credit_collection_enabled` 保存花呗商户收款码开关，`POST /api/v1/p2p-collections/codes/me/credit-collection/open` 幂等开通，换码时继承开关。
+
+选择 `BANK_CARD` 时，确认请求和支付请求都必须携带本人银行卡 `cardId`。选择 `MINI_CREDIT` 时，确认摘要绑定 `MINI_CREDIT` 且 `cardId` 为空。银行卡个人扫码付款受理为 `TRANSFER` 主单；Mini 花呗个人扫码付款受理为 `CREDIT_PAY` 主单，账户中心使用既有 `CREDIT_PAY_LEDGER` 借记信用应收、贷记收款方余额负债。
+
+C 端账单页只保留“全部、收入、支出”三类视图，展示用户参与的余额、银行卡、花呗所有成功交易；银行卡直接出资付款虽然不改变付款方账户余额，也必须进入账单。钱包最近明细和完整余额明细页只展示直接改变账户可用余额的交易，并排除银行卡直接出资付款方支出与 Mini 花呗消费付款方信用分录；Mini 花呗付款成功后，收款方余额明细必须显示收款入账。

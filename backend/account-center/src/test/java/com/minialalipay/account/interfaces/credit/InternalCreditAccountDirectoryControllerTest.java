@@ -29,11 +29,29 @@ class InternalCreditAccountDirectoryControllerTest {
         mvc.perform(get("/internal/v1/credit-accounts/by-user/{userId}", userId))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.creditAccountId").value("01K1CREDITACCOUNT0000000000"))
+                .andExpect(jsonPath("$.opened").value(true))
                 .andExpect(jsonPath("$.status").value("ACTIVE"))
                 .andExpect(jsonPath("$.version").value(0))
                 .andExpect(jsonPath("$.availableFen").doesNotExist())
                 .andExpect(jsonPath("$.usedFen").doesNotExist())
                 .andExpect(jsonPath("$.frozenFen").doesNotExist());
+    }
+
+    @Test
+    void 信用支付资格预检拒绝未开通Mini花呗() throws Exception {
+        CreditAccountRepository repository = mock(CreditAccountRepository.class);
+        String userId = "01K1ABCDEFGHJKMNPQRSTVWXYZ";
+        CreditAccount account = CreditAccount.provisionedUnopened("01K1CREDITACCOUNT0000000000", userId,
+                Instant.parse("2026-08-05T00:00:00Z"));
+        when(repository.findById(account.getCreditAccountId())).thenReturn(Optional.of(account));
+        MockMvc mvc = MockMvcBuilders.standaloneSetup(new InternalCreditAccountDirectoryController(repository)).build();
+
+        mvc.perform(post("/internal/v1/credit-accounts/{id}/eligibility", account.getCreditAccountId())
+                        .contentType("application/json").content("{\"amountFen\":200}")
+                        .header("X-Internal-Caller", "business-center"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.eligible").value(false))
+                .andExpect(jsonPath("$.reasonCode").value("CREDIT_NOT_OPENED"));
     }
 
     @Test

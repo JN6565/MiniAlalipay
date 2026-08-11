@@ -27,10 +27,10 @@ public class SeataGlobalTransactionExecutor {
      *
      * <p>余额出资：注册付款余额冻结、收款余额预占和复式账本三个分支（组合端点一次完成）。
      * 银行卡出资：资金方向与充值相同（银行卡扣款 → 收款账户入账），复用充值组合端点
-     * 注册银行卡扣减分支（BANK_CARD_RECHARGE，Confirm 时扣减卡虚拟余额）与收款入账分支
-     * （PAYEE_BALANCE，Confirm 时增加收款方余额），无复式账本；账户中心事实核验按
-     * 银行卡充值规则集判定终态。不得改用提现分支：其 Confirm 向卡入账，方向相反且
-     * 没有收款分支，会导致收款方永远收不到钱。</p>
+     * 注册银行卡扣减分支（BANK_CARD_RECHARGE，Confirm 时扣减卡虚拟余额）、收款入账分支
+     * （PAYEE_BALANCE，Confirm 时增加收款方余额）和外部出资账本分支。账本分支只给收款方
+     * 生成余额贷方明细，付款方银行卡扣款由银行卡流水进入全局账单。不得改用提现分支：
+     * 其 Confirm 向卡入账，方向相反且没有收款分支，会导致收款方永远收不到钱。</p>
      *
      * @param request 稳定业务分支参数；重试时不得改变
      */
@@ -47,7 +47,9 @@ public class SeataGlobalTransactionExecutor {
                     .header(RootContext.KEY_XID, xid)
                     .body(new BankCardRechargeRequest(request.businessXid(), request.transactionId(),
                             request.payerUserId(), request.payeeAccountId(), request.bankCardId(),
-                            request.amountFen(), request.payeeReservationId()))
+                            request.amountFen(), request.payeeReservationId(), request.voucherId(),
+                            request.debitEntryId(), request.creditEntryId(), request.ledgerEventId(),
+                            request.traceId()))
                     .retrieve()
                     .toBodilessEntity();
         } else {
@@ -109,10 +111,12 @@ public class SeataGlobalTransactionExecutor {
                                      String ledgerEventId, String traceId,
                                      String payerUserId, String bankCardId) { }
 
-    /** 银行卡充值 TCC 的完整稳定参数，包含账户入账所需标识。 */
+    /** 银行卡充值 TCC 的完整稳定参数；账本字段仅银行卡出资转账/扫码使用，普通充值为空。 */
     public record BankCardRechargeRequest(String businessXid, String transactionId,
                                           String userId, String accountId, String cardId,
-                                          long amountFen, String reservationId) { }
+                                          long amountFen, String reservationId,
+                                          String voucherId, long debitEntryId, long creditEntryId,
+                                          String ledgerEventId, String traceId) { }
 
     /** 银行卡提现 TCC 的完整稳定参数，包含账户冻结所需标识。 */
     public record BankCardWithdrawRequest(String businessXid, String transactionId,

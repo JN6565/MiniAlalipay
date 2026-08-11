@@ -94,9 +94,9 @@ public class AccountApplicationService {
         CreditAccount creditAccount = creditAccountRepository.findByUserId(userId).orElse(null);
         if (creditAccount == null) {
             String creditAccountId = generateCreditAccountId();
-            creditAccount = new CreditAccount(creditAccountId, userId, now);
+            creditAccount = CreditAccount.provisionedUnopened(creditAccountId, userId, now);
             creditAccountRepository.save(creditAccount);
-            log.info("创建信用账户成功: creditAccountId={}, userId={}, 额度={}分",
+            log.info("预创建未开通 Mini 花呗账户成功: creditAccountId={}, userId={}, 额度={}分",
                     creditAccountId, userId, CreditAccount.FIXED_TOTAL_LIMIT_FEN);
 
             // 4. 创建信用应收记录

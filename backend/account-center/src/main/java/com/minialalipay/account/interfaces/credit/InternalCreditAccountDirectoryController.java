@@ -42,7 +42,7 @@ public class InternalCreditAccountDirectoryController {
         var account = creditAccounts.findByUserId(userId)
                 .orElseThrow(() -> new BusinessException(CommonErrorCode.NOT_FOUND));
         return ResponseEntity.ok(new CreditAccountReference(account.getCreditAccountId(), account.getUserId(),
-                account.getStatus().name(), account.getVersion()));
+                account.isOpened(), account.getStatus().name(), account.getVersion()));
     }
 
     /**
@@ -61,6 +61,9 @@ public class InternalCreditAccountDirectoryController {
         if (amountFen <= 0L) {
             throw new BusinessException(CommonErrorCode.INVALID_REQUEST);
         }
+        if (!account.isOpened()) {
+            return ResponseEntity.ok(new CreditEligibility(false, "CREDIT_NOT_OPENED", account.getVersion()));
+        }
         if (!account.allowsCreditPay()) {
             return ResponseEntity.ok(new CreditEligibility(false, "CREDIT_NOT_AVAILABLE", account.getVersion()));
         }
@@ -71,7 +74,7 @@ public class InternalCreditAccountDirectoryController {
     }
 
     /** 信用账户只读引用，不携带可用额度、已用额度、冻结额度或账务数据。 */
-    public record CreditAccountReference(String creditAccountId, String userId, String status, long version) { }
+    public record CreditAccountReference(String creditAccountId, String userId, boolean opened, String status, long version) { }
 
     /** 信用支付资格预检请求，金额单位为分。 */
     public record EligibilityRequest(long amountFen) { }

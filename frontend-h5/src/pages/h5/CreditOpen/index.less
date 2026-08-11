@@ -1,0 +1,122 @@
+.credit-open-page {
+  min-height: 100vh;
+  background: var(--h5-bg);
+}
+
+.open-hero {
+  background: var(--h5-grad-credit);
+  color: #fff;
+  padding: 40px 16px 74px;
+
+  .open-title {
+    font-size: 22px;
+    font-weight: 800;
+  }
+
+  .open-limit {
+    margin-top: 14px;
+    font-size: 42px;
+    font-weight: 800;
+    letter-spacing: 1px;
+  }
+
+  .open-sub {
+    margin-top: 6px;
+    font-size: 13px;
+    opacity: 0.86;
+  }
+}
+
+.open-body {
+  margin: -52px 14px 0;
+  padding-bottom: 28px;
+}
+
+.feature-grid,
+.rule-card {
+  background: #fff;
+  border-radius: var(--h5-radius-card);
+  box-shadow: var(--h5-shadow-card);
+}
+
+.feature-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  overflow: hidden;
+}
+
+.feature-item {
+  display: flex;
+  gap: 10px;
+  padding: 16px 12px;
+  min-height: 74px;
+
+  &:nth-child(odd) { border-right: 1px solid var(--h5-divider); }
+  &:nth-child(-n + 2) { border-bottom: 1px solid var(--h5-divider); }
+}
+
+.feature-icon {
+  width: 34px;
+  height: 34px;
+  border-radius: 50%;
+  background: var(--h5-primary-bg);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex: none;
+}
+
+.feature-title {
+  font-size: 13px;
+  font-weight: 700;
+  color: var(--h5-text);
+}
+
+.feature-desc {
+  margin-top: 4px;
+  font-size: 11px;
+  line-height: 1.45;
+  color: var(--h5-text-3);
+}
+
+.rule-card {
+  margin-top: 14px;
+  padding: 14px;
+
+  .rule-title {
+    font-size: 14px;
+    font-weight: 700;
+    color: var(--h5-text);
+    margin-bottom: 8px;
+  }
+
+  .rule-line {
+    font-size: 12px;
+    line-height: 1.8;
+    color: var(--h5-text-2);
+  }
+}
+
+.open-check {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 18px 4px 12px;
+  color: var(--h5-text-2);
+  font-size: 12px;
+}
+
+.open-submit {
+  border-radius: 24px;
+  padding: 13px 0;
+  text-align: center;
+  color: #fff;
+  font-size: 15px;
+  font-weight: 800;
+  background: var(--h5-grad-credit);
+  box-shadow: 0 8px 18px rgba(90, 108, 255, 0.34);
+
+  &.disabled {
+    opacity: 0.45;
+  }
+}

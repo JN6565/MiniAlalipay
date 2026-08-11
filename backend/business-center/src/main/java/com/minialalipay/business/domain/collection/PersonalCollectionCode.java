@@ -13,6 +13,7 @@ public final class PersonalCollectionCode {
     private final String codeId;
     private final String userId;
     private final String accountId;
+    private boolean creditCollectionEnabled;
     private PersonalCollectionCodeStatus status;
     private long version;
     private final Instant createdAt;
@@ -20,15 +21,30 @@ public final class PersonalCollectionCode {
 
     /** 创建一个可用的个人收款码。 */
     public static PersonalCollectionCode activate(String codeId, String userId, String accountId, Instant now) {
-        return new PersonalCollectionCode(codeId, userId, accountId, PersonalCollectionCodeStatus.ACTIVE, 0L, now, now);
+        return new PersonalCollectionCode(codeId, userId, accountId, false,
+                PersonalCollectionCodeStatus.ACTIVE, 0L, now, now);
+    }
+
+    /** 创建一个继承商户收款能力的新个人码。 */
+    public static PersonalCollectionCode activate(String codeId, String userId, String accountId,
+                                                  boolean creditCollectionEnabled, Instant now) {
+        return new PersonalCollectionCode(codeId, userId, accountId, creditCollectionEnabled,
+                PersonalCollectionCodeStatus.ACTIVE, 0L, now, now);
     }
 
     /** 从持久化事实重建个人收款码。 */
     public PersonalCollectionCode(String codeId, String userId, String accountId, PersonalCollectionCodeStatus status,
                                   long version, Instant createdAt, Instant updatedAt) {
+        this(codeId, userId, accountId, false, status, version, createdAt, updatedAt);
+    }
+
+    /** 从持久化事实重建个人收款码，包含是否支持 Mini 花呗商户收款。 */
+    public PersonalCollectionCode(String codeId, String userId, String accountId, boolean creditCollectionEnabled,
+                                  PersonalCollectionCodeStatus status, long version, Instant createdAt, Instant updatedAt) {
         this.codeId = required(codeId, "个人收款码 ID");
         this.userId = required(userId, "用户 ID");
         this.accountId = required(accountId, "收款账户 ID");
+        this.creditCollectionEnabled = creditCollectionEnabled;
         this.status = Objects.requireNonNull(status, "个人收款码状态不能为空");
         if (version < 0) throw new IllegalArgumentException("个人收款码版本不得为负数");
         this.version = version;
@@ -53,6 +69,17 @@ public final class PersonalCollectionCode {
         }
     }
 
+    /** 幂等开通当前个人码的 Mini 花呗商户收款能力。 */
+    public void openCreditCollection(long expectedVersion, Instant now) {
+        if (version != expectedVersion) throw new IllegalStateException("个人收款码版本已经变化");
+        ensureActive();
+        if (!creditCollectionEnabled) {
+            creditCollectionEnabled = true;
+            version++;
+            updatedAt = now;
+        }
+    }
+
     private void transition(long expectedVersion, PersonalCollectionCodeStatus target, Instant now, String message) {
         if (version != expectedVersion) throw new IllegalStateException("个人收款码版本已经变化");
         if (status != PersonalCollectionCodeStatus.ACTIVE) throw new IllegalStateException(message);
@@ -69,6 +96,7 @@ public final class PersonalCollectionCode {
     public String getCodeId() { return codeId; }
     public String getUserId() { return userId; }
     public String getAccountId() { return accountId; }
+    public boolean isCreditCollectionEnabled() { return creditCollectionEnabled; }
     public PersonalCollectionCodeStatus getStatus() { return status; }
     public long getVersion() { return version; }
     public Instant getCreatedAt() { return createdAt; }

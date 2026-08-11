@@ -69,6 +69,7 @@ public class CreditAccountRepositoryImpl implements CreditAccountRepository {
                 po.getFrozenFen(),
                 CreditAccountStatus.valueOf(po.getStatus()),
                 po.getSuspendReason(),
+                po.getOpenedAt(),
                 po.getVersion(),
                 po.getCreatedAt(),
                 po.getUpdatedAt()
@@ -87,6 +88,7 @@ public class CreditAccountRepositoryImpl implements CreditAccountRepository {
         po.setFrozenFen(account.getFrozenFen());
         po.setStatus(account.getStatus().name());
         po.setSuspendReason(account.getSuspendReason());
+        po.setOpenedAt(account.getOpenedAt());
         po.setVersion(account.getVersion());
         po.setCreatedAt(account.getCreatedAt());
         po.setUpdatedAt(account.getUpdatedAt());

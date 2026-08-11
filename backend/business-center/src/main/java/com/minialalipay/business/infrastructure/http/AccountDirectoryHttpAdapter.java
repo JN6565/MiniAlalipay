@@ -66,7 +66,7 @@ public class AccountDirectoryHttpAdapter implements AccountDirectoryPort {
     }
 
     /** 账户中心信用账户只读引用。 */
-    private record CreditAccountReference(String creditAccountId, String userId, String status, long version) { }
+    private record CreditAccountReference(String creditAccountId, String userId, boolean opened, String status, long version) { }
 
     /** 信用支付资格预检请求。 */
     private record CreditEligibilityRequest(long amountFen) { }

@@ -147,8 +147,25 @@ const QrPayPage: React.FC = () => {
   }
 
   const selectedCard = bankCards.find((c) => c.cardId === selectedCardId) || null;
+  const creditUnavailableReason = (() => {
+    if (!credit?.opened) return '未开通，点击开通';
+    if (credit.status !== 'ACTIVE') return credit.overdueFen > 0 ? '逾期暂停使用' : '当前不可用';
+    if ((credit.availableFen || 0) < order.amountFen) return '可用额度不足';
+    return '';
+  })();
 
   const selectFundingSource = (value: 'BALANCE' | 'MINI_CREDIT' | 'BANK_CARD') => {
+    if (value === 'MINI_CREDIT') {
+      if (!credit?.opened) {
+        Toast.show({ content: '请先开通 Mini 花呗', icon: 'fail' });
+        history.push('/h5/credit/open');
+        return;
+      }
+      if (creditUnavailableReason) {
+        Toast.show({ content: creditUnavailableReason, icon: 'fail' });
+        return;
+      }
+    }
     setFundingSource(value);
     setPassword('');
     if (value === 'BANK_CARD') {
@@ -165,9 +182,15 @@ const QrPayPage: React.FC = () => {
     key: 'BALANCE' | 'MINI_CREDIT' | 'BANK_CARD';
     label: string;
     value: string;
+    disabled?: boolean;
   }> = [
     { key: 'BALANCE', label: '账户余额', value: `可用 ¥${formatBalance(account?.availableFen || 0)}` },
-    { key: 'MINI_CREDIT', label: 'Mini 花呗', value: `可用额度 ¥${formatBalance(credit?.availableFen || 0)}` },
+    {
+      key: 'MINI_CREDIT',
+      label: 'Mini 花呗',
+      value: creditUnavailableReason || `可用额度 ¥${formatBalance(credit?.availableFen || 0)}`,
+      disabled: !!creditUnavailableReason && credit?.opened,
+    },
     {
       key: 'BANK_CARD',
       label: '银行卡',
@@ -202,7 +225,7 @@ const QrPayPage: React.FC = () => {
           {fundingRows.map((row) => {
             const on = fundingSource === row.key;
             return (
-              <div className="funding-row" key={row.key} onClick={() => selectFundingSource(row.key)}>
+              <div className={`funding-row${row.disabled ? ' disabled' : ''}`} key={row.key} onClick={() => selectFundingSource(row.key)}>
                 <span className="funding-label">{row.label}</span>
                 <span className="funding-value">{row.value}</span>
                 <span className={`funding-radio${on ? ' active' : ''}`}>

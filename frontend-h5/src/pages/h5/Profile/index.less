@@ -77,6 +77,65 @@
     padding: 0 12px;
   }
 
+  .mine-credit-card {
+    background: #fff;
+    border-radius: var(--h5-radius-card);
+    box-shadow: var(--h5-shadow-card);
+    padding: 14px;
+    margin-bottom: 12px;
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    cursor: pointer;
+
+    &:active { opacity: 0.78; }
+
+    .mine-credit-icon {
+      width: 52px;
+      height: 52px;
+      border-radius: 16px;
+      background: linear-gradient(135deg, rgba(38, 108, 255, 0.12), rgba(124, 91, 255, 0.1));
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      flex: none;
+    }
+
+    .mine-credit-main {
+      flex: 1;
+      min-width: 0;
+    }
+
+    .mine-credit-title {
+      font-size: 15px;
+      font-weight: 700;
+      color: var(--h5-text);
+    }
+
+    .mine-credit-desc {
+      font-size: 12px;
+      color: var(--h5-text-2);
+      margin-top: 4px;
+    }
+
+    .mine-credit-limit {
+      font-size: 12px;
+      color: var(--h5-primary);
+      margin-top: 4px;
+    }
+
+    .mine-credit-action {
+      flex: none;
+      border-radius: 16px;
+      padding: 7px 12px;
+      color: #fff;
+      font-size: 12px;
+      font-weight: 700;
+      background: var(--h5-grad-brand);
+      box-shadow: 0 6px 14px rgba(38, 108, 255, 0.25);
+    }
+  }
+
   .mine-list {
     background: var(--h5-card-bg);
     border-radius: var(--h5-radius-card);

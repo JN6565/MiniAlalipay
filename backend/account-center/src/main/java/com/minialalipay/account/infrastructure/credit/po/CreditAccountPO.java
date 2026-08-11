@@ -31,6 +31,9 @@ public class CreditAccountPO {
     /** 挂起原因，对应 VARCHAR */
     private String suspendReason;
 
+    /** 用户显式开通 Mini 花呗的时间；为空表示仅预创建、尚未开通。 */
+    private Instant openedAt;
+
     /** 乐观锁版本号，对应 BIGINT UNSIGNED */
     private Long version;
 
@@ -55,6 +58,7 @@ public class CreditAccountPO {
         this.frozenFen = frozenFen;
         this.status = status;
         this.suspendReason = suspendReason;
+        this.openedAt = createdAt;
         this.version = version;
         this.createdAt = createdAt;
         this.updatedAt = updatedAt;
@@ -114,6 +118,14 @@ public class CreditAccountPO {
 
     public void setSuspendReason(String suspendReason) {
         this.suspendReason = suspendReason;
+    }
+
+    public Instant getOpenedAt() {
+        return openedAt;
+    }
+
+    public void setOpenedAt(Instant openedAt) {
+        this.openedAt = openedAt;
     }
 
     public Long getVersion() {

@@ -4,8 +4,27 @@ import { useCallback, useEffect, useState } from 'react';
 import * as accountService from '@/services/account';
 import { getBankCards, formatBalance, type BankCard } from '@/services/bankCard';
 import { fetchAvailableFen } from '@/utils/balanceConfirm';
+import { formatAmount, formatTime } from '@/utils/format';
 import { Skeleton, RevealToggle, EmptyState, BankCardFace, IconSet } from '@/components/h5/common';
+import { isBalanceChangingTransaction, loadBankCardTransactions, mergeUniqueTransactions } from '@/pages/h5/Transactions/viewModel';
 import './index.less';
+
+const RECENT_FILTERS = [
+  { key: 'all', label: '全部', match: () => true },
+  { key: 'income', label: '收入', match: (tx: accountService.Transaction) => tx.direction === 'IN' },
+  { key: 'expense', label: '支出', match: (tx: accountService.Transaction) => tx.direction === 'OUT' },
+] as const;
+
+const getRecentTitle = (tx: accountService.Transaction): string => {
+  const memo = tx.memo || '';
+  if (memo.includes('充值')) return '银行卡充值';
+  if (memo.includes('提现')) return '银行卡提现';
+  if (memo.includes('花呗还款') || memo.includes('还款')) return '花呗还款';
+  if (memo.includes('转账')) return tx.direction === 'IN' ? '转账收入' : '转账支出';
+  if (memo.includes('收款')) return '扫码收款';
+  if (memo.includes('支付') || memo.includes('扫码')) return '扫码支付';
+  return accountService.getLedgerEntryTitle({ memo });
+};
 
 /**
  * 钱包页（原充值提现）：账户余额与银行卡的统一资金入口。
@@ -22,14 +41,18 @@ const WalletPage = () => {
   const location = useLocation();
   const [account, setAccount] = useState<accountService.AccountInfo | null>(null);
   const [cards, setCards] = useState<BankCard[]>([]);
+  const [recentEntries, setRecentEntries] = useState<accountService.Transaction[]>([]);
+  const [recentFilter, setRecentFilter] = useState<typeof RECENT_FILTERS[number]['key']>('all');
   const [loading, setLoading] = useState(true);
 
   const loadData = useCallback(async () => {
     setLoading(true);
     try {
-      const [accountResp, cardsResp] = await Promise.allSettled([
+      const [accountResp, cardsResp, ledgerResp, bankCardResp] = await Promise.allSettled([
         accountService.getMyAccount(),
         getBankCards(),
+        accountService.getTransactions({ pageSize: 20 }),
+        loadBankCardTransactions(20),
       ]);
       if (accountResp.status === 'fulfilled') {
         // 请求拦截器已拆包 ApiResponse，运行时返回值为业务数据而非 AxiosResponse
@@ -38,6 +61,12 @@ const WalletPage = () => {
       if (cardsResp.status === 'fulfilled') {
         setCards(cardsResp.value || []);
       }
+      const ledgerItems = ledgerResp.status === 'fulfilled' ? (ledgerResp.value.items || []) : [];
+      const bankCardItems = bankCardResp.status === 'fulfilled' ? bankCardResp.value : [];
+      setRecentEntries(mergeUniqueTransactions(
+        ledgerItems.filter(isBalanceChangingTransaction),
+        bankCardItems.filter(isBalanceChangingTransaction),
+      ));
     } catch (error: any) {
       Toast.show({ icon: 'fail', content: error?.message || '加载失败' });
     } finally {
@@ -87,6 +116,9 @@ const WalletPage = () => {
       </div>
     );
   }
+
+  const filter = RECENT_FILTERS.find((item) => item.key === recentFilter) || RECENT_FILTERS[0];
+  const latestEntries = recentEntries.filter(filter.match).slice(0, 5);
 
   return (
     <div className="wallet-page">
@@ -147,16 +179,47 @@ const WalletPage = () => {
         </div>
       )}
 
-      {/* 余额变动明细入口（替换原资金渠道说明）：查看直接影响可用余额的流水 */}
-      <div className="wallet-balance-entry" onClick={() => history.push('/h5/wallet/balance-entries')}>
-        <div className="balance-entry-icon">
-          <IconSet name="receipt" size={16} color="#fff" />
+      {/* 最近 5 条余额明细：仅展示直接影响可用余额的流水，完整列表进入余额明细页。 */}
+      <div className="wallet-recent-panel">
+        <div className="wallet-section-head inline">
+          <span className="section-title">余额明细</span>
+          <span className="section-link" onClick={() => history.push('/h5/wallet/balance-entries')}>
+            查看全部 <IconSet name="chevronRight" size={12} />
+          </span>
         </div>
-        <div className="balance-entry-text">
-          <div className="balance-entry-title">余额变动明细</div>
-          <div className="balance-entry-sub">查看余额收支流水</div>
+        <div className="wallet-entry-chips">
+          {RECENT_FILTERS.map((item) => (
+            <span
+              key={item.key}
+              className={`wallet-entry-chip${recentFilter === item.key ? ' active' : ''}`}
+              onClick={() => setRecentFilter(item.key)}
+            >
+              {item.label}
+            </span>
+          ))}
         </div>
-        <IconSet name="chevronRight" size={14} color="var(--h5-text-3)" />
+        {latestEntries.length === 0 ? (
+          <div className="wallet-entry-empty">暂无余额变动记录</div>
+        ) : latestEntries.map((tx) => (
+          <div className="wallet-entry-row" key={tx.transactionId} onClick={() => history.push('/h5/wallet/balance-entries')}>
+            <div className="wallet-entry-icon">
+              <IconSet name="receipt" size={14} color="var(--h5-primary)" />
+            </div>
+            <div className="wallet-entry-main">
+              <div className="wallet-entry-title">
+                {getRecentTitle(tx)}
+                {tx.counterpartyName ? ` · ${tx.direction === 'IN' ? '来自' : '付给'} ${tx.counterpartyName}` : ''}
+              </div>
+              <div className="wallet-entry-sub">
+                {formatTime(tx.createdAt, 'MM-DD HH:mm')}
+                {tx.balanceAfterFen !== null && ` · 余额 ¥${formatAmount(tx.balanceAfterFen)}`}
+              </div>
+            </div>
+            <div className={`wallet-entry-amount${tx.direction === 'IN' ? ' amount-in' : ''}`}>
+              {tx.direction === 'IN' ? '+' : '−'}¥{formatAmount(tx.amountFen)}
+            </div>
+          </div>
+        ))}
       </div>
     </div>
   );

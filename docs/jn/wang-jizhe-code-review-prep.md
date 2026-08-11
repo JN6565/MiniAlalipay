@@ -268,3 +268,319 @@ BankCardBalanceController.recharge
 - `backend/account-center/src/main/java/com/minialalipay/account/application/credit/CreditRepaymentService.java`（还款提交细节）
 - `frontend-h5/src/pages/h5/CreditBills/index.tsx`（页面具体交互）
 - `docs/minialalipay/minialalipay-bank-card-design.md`（银行卡产品规则）
+
+---
+
+## 9. 前端讲解补充：围绕我的分工讲页面怎么承接信用、银行卡和质量门禁
+
+这一章给明天讲前端用，但口径要先摆正：**我不是 H5 或 B 端工程的总负责人；按团队分工，H5 主体由闫泽华负责，B 端主体由王春桂负责。我负责的是 `account-center` 的信用/账单/还款子域，以及 `tests/`、`deploy/` 的质量门禁；银行卡是本次额外负责的联调范围。**  
+所以我讲前端时，不讲所有页面的全量实现，而是讲“我的后端能力和质量验证，分别落到了哪些前端页面、卡片和接口调用上”。
+
+### 9.1 我的分工和前端页面的对应关系
+
+| 工程 | 位置 | 面向谁 | UI 技术 | 主要职责 |
+|---|---|---|---|---|
+| C 端 H5 | `frontend-h5/` | 普通用户 | React + TypeScript + Umi + `antd-mobile` + 自定义 Less | 与我强相关的是 Mini 花呗、花呗账单、还款、银行卡、卡账单、钱包入口、首页花呗摘要 |
+| B 端 Admin | `frontend-admin/` | 运营/管理员/观察者 | React + TypeScript + Umi + Ant Design + TanStack Query + Zustand | 与我强相关的是信用出账/到期运维入口、交易查询、数据质量、看板中的质量门禁和故障验证结果 |
+
+可以这样讲分工：
+
+- **我负责的业务事实**：Mini 花呗额度、已用/可用、信用应收、消费明细、月度账单、还款分配、逾期暂停和清偿恢复。
+- **我负责的联调范围**：银行卡绑定、银行卡充值/提现、卡交易明细，重点验证资金方向、卡号脱敏、余额掩码和幂等。
+- **我负责的质量门禁**：跨服务测试、故障注入、本地部署，验证前端入口经网关打通后，后端交易状态、余额/额度变化、账本分录三者一致。
+- **我不把前端页面说成自己的代码所有权**：H5 页面和 Admin 页面分别归 C 端/B 端负责人，但我需要能讲清它们如何调用我的接口、展示我的业务事实，以及我用什么测试证明它们没有展示错误状态。
+
+工程入口配置仍然要知道：
+
+- H5 配置：`frontend-h5/config/config.ts`，这里配置移动端 viewport、路由、开发代理 `/api -> http://localhost:8080`，还对 AI SSE 流接口单独配置代理。
+- H5 路由：`frontend-h5/config/routes.ts`，其中 `/h5/credit`、`/h5/credit/bills`、`/h5/credit/bills/:id`、`/h5/credit/repay`、`/h5/bank-cards/**` 是我讲解时最需要打开的路由。
+- Admin 配置：`frontend-admin/config/config.ts`，使用 Hash 路由、Ant Design 插件、请求插件、权限插件，代理 `/api` 和 `/actuator` 到网关。
+- Admin 路由：`frontend-admin/config/routes.ts`，其中 `/admin/transactions`、`/admin/dashboard`、`/admin/data-quality`、`/admin/reports`、`/admin/demo-tasks` 与我的质量保障讲解更相关。
+
+### 9.2 我相关的 H5 页面放在哪里
+
+H5 的目录结构可以简单讲，但重点落到这些页面：
+
+| 页面 | 代码位置 | 和我分工的关系 |
+|---|---|---|
+| 首页花呗摘要 | `frontend-h5/src/pages/h5/Home/index.tsx` | 首页只取花呗摘要，展示本期应还和可用额度 |
+| Mini 花呗首页 | `frontend-h5/src/pages/h5/Credit/index.tsx` | 展示额度、应还、还款日、最近账单 |
+| 花呗账单列表 | `frontend-h5/src/pages/h5/CreditBills/index.tsx` | 展示月度账单、未出账/已出账状态 |
+| 花呗账单详情 | `frontend-h5/src/pages/h5/CreditBillDetail/index.tsx` | 展示账单明细、消费项和应还金额 |
+| 花呗还款 | `frontend-h5/src/pages/h5/CreditRepay/index.tsx` | 创建还款草稿、展示分配、提交还款 |
+| 银行卡列表 | `frontend-h5/src/pages/h5/BankCards/index.tsx` | 展示已绑定卡和卡面掩码 |
+| 注册银行卡 | `frontend-h5/src/pages/h5/BankCardAdd/index.tsx` | 银行卡注册，生成演示卡 |
+| 绑定银行卡 | `frontend-h5/src/pages/h5/BankCardBind/index.tsx` | 三要素绑定已注册银行卡 |
+| 卡片详情 | `frontend-h5/src/pages/h5/BankCardDetail/index.tsx` | 查看默认卡、余额掩码、查完整卡号入口 |
+| 卡账单 | `frontend-h5/src/pages/h5/BankCardBills/index.tsx` | 展示银行卡充值/提现/出资交易明细 |
+| 充值/提现 | `frontend-h5/src/pages/h5/BankCardRecharge/index.tsx`、`BankCardWithdraw/index.tsx` | 触发银行卡资金流程，后端用 Seata TCC 编排 |
+
+讲解时的主线是：**页面文件只是用户入口；真正的信用事实来自 `frontend-h5/src/services/credit.ts` 调网关后的后端接口，银行卡事实来自 `frontend-h5/src/services/bankCard.ts`。页面不能自己发明额度、账单、交易终态。**
+
+### 9.3 首页里和我相关的卡片：花呗摘要卡
+
+首页代码在 `frontend-h5/src/pages/h5/Home/index.tsx`，样式在同目录 `index.less`。
+
+我讲首页时只讲和我相关的两块：
+
+- 快捷入口里有“花呗”和“银行卡”，分别跳 `/h5/credit` 和 `/h5/bank-cards`。
+- `credit-card` 是首页花呗摘要卡，展示“本期应还”和“可用额度”，点击进入 `/h5/credit`。
+
+首页数据只拉花呗摘要：
+
+```ts
+const creditResult = await creditService.getCreditSummary();
+setCredit(creditResult as unknown as creditService.CreditSummary);
+```
+
+这里可以强调：**首页只是信用信息的轻量入口，不展示完整账单，也不做额度计算。`billedFen`、`availableFen` 都是后端信用子域返回的事实，前端只用 `formatAmount()` 做展示转换。**
+
+### 9.4 Mini 花呗页面怎么做：承接我的信用接口
+
+花呗首页在 `frontend-h5/src/pages/h5/Credit/index.tsx`，样式在 `Credit/index.less`。
+
+页面结构：
+
+- `credit-hero`：沉浸式头部，展示“Mini 花呗”、本月应还、还款日、总额度、可用额度。
+- `credit-entry-card`：白色入口卡，里面两行入口：花呗账单、立即还款。
+- `credit-repay-cta`：大按钮，根据是否有应还/未出账决定可点状态。
+- `bills-card`：最近账单列表，最多展示 3 条，点击进入账单详情。
+
+数据加载方式：
+
+```ts
+const [creditData, billsData] = await Promise.all([
+  creditService.getCreditSummary(),
+  creditService.getBills(),
+]);
+```
+
+这对应我的后端接口：
+
+- `GET /api/v1/credit/me`：额度摘要，来自 `CreditController` + `CreditQueryService`。
+- `GET /api/v1/credit/bills`：账单列表，来自 `CreditQueryService`。
+
+讲解口径：**这页展示的是我信用子域的读模型。前端只负责把 `totalLimitFen`、`availableFen`、`billedFen`、`unbilledFen` 展示出来；额度守恒、逾期暂停、已用恢复都由后端领域模型和测试保证。**
+
+### 9.5 花呗账单和还款页怎么讲
+
+这一块最贴近我的核心分工，建议重点讲。
+
+| 页面 | 位置 | 调用能力 | 我负责解释的后端事实 |
+|---|---|---|---|
+| 账单列表 | `frontend-h5/src/pages/h5/CreditBills/index.tsx` | `creditService.getBills()` | 每月 1 日出账；账单状态 OPEN/PARTIALLY_PAID/PAID/OVERDUE |
+| 账单详情 | `frontend-h5/src/pages/h5/CreditBillDetail/index.tsx` | `creditService.getBillDetail()` | 账单金额、消费明细、已还/待还金额 |
+| 还款页 | `frontend-h5/src/pages/h5/CreditRepay/index.tsx` | `createCreditRepaymentDraft()`、`submitCreditRepayment()` | 还款草稿、分配顺序、确认令牌、幂等提交 |
+
+还款页讲解重点：
+
+- 前端输入金额后，不自己决定还哪笔账单，而是调用后端创建还款草稿。
+- 后端按固定顺序分配：逾期账单 → 已出账账单 → 未出账消费。
+- 草稿返回分配预览和确认上下文；提交还款时必须走支付密码证明和幂等键。
+- 还款成功后，后端同时保证：用户余额减少、信用应收减少、已用额度减少、可用额度恢复、账本借贷平衡。
+
+一句话口径：**还款页只是展示和提交入口，真正的还款分配和资金守恒在我的 `CreditRepaymentService`、`CreditRepayTccParticipant` 和账本联动测试里。**
+
+### 9.6 银行卡卡片怎么做：我的额外联调范围
+
+银行卡不是我原始代码所有权，但属于这次我需要讲清的额外联调范围。前端最重要的复用组件是：
+
+`frontend-h5/src/components/h5/common/BankCardFace.tsx`
+
+这个组件的输入参数包括：
+
+- `bankCode`：银行代码，如 ICBC、CMB、BOC。
+- `bankName`：银行名称。
+- `cardType`：`DEBIT` 或 `CREDIT`。
+- `cardLast4`：卡号后四位。
+- `isDefault`：是否默认卡。
+- `balanceFen`：卡内虚拟余额，单位是分。
+- `balanceRevealed`：余额是否明文展示。
+
+卡片的视觉不是图片，而是 CSS 做的：
+
+- `BANK_FACE_STYLES` 根据银行代码选择不同 `gradient` 渐变和 `pattern` 纹样。
+- 外层 `<div className="bank-card-face">` 把 `pattern + gradient` 拼成背景。
+- 卡号只显示 `**** **** **** 后四位`。
+- 余额默认显示 `****`，只有调用方传 `balanceRevealed=true` 时才显示金额。
+
+可以这样讲：**银行卡卡片是一个真正的复用组件。页面只负责拿数据和决定点哪里跳转；卡面的颜色、纹样、掩码、默认角标都集中在 `BankCardFace` 里。这样列表页、详情页、充值提现入口都能保持同一套卡面。**
+
+相关页面位置：
+
+- 卡列表：`frontend-h5/src/pages/h5/BankCards/index.tsx`
+- 注册银行卡：`frontend-h5/src/pages/h5/BankCardAdd/index.tsx`
+- 绑定银行卡：`frontend-h5/src/pages/h5/BankCardBind/index.tsx`
+- 卡片详情：`frontend-h5/src/pages/h5/BankCardDetail/index.tsx`
+- 卡账单：`frontend-h5/src/pages/h5/BankCardBills/index.tsx`
+- 充值：`frontend-h5/src/pages/h5/BankCardRecharge/index.tsx`
+- 提现：`frontend-h5/src/pages/h5/BankCardWithdraw/index.tsx`
+- API 封装：`frontend-h5/src/services/bankCard.ts`
+
+我的讲解重点不是“卡片样式好看”，而是四个安全点：
+
+- 卡号只显示后四位，完整卡号必须走一次性证明接口。
+- 余额默认掩码，明文只在当前页面状态里展示，不写浏览器存储。
+- 充值/提现页面提交的是整数分金额和幂等键，后端通过 TCC 判断最终资金状态。
+- 卡交易明细来自后端交易主单查询，不由前端根据本地操作记录拼出来。
+
+### 9.7 AI Talk 里和我相关的是信用查询/还款确认，不是普通转账全流程
+
+AI Talk 页面在 `frontend-h5/src/pages/h5/AITalk/index.tsx`，拆了很多子组件：
+
+| 子组件 | 位置 | 职责 |
+|---|---|---|
+| 消息列表 | `AITalk/components/MessageList.tsx` | 渲染用户消息、AI 消息、流式消息 |
+| 输入栏 | `AITalk/components/InputBar.tsx` | 输入自然语言并发送 |
+| 澄清气泡 | `AITalk/components/ClarificationBubble.tsx` | 多收款人/信息不完整时让用户选择 |
+| 确认卡片 | `AITalk/components/ConfirmationCard.tsx` | 展示转账/还款确认信息，输入支付密码，提交确认 |
+| 工具结果卡片 | `AITalk/components/ToolResultCard.tsx` | 展示 AI 工具调用结果 |
+
+和我分工相关的是两点：
+
+- AI 可以查询 Mini 花呗额度、账单、还款状态，但查询结果必须来自后端 `credit` 接口。
+- AI 可以引导创建还款草稿或展示还款确认卡片，但不能绕过确认令牌、支付密码和后端还款分配。
+
+讲解口径：**我的信用子域给 AI 提供的是可查询、可确认的结构化能力，不给 AI 直接写额度、写应收或提交资金动作的权限。**
+
+### 9.8 H5 接口调用：重点讲 credit.ts 和 bankCard.ts
+
+H5 统一请求基础层在 `frontend-h5/src/services/request.ts`。
+
+它做的事情：
+
+- 每个请求自动加 `X-Request-Id`，方便和后端日志串起来。
+- 登录后自动加 `Authorization: Bearer <token>`。
+- 统一把后端错误包装成 `ApiError`。
+- 遇到 401 或会话失效错误码，会清理本地会话并回到登录页。
+- 对带 `Idempotency-Key` 的可重试请求，在网络错误或 502/503/504 时最多重试 3 次。
+- `clearSession()` 只清登录态，不清头像/昵称展示偏好，符合系统分析第 25 节。
+
+业务服务文件按领域拆分：
+
+| 文件 | 主要负责 |
+|---|---|
+| `services/credit.ts` | **我的核心分工入口**：花呗额度、消费、账单、还款草稿、提交还款 |
+| `services/bankCard.ts` | **我的联调范围入口**：银行卡列表、注册、绑定、详情、充值、提现、卡流水 |
+| `services/account.ts` | 账单主页/余额明细会引用账户事实，用于和信用还款后的余额变化对照 |
+| `services/ai.ts` | AI 查询信用信息或发起还款确认时会间接关联我的信用接口 |
+
+可以这样讲：**我检查前端时，主要看 `credit.ts` 和 `bankCard.ts` 是否只走网关、是否传整数分、写操作是否有幂等键、是否没有把支付密码/确认令牌/完整卡号放进 URL 或本地存储。**
+
+### 9.9 B 端 Admin：我重点讲质量门禁和信用运维入口
+
+B 端代码在 `frontend-admin/src/`。
+
+基本结构：
+
+```
+frontend-admin/src/
+  layouts/AdminLayout/          左侧菜单、顶部栏、内容区
+  pages/<页面名>/index.tsx      运营页面
+  services/ops.ts               运营接口封装
+  services/request.ts           网关请求基础层
+  wrappers/*.tsx                登录、角色、权限守卫
+  stores/ui.ts                  Zustand，只保存菜单折叠这类 UI 状态
+```
+
+`AdminLayout/index.tsx` 做后台壳子：
+
+- 左侧 `Sider` 菜单，分为“总览 / 数据 / 系统”。
+- 顶部 `Header` 显示当前页面标题、页面说明、登录用户、退出按钮。
+- 内容区用 `<Outlet />` 渲染当前页面。
+- 菜单折叠状态存在 `stores/ui.ts`，这是客户端 UI 状态，不是业务事实。
+
+菜单权限在 `AdminLayout/menu.tsx`：先定义全部菜单项，再根据 `access.ts` 的权限模型过滤。这里要讲清楚：**隐藏菜单只是前端体验，不能替代服务端鉴权；路由 wrapper 和后端权限才是最终门禁。**
+
+与我分工强相关的 B 端页面：
+
+| 页面 | 位置 | 和我分工的关系 |
+|---|---|---|
+| 可信运行看板 | `frontend-admin/src/pages/Dashboard/index.tsx` | 展示质量结果、服务健康、最近交易，是质量门禁的展示入口 |
+| 交易查询与回执 | `frontend-admin/src/pages/Transactions/index.tsx` | 用于验证信用支付、还款、银行卡充值提现的交易事实和 TCC/Outbox 状态 |
+| 数据质量 | `frontend-admin/src/pages/DataQuality/index.tsx` | 对应我负责的数据质量门禁、对账差异和发布阻断 |
+| T+1 报表 | `frontend-admin/src/pages/Reports/index.tsx` | 验证日终指标和质量门禁结果 |
+| 演示任务触发 | `frontend-admin/src/pages/DemoTasks/index.tsx` | 可辅助触发出账、到期检查、故障演示任务 |
+
+### 9.10 B 端交易页怎么支撑我的测试讲解
+
+交易查询页：`frontend-admin/src/pages/Transactions/index.tsx`
+
+页面结构：
+
+- 顶部筛选栏：交易状态、业务类型、发起人关键词、搜索、刷新。
+- 中间表格：交易编号、金额、状态、业务类型、发起人、来源订单、风险、创建时间。
+- 右侧抽屉：点击交易行后打开“交易唯一事实详情”。
+- 抽屉分组：交易结果、处理进度、风险/人工处理、技术追溯。
+
+我讲这页时，重点把它和测试三断言连起来：
+
+- 信用支付：交易状态是 `SUCCESS`，资金来源是花呗，后端验证额度已用增加、应收增加、收款余额增加、账本平衡。
+- 信用还款：交易状态是 `SUCCESS`，后端验证余额减少、应收减少、可用额度恢复、账本平衡。
+- 银行卡充值/提现：交易状态和 TCC 状态一致，银行卡虚拟余额方向正确。
+- 故障注入：如果 TCC 未收敛，页面应展示处理中/回滚中/人工处理，不能展示成功。
+
+### 9.11 讲前端时的推荐路线：按我的任务包走
+
+建议不要从“前端技术栈”发散，而按你的任务包讲：
+
+1. **Mini 花呗额度**：打开 `/h5/credit`，讲 `Credit/index.tsx` 如何展示 `GET /api/v1/credit/me` 的额度摘要。
+2. **花呗账单**：打开 `/h5/credit/bills` 和详情页，讲账单来自 `credit_bill`/`credit_bill_item`，前端只展示后端状态。
+3. **花呗还款**：打开 `/h5/credit/repay`，讲创建草稿、后端分配、支付密码、幂等提交和还款守恒。
+4. **银行卡联调**：打开 `/h5/bank-cards`，讲 `BankCardFace` 卡面、卡号脱敏、充值/提现入口和 TCC 资金方向。
+5. **质量门禁**：打开 `/admin/transactions` 和 `/admin/dashboard`，讲如何用交易事实、TCC 状态、数据质量结果证明“页面显示没有把未知当成功”。
+6. **收束边界**：前端不是资金事实来源；我负责通过后端不变量和跨服务测试保证页面展示可信。
+
+---
+
+## 10. 前端评审问答示例：围绕我的分工回答
+
+### 问题 1：你负责后端信用业务，为什么还要讲 H5 的花呗页面？
+
+因为前端页面是我负责能力的用户入口和验收证据。我的代码所有权在 `account-center` 的 `credit`、`bill`、`repayment`，但这些能力最终要在 H5 展示为 `/h5/credit`、`/h5/credit/bills`、`/h5/credit/repay`。我讲前端不是说页面归我维护，而是说明我的接口如何被页面调用、页面展示哪些后端事实、以及我怎么用测试保证展示可信。
+
+### 问题 2：首页花呗卡片是怎么做的，和你的接口有什么关系？
+
+首页在 `frontend-h5/src/pages/h5/Home/index.tsx`。里面的 `credit-card` 展示本期应还和可用额度，数据来自 `creditService.getCreditSummary()`，也就是后端 `GET /api/v1/credit/me`。页面只是把 `billedFen`、`availableFen` 用 `formatAmount()` 转成元展示，不自己计算额度。
+
+### 问题 3：Mini 花呗首页的卡片怎么做？
+
+页面在 `frontend-h5/src/pages/h5/Credit/index.tsx`。上半部分是 `credit-hero`，展示本月应还、还款日、总额度、可用额度；下面 `credit-entry-card` 提供账单和还款入口；`bills-card` 展示最近账单。它同时调用 `getCreditSummary()` 和 `getBills()`，对应我的 `CreditQueryService`。
+
+### 问题 4：还款页为什么不能由前端自己决定还哪张账单？
+
+因为还款分配是信用业务规则，必须由后端固定。前端 `/h5/credit/repay` 只提交还款金额并请求创建草稿，后端按“逾期账单 → 已出账账单 → 未出账消费”的顺序生成分配预览。提交还款时，后端还要校验支付密码证明、确认令牌和幂等键，并通过 TCC 保证余额、应收、额度、账本同时一致。
+
+### 问题 5：银行卡卡片为什么每家银行颜色不一样？这块你怎么讲到自己的分工？
+
+卡面组件在 `frontend-h5/src/components/h5/common/BankCardFace.tsx`，通过 `BANK_FACE_STYLES` 配置不同银行的 CSS 渐变和纹样，不使用真实银行卡图片或商标。我讲它主要是因为银行卡是我的额外联调范围：卡号只显示后四位，余额默认掩码，充值/提现和卡流水都必须走网关接口并接受后端 TCC 事实校验。
+
+### 问题 6：B 端交易详情和你的质量负责人职责有什么关系？
+
+B 端交易查询页在 `frontend-admin/src/pages/Transactions/index.tsx`。它展示交易唯一事实、资金处理状态、终态发布状态、风险和 Trace。我的跨服务测试和故障注入要验证：信用支付、信用还款、银行卡充值提现在这里展示的状态，和后端余额/额度/账本事实一致；处理中或回滚中的交易不能被前端显示成成功。
+
+### 问题 7：你怎么确认前端没有绕过网关调用你的服务？
+
+开发代理和请求层都约束了这个原则。H5 的 `frontend-h5/config/config.ts` 把 `/api` 代理到 `http://localhost:8080`；Admin 的 `frontend-admin/src/services/request.ts` 会检查 URL 必须以 `/api/` 或 `/actuator/` 开头，否则直接抛错。
+
+所以页面代码只写 `/api/v1/...` 这种网关路径，不写 `8081`、`8082`、`8083`、`8084`，也不访问 MySQL 或 Redis。
+
+### 问题 8：金额为什么总是 `amountFen`，页面上才显示“元”？
+
+这是资金系统的统一约束：接口和计算都用整数分，避免 JavaScript 小数精度问题。前端只在展示边界用 `formatAmount()` 或 `formatAmountFen()` 把分转成元字符串；输入金额时也要转回整数分再提交。
+
+例如还款页用户输入“12.34”，前端提交给后端的应该是 `1234` 分。我的后端信用模型、账单和还款分配也全部使用 `long` 分，避免前后端金额口径不一致。
+
+### 问题 9：如果接口失败，页面会不会把失败当成 0 或成功？
+
+不会。H5 请求层会把错误包装成 `ApiError`，页面一般用 Toast 或失败状态提示。B 端看板更明确：`Dashboard/index.tsx` 如果汇总请求失败，会展示“看板汇总数据加载失败”，不会把交易额、成功率、服务健康伪造成 0 或正常。
+
+这点适合和后端资金一致性一起讲：**前端展示也遵循事实优先，未知就是未知，不用假数据掩盖。**
+
+### 问题 10：你明天前端部分最应该强调什么？
+
+强调三句话：
+
+1. **页面所有权不是我的，但信用/账单/还款事实是我的后端分工。**
+2. **前端卡片只展示事实，不计算资金终态，不保存敏感材料。**
+3. **我负责用跨服务测试和故障注入证明：H5、B 端、AI 这些入口最终看到的交易状态、余额/额度变化和账本事实是一致的。**

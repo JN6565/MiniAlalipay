@@ -166,7 +166,8 @@ public class SeataTccCoordinator implements TccCoordinatorPort {
                 new SeataGlobalTransactionExecutor.BankCardRechargeRequest(
                         businessXid, id, transaction.getInitiatorUserId(),
                         transaction.getPayeeAccountId(), transaction.getBankCardId(),
-                        transaction.getAmountFen(), secure.stableId(id + ":payee"));
+                        transaction.getAmountFen(), secure.stableId(id + ":payee"),
+                        null, 0L, 0L, null, null);
         Instant now = Instant.now();
         store.createTccGlobal(businessXid, id, now);
         try {
@@ -191,7 +192,7 @@ public class SeataTccCoordinator implements TccCoordinatorPort {
         }
     }
 
-    /** 银行卡出资转账/扫码支付走 Seata 全局事务：注册银行卡扣减 + 收款入账两个分支，无复式账本。 */
+    /** 银行卡出资转账/扫码支付走 Seata 全局事务：注册银行卡扣减、收款入账和收款方可见账本分支。 */
     private void executeBankCardTransfer(FundTransaction transaction) {
         if (transaction.getStatus().hasDefinitiveOutcome()) return;
         SeataGlobalTransactionExecutor.TransferTccRequest request = request(transaction);

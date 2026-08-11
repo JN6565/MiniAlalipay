@@ -29,6 +29,7 @@ import java.util.Arrays;
 public class CollectionApplicationService {
     private static final String REGENERATE_CODE = "REGENERATE_COLLECTION_CODE";
     private static final String DISABLE_CODE = "DISABLE_COLLECTION_CODE";
+    private static final String OPEN_CREDIT_COLLECTION = "OPEN_CREDIT_COLLECTION";
     private static final String CREATE_REQUEST = "CREATE_COLLECTION_REQUEST";
     private static final String CANCEL_REQUEST = "CANCEL_COLLECTION_REQUEST";
 
@@ -61,8 +62,10 @@ public class CollectionApplicationService {
         if (!"ACTIVE".equals(account.status())) throw new BusinessException(BusinessErrorCode.ACCOUNT_UNAVAILABLE);
         Instant now = clock.instant();
         PersonalCollectionCode oldCode = store.findActiveCode(userId).orElse(null);
+        boolean creditCollectionEnabled = oldCode != null && oldCode.isCreditCollectionEnabled();
         if (oldCode != null) oldCode.replace(oldCode.getVersion(), now);
-        PersonalCollectionCode newCode = PersonalCollectionCode.activate(security.newId(), userId, account.accountId(), now);
+        PersonalCollectionCode newCode = PersonalCollectionCode.activate(security.newId(), userId, account.accountId(),
+                creditCollectionEnabled, now);
         String token = security.newCollectionToken();
         if (!store.replaceCode(oldCode, newCode, security.digest(token), security.newId(), userId, idempotencyKey, digest)) {
             return replayCode(store.findIdempotency(userId, REGENERATE_CODE, idempotencyKey)
@@ -78,6 +81,36 @@ public class CollectionApplicationService {
     @Transactional(readOnly = true)
     public PersonalCollectionCode getActiveCode(String userId) {
         return store.findActiveCode(userId).orElse(null);
+    }
+
+    /**
+     * 幂等开通本人个人收款码的 Mini 花呗商户收款能力。
+     *
+     * <p>开关归属于当前有效个人码；换码时会继承该能力，因此长期个人码和固定金额收款请求都使用同一商户准入事实。</p>
+     */
+    @Transactional
+    public PersonalCollectionCode openCreditCollection(String userId, String idempotencyKey) {
+        requireKey(idempotencyKey);
+        byte[] digest = security.digest("open-credit-collection");
+        CollectionStore.IdempotencyRecord existing = store.findIdempotency(userId, OPEN_CREDIT_COLLECTION, idempotencyKey).orElse(null);
+        if (existing != null) return replayCode(existing, digest, userId).code();
+        PersonalCollectionCode code = store.findActiveCode(userId)
+                .orElseThrow(() -> new BusinessException(BusinessErrorCode.P2P_CODE_INVALID));
+        if (!store.reserveIdempotency(security.newId(), userId, OPEN_CREDIT_COLLECTION, idempotencyKey,
+                digest, code.getCodeId(), "PERSONAL_COLLECTION_CODE")) {
+            return replayCode(store.findIdempotency(userId, OPEN_CREDIT_COLLECTION, idempotencyKey)
+                    .orElseThrow(() -> new IllegalStateException("花呗商户收款码开通幂等冲突后未找到既有记录")), digest, userId).code();
+        }
+        long expectedVersion = code.getVersion();
+        try {
+            code.openCreditCollection(expectedVersion, clock.instant());
+        } catch (IllegalStateException invalid) {
+            throw new BusinessException(BusinessErrorCode.VERSION_CONFLICT);
+        }
+        if (code.getVersion() != expectedVersion && !store.updateCode(code, expectedVersion)) {
+            throw new BusinessException(BusinessErrorCode.VERSION_CONFLICT);
+        }
+        return code;
     }
 
     /** 停用本人当前有效个人码，重复同参调用返回首次结果。 */
@@ -141,6 +174,14 @@ public class CollectionApplicationService {
     @Transactional(readOnly = true)
     public String getRequestShortCode(String userId, String requestId) {
         return store.findRequestShortCode(ownedRequest(userId, requestId).getRequestId()).orElse(null);
+    }
+
+    /** 查询指定收款用户是否已开通 Mini 花呗商户收款能力。 */
+    @Transactional(readOnly = true)
+    public boolean isCreditCollectionEnabled(String payeeUserId) {
+        return store.findActiveCode(payeeUserId)
+                .map(PersonalCollectionCode::isCreditCollectionEnabled)
+                .orElse(false);
     }
 
     /**

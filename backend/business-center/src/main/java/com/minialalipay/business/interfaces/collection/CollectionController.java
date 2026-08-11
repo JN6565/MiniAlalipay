@@ -97,6 +97,14 @@ public class CollectionController {
         return ResponseEntity.ok(success(CodeResponse.from(service.disableCode(userId, body.version(), key), null, null), request));
     }
 
+    /** 幂等开通本人个人收款码的 Mini 花呗商户收款能力。 */
+    @PostMapping("/codes/me/credit-collection/open")
+    public ResponseEntity<ApiResponse<CodeResponse>> openCreditCollection(@RequestHeader("X-User-Id") String userId,
+            @RequestHeader("Idempotency-Key") String key, HttpServletRequest request) {
+        PersonalCollectionCode code = service.openCreditCollection(userId, key);
+        return ResponseEntity.ok(success(CodeResponse.from(code, null, service.getActiveCodeShortCode(userId)), request));
+    }
+
     /** 创建固定金额收款请求；收款令牌仅在创建响应中可见。 */
     @PostMapping("/requests")
     public ResponseEntity<ApiResponse<RequestResponse>> createRequest(@RequestHeader("X-User-Id") String userId,
@@ -152,7 +160,7 @@ public class CollectionController {
             @Valid @RequestBody TokenExchangeRequest body, HttpServletRequest request) {
         CollectionOrder order = service.exchange(authenticatedUser(userId), sessionId(request), body.token());
         return ResponseEntity.ok(success(OrderResponse.from(order, lookupMaskedName(order.getPayeeUserId()),
-                lookupMaskedName(order.getPayerUserId())), request));
+                lookupMaskedName(order.getPayerUserId()), service.isCreditCollectionEnabled(order.getPayeeUserId())), request));
     }
 
     /** 仅个人码订单允许付款人锁定金额和备注。 */
@@ -162,7 +170,7 @@ public class CollectionController {
         CollectionOrder order = service.lockPersonalOrder(authenticatedUser(userId), sessionId(request), id,
                 body.version(), body.amountFen(), body.subject());
         return ResponseEntity.ok(success(OrderResponse.from(order, lookupMaskedName(order.getPayeeUserId()),
-                lookupMaskedName(order.getPayerUserId())), request));
+                lookupMaskedName(order.getPayerUserId()), service.isCreditCollectionEnabled(order.getPayeeUserId())), request));
     }
 
     /** 查询订单；付款人、收款人或绑定 H5 会话可读取脱敏结果。 */
@@ -172,7 +180,7 @@ public class CollectionController {
         String sessionId = request.getSession(false) == null ? null : request.getSession(false).getId();
         CollectionOrder order = service.getOrderForAuthorizedUser(authenticatedUser(userId), sessionId, id);
         return ResponseEntity.ok(success(OrderResponse.from(order, lookupMaskedName(order.getPayeeUserId()),
-                lookupMaskedName(order.getPayerUserId())), request));
+                lookupMaskedName(order.getPayerUserId()), service.isCreditCollectionEnabled(order.getPayeeUserId())), request));
     }
 
     /** 查询用户真实姓名并加密显示：只显示第一个字，后面用星号代替。 */
@@ -190,13 +198,13 @@ public class CollectionController {
         return name.charAt(0) + "*".repeat(name.length() - 1);
     }
 
-    /** 为绑定 H5 会话的付款人签发绑定余额或 Mini 花呗资金来源的 C2C 确认令牌。 */
+    /** 为绑定 H5 会话的付款人签发绑定余额或银行卡资金来源的 C2C 确认令牌。 */
     @PostMapping("/orders/{id}/confirmations")
     public ResponseEntity<ApiResponse<ConfirmationResponse>> confirmation(
             @RequestHeader(value = "X-User-Id", required = false) String userId, @PathVariable String id,
             @Valid @RequestBody ConfirmationRequest body, HttpServletRequest request) {
         CollectionPaymentApplicationService.IssuedConfirmation issued = payment().issueConfirmation(authenticatedUser(userId), id,
-                sessionId(request), body.version(), body.paymentProof(), body.fundingSource());
+                sessionId(request), body.version(), body.paymentProof(), body.fundingSource(), body.cardId());
         return ResponseEntity.ok(success(new ConfirmationResponse(issued.confirmationToken(), issued.subjectHash(), issued.expiresAt()), request));
     }
 
@@ -207,7 +215,7 @@ public class CollectionController {
             @RequestHeader("Idempotency-Key") String idempotencyKey, @PathVariable String id,
             @Valid @RequestBody PayRequest body, HttpServletRequest request) {
         FundTransaction transaction = payment().pay(authenticatedUser(userId), id, sessionId(request), body.confirmationToken(),
-                idempotencyKey, request.getHeader("X-Trace-Id"));
+                idempotencyKey, request.getHeader("X-Trace-Id"), body.cardId());
         return ResponseEntity.accepted().body(success(new PaymentResponse(id, transaction.getTransactionId(),
                 transaction.getStatus().name(), "/api/v1/p2p-collections/orders/" + id, transaction.getUpdatedAt()), request));
     }
@@ -291,20 +299,24 @@ public class CollectionController {
         @JsonAnySetter
         void rejectUnknownField(String field, Object ignored) { throw new BusinessException(CommonErrorCode.INVALID_REQUEST); }
     }
-    /** C2C 确认请求，付款账户和资金来源以服务端事实为准。 */
+    /** C2C 确认请求，付款账户和资金来源以服务端事实为准；银行卡付款必须携带 cardId。 */
     public record ConfirmationRequest(@Min(0) long version,
                                       @jakarta.validation.constraints.NotBlank @jakarta.validation.constraints.Size(max = 256) String paymentProof,
-                                      @jakarta.validation.constraints.NotNull FundingSource fundingSource) { }
-    /** C2C 付款请求，确认令牌不得进入 URL、日志或持久化字段。 */
-    public record PayRequest(@jakarta.validation.constraints.NotBlank @jakarta.validation.constraints.Size(min = 16, max = 256) String confirmationToken) { }
+                                      @jakarta.validation.constraints.NotNull FundingSource fundingSource,
+                                      @jakarta.validation.constraints.Size(max = 26) String cardId) { }
+    /** C2C 付款请求，确认令牌不得进入 URL、日志或持久化字段；银行卡付款时 cardId 必须与确认阶段一致。 */
+    public record PayRequest(@jakarta.validation.constraints.NotBlank @jakarta.validation.constraints.Size(min = 16, max = 256) String confirmationToken,
+                             @jakarta.validation.constraints.Size(max = 26) String cardId) { }
     /** 一次性确认令牌响应。 */
     public record ConfirmationResponse(String confirmationToken, String subjectHash, Instant expiresAt) { }
     /** 资金受理响应；PROCESSING 不代表资金已成功。 */
     public record PaymentResponse(String collectionOrderId, String transactionId, String status, String statusUrl, Instant updatedAt) { }
     /** 脱敏个人码响应；短码只是订单指针，供不支持扫码时手动输入。 */
-    public record CodeResponse(String codeId, String status, String collectionUrl, String shortCode, long version) {
+    public record CodeResponse(String codeId, String status, String collectionUrl, String shortCode,
+                               boolean creditCollectionEnabled, long version) {
         static CodeResponse from(PersonalCollectionCode code, String url, String shortCode) {
-            return new CodeResponse(code.getCodeId(), code.getStatus().name(), url, shortCode, code.getVersion());
+            return new CodeResponse(code.getCodeId(), code.getStatus().name(), url, shortCode,
+                    code.isCreditCollectionEnabled(), code.getVersion());
         }
     }
     /** 固定收款请求响应；collectionUrl 仅创建响应携带，令牌服务端只存摘要不可重读；短码随有效期可重读展示。 */
@@ -320,13 +332,16 @@ public class CollectionController {
     /** C2C 订单响应，禁止返回双方账户、原始令牌和会话标识。 */
     public record OrderResponse(String collectionOrderId, String kind, Long amountFen, String subject, String status,
                                 String transactionId, Instant expiresAt, long version,
-                                String payeeName, String payerName, boolean editable) {
-        static OrderResponse from(CollectionOrder order, String payeeName, String payerName) {
+                                String payeeName, String payerName, boolean editable,
+                                boolean creditPayAllowed, String creditPayDisabledReason) {
+        static OrderResponse from(CollectionOrder order, String payeeName, String payerName, boolean creditCollectionEnabled) {
             String kind = order.getPersonalCodeId() == null ? "FIXED_REQUEST" : "PERSONAL_QR";
             boolean editable = "PERSONAL_QR".equals(kind) && "DRAFT".equals(order.getStatus().name());
+            String reason = creditCollectionEnabled ? null : "该收款码暂不支持花呗";
             return new OrderResponse(order.getOrderId(), kind,
                     order.getAmountFen(), order.getSubject(), order.getStatus().name(), order.getTransactionId(),
-                    order.getExpiresAt(), order.getVersion(), payeeName, payerName, editable);
+                    order.getExpiresAt(), order.getVersion(), payeeName, payerName, editable,
+                    creditCollectionEnabled, reason);
         }
     }
     /**

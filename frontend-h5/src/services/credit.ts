@@ -3,6 +3,8 @@ import { generateIdempotencyKey } from './utils';
 
 export interface CreditSummary {
   creditAccountId: string;
+  /** 是否已由用户显式开通 Mini 花呗；未开通时不可用于付款。 */
+  opened: boolean;
   totalLimitFen: number;
   usedFen: number;
   frozenFen: number;
@@ -58,6 +60,13 @@ export interface BillDetail extends CreditBill {
 // 查询Mini花呗摘要
 export const getCreditSummary = () => {
   return request.get<CreditSummary>('/api/v1/credit/me');
+};
+
+// 显式开通 Mini 花呗；重复点击复用幂等键由服务端保证不会重复开户。
+export const openCredit = () => {
+  return request.post<CreditSummary>('/api/v1/credit/open', {}, {
+    headers: { 'Idempotency-Key': generateIdempotencyKey() },
+  });
 };
 
 // 查询账单列表

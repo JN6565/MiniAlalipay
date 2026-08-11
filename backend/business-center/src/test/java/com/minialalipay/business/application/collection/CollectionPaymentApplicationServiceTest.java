@@ -1,11 +1,13 @@
 package com.minialalipay.business.application.collection;
 
 import com.minialalipay.business.application.port.BusinessStore;
+import com.minialalipay.business.application.port.AccountDirectoryPort;
 import com.minialalipay.business.application.port.CollectionStore;
 import com.minialalipay.business.application.port.PaymentProofPort;
 import com.minialalipay.business.application.port.SecurityMaterialPort;
 import com.minialalipay.business.application.port.TccCoordinatorPort;
 import com.minialalipay.business.domain.collection.CollectionOrder;
+import com.minialalipay.business.domain.collection.PersonalCollectionCode;
 import com.minialalipay.business.domain.confirmation.Confirmation;
 import com.minialalipay.business.domain.transaction.FundingSource;
 import com.minialalipay.business.domain.transaction.SourceType;
@@ -36,14 +38,26 @@ class CollectionPaymentApplicationServiceTest {
     private static final String KEY = "123e4567-e89b-12d3-a456-426614174000";
 
     @Test
-    void C2C支持用户明确选择MiniCredit并签发确认() {
+    void 收款方未开通花呗商户收款码时拒绝MiniCredit确认() {
         Fixture fixture = fixture();
 
-        var issued = fixture.service.issueConfirmation("payer-1", "order-1", "session-1", 1L,
-                "proof", FundingSource.MINI_CREDIT);
-        ArgumentCaptor<Confirmation> captor = ArgumentCaptor.forClass(Confirmation.class);
-        verify(fixture.business).replaceCollectionConfirmation(captor.capture());
-        when(fixture.business.findConfirmationForUpdate(any())).thenReturn(Optional.of(captor.getValue()));
+        assertThatThrownBy(() -> fixture.service.issueConfirmation("payer-1", "order-1", "session-1", 1L,
+                "proof", FundingSource.MINI_CREDIT, null))
+                .isInstanceOf(BusinessException.class);
+        verify(fixture.business, never()).replaceCollectionConfirmation(any());
+    }
+
+    @Test
+    void 收款方开通花呗商户收款码后允许MiniCredit并受理为CreditPay() {
+        Fixture fixture = fixture();
+        when(fixture.collections.findActiveCode("payee-1")).thenReturn(Optional.of(
+                PersonalCollectionCode.activate("code-1", "payee-1", "account-payee-1", true, NOW)));
+
+        CollectionPaymentApplicationService.IssuedConfirmation issued = fixture.service.issueConfirmation(
+                "payer-1", "order-1", "session-1", 1L, "proof", FundingSource.MINI_CREDIT, null);
+        ArgumentCaptor<Confirmation> confirmationCaptor = ArgumentCaptor.forClass(Confirmation.class);
+        verify(fixture.business).replaceCollectionConfirmation(confirmationCaptor.capture());
+        when(fixture.business.findConfirmationForUpdate(any())).thenReturn(Optional.of(confirmationCaptor.getValue()));
         when(fixture.business.findByIdempotency("payer-1",
                 com.minialalipay.business.domain.transaction.TransactionType.CREDIT_PAY, KEY)).thenReturn(Optional.empty());
         when(fixture.business.findBySource(SourceType.PERSONAL_QR_ORDER.name(), "order-1")).thenReturn(Optional.empty());
@@ -51,11 +65,37 @@ class CollectionPaymentApplicationServiceTest {
         when(fixture.collections.acceptOrderForPayment(any(), anyLong(), any())).thenReturn(true);
 
         var transaction = fixture.service.pay("payer-1", "order-1", "session-1",
-                issued.confirmationToken(), KEY, "0".repeat(32));
+                issued.confirmationToken(), KEY, "0".repeat(32), null);
 
         assertThat(transaction.getBusinessType()).isEqualTo(
                 com.minialalipay.business.domain.transaction.TransactionType.CREDIT_PAY);
         assertThat(transaction.getFundingSource()).isEqualTo(FundingSource.MINI_CREDIT);
+        verify(fixture.accounts).requireCreditPaymentEligible("payer-1", 5200L);
+    }
+
+    @Test
+    void C2C个人扫码支持银行卡付款并绑定卡号摘要() {
+        Fixture fixture = fixture();
+
+        var issued = fixture.service.issueConfirmation("payer-1", "order-1", "session-1", 1L,
+                "proof", FundingSource.BANK_CARD, "card-1");
+        ArgumentCaptor<Confirmation> captor = ArgumentCaptor.forClass(Confirmation.class);
+        verify(fixture.business).replaceCollectionConfirmation(captor.capture());
+        when(fixture.business.findConfirmationForUpdate(any())).thenReturn(Optional.of(captor.getValue()));
+        when(fixture.business.findByIdempotency("payer-1",
+                com.minialalipay.business.domain.transaction.TransactionType.TRANSFER, KEY)).thenReturn(Optional.empty());
+        when(fixture.business.findBySource(SourceType.PERSONAL_QR_ORDER.name(), "order-1")).thenReturn(Optional.empty());
+        when(fixture.business.updateConfirmation(any(), anyString())).thenReturn(true);
+        when(fixture.collections.acceptOrderForPayment(any(), anyLong(), any())).thenReturn(true);
+
+        var transaction = fixture.service.pay("payer-1", "order-1", "session-1",
+                issued.confirmationToken(), KEY, "0".repeat(32), "card-1");
+
+        assertThat(transaction.getBusinessType()).isEqualTo(
+                com.minialalipay.business.domain.transaction.TransactionType.TRANSFER);
+        assertThat(transaction.getFundingSource()).isEqualTo(FundingSource.BANK_CARD);
+        assertThat(transaction.getBankCardId()).isEqualTo("card-1");
+        assertThat(transaction.getPayerAccountId()).isNull();
         verify(fixture.coordinator).startOrResume(transaction);
     }
 
@@ -63,7 +103,7 @@ class CollectionPaymentApplicationServiceTest {
     void 个人码订单确认并受理为唯一余额Transfer() {
         Fixture fixture = fixture();
         CollectionPaymentApplicationService.IssuedConfirmation issued = fixture.service.issueConfirmation(
-                "payer-1", "order-1", "session-1", 1L, "proof", FundingSource.BALANCE);
+                "payer-1", "order-1", "session-1", 1L, "proof", FundingSource.BALANCE, null);
         ArgumentCaptor<Confirmation> confirmationCaptor = ArgumentCaptor.forClass(Confirmation.class);
         verify(fixture.business).replaceCollectionConfirmation(confirmationCaptor.capture());
         Confirmation confirmation = confirmationCaptor.getValue();
@@ -75,7 +115,7 @@ class CollectionPaymentApplicationServiceTest {
         when(fixture.business.updateConfirmation(any(), anyString())).thenReturn(true);
         when(fixture.collections.acceptOrderForPayment(any(), anyLong(), any())).thenReturn(true);
 
-        var transaction = fixture.service.pay("payer-1", "order-1", "session-1", issued.confirmationToken(), KEY, "0".repeat(32));
+        var transaction = fixture.service.pay("payer-1", "order-1", "session-1", issued.confirmationToken(), KEY, "0".repeat(32), null);
 
         assertThat(transaction.getSourceType()).isEqualTo(SourceType.PERSONAL_QR_ORDER);
         assertThat(transaction.getFundingSource()).isEqualTo(FundingSource.BALANCE);
@@ -108,11 +148,12 @@ class CollectionPaymentApplicationServiceTest {
         when(business.findBySource(anyString(), anyString())).thenReturn(Optional.empty());
         when(business.updateConfirmation(any(), anyString())).thenReturn(true);
         when(collections.acceptOrderForPayment(any(), anyLong(), any())).thenReturn(true);
-        CollectionPaymentApplicationService service = new CollectionPaymentApplicationService(collections, business, proofs,
+        AccountDirectoryPort accounts = mock(AccountDirectoryPort.class);
+        CollectionPaymentApplicationService service = new CollectionPaymentApplicationService(collections, business, accounts, proofs,
                 security, coordinator, new IdempotencyKeyValidator(), null, null, Clock.fixed(NOW, ZoneOffset.UTC));
 
-        service.issueConfirmation("payer-1", "order-1", "session-1", 0L, "proof", FundingSource.BALANCE);
-        service.issueConfirmation("payer-2", "order-2", "session-2", 0L, "proof", FundingSource.BALANCE);
+        service.issueConfirmation("payer-1", "order-1", "session-1", 0L, "proof", FundingSource.BALANCE, null);
+        service.issueConfirmation("payer-2", "order-2", "session-2", 0L, "proof", FundingSource.BALANCE, null);
         ArgumentCaptor<Confirmation> confirmationCaptor = ArgumentCaptor.forClass(Confirmation.class);
         verify(business, org.mockito.Mockito.times(2)).replaceCollectionConfirmation(confirmationCaptor.capture());
         java.util.List<Confirmation> confirmations = confirmationCaptor.getAllValues();
@@ -122,9 +163,9 @@ class CollectionPaymentApplicationServiceTest {
                 .thenReturn(Optional.of(confirmations.get(1)));
 
         var firstTransaction = service.pay("payer-1", "order-1", "session-1", "confirmation-token-0123456789abcdef",
-                KEY, "0".repeat(32));
+                KEY, "0".repeat(32), null);
         var secondTransaction = service.pay("payer-2", "order-2", "session-2", "confirmation-token-0123456789abcdef",
-                KEY, "0".repeat(32));
+                KEY, "0".repeat(32), null);
 
         assertThat(firstTransaction.getSourceType()).isEqualTo(SourceType.COLLECTION_REQUEST_ORDER);
         assertThat(secondTransaction.getSourceType()).isEqualTo(SourceType.COLLECTION_REQUEST_ORDER);
@@ -139,6 +180,7 @@ class CollectionPaymentApplicationServiceTest {
     private static Fixture fixture() {
         CollectionStore collections = mock(CollectionStore.class);
         BusinessStore business = mock(BusinessStore.class);
+        AccountDirectoryPort accounts = mock(AccountDirectoryPort.class);
         PaymentProofPort proofs = mock(PaymentProofPort.class);
         TccCoordinatorPort coordinator = mock(TccCoordinatorPort.class);
         TestSecurity security = new TestSecurity();
@@ -150,13 +192,14 @@ class CollectionPaymentApplicationServiceTest {
         when(proofs.verify("payer-1", "proof", "COLLECTION_CONFIRM"))
                 .thenReturn(new PaymentProofPort.VerifiedProof("proof-1", 3L));
         when(proofs.currentPayPasswordVersion("payer-1")).thenReturn(3L);
-        CollectionPaymentApplicationService service = new CollectionPaymentApplicationService(collections, business, proofs,
+        CollectionPaymentApplicationService service = new CollectionPaymentApplicationService(collections, business, accounts, proofs,
                 security, coordinator, new IdempotencyKeyValidator(), null, null, Clock.fixed(NOW, ZoneOffset.UTC));
-        return new Fixture(service, collections, business, coordinator, security, order);
+        return new Fixture(service, collections, business, accounts, coordinator, security, order);
     }
 
     private record Fixture(CollectionPaymentApplicationService service, CollectionStore collections, BusinessStore business,
-                           TccCoordinatorPort coordinator, TestSecurity security, CollectionOrder order) { }
+                           AccountDirectoryPort accounts, TccCoordinatorPort coordinator, TestSecurity security,
+                           CollectionOrder order) { }
 
     private static final class TestSecurity implements SecurityMaterialPort {
         private int sequence;

@@ -11,7 +11,8 @@ import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 
-/** 供业务中心终态发布器调用的版本化资金与账本事实接口。 */
+/**账本
+ * 供业务中心终态发布器调用的版本化资金与账本事实接口。 */
 @RestController
 @Validated
 @RequestMapping("/internal/v1/transaction-facts")

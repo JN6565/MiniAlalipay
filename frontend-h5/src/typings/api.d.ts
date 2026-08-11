@@ -53,5 +53,5 @@ declare namespace API {
     | 'RECHARGE';
 
   // 资金来源
-  type FundingSource = 'BALANCE' | 'MINI_CREDIT';
+  type FundingSource = 'BALANCE' | 'MINI_CREDIT' | 'BANK_CARD';
 }

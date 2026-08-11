@@ -53,9 +53,9 @@ public interface CreditAccountMapper {
      */
     @Insert("INSERT INTO account_db.credit_account "
             + "(credit_account_id, user_id, total_limit_fen, used_fen, frozen_fen, "
-            + "status, suspend_reason, version, created_at, updated_at) "
+            + "status, suspend_reason, opened_at, version, created_at, updated_at) "
             + "VALUES (#{creditAccountId}, #{userId}, #{totalLimitFen}, #{usedFen}, #{frozenFen}, "
-            + "#{status}, #{suspendReason}, #{version}, #{createdAt}, #{updatedAt})")
+            + "#{status}, #{suspendReason}, #{openedAt}, #{version}, #{createdAt}, #{updatedAt})")
     int insert(CreditAccountPO po);
 
     /**
@@ -69,7 +69,7 @@ public interface CreditAccountMapper {
      */
     @Update("UPDATE account_db.credit_account "
             + "SET used_fen = #{usedFen}, frozen_fen = #{frozenFen}, "
-            + "status = #{status}, suspend_reason = #{suspendReason}, "
+            + "status = #{status}, suspend_reason = #{suspendReason}, opened_at = #{openedAt}, "
             + "version = version + 1, updated_at = #{updatedAt} "
             + "WHERE credit_account_id = #{creditAccountId} AND version = #{version}")
     int updateByCas(CreditAccountPO po);

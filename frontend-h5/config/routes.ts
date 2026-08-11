@@ -209,6 +209,20 @@ export default [
         auth: true,
       },
       {
+        path: '/h5/credit/open',
+        component: '@/pages/h5/CreditOpen',
+        exact: true,
+        title: '开通Mini花呗',
+        auth: true,
+      },
+      {
+        path: '/h5/credit/merchant-collection',
+        component: '@/pages/h5/CreditMerchantCollection',
+        exact: true,
+        title: '花呗商户收款码',
+        auth: true,
+      },
+      {
         path: '/h5/credit/bills',
         component: '@/pages/h5/CreditBills',
         exact: true,

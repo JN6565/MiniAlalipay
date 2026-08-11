@@ -52,6 +52,31 @@ public class LedgerTccApplicationService {
         long version = branch.getBarrierVersion(); branch.markTried(now); save(branch, version); return branch;
     }
 
+    /**
+     * Try 创建银行卡出资转账/扫码的外部清算账本凭证。
+     *
+     * <p>付款方资金来自银行卡虚拟余额，不应生成付款用户余额分录；但收款方余额已经真实增加，
+     * 必须以系统发行权益作为清算借方、收款用户余额负债作为贷方生成平衡凭证。这样 B 的余额明细、
+     * 全局账单和对账都能从账本事实读取收款入账，而不是依赖 A 的银行卡流水投影。</p>
+     */
+    @Transactional
+    public TccBranch tryExternalFundingLedger(ExternalFundingLedgerCommand c, Instant now) {
+        TccBranch branch = find(c.xid(), c.voucherId());
+        if (branch == null) {
+            branch = TccBranch.initialize(c.xid(), TccBranchType.LEDGER, c.voucherId(), c.transactionId(), c.amountFen(), now);
+            try { branches.createLedgerBranch(branch); }
+            catch (DataIntegrityViolationException conflict) { branch = required(c.xid(), c.voucherId()); }
+        }
+        same(branch, c.transactionId(), c.amountFen());
+        if (branch.getStatus() == TccBranchStatus.CANCELLED) throw new IllegalStateException("Cancel 已建立屏障，拒绝晚到 Try");
+        if (branch.getStatus() != TccBranchStatus.INIT) return branch;
+        LedgerVoucher voucher = externalFundingVoucher(c, now);
+        LedgerVoucher existing = ledgers.find(c.transactionId(), "TRANSFER", 0).orElse(null);
+        if (existing == null) ledgers.savePrepared(voucher);
+        else validateVoucher(existing, voucher);
+        long version = branch.getBarrierVersion(); branch.markTried(now); save(branch, version); return branch;
+    }
+
     /** Confirm 汇总数据库分录验平后过账，并写账本 Outbox。 */
     @Transactional
     public TccBranch confirmLedger(LedgerCommand c, Instant now) {
@@ -72,6 +97,13 @@ public class LedgerTccApplicationService {
         long version = branch.getBarrierVersion(); branch.confirm(now); save(branch, version); return branch;
     }
 
+    /** Confirm 银行卡外部出资账本；过账规则与普通 TRANSFER 账本相同。 */
+    @Transactional
+    public TccBranch confirmExternalFundingLedger(ExternalFundingLedgerCommand c, Instant now) {
+        return confirmLedger(new LedgerCommand(c.xid(), c.transactionId(), c.payeeAccountId(), c.payeeAccountId(),
+                c.amountFen(), c.voucherId(), c.debitEntryId(), c.creditEntryId(), c.eventId(), c.traceId()), now);
+    }
+
     /** Cancel 先到记录空回滚；Try 已完成时只取消 PREPARED 凭证。 */
     @Transactional
     public TccBranch cancelLedger(LedgerCommand c, Instant now) {
@@ -88,6 +120,13 @@ public class LedgerTccApplicationService {
         long version = branch.getBarrierVersion(); branch.cancel(now); save(branch, version); return branch;
     }
 
+    /** Cancel 银行卡外部出资账本；只取消尚未过账的预制凭证并保留屏障。 */
+    @Transactional
+    public TccBranch cancelExternalFundingLedger(ExternalFundingLedgerCommand c, Instant now) {
+        return cancelLedger(new LedgerCommand(c.xid(), c.transactionId(), c.payeeAccountId(), c.payeeAccountId(),
+                c.amountFen(), c.voucherId(), c.debitEntryId(), c.creditEntryId(), c.eventId(), c.traceId()), now);
+    }
+
     private LedgerVoucher voucher(LedgerCommand c, Instant now) {
         var payer = accounts.findById(c.payerAccountId()).orElseThrow(() -> new BusinessException(CommonErrorCode.NOT_FOUND));
         var payee = accounts.findById(c.payeeAccountId()).orElseThrow(() -> new BusinessException(CommonErrorCode.NOT_FOUND));
@@ -99,17 +138,41 @@ public class LedgerTccApplicationService {
         return LedgerVoucher.prepare(c.voucherId(), c.transactionId(), "TRANSFER", 0, null,
                 c.amountFen(), c.amountFen(), entries, now);
     }
+
+    private LedgerVoucher externalFundingVoucher(ExternalFundingLedgerCommand c, Instant now) {
+        var payee = accounts.findById(c.payeeAccountId()).orElseThrow(() -> new BusinessException(CommonErrorCode.NOT_FOUND));
+        var clearing = ledgerAccounts.findSystemIssuance()
+                .orElseThrow(() -> new BusinessException(CommonErrorCode.NOT_FOUND));
+        var payeeLedger = ledgerAccounts.findUserBalanceByUserId(payee.getUserId())
+                .orElseThrow(() -> new BusinessException(CommonErrorCode.NOT_FOUND));
+        List<LedgerEntry> entries = List.of(
+                new LedgerEntry(c.debitEntryId(), c.voucherId(), c.transactionId(),
+                        clearing.getLedgerAccountId(), LedgerDirection.DEBIT, c.amountFen(), 1,
+                        "银行卡出资清算借记系统发行权益", now),
+                new LedgerEntry(c.creditEntryId(), c.voucherId(), c.transactionId(),
+                        payeeLedger.getLedgerAccountId(), LedgerDirection.CREDIT, c.amountFen(), 2,
+                        "银行卡出资转账收款", now));
+        return LedgerVoucher.prepare(c.voucherId(), c.transactionId(), "TRANSFER", 0, null,
+                c.amountFen(), c.amountFen(), entries, now);
+    }
     private void validateVoucher(LedgerVoucher left, LedgerVoucher right) {
         if (left.getTotalDebitFen() != right.getTotalDebitFen() || left.getTotalCreditFen() != right.getTotalCreditFen()) {
             throw new IllegalStateException("相同交易对应的账本参数不一致");
         }
     }
     private TccBranch find(LedgerCommand c) { return branches.findLedgerBranchForUpdate(c.xid(), c.voucherId()).orElse(null); }
+    private TccBranch find(String xid, String voucherId) { return branches.findLedgerBranchForUpdate(xid, voucherId).orElse(null); }
     private TccBranch required(LedgerCommand c) {
         TccBranch branch = find(c); if (branch == null) throw new BusinessException(CommonErrorCode.NOT_FOUND); return branch;
     }
+    private TccBranch required(String xid, String voucherId) {
+        TccBranch branch = find(xid, voucherId); if (branch == null) throw new BusinessException(CommonErrorCode.NOT_FOUND); return branch;
+    }
     private void same(TccBranch b, LedgerCommand c) {
-        if (!b.getTransactionId().equals(c.transactionId()) || b.getAmountFen() != c.amountFen()) throw new IllegalStateException("TCC 分支幂等参数不一致");
+        same(b, c.transactionId(), c.amountFen());
+    }
+    private void same(TccBranch b, String transactionId, long amountFen) {
+        if (!b.getTransactionId().equals(transactionId) || b.getAmountFen() != amountFen) throw new IllegalStateException("TCC 分支幂等参数不一致");
     }
     private void save(TccBranch b, long version) {
         if (!branches.updateLedgerBranch(b, version)) throw new IllegalStateException("TCC 分支版本冲突");
@@ -117,5 +180,9 @@ public class LedgerTccApplicationService {
 
     /** 账本参与者命令；两个分录 ID 必须稳定重试。 */
     public record LedgerCommand(String xid, String transactionId, String payerAccountId, String payeeAccountId,
+            long amountFen, String voucherId, long debitEntryId, long creditEntryId, String eventId, String traceId) { }
+
+    /** 银行卡等外部资金出资账本命令；只给收款方用户余额生成可见贷方分录。 */
+    public record ExternalFundingLedgerCommand(String xid, String transactionId, String payeeAccountId,
             long amountFen, String voucherId, long debitEntryId, long creditEntryId, String eventId, String traceId) { }
 }

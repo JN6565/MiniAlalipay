@@ -25,4 +25,12 @@ class SeataTransferTccContractTest {
                 long.class, long.class, String.class, String.class);
         assertNotNull(method.getAnnotation(TwoPhaseBusinessAction.class));
     }
+
+    @Test
+    void 银行卡外部出资账本参与者必须声明TwoPhaseBusinessAction() throws Exception {
+        Method method = SeataExternalFundingLedgerTccParticipant.class.getMethod("tryLedger",
+                BusinessActionContext.class, String.class, String.class, String.class, long.class,
+                String.class, long.class, long.class, String.class, String.class);
+        assertNotNull(method.getAnnotation(TwoPhaseBusinessAction.class));
+    }
 }

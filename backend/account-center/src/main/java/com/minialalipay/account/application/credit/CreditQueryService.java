@@ -64,7 +64,7 @@ public class CreditQueryService {
             CreditAccount account = creditAccountRepository.findByUserId(userId).orElse(null);
             if (account == null) {
                 // 信用账户不存在时返回默认值
-                return new CreditSummaryDTO("", "ACTIVE", 500000L, 0L, 0L, 500000L, 0L, 0L, 0L);
+                return new CreditSummaryDTO("", false, "ACTIVE", 500000L, 0L, 0L, 500000L, 0L, 0L, 0L);
             }
             CreditReceivable receivable = creditReceivableRepository
                     .findByCreditAccountId(account.getCreditAccountId())
@@ -72,6 +72,7 @@ public class CreditQueryService {
                             java.time.Instant.now()));
             return new CreditSummaryDTO(
                     account.getCreditAccountId(),
+                    account.isOpened(),
                     account.getStatus().name(),
                     account.getTotalLimitFen(),
                     account.getUsedFen(),
@@ -83,7 +84,7 @@ public class CreditQueryService {
             );
         } catch (Exception e) {
             // 查询失败时返回默认值
-            return new CreditSummaryDTO("", "ACTIVE", 500000L, 0L, 0L, 500000L, 0L, 0L, 0L);
+            return new CreditSummaryDTO("", false, "ACTIVE", 500000L, 0L, 0L, 500000L, 0L, 0L, 0L);
         }
     }
 

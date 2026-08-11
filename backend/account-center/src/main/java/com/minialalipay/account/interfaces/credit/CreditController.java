@@ -1,6 +1,7 @@
 package com.minialalipay.account.interfaces.credit;
 
 import com.minialalipay.account.application.credit.CreditQueryService;
+import com.minialalipay.account.application.credit.CreditOpeningService;
 import com.minialalipay.account.application.credit.CreditRepaymentService;
 import com.minialalipay.account.application.credit.dto.CreditBillDetailDTO;
 import com.minialalipay.account.application.credit.dto.CreditBillListDTO;
@@ -49,6 +50,7 @@ import org.springframework.web.bind.annotation.RestController;
 public class CreditController {
 
     private final CreditQueryService creditQueryService;
+    private final CreditOpeningService creditOpeningService;
     private final CreditRepaymentService creditRepaymentService;
     private final IdempotencyKeyValidator idempotencyKeyValidator;
     private final RequestIdGenerator requestIdGenerator;
@@ -58,14 +60,39 @@ public class CreditController {
      */
     public CreditController(
             CreditQueryService creditQueryService,
+            CreditOpeningService creditOpeningService,
             CreditRepaymentService creditRepaymentService,
             IdempotencyKeyValidator idempotencyKeyValidator,
             RequestIdGenerator requestIdGenerator
     ) {
         this.creditQueryService = creditQueryService;
+        this.creditOpeningService = creditOpeningService;
         this.creditRepaymentService = creditRepaymentService;
         this.idempotencyKeyValidator = idempotencyKeyValidator;
         this.requestIdGenerator = requestIdGenerator;
+    }
+
+    /**
+     * 显式开通当前用户的 Mini 花呗。
+     *
+     * <p>幂等键必填；重复提交只返回同一已开通账户事实，不会重复创建额度、应收或账本科目。</p>
+     *
+     * @param userId 用户 ID
+     * @param idempotencyKey 幂等键
+     * @param httpRequest HTTP 请求
+     * @return 开通后的额度摘要
+     */
+    @PostMapping("/open")
+    public ResponseEntity<ApiResponse<CreditSummaryDTO>> openCredit(
+            @RequestHeader("X-User-Id") String userId,
+            @RequestHeader("Idempotency-Key") String idempotencyKey,
+            HttpServletRequest httpRequest
+    ) {
+        validateIdempotencyKey(idempotencyKey);
+        String requestId = requestIdGenerator.resolve(httpRequest.getHeader("X-Request-Id"));
+        String traceId = httpRequest.getHeader("X-Trace-Id");
+        CreditSummaryDTO data = creditOpeningService.open(userId, idempotencyKey);
+        return ResponseEntity.ok(ApiResponse.success(data, requestId, traceId));
     }
 
     /**

@@ -1,12 +1,12 @@
 import React, { useEffect, useState } from 'react';
 import { useParams, history, useLocation } from 'umi';
-import { Input, Toast, SpinLoading } from 'antd-mobile';
+import { Input, Toast, SpinLoading, Popup } from 'antd-mobile';
 import * as collectionService from '@/services/collection';
 import * as paymentPasswordService from '@/services/paymentPassword';
 import * as accountService from '@/services/account';
 import * as creditService from '@/services/credit';
 import { AMOUNT_MIN, AMOUNT_MAX } from '@/constants';
-import { formatBalance } from '@/services/bankCard';
+import { getBankCards, formatBalance, type BankCard } from '@/services/bankCard';
 import { AmountInput } from '@/components/h5/AmountInput';
 import { PasswordInput } from '@/components/h5/PasswordInput';
 import { IconSet } from '@/components/h5/common';
@@ -26,9 +26,12 @@ const CollectionPayPage: React.FC = () => {
   const [amount, setAmount] = useState(0);
   const [subject, setSubject] = useState('');
   const [password, setPassword] = useState('');
-  const [fundingSource, setFundingSource] = useState<'BALANCE' | 'MINI_CREDIT' | null>(null);
+  const [fundingSource, setFundingSource] = useState<'BALANCE' | 'BANK_CARD' | 'MINI_CREDIT' | null>(null);
   const [account, setAccount] = useState<accountService.AccountInfo | null>(null);
   const [credit, setCredit] = useState<creditService.CreditSummary | null>(null);
+  const [bankCards, setBankCards] = useState<BankCard[]>([]);
+  const [selectedCardId, setSelectedCardId] = useState<string | null>(null);
+  const [showCardPicker, setShowCardPicker] = useState(false);
 
   useEffect(() => {
     if (token) {
@@ -56,12 +59,13 @@ const CollectionPayPage: React.FC = () => {
         data = await collectionService.exchangeToken(t);
       }
       setOrder(data);
-      setLoading(false);
-      const [accountResult, creditResult] = await Promise.allSettled([
+      const [accountResult, bankCardsResult, creditResult] = await Promise.allSettled([
         accountService.getMyAccount(),
+        getBankCards(),
         creditService.getCreditSummary(),
       ]);
       if (accountResult.status === 'fulfilled') setAccount(accountResult.value as unknown as accountService.AccountInfo);
+      if (bankCardsResult.status === 'fulfilled') setBankCards(bankCardsResult.value as unknown as BankCard[]);
       if (creditResult.status === 'fulfilled') setCredit(creditResult.value as unknown as creditService.CreditSummary);
       if (data.amountFen) {
         setAmount(data.amountFen / 100);
@@ -113,6 +117,14 @@ const CollectionPayPage: React.FC = () => {
 
   const handlePay = async () => {
     if (!order) return;
+    if (!fundingSource) {
+      Toast.show({ content: '请选择支付方式', icon: 'fail' });
+      return;
+    }
+    if (fundingSource === 'BANK_CARD' && !selectedCardId) {
+      Toast.show({ content: '请选择付款银行卡', icon: 'fail' });
+      return;
+    }
     if (!password || password.length !== 6) {
       Toast.show({ content: '请输入6位支付密码', icon: 'fail' });
       return;
@@ -132,10 +144,15 @@ const CollectionPayPage: React.FC = () => {
         paymentProof,
         order.version || 0,
         fundingSource,
+        fundingSource === 'BANK_CARD' ? selectedCardId || undefined : undefined,
       );
 
       // 3. 提交支付
-      await collectionService.submitPayment(order.collectionOrderId, confirmationToken);
+      await collectionService.submitPayment(
+        order.collectionOrderId,
+        confirmationToken,
+        fundingSource === 'BANK_CARD' ? selectedCardId || undefined : undefined,
+      );
 
       // 结果页按订单 ID 查询状态，不能传交易 ID
       history.push(`/h5/collection/result/${order.collectionOrderId}`);
@@ -161,10 +178,58 @@ const CollectionPayPage: React.FC = () => {
   // 个人码草稿阶段：先填写金额与备注并锁定，锁定后才进入支付
   const draftStage = order.editable;
 
-  // 支付方式行（余额 / Mini 花呗）自定义单选
-  const fundingRows: Array<{ key: 'BALANCE' | 'MINI_CREDIT'; label: string; value: string }> = [
+  const selectedCard = bankCards.find((card) => card.cardId === selectedCardId) || null;
+  const creditUnavailableReason = (() => {
+    if (!credit?.opened) return '未开通，点击开通';
+    if (credit.status !== 'ACTIVE') return credit.overdueFen > 0 ? '逾期暂停使用' : '当前不可用';
+    if (!order.creditPayAllowed) return order.creditPayDisabledReason || '该收款码暂不支持花呗';
+    if ((credit.availableFen || 0) < Math.round(amount * 100)) return '可用额度不足';
+    return '';
+  })();
+
+  const selectFundingSource = (value: 'BALANCE' | 'BANK_CARD' | 'MINI_CREDIT') => {
+    if (value === 'MINI_CREDIT') {
+      if (!credit?.opened) {
+        Toast.show({ content: '请先开通 Mini 花呗', icon: 'fail' });
+        history.push('/h5/credit/open');
+        return;
+      }
+      if (creditUnavailableReason) {
+        Toast.show({ content: creditUnavailableReason, icon: 'fail' });
+        return;
+      }
+    }
+    setFundingSource(value);
+    setPassword('');
+    if (value === 'BANK_CARD') {
+      if (bankCards.length === 0) {
+        Toast.show({ content: '暂无银行卡，请先绑定', icon: 'fail' });
+        history.push('/h5/bank-cards');
+        return;
+      }
+      if (!selectedCardId) setSelectedCardId(bankCards[0].cardId);
+      setShowCardPicker(true);
+    }
+  };
+
+  const fundingRows: Array<{
+    key: 'BALANCE' | 'BANK_CARD' | 'MINI_CREDIT';
+    label: string;
+    value: string;
+    disabled?: boolean;
+  }> = [
     { key: 'BALANCE', label: '账户余额', value: `可用 ¥${formatBalance(account?.availableFen || 0)}` },
-    { key: 'MINI_CREDIT', label: 'Mini 花呗', value: `可用额度 ¥${formatBalance(credit?.availableFen || 0)}` },
+    {
+      key: 'BANK_CARD',
+      label: '银行卡',
+      value: selectedCard ? `${selectedCard.bankName}（${selectedCard.cardLast4}）` : '选择银行卡',
+    },
+    {
+      key: 'MINI_CREDIT',
+      label: 'Mini 花呗',
+      value: creditUnavailableReason || `可用额度 ¥${formatBalance(credit?.availableFen || 0)}`,
+      disabled: !!creditUnavailableReason && credit?.opened,
+    },
   ];
 
   const renderFundingRows = () => (
@@ -173,12 +238,9 @@ const CollectionPayPage: React.FC = () => {
         const on = fundingSource === row.key;
         return (
           <div
-            className="funding-row"
+            className={`funding-row${row.disabled ? ' disabled' : ''}`}
             key={row.key}
-            onClick={() => {
-              setFundingSource(row.key);
-              setPassword('');
-            }}
+            onClick={() => selectFundingSource(row.key)}
           >
             <span className="funding-label">{row.label}</span>
             <span className="funding-value">{row.value}</span>
@@ -254,6 +316,42 @@ const CollectionPayPage: React.FC = () => {
           取消
         </div>
       </div>
+
+      <Popup
+        visible={showCardPicker}
+        onMaskClick={() => setShowCardPicker(false)}
+        bodyStyle={{ borderTopLeftRadius: '18px', borderTopRightRadius: '18px', padding: '14px 14px 20px' }}
+      >
+        <div className="card-picker">
+          <div className="picker-handle" />
+          <div className="picker-title">选择付款银行卡</div>
+          {bankCards.map((card) => {
+            const on = card.cardId === selectedCardId;
+            return (
+              <div
+                key={card.cardId}
+                className={`picker-row${on ? ' active' : ''}`}
+                onClick={() => {
+                  setSelectedCardId(card.cardId);
+                  setShowCardPicker(false);
+                }}
+              >
+                <span className={`picker-logo${on ? ' active' : ''}`}>
+                  {on ? <IconSet name="check" size={14} color="#fff" /> : card.bankName.slice(0, 1)}
+                </span>
+                <span className="picker-name">
+                  {card.bankName} · 余额 ¥{formatBalance(card.balanceFen || 0)}（{card.cardLast4}）
+                </span>
+                {on ? (
+                  <IconSet name="check" size={16} color="var(--h5-primary)" />
+                ) : (
+                  <span className="picker-radio" />
+                )}
+              </div>
+            );
+          })}
+        </div>
+      </Popup>
     </div>
   );
 };

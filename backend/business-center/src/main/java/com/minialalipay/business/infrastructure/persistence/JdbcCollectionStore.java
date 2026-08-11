@@ -32,32 +32,23 @@ public class JdbcCollectionStore implements CollectionStore {
 
     @Override
     public Optional<PersonalCollectionCode> findActiveCode(String userId) {
-        return jdbc.query("SELECT code_id,owner_user_id,payee_account_id,status,version,created_at,updated_at "
+        return jdbc.query("SELECT code_id,owner_user_id,payee_account_id,credit_collection_enabled,status,version,created_at,updated_at "
                         + "FROM business_db.personal_collection_code WHERE owner_user_id=? AND status='ACTIVE'",
-                rs -> rs.next() ? Optional.of(new PersonalCollectionCode(rs.getString("code_id"), rs.getString("owner_user_id"),
-                        rs.getString("payee_account_id"), PersonalCollectionCodeStatus.valueOf(rs.getString("status")),
-                        rs.getLong("version"), rs.getTimestamp("created_at").toInstant(), rs.getTimestamp("updated_at").toInstant()))
-                        : Optional.empty(), userId);
+                rs -> rs.next() ? Optional.of(mapCode(rs)) : Optional.empty(), userId);
     }
 
     @Override
     public Optional<PersonalCollectionCode> findCode(String codeId) {
-        return jdbc.query("SELECT code_id,owner_user_id,payee_account_id,status,version,created_at,updated_at "
+        return jdbc.query("SELECT code_id,owner_user_id,payee_account_id,credit_collection_enabled,status,version,created_at,updated_at "
                         + "FROM business_db.personal_collection_code WHERE code_id=?", rs -> rs.next()
-                        ? Optional.of(new PersonalCollectionCode(rs.getString("code_id"), rs.getString("owner_user_id"),
-                        rs.getString("payee_account_id"), PersonalCollectionCodeStatus.valueOf(rs.getString("status")),
-                        rs.getLong("version"), rs.getTimestamp("created_at").toInstant(), rs.getTimestamp("updated_at").toInstant()))
-                        : Optional.empty(), codeId);
+                        ? Optional.of(mapCode(rs)) : Optional.empty(), codeId);
     }
 
     @Override
     public Optional<PersonalCollectionCode> findActiveCodeByTokenDigest(byte[] tokenDigest) {
-        return jdbc.query("SELECT code_id,owner_user_id,payee_account_id,status,version,created_at,updated_at "
+        return jdbc.query("SELECT code_id,owner_user_id,payee_account_id,credit_collection_enabled,status,version,created_at,updated_at "
                         + "FROM business_db.personal_collection_code WHERE token_digest=? AND status='ACTIVE'", rs -> rs.next()
-                        ? Optional.of(new PersonalCollectionCode(rs.getString("code_id"), rs.getString("owner_user_id"),
-                        rs.getString("payee_account_id"), PersonalCollectionCodeStatus.valueOf(rs.getString("status")),
-                        rs.getLong("version"), rs.getTimestamp("created_at").toInstant(), rs.getTimestamp("updated_at").toInstant()))
-                        : Optional.empty(), tokenDigest);
+                        ? Optional.of(mapCode(rs)) : Optional.empty(), tokenDigest);
     }
 
     @Override
@@ -73,8 +64,9 @@ public class JdbcCollectionStore implements CollectionStore {
                 oldCode.getCodeId(), userId, oldCode.getVersion() - 1) != 1) return false;
         try {
             jdbc.update("INSERT INTO business_db.personal_collection_code "
-                            + "(code_id,owner_user_id,payee_account_id,token_digest,status,version,created_at,updated_at) VALUES (?,?,?,?,?,?,?,?)",
-                    newCode.getCodeId(), newCode.getUserId(), newCode.getAccountId(), tokenDigest, newCode.getStatus().name(),
+                            + "(code_id,owner_user_id,payee_account_id,token_digest,credit_collection_enabled,status,version,created_at,updated_at) VALUES (?,?,?,?,?,?,?,?,?)",
+                    newCode.getCodeId(), newCode.getUserId(), newCode.getAccountId(), tokenDigest,
+                    newCode.isCreditCollectionEnabled(), newCode.getStatus().name(),
                     newCode.getVersion(), Timestamp.from(newCode.getCreatedAt()), Timestamp.from(newCode.getUpdatedAt()));
             return true;
         } catch (DuplicateKeyException duplicate) {
@@ -84,9 +76,11 @@ public class JdbcCollectionStore implements CollectionStore {
 
     @Override
     public boolean updateCode(PersonalCollectionCode code, long expectedVersion) {
-        return jdbc.update("UPDATE business_db.personal_collection_code SET status=?,version=?,updated_at=?,revoked_at=? "
+        return jdbc.update("UPDATE business_db.personal_collection_code SET status=?,credit_collection_enabled=?,version=?,updated_at=?,"
+                        + "revoked_at=CASE WHEN ?='ACTIVE' THEN revoked_at ELSE ? END "
                         + "WHERE code_id=? AND status='ACTIVE' AND version=?",
-                code.getStatus().name(), code.getVersion(), Timestamp.from(code.getUpdatedAt()), Timestamp.from(code.getUpdatedAt()),
+                code.getStatus().name(), code.isCreditCollectionEnabled(), code.getVersion(), Timestamp.from(code.getUpdatedAt()),
+                code.getStatus().name(), Timestamp.from(code.getUpdatedAt()),
                 code.getCodeId(), expectedVersion) == 1;
     }
 
@@ -239,6 +233,13 @@ public class JdbcCollectionStore implements CollectionStore {
                 rs.getTimestamp("created_at").toInstant(), rs.getTimestamp("updated_at").toInstant());
     }
 
+    private static PersonalCollectionCode mapCode(java.sql.ResultSet rs) throws java.sql.SQLException {
+        return new PersonalCollectionCode(rs.getString("code_id"), rs.getString("owner_user_id"),
+                rs.getString("payee_account_id"), rs.getBoolean("credit_collection_enabled"),
+                PersonalCollectionCodeStatus.valueOf(rs.getString("status")), rs.getLong("version"),
+                rs.getTimestamp("created_at").toInstant(), rs.getTimestamp("updated_at").toInstant());
+    }
+
     private static CollectionOrder mapOrder(java.sql.ResultSet rs) throws java.sql.SQLException {
         Object amountObj = rs.getObject("amount_fen");
         Long amountFen = amountObj == null ? null : ((Number) amountObj).longValue();
@@ -258,12 +259,9 @@ public class JdbcCollectionStore implements CollectionStore {
 
     @Override
     public Optional<PersonalCollectionCode> findActiveCodeByShortCode(String shortCode) {
-        return jdbc.query("SELECT code_id,owner_user_id,payee_account_id,status,version,created_at,updated_at "
+        return jdbc.query("SELECT code_id,owner_user_id,payee_account_id,credit_collection_enabled,status,version,created_at,updated_at "
                         + "FROM business_db.personal_collection_code WHERE short_code=? AND status='ACTIVE'", rs -> rs.next()
-                        ? Optional.of(new PersonalCollectionCode(rs.getString("code_id"), rs.getString("owner_user_id"),
-                        rs.getString("payee_account_id"), PersonalCollectionCodeStatus.valueOf(rs.getString("status")),
-                        rs.getLong("version"), rs.getTimestamp("created_at").toInstant(), rs.getTimestamp("updated_at").toInstant()))
-                        : Optional.empty(), shortCode);
+                        ? Optional.of(mapCode(rs)) : Optional.empty(), shortCode);
     }
 
     @Override
