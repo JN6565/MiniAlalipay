@@ -4,9 +4,10 @@ export interface UserInfo {
   userId: string;
   accountNumber: string;
   nickname: string;
-  maskedPhone?: string;
+  maskedPhone?: string | null;
+  maskedRealName?: string | null;
   avatar?: string;
-  userType: string;
+  userType?: string;
   createdAt: string;
 }
 
@@ -54,7 +55,7 @@ export interface FriendRequest {
 
 // 查询当前用户信息
 export const getMyInfo = () => {
-  return request.get<UserInfo>('/api/v1/users/me');
+  return request.get<UserInfo>('/api/v1/users/me') as unknown as Promise<UserInfo>;
 };
 
 // 搜索用户

@@ -195,6 +195,19 @@ spring:
                 redis-rate-limiter.burstCapacity: 20
                 redis-rate-limiter.requestedTokens: 1
 
+        # 银行卡充值/提现由 business-center 拥有（必须先于 account-center 通配路由匹配）
+        - id: business-center-bank-card-ops
+          uri: ${BUSINESS_CENTER_URI:lb://business-center}
+          predicates:
+            - Path=/api/v1/bank-cards/*/*
+          filters:
+            - name: RequestRateLimiter
+              args:
+                key-resolver: "#{@userKeyResolver}"
+                redis-rate-limiter.replenishRate: 1
+                redis-rate-limiter.burstCapacity: 30
+                redis-rate-limiter.requestedTokens: 1
+
         # ========== 账户中心路由（仅已实现 Controller 的操作） ==========
         - id: account-center
           uri: ${ACCOUNT_CENTER_URI:lb://account-center}

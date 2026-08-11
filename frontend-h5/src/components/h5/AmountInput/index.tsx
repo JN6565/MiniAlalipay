@@ -1,5 +1,6 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { Input } from 'antd-mobile';
+import { normalizeAmountInput } from '@/utils/amountInput';
 import './index.less';
 
 interface AmountInputProps {
@@ -22,42 +23,23 @@ export const AmountInput: React.FC<AmountInputProps> = ({
   label,
 }) => {
   const [error, setError] = useState<string | null>(null);
-  // 内部字符串状态，保留用户输入的中间状态（如 "3."）
-  const [inputStr, setInputStr] = useState<string>(value?.toString() || '');
+  // 使用字符串保存输入中间态，避免用户输入末尾小数点时被数值转换抹掉。
+  const [inputValue, setInputValue] = useState(value ? String(value) : '');
 
-  // 当外部 value 变化时同步（如预设金额选择）
-  React.useEffect(() => {
-    const newStr = value?.toString() || '';
-    // 只在数值实际变化时同步，避免覆盖用户正在输入的内容
-    const currentNum = parseFloat(inputStr);
-    if (value !== currentNum) {
-      setInputStr(newStr);
-    }
+  useEffect(() => {
+    setInputValue((current) => {
+      const currentNumber = Number.parseFloat(current);
+      if (current && currentNumber === value) return current;
+      return value ? String(value) : '';
+    });
   }, [value]);
 
   const handleChange = (val: string) => {
-    // 只允许数字和小数点
-    const cleaned = val.replace(/[^\d.]/g, '');
+    const normalized = normalizeAmountInput(val);
+    setInputValue(normalized);
+    const numVal = Number.parseFloat(normalized);
 
-    // 防止多个小数点
-    const parts = cleaned.split('.');
-    if (parts.length > 2) return;
-
-    // 限制两位小数
-    if (parts[1] && parts[1].length > 2) return;
-
-    // 处理前导零：保留 "0" 和 "0.x" 的情况，其他情况去掉前导零
-    let formatted = cleaned;
-    if (cleaned.length > 1 && cleaned[0] === '0' && cleaned[1] !== '.') {
-      formatted = cleaned.replace(/^0+/, '') || '0';
-    }
-
-    // 更新显示的字符串
-    setInputStr(formatted);
-
-    const numVal = parseFloat(formatted);
-
-    if (isNaN(numVal)) {
+    if (Number.isNaN(numVal)) {
       onChange?.(0);
       setError(null);
       return;
@@ -82,7 +64,7 @@ export const AmountInput: React.FC<AmountInputProps> = ({
         <Input
           type="text"
           inputMode="decimal"
-          value={inputStr}
+          value={inputValue}
           onChange={handleChange}
           placeholder={placeholder}
           disabled={disabled}

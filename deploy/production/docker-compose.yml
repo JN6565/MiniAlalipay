@@ -142,11 +142,15 @@ services:
     container_name: minialalipay-nginx
     restart: unless-stopped
     ports:
-      # 80 = C 端 H5，81 = B 端管理端；网关 8080 不对公网暴露，统一经 Nginx 反代
+      # 443 = C 端 H5（HTTPS，扫码页摄像头 API 要求安全上下文），80 仅 301 跳转；
+      # 81 = B 端管理端；网关 8080 不对公网暴露，统一经 Nginx 反代
+      - "443:443"
       - "80:80"
       - "81:81"
     volumes:
       - ./nginx/nginx.conf:/etc/nginx/nginx.conf:ro
+      # TLS 证书目录（在服务器上生成，不入库不经脚本上传）：h5.crt / h5.key
+      - ./nginx/certs:/etc/nginx/certs:ro
       - ./web/h5:/usr/share/nginx/html/h5:ro
       - ./web/admin:/usr/share/nginx/html/admin:ro
     depends_on:

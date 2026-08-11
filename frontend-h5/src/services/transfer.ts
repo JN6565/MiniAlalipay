@@ -165,10 +165,12 @@ export const submitTransferWithPassword = (
   version: number,
   paymentPassword: string,
   idempotencyKey?: string,
+  fundingSource?: string,
+  cardId?: string,
 ) => {
   return request.post<TransferResult>(
     '/api/v1/transfers/submit-with-password',
-    { draftId, version, paymentPassword },
+    { draftId, version, paymentPassword, fundingSource, cardId },
     { headers: { 'Idempotency-Key': idempotencyKey || generateIdempotencyKey() } },
   );
 };

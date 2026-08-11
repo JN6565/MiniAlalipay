@@ -20,5 +20,11 @@ public enum TransactionType {
     RECHARGE,
 
     /** 对原扫码支付执行受控全额虚拟退款，并关联原交易和冲正凭证。 */
-    REFUND
+    REFUND,
+
+    /** 银行卡充值（银行卡给账户充钱）：银行卡余额减少，账户余额同步增加。 */
+    BANK_CARD_RECHARGE,
+
+    /** 银行卡提现（账户给银行卡充钱）：账户余额减少，银行卡余额同步增加。 */
+    BANK_CARD_WITHDRAW
 }

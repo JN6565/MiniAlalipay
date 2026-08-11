@@ -182,7 +182,7 @@ class BankCardApplicationServiceTest {
     private BankCard card(String cardId, boolean isDefault, Instant createdAt) {
         return new BankCard(cardId, USER, "ACC001", "ICBC", "中国工商银行",
                 BankCardType.DEBIT, "621226", "1234", "张*", "3301**********1234",
-                "138****5678", isDefault, BankCardStatus.ACTIVE, null,
+                "138****5678", 0L, isDefault, BankCardStatus.ACTIVE, null,
                 0L, createdAt, createdAt);
     }
 
@@ -232,7 +232,7 @@ class BankCardApplicationServiceTest {
     void unbindOtherUserCardReturnsNotFound() {
         BankCard othersCard = new BankCard("CARD_X", "OTHER_USER", "ACC002", "ICBC", "中国工商银行",
                 BankCardType.DEBIT, "621226", "1234", "张*", "3301**********1234",
-                "138****5678", false, BankCardStatus.ACTIVE, null, 0L, Instant.now(), Instant.now());
+                "138****5678", 0L, false, BankCardStatus.ACTIVE, null, 0L, Instant.now(), Instant.now());
         when(cardRepository.findById("CARD_X")).thenReturn(Optional.of(othersCard));
 
         assertThatThrownBy(() -> service.unbind(USER, "CARD_X"))

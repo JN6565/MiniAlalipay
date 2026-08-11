@@ -17,5 +17,11 @@ public enum SourceType {
     /** 受控模拟充值订单。 */
     RECHARGE_ORDER,
     /** 受控退款来源订单。 */
-    REFUND_ORDER
+    REFUND_ORDER,
+
+    /** 银行卡充值订单。 */
+    BANK_CARD_RECHARGE_ORDER,
+
+    /** 银行卡提现订单。 */
+    BANK_CARD_WITHDRAW_ORDER
 }

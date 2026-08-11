@@ -138,7 +138,7 @@ public class QrPayController {
             @RequestHeader("X-User-Id") String userId, @PathVariable String id,
             @Valid @RequestBody ConfirmationRequest body, HttpServletRequest request) {
         QrPayApplicationService.IssuedConfirmation issued = service.issueConfirmation(userId, id, sessionId(request),
-                body.version(), body.paymentProof(), body.fundingSource());
+                body.version(), body.paymentProof(), body.fundingSource(), body.cardId());
         return ResponseEntity.ok(success(new ConfirmationResponse(issued.confirmationToken(), issued.subjectHash(), issued.expiresAt()), request));
     }
 
@@ -148,7 +148,7 @@ public class QrPayController {
             @RequestHeader("Idempotency-Key") String idempotencyKey, @PathVariable String id,
             @Valid @RequestBody PayRequest body, HttpServletRequest request) {
         FundTransaction transaction = service.pay(userId, id, sessionId(request), body.confirmationToken(), idempotencyKey,
-                request.getHeader("X-Trace-Id"));
+                request.getHeader("X-Trace-Id"), body.cardId());
         return ResponseEntity.accepted().body(success(new PaymentResponse(id, transaction.getTransactionId(),
                 transaction.getStatus().name(), "/api/v1/qr-pay/orders/" + id, transaction.getUpdatedAt()), request));
     }
@@ -172,12 +172,14 @@ public class QrPayController {
     /** 客户端读取到的订单 CAS 版本。 */
     public record VersionRequest(@Min(0) long version) { }
 
-    /** 动态扫码确认请求；付款账户始终从登录会话派生。 */
+    /** 动态扫码确认请求；付款账户始终从登录会话派生。选择 BANK_CARD 时必须指定 cardId。 */
     public record ConfirmationRequest(@Min(0) long version, @NotBlank @Size(max = 256) String paymentProof,
-                                      @jakarta.validation.constraints.NotNull FundingSource fundingSource) { }
+                                      @jakarta.validation.constraints.NotNull FundingSource fundingSource,
+                                      @Size(max = 26) String cardId) { }
 
-    /** 动态扫码付款请求；资金来源必须与确认令牌绑定，不能在此处覆盖。 */
-    public record PayRequest(@NotBlank @Size(min = 16, max = 256) String confirmationToken) { }
+    /** 动态扫码付款请求；资金来源必须与确认令牌绑定，不能在此处覆盖。银行卡支付时需携带 cardId。 */
+    public record PayRequest(@NotBlank @Size(min = 16, max = 256) String confirmationToken,
+                             @Size(max = 26) String cardId) { }
 
     /** 一次性确认令牌响应。 */
     public record ConfirmationResponse(String confirmationToken, String subjectHash, Instant expiresAt) { }

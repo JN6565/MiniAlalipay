@@ -14,6 +14,7 @@ public final class FundTransaction {
     private final String payeeAccountId;
     private final FundingSource fundingSource;
     private final String relatedTransactionId;
+    private final String bankCardId;
     private final long amountFen;
     private final String idempotencyKey;
     private TransactionStatus status;
@@ -43,6 +44,23 @@ public final class FundTransaction {
                 TransactionStatus.PROCESSING, riskLevel, traceId, 0L, now, now, relatedTransactionId);
     }
 
+    /** 受理银行卡充值或提现，初始状态固定为 PROCESSING。 */
+    public static FundTransaction acceptBankCardOperation(String transactionId, TransactionType businessType,
+                                                         SourceType sourceType, String sourceOrderId,
+                                                         String initiatorUserId, String targetAccountId,
+                                                         String bankCardId, FundingSource fundingSource,
+                                                         long amountFen, String idempotencyKey,
+                                                         String riskLevel, String traceId, Instant now) {
+        if (businessType != TransactionType.BANK_CARD_RECHARGE && businessType != TransactionType.BANK_CARD_WITHDRAW) {
+            throw new IllegalArgumentException("银行卡操作只允许 BANK_CARD_RECHARGE 或 BANK_CARD_WITHDRAW");
+        }
+        FundTransaction tx = new FundTransaction(transactionId, businessType, sourceType, sourceOrderId,
+                initiatorUserId, null, targetAccountId, fundingSource, amountFen, idempotencyKey,
+                TransactionStatus.PROCESSING, riskLevel, traceId, 0L, now, now, null,
+                required(bankCardId));
+        return tx;
+    }
+
     /** 从持久化事实重建交易；退款等场景通过关联字段带回原支付交易号。 */
     public FundTransaction(String transactionId, TransactionType businessType, SourceType sourceType,
                            String sourceOrderId, String initiatorUserId, String payerAccountId,
@@ -61,15 +79,34 @@ public final class FundTransaction {
                            String idempotencyKey, TransactionStatus status, String riskLevel,
                            String traceId, long version, Instant createdAt, Instant updatedAt,
                            String relatedTransactionId) {
+        this(transactionId, businessType, sourceType, sourceOrderId, initiatorUserId, payerAccountId,
+                payeeAccountId, fundingSource, amountFen, idempotencyKey, status, riskLevel,
+                traceId, version, createdAt, updatedAt, relatedTransactionId, null);
+    }
+
+    /** 全参数重建构造器，支持银行卡操作关联银行卡 ID。 */
+    public FundTransaction(String transactionId, TransactionType businessType, SourceType sourceType,
+                           String sourceOrderId, String initiatorUserId, String payerAccountId,
+                           String payeeAccountId, FundingSource fundingSource, long amountFen,
+                           String idempotencyKey, TransactionStatus status, String riskLevel,
+                           String traceId, long version, Instant createdAt, Instant updatedAt,
+                           String relatedTransactionId, String bankCardId) {
         this.transactionId = required(transactionId); this.businessType = Objects.requireNonNull(businessType);
         this.sourceType = Objects.requireNonNull(sourceType); this.sourceOrderId = required(sourceOrderId);
         this.initiatorUserId = required(initiatorUserId);
-        if (businessType == TransactionType.RECHARGE) {
+        if (businessType == TransactionType.RECHARGE
+                || businessType == TransactionType.BANK_CARD_RECHARGE
+                || businessType == TransactionType.BANK_CARD_WITHDRAW) {
             if (payerAccountId != null && !payerAccountId.isBlank()) {
-                throw new IllegalArgumentException("充值交易不得指定付款账户");
+                throw new IllegalArgumentException("充值/银行卡交易不得指定付款账户");
             }
-            if (fundingSource != FundingSource.SYSTEM_ISSUANCE) {
+            if (businessType == TransactionType.RECHARGE && fundingSource != FundingSource.SYSTEM_ISSUANCE) {
                 throw new IllegalArgumentException("充值交易必须使用系统发行资金");
+            }
+            if ((businessType == TransactionType.BANK_CARD_RECHARGE
+                    || businessType == TransactionType.BANK_CARD_WITHDRAW)
+                    && fundingSource != FundingSource.BANK_CARD) {
+                throw new IllegalArgumentException("银行卡交易必须使用银行卡资金来源");
             }
             this.payerAccountId = null;
         } else {
@@ -86,6 +123,7 @@ public final class FundTransaction {
         this.version = version; this.createdAt = Objects.requireNonNull(createdAt);
         this.updatedAt = Objects.requireNonNull(updatedAt);
         this.relatedTransactionId = relatedTransactionId;
+        this.bankCardId = bankCardId;
     }
 
     /** 开始取消或补偿。 */
@@ -150,4 +188,5 @@ public final class FundTransaction {
     public long getVersion() { return version; }
     public Instant getCreatedAt() { return createdAt; }
     public Instant getUpdatedAt() { return updatedAt; }
+    public String getBankCardId() { return bankCardId; }
 }

@@ -2,6 +2,7 @@ package com.minialalipay.business.interfaces.transfer;
 
 import com.minialalipay.business.application.transfer.TransferApplicationService;
 import com.minialalipay.business.domain.transaction.FundTransaction;
+import com.minialalipay.business.domain.transaction.FundingSource;
 import com.minialalipay.business.domain.transfer.TransferDraft;
 import com.minialalipay.common.api.ApiResponse;
 import com.minialalipay.common.trace.RequestIdGenerator;
@@ -103,8 +104,14 @@ public class TransferController {
             @RequestHeader("X-User-Id") String userId,
             @RequestHeader("Idempotency-Key") String key,
             @Valid @RequestBody SubmitWithPasswordRequest body, HttpServletRequest request) {
+        FundingSource fundingSource = body.fundingSource() != null && !body.fundingSource().isBlank()
+                ? FundingSource.valueOf(body.fundingSource()) : FundingSource.BALANCE;
+        String cardId = body.cardId();
+        if (fundingSource == FundingSource.BANK_CARD && (cardId == null || cardId.isBlank())) {
+            throw new IllegalArgumentException("银行卡支付必须指定 cardId");
+        }
         FundTransaction value = service.submitWithPassword(userId, body.draftId(), body.version(),
-                body.paymentPassword(), key, request.getHeader("X-Trace-Id"));
+                body.paymentPassword(), key, request.getHeader("X-Trace-Id"), fundingSource, cardId);
         return ResponseEntity.accepted().body(success(
                 TransactionResponse.from(service.getTransactionDetail(userId, value.getTransactionId())), request));
     }
@@ -144,9 +151,12 @@ public class TransferController {
                                       @Min(0) long subjectVersion, @NotBlank String paymentProof) { }
     /** 提交转账请求，确认令牌不得进入 URL 或日志。 */
     public record SubmitTransferRequest(@NotBlank String draftId, @NotBlank String confirmationToken) { }
-    /** 合并提交请求；version 为风控预检返回的草稿版本，paymentPassword 属敏感字段，禁止进入日志或 URL。 */
+    /** 合并提交请求；version 为风控预检返回的草稿版本，paymentPassword 属敏感字段，禁止进入日志或 URL。
+     *  fundingSource 可选，默认 BALANCE；选择 BANK_CARD 时必须指定 cardId。 */
     public record SubmitWithPasswordRequest(@NotBlank String draftId, @Min(0) long version,
-                                            @NotBlank @Pattern(regexp = "^\\d{6}$") String paymentPassword) { }
+                                            @NotBlank @Pattern(regexp = "^\\d{6}$") String paymentPassword,
+                                            @Size(max = 32) String fundingSource,
+                                            @Size(max = 26) String cardId) { }
 
     /** 转账草稿 API DTO，不暴露内部持久化对象；收款方展示字段已脱敏且可空。 */
     public record DraftResponse(String draftId, String payeeUserId, long amountFen, String remark,

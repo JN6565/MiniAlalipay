@@ -9,8 +9,12 @@ export class ApiError extends Error {
   }
 }
 
+/**
+ * 清除会话数据：仅移除登录态与账户身份，保留浏览器本地的展示偏好（昵称、头像）。
+ * 展示偏好按系统分析第 25 节仅保存在当前浏览器、不上传服务端，退出后重新登录需继续可见。
+ */
 export const clearSession = () => {
-  ['accessToken', 'userId', 'accountNumber', 'nickname', 'userType', 'session-storage',
+  ['accessToken', 'userId', 'accountNumber', 'userType', 'session-storage',
    'ai_session_id', 'ai_session_expiry']
     .forEach((key) => localStorage.removeItem(key));
 };

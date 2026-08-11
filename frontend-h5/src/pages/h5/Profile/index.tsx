@@ -4,16 +4,20 @@ import { Toast, Dialog } from 'antd-mobile';
 import { clearSession } from '@/services/request';
 import * as userService from '@/services/user';
 import { getIdentity } from '@/services/identity';
+import { formatAccountName, getAvatarDisplay, getProfilePreference } from '@/utils/profile';
 import './index.less';
 
 const ProfilePage: React.FC = () => {
-  const nickname = localStorage.getItem('nickname') || '用户';
+  const profilePreference = getProfilePreference();
+  const nickname = profilePreference.nickname;
+  const [accountNumber, setAccountNumber] = useState(localStorage.getItem('accountNumber') || '');
   const [maskedPhone, setMaskedPhone] = useState<string>('');
   /** 是否已绑定身份（identityStatus 为 VERIFIED），接口失败时保持未绑定展示。 */
   const [identityBound, setIdentityBound] = useState(false);
 
   useEffect(() => {
     userService.getMyInfo().then(info => {
+      if (info.accountNumber) setAccountNumber(info.accountNumber);
       setMaskedPhone(info.maskedPhone || '');
     }).catch(() => {});
     getIdentity().then(info => {
@@ -37,13 +41,27 @@ const ProfilePage: React.FC = () => {
     <div className="profile-page">
       {/* 用户信息 */}
       <div className="profile-user">
-        <div className="avatar">👤</div>
+        <div className="avatar">
+          {profilePreference.avatarDataUrl ? (
+            <img src={profilePreference.avatarDataUrl} alt="头像" />
+          ) : (
+            getAvatarDisplay(profilePreference.avatarCode)
+          )}
+        </div>
         <div className="user-info">
           <div className="name">{nickname}</div>
           {identityBound && <div className="identity-status">已绑定身份</div>}
+          <div className="account-name">{formatAccountName(accountNumber)}</div>
           <div className="id">{maskedPhone || '加载中...'}</div>
         </div>
-        <span className="arrow">›</span>
+        <button
+          type="button"
+          className="profile-settings-button"
+          aria-label="编辑个人资料"
+          onClick={() => history.push('/h5/profile/edit')}
+        >
+          <span aria-hidden="true">›</span>
+        </button>
       </div>
 
       {/* 账号与安全 */}

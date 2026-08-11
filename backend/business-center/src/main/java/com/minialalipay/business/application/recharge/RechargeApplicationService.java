@@ -28,10 +28,14 @@ import java.time.ZoneId;
 import java.util.Arrays;
 
 /**
- * 受控模拟充值订单应用服务。
+ * 受控模拟充值订单应用服务（测试专用，C 端入口已下线）。
  *
  * <p>在同一 business_db 事务中完成登录用户账户解析、限额快照、幂等、日额度预占和订单创建；
  * 渠道成功后创建 {@code fund_transaction} 并启动充值专用 TCC，渠道拒绝只推进订单状态。</p>
+ *
+ * <p>模拟充值通过系统发行权益（{@link FundingSource#SYSTEM_ISSUANCE}）凭空注入余额，
+ * 不符合真实资金流转，H5 端已不再暴露入口；保留本链路仅为测试环境演示与既有数据兼容。
+ * 真实的账户资金流入渠道为：他人转账、银行卡充值（BANK_CARD_RECHARGE）。</p>
  */
 @Service
 public class RechargeApplicationService {

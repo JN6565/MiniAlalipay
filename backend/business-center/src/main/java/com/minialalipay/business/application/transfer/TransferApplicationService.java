@@ -156,6 +156,20 @@ public class TransferApplicationService {
     @Transactional
     public IssuedConfirmation issueConfirmation(String userId, String draftId, long subjectVersion,
                                                   String paymentProof) {
+        return issueConfirmation(userId, draftId, subjectVersion, paymentProof, FundingSource.BALANCE, null);
+    }
+
+    /**
+     * 校验一次性支付证明并签发两分钟确认令牌；重新签发会原子撤销旧令牌。
+     *
+     * <p>前端 validate 和 confirm 之间存在时间窗口，草稿版本可能因重复校验而递增。
+     * 版本不匹配时重新读取草稿并重试一次，避免前端竞态导致409。</p>
+     *
+     * <p>fundingSource 和 cardId 纳入确认摘要哈希，防止同一令牌被用于不同资金来源。</p>
+     */
+    @Transactional
+    public IssuedConfirmation issueConfirmation(String userId, String draftId, long subjectVersion,
+                                                  String paymentProof, FundingSource fundingSource, String cardId) {
         TransferDraft draft = requiredDraft(draftId, userId);
         PaymentProofPort.VerifiedProof proof = paymentProofs.verify(userId, paymentProof, "TRANSFER_CONFIRM");
         try {
@@ -168,7 +182,7 @@ public class TransferApplicationService {
             subjectVersion = draft.getVersion();
         }
         String rawToken = secure.newConfirmationToken();
-        byte[] subjectHash = subjectHash(draft);
+        byte[] subjectHash = subjectHash(draft, fundingSource, cardId);
         Instant now = clock.instant();
         Confirmation confirmation = Confirmation.issue(secure.newId(), secure.digest(rawToken),
                 SubjectType.TRANSFER_DRAFT, draftId, subjectHash, userId, proof.paymentProofId(),
@@ -192,9 +206,26 @@ public class TransferApplicationService {
     @Transactional
     public FundTransaction submitWithPassword(String userId, String draftId, long subjectVersion,
                                               String paymentPassword, String idempotencyKey, String traceId) {
+        return submitWithPassword(userId, draftId, subjectVersion, paymentPassword, idempotencyKey, traceId,
+                FundingSource.BALANCE, null);
+    }
+
+    /**
+     * 验密即支付：H5 合并提交端点专用，一次请求在服务端内部完成
+     * 验密签发证明、签发并消费确认令牌、受理转账，响应语义与 POST /transfers 一致。
+     *
+     * <p>安全约束：确认令牌的签发与消费仍是受理前置条件，满足“资金执行必须持有未消费
+     * 确认令牌”不变量；原始支付密码只透传用户中心，不进入日志、响应或持久化。</p>
+     */
+    @Transactional
+    public FundTransaction submitWithPassword(String userId, String draftId, long subjectVersion,
+                                              String paymentPassword, String idempotencyKey, String traceId,
+                                              FundingSource fundingSource, String cardId) {
         String paymentProof = paymentProofs.verifyAndIssueProof(userId, paymentPassword, "TRANSFER_CONFIRM");
-        IssuedConfirmation issued = issueConfirmation(userId, draftId, subjectVersion, paymentProof);
-        return submit(userId, draftId, issued.confirmationToken(), idempotencyKey, traceId);
+        IssuedConfirmation issued = issueConfirmation(userId, draftId, subjectVersion, paymentProof,
+                fundingSource, cardId);
+        return submit(userId, draftId, issued.confirmationToken(), idempotencyKey, traceId,
+                fundingSource, cardId);
     }
 
     /**
@@ -203,6 +234,19 @@ public class TransferApplicationService {
     @Transactional
     public FundTransaction submit(String userId, String draftId, String confirmationToken,
                                   String idempotencyKey, String traceId) {
+        return submit(userId, draftId, confirmationToken, idempotencyKey, traceId,
+                FundingSource.BALANCE, null);
+    }
+
+    /**
+     * 原子受理普通转账；同键同参返回原交易，同键异参冲突，令牌原文不进入日志和持久化。
+     *
+     * <p>fundingSource 为 BANK_CARD 时，交易使用银行卡虚拟余额扣款，bankCardId 必须非空。</p>
+     */
+    @Transactional
+    public FundTransaction submit(String userId, String draftId, String confirmationToken,
+                                  String idempotencyKey, String traceId,
+                                  FundingSource fundingSource, String cardId) {
         requireKey(idempotencyKey);
         byte[] tokenDigest = secure.digest(confirmationToken);
         byte[] requestHash = secure.digest(draftId + "\n" + Base64.getEncoder().encodeToString(tokenDigest));
@@ -221,7 +265,7 @@ public class TransferApplicationService {
                 || confirmation.getSubjectType() != SubjectType.TRANSFER_DRAFT) {
             throw new BusinessException(BusinessErrorCode.CONFIRMATION_MISMATCH);
         }
-        if (!Arrays.equals(confirmation.getSubjectHash(), subjectHash(draft))) {
+        if (!Arrays.equals(confirmation.getSubjectHash(), subjectHash(draft, fundingSource, cardId))) {
             throw new BusinessException(BusinessErrorCode.CONFIRMATION_STALE);
         }
         if (paymentProofs.currentPayPasswordVersion(userId) != confirmation.getPayPasswordVersion()) {
@@ -242,10 +286,18 @@ public class TransferApplicationService {
         try { draft.submit(draftVersion, now); }
         catch (IllegalStateException invalid) { throw new BusinessException(BusinessErrorCode.CONFIRMATION_STALE); }
         if (!store.updateDraft(draft, draftVersion)) throw new BusinessException(BusinessErrorCode.VERSION_CONFLICT);
-        FundTransaction transaction = FundTransaction.accept(secure.newId(), TransactionType.TRANSFER,
-                SourceType.TRANSFER_DRAFT, draftId, userId, draft.getPayerAccountId(), draft.getPayeeAccountId(),
-                FundingSource.BALANCE, draft.getAmountFen(), idempotencyKey, "LOW",
-                traceId == null || traceId.length() != 32 ? secure.newTraceId() : traceId, now);
+        FundTransaction transaction;
+        if (fundingSource == FundingSource.BANK_CARD) {
+            transaction = FundTransaction.acceptBankCardOperation(secure.newId(), TransactionType.TRANSFER,
+                    SourceType.TRANSFER_DRAFT, draftId, userId, draft.getPayeeAccountId(),
+                    cardId, fundingSource, draft.getAmountFen(), idempotencyKey, "LOW",
+                    traceId == null || traceId.length() != 32 ? secure.newTraceId() : traceId, now);
+        } else {
+            transaction = FundTransaction.accept(secure.newId(), TransactionType.TRANSFER,
+                    SourceType.TRANSFER_DRAFT, draftId, userId, draft.getPayerAccountId(), draft.getPayeeAccountId(),
+                    fundingSource, draft.getAmountFen(), idempotencyKey, "LOW",
+                    traceId == null || traceId.length() != 32 ? secure.newTraceId() : traceId, now);
+        }
         store.createTransaction(transaction, requestHash, secure.newId(), now);
         // 交易已以 PROCESSING 持久化，TCC 协调异步执行以免 Seata 全局事务往返阻塞提交响应；
         // 异步失败时由恢复扫描器按既有补偿语义接管，资金安全不依赖同步执行。
@@ -313,10 +365,11 @@ public class TransferApplicationService {
         if (!draft.getPayerUserId().equals(userId)) throw new BusinessException(BusinessErrorCode.DRAFT_NOT_FOUND);
         return draft;
     }
-    private byte[] subjectHash(TransferDraft d) {
+    private byte[] subjectHash(TransferDraft d, FundingSource fundingSource, String cardId) {
         return secure.digest(d.getDraftId() + "\n" + d.getPayerUserId() + "\n" + d.getPayeeUserId() + "\n"
                 + d.getPayerAccountId() + "\n" + d.getPayeeAccountId() + "\n" + d.getAmountFen() + "\n"
-                + text(d.getRemark()) + "\n" + d.getVersion());
+                + text(d.getRemark()) + "\n" + d.getVersion() + "\n" + fundingSource.name() + "\n"
+                + text(cardId));
     }
     private void requireKey(String key) {
         if (!keyValidator.isValid(key)) throw new BusinessException(CommonErrorCode.INVALID_REQUEST);
