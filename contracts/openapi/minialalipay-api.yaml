@@ -343,6 +343,38 @@ paths:
         '401': { $ref: '#/components/responses/Unauthorized' }
         '404': { $ref: '#/components/responses/NotFound' }
         '409': { $ref: '#/components/responses/Conflict' }
+  /api/v1/bank-cards/{cardId}/full-card-number:
+    post:
+      summary: 查看本人银行卡完整卡号（需消费一次性支付证明）
+      description: |
+        完整卡号仅存于绑卡注册表，默认任何查询接口只返回尾号。
+        前端需先以用途 BANK_CARD_NUMBER_VIEW 调用 POST /api/v1/payment-password/proof
+        验密签发一次性支付证明，再凭证明调用本接口；证明校验成功后即被原子消费，不可重放。
+        采用 POST 请求体承载证明的原因：确认令牌禁止出现在 URL（会进入访问日志与浏览器历史）。
+        响应含卡号明文，客户端仅内存展示，禁止写入日志、浏览器存储或埋点。
+      operationId: getFullCardNumber
+      x-client-scope: C
+      parameters:
+        - $ref: '#/components/parameters/RequestIdHeader'
+        - name: cardId
+          in: path
+          required: true
+          schema: { type: string, minLength: 1, maxLength: 26 }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/FullCardNumberRequest' }
+      responses:
+        '200':
+          description: 返回完整卡号明文，仅本次响应可见
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/FullCardNumberResponse' }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '422': { $ref: '#/components/responses/UnprocessableEntity' }
   /api/v1/bank-cards/{cardId}/balance:
     get:
       summary: 查询银行卡虚拟余额
@@ -3810,6 +3842,22 @@ components:
         holderName: { type: string, minLength: 1, maxLength: 32, description: 持卡人姓名明文 }
         idCard: { type: string, minLength: 18, maxLength: 18, description: 身份证号，18 位，末位可为 X/x }
         phone: { type: string, minLength: 11, maxLength: 11, description: 预留手机号，11 位 }
+    FullCardNumberRequest:
+      type: object
+      required: [paymentProof]
+      properties:
+        paymentProof: { type: string, minLength: 1, maxLength: 256, description: 一次性支付证明，必须专以 BANK_CARD_NUMBER_VIEW 用途签发；禁止写入日志、浏览器存储、埋点或 URL }
+    FullCardNumberResponse:
+      allOf:
+        - $ref: '#/components/schemas/ApiResponse'
+        - type: object
+          required: [data]
+          properties:
+            data:
+              type: object
+              required: [fullCardNumber]
+              properties:
+                fullCardNumber: { type: string, description: 完整卡号明文，仅本次响应可见，客户端仅内存展示 }
     BankCard:
       type: object
       required: [cardId, bankCode, bankName, cardType, cardLast4, holderMasked, idCardMasked, phoneMasked, balanceFen, isDefault, status, boundAt]
@@ -3914,6 +3962,13 @@ components:
           type: [string, 'null']
           maxLength: 255
           description: 已脱敏的分录摘要。
+        balanceAfterFen:
+          type: [integer, 'null']
+          format: int64
+          minimum: 0
+          description: |
+            该分录所属用户账户在交易完成后的可用余额（分），仅供 C 端明细展示。
+            过账时按当时账户余额回填；存量分录与系统账户分录为空，前端需回退为不展示。
         createdAt:
           type: string
           format: date-time

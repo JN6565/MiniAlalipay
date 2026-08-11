@@ -1,11 +1,106 @@
+// 修改登录密码页（V2 重设计）：表单卡 + 眼睛切换 + 强度条 + 渐变提交钮
 .change-password-page {
   min-height: 100vh;
-  background: #f5f5f5;
-  padding: 16px;
+  background: var(--h5-bg);
+  padding: 12px;
 }
 
-.change-password-form {
-  background: #fff;
-  border-radius: 12px;
-  padding: 24px;
+.clp-card {
+  background: var(--h5-card-bg);
+  border-radius: var(--h5-radius-card);
+  box-shadow: var(--h5-shadow-card);
+  padding: 14px 16px 16px;
+}
+
+.clp-field {
+  margin-bottom: 12px;
+
+  &:last-child {
+    margin-bottom: 0;
+  }
+}
+
+.clp-field-label {
+  font-size: 12px;
+  color: var(--h5-text-3);
+  padding: 0 2px 6px;
+}
+
+.clp-field-box {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  background: var(--h5-bg);
+  border: 1.5px solid var(--h5-divider);
+  border-radius: var(--h5-radius-input);
+  padding: 12px 14px;
+  transition: border-color 0.15s;
+
+  &:focus-within {
+    border-color: var(--h5-primary);
+  }
+
+  .clp-field-input {
+    flex: 1;
+    min-width: 0;
+    border: none;
+    outline: none;
+    background: transparent;
+    font-size: 14px;
+    color: var(--h5-text);
+    letter-spacing: 1px;
+
+    &::placeholder {
+      color: var(--h5-text-3);
+      letter-spacing: 0;
+    }
+  }
+
+  .clp-eye {
+    flex: none;
+    display: flex;
+    align-items: center;
+    cursor: pointer;
+  }
+}
+
+// 强度条：四段，弱红/中橙/强绿
+.clp-strength {
+  margin: -2px 2px 12px;
+
+  .clp-strength-bars {
+    display: flex;
+    gap: 4px;
+
+    .clp-strength-bar {
+      flex: 1;
+      height: 3px;
+      border-radius: 2px;
+    }
+  }
+
+  .clp-strength-tip {
+    font-size: 11px;
+    color: var(--h5-text-3);
+    margin-top: 6px;
+  }
+}
+
+.clp-submit {
+  margin-top: 16px;
+  text-align: center;
+  padding: 13px 0;
+  border-radius: var(--h5-radius-btn);
+  background: var(--h5-grad-brand);
+  color: #fff;
+  font-size: 15px;
+  font-weight: 700;
+  letter-spacing: 2px;
+  box-shadow: 0 6px 16px rgba(37, 108, 255, 0.3);
+  cursor: pointer;
+
+  &.disabled {
+    opacity: 0.55;
+    pointer-events: none;
+  }
 }

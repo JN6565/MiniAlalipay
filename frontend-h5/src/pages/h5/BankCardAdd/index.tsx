@@ -1,9 +1,10 @@
 import { history } from 'umi';
-import { Button, Input, Toast, Picker, Dialog } from 'antd-mobile';
+import { Input, Toast, Picker, Dialog } from 'antd-mobile';
 import { useState } from 'react';
 import { registerBankCard, BIN_TABLE } from '@/services/bankCard';
 import { validateIdCard } from '@/services/utils';
 import { ApiError } from '@/services/request';
+import { IconSet } from '@/components/h5/common';
 import './index.less';
 
 /** 中国大陆手机号：1 开头 11 位数字。 */
@@ -103,7 +104,10 @@ const BankCardAddPage = () => {
     const formatted = registeredCard.cardNumber.replace(/(\d{4})(?=\d)/g, '$1 ');
     return (
       <div className="bank-card-add-page">
-        <div className="add-section">
+        <div className="bca-card registered-card-section">
+          <span className="registered-icon">
+            <IconSet name="check" size={22} color="var(--h5-success)" />
+          </span>
           <div className="section-label">注册成功！请牢记您的卡号</div>
           <div className="registered-card-number">{formatted}</div>
           <div className="registered-card-info">
@@ -113,71 +117,87 @@ const BankCardAddPage = () => {
         <div className="add-tip">
           请复制并记住卡号，然后前往「绑定银行卡」页面完成绑定。
         </div>
-        <Button block color="primary" size="large" onClick={() => history.push('/h5/bank-card-bind')}>
+        <div className="h5-btn-gradient add-submit" onClick={() => history.push('/h5/bank-card-bind')}>
           去绑定银行卡
-        </Button>
-        <Button block size="large" style={{ marginTop: 12 }} onClick={() => history.push('/h5/bank-cards')}>
+        </div>
+        <div className="add-later" onClick={() => history.push('/h5/bank-cards')}>
           稍后再说
-        </Button>
+        </div>
       </div>
     );
   }
 
   return (
     <div className="bank-card-add-page">
-      <div className="add-section">
-        <div className="section-label">选择银行</div>
-        <Picker
-          columns={[BANK_OPTIONS]}
-          visible={pickerVisible}
-          onConfirm={(value) => {
-            handleBankSelect(value);
-            setPickerVisible(false);
-          }}
-          onCancel={() => setPickerVisible(false)}
-        >
-          {(items) => (
-            <Button block size="large" style={{ textAlign: 'left' }} onClick={() => setPickerVisible(true)}>
-              {bankCode ? bankName : '请选择银行'}
-            </Button>
-          )}
-        </Picker>
+      {/* 表单卡 */}
+      <div className="bca-card add-form-card">
+        <div className="field-label">选择银行</div>
+        <div className="field-box" onClick={() => setPickerVisible(true)}>
+          <span className={`field-value${bankCode ? '' : ' placeholder'}`}>
+            {bankCode ? bankName : '请选择银行'}
+          </span>
+          <IconSet name="chevronRight" size={16} color="var(--h5-text-3)" />
+        </div>
+
+        {bankCode && (
+          <>
+            <div className="field-label">持卡人姓名</div>
+            <div className="field-box">
+              <Input
+                className="field-input"
+                placeholder="请输入银行预留姓名"
+                value={holderName}
+                onChange={setHolderName}
+                maxLength={32}
+              />
+            </div>
+
+            <div className="field-label">身份证号</div>
+            <div className="field-box">
+              <Input
+                className="field-input"
+                placeholder="请输入 18 位身份证号"
+                value={idCard}
+                onChange={(value) => setIdCard(value.replace(/[^\dXx]/g, '').slice(0, 18))}
+              />
+              <IconSet name="shield" size={16} color="var(--h5-text-3)" />
+            </div>
+
+            <div className="field-label">预留手机号</div>
+            <div className="field-box">
+              <Input
+                className="field-input"
+                placeholder="请输入银行预留手机号"
+                value={phone}
+                onChange={(value) => setPhone(value.replace(/\D/g, '').slice(0, 11))}
+                inputMode="numeric"
+              />
+              <IconSet name="phone" size={16} color="var(--h5-text-3)" />
+            </div>
+          </>
+        )}
       </div>
 
-      {bankCode && (
-        <div className="add-section">
-          <div className="section-label">持卡人姓名</div>
-          <Input placeholder="请输入银行预留姓名" value={holderName} onChange={setHolderName} maxLength={32} clearable />
-
-          <div className="section-label">身份证号</div>
-          <Input placeholder="请输入 18 位身份证号" value={idCard} onChange={setIdCard} maxLength={18} clearable />
-
-          <div className="section-label">预留手机号</div>
-          <Input
-            placeholder="请输入银行预留手机号"
-            value={phone}
-            onChange={setPhone}
-            inputMode="numeric"
-            maxLength={11}
-            clearable
-          />
-        </div>
-      )}
+      <Picker
+        columns={[BANK_OPTIONS]}
+        visible={pickerVisible}
+        onConfirm={(value) => {
+          handleBankSelect(value);
+          setPickerVisible(false);
+        }}
+        onCancel={() => setPickerVisible(false)}
+      />
 
       <div className="add-tip">
         注册后系统将自动生成卡号，请牢记卡号后前往绑定页面完成绑卡。三要素信息仅用于校验，平台只保存哈希值。
       </div>
 
-      <Button
-        block
-        color="primary"
-        size="large"
-        loading={submitting}
-        disabled={!bankCode}
-        onClick={handleSubmit}
+      <div
+        className={`h5-btn-gradient add-submit${submitting || !bankCode ? ' disabled' : ''}`}
+        onClick={() => !submitting && bankCode && handleSubmit()}
       >
-        注册银行卡
-      </Button>
+        {submitting ? '注册中...' : '注册银行卡'}
+      </div>
     </div>
   );
 };

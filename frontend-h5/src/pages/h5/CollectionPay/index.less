@@ -1,121 +1,190 @@
+/* 收款支付页（V2）：渐变头 + 悬浮卡片（收款方/金额/支付方式/密码） */
 .collection-pay-page {
   min-height: 100vh;
-  background: #f5f5f5;
-  padding: 16px;
+  background: var(--h5-bg);
+}
+
+.cp-hero {
+  height: 72px;
+  background: var(--h5-grad-soft);
+}
+
+.cp-body {
+  margin: -46px 14px 0;
+  padding-bottom: 30px;
+  position: relative;
+}
+
+.cp-card {
+  background: #fff;
+  border-radius: var(--h5-radius-card);
+  box-shadow: var(--h5-shadow-card);
+  padding: 14px;
+
+  & + .cp-card {
+    margin-top: 10px;
+  }
+}
+
+/* 收款方信息卡 */
+.payee-card {
+  text-align: center;
+  padding: 16px 12px;
+
+  .payee-tile {
+    width: 42px;
+    height: 42px;
+    margin: 0 auto;
+    border-radius: 12px;
+    background: var(--h5-grad-brand);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    box-shadow: var(--h5-shadow-icon);
+  }
+
+  .payee-name {
+    font-size: 14.5px;
+    font-weight: 700;
+    color: var(--h5-text);
+    margin-top: 8px;
+  }
+
+  .payee-subject {
+    font-size: 12px;
+    color: var(--h5-text-3);
+    margin-top: 3px;
+  }
+}
+
+/* 金额卡 */
+.amount-card {
+  text-align: center;
+  margin-top: 10px;
+
+  .amount-label {
+    font-size: 12.5px;
+    color: var(--h5-text-2);
+  }
+
+  .amount-value {
+    font-size: 28px;
+    font-weight: 800;
+    color: var(--h5-text);
+    margin: 6px 0 4px;
+    letter-spacing: 0.5px;
+  }
+
+  .amount-locked-tips {
+    font-size: 11.5px;
+    color: var(--h5-text-3);
+  }
+
+  .amount-divider {
+    height: 1px;
+    background: var(--h5-divider);
+    margin: 10px 22px;
+  }
+
+  .amount-subject-input {
+    input {
+      text-align: center;
+      font-size: 13px;
+      color: var(--h5-text-2);
+
+      &::placeholder {
+        color: var(--h5-text-3);
+      }
+    }
+  }
+}
+
+/* 支付方式行（自定义单选） */
+.funding-rows {
+  padding: 4px 14px;
+  margin-top: 10px;
+
+  .funding-row {
+    display: flex;
+    align-items: center;
+    padding: 12px 0;
+    cursor: pointer;
+
+    &:first-child {
+      border-bottom: 1px solid var(--h5-divider);
+    }
+  }
+
+  .funding-label {
+    flex: 1;
+    font-size: 13px;
+    color: var(--h5-text);
+  }
+
+  .funding-value {
+    font-size: 12px;
+    color: var(--h5-text-2);
+    margin-right: 10px;
+  }
+
+  .funding-radio {
+    width: 17px;
+    height: 17px;
+    border-radius: 50%;
+    border: 1.5px solid var(--h5-divider);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    flex-shrink: 0;
+
+    &.active {
+      border-color: var(--h5-primary);
+    }
+  }
+
+  .funding-radio-dot {
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+    background: var(--h5-primary);
+  }
+}
+
+/* 密码卡 */
+.password-card {
+  text-align: center;
+
+  .password-title {
+    font-size: 14px;
+    font-weight: 700;
+    color: var(--h5-text);
+    margin-bottom: 12px;
+  }
+}
+
+.cp-submit {
+  margin-top: 14px;
+}
+
+.cp-cancel {
+  margin-top: 14px;
+  text-align: center;
+  font-size: 13px;
+  color: var(--h5-text-2);
+  cursor: pointer;
 }
 
 .loading-container {
   display: flex;
-  justify-content: center;
   align-items: center;
+  justify-content: center;
   height: 100vh;
 }
 
 .error-state {
   display: flex;
-  justify-content: center;
   align-items: center;
+  justify-content: center;
   height: 100vh;
-  color: #999;
-}
-
-.payee-card {
-  margin-bottom: 16px;
-}
-
-.payee-title {
-  font-size: 14px;
-  color: #999;
-  margin-bottom: 8px;
-}
-
-.payee-name {
-  font-size: 18px;
-  font-weight: bold;
-  color: #333;
-}
-
-.amount-card {
-  margin-bottom: 16px;
-}
-
-.amount-title {
-  font-size: 16px;
-  font-weight: bold;
-  color: #333;
-  margin-bottom: 12px;
-}
-
-.amount-value {
-  text-align: center;
-  padding: 20px 0;
-}
-
-.amount-subject {
-  font-size: 14px;
-  color: #666;
-  margin-top: 8px;
-}
-
-.info-card {
-  margin-bottom: 16px;
-}
-
-.info-row {
-  display: flex;
-  justify-content: space-between;
-  padding: 12px 0;
-  border-bottom: 1px solid #f0f0f0;
-}
-
-.info-row:last-child {
-  border-bottom: none;
-}
-
-.info-label {
-  font-size: 14px;
-  color: #999;
-}
-
-.info-value {
-  font-size: 14px;
-  color: #333;
-}
-
-.password-card {
-  margin-bottom: 16px;
-}
-
-.funding-title,
-.password-title {
-  font-size: 16px;
-  font-weight: 600;
-  color: #333;
-  margin-bottom: 12px;
-}
-
-.funding-options {
-  display: flex;
-  flex-direction: column;
-  gap: 10px;
-  margin-bottom: 20px;
-}
-
-.funding-option {
-  padding: 12px;
-  background: #f7f7f7;
-  border-radius: 8px;
-}
-
-.password-title {
-  font-size: 16px;
-  font-weight: bold;
-  color: #333;
-  margin-bottom: 12px;
-}
-
-.pay-actions {
-  display: flex;
-  flex-direction: column;
-  gap: 12px;
+  color: var(--h5-text-3);
 }

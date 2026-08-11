@@ -15,6 +15,7 @@ import StreamingBubble from './components/StreamingBubble';
 import SessionList from './components/SessionList';
 import MessageActions from './components/MessageActions';
 import { confirmSubmission, sendMessage } from '@/services/ai';
+import { IconSet } from '@/components/h5/common';
 import './index.less';
 
 let idCounter = 0;
@@ -419,7 +420,7 @@ const AITalkPage: React.FC = () => {
           id: successId,
           role: 'assistant',
           kind: 'text',
-          content: '✅ 转账已提交，请稍后查询交易状态确认结果。',
+          content: '转账已提交，请稍后查询交易状态确认结果。',
           streaming: false,
           showActions: true,
           timestamp: new Date(),
@@ -593,9 +594,10 @@ const AITalkPage: React.FC = () => {
       if (msg.kind === 'error') {
         return (
           <div className="ai-message ai-message-assistant">
+            <div className="ai-assistant-orb" />
             <div className="ai-message-body">
               <div className="ai-message-content ai-error">
-                <span className="ai-error-icon">⚠️</span>
+                <span className="ai-error-icon">!</span>
                 <span className="ai-error-text">{msg.content}</span>
                 <button type="button" className="ai-retry-btn" onClick={() => handleRetry(msg)}>
                   重试
@@ -629,10 +631,13 @@ const AITalkPage: React.FC = () => {
           onClick={handleOpenSessions}
           aria-label="打开历史会话"
         >
-          ☰
+          <IconSet name="drawer" size={18} />
         </button>
         <div className="ai-top-title-block">
-          <div className="ai-top-title">{sessionTitle}</div>
+          <div className="ai-top-title">
+            <IconSet name="ai" size={15} color="#8fc2ff" />
+            <span className="ai-top-title-text">{sessionTitle}</span>
+          </div>
         </div>
         <button
           type="button"
@@ -640,7 +645,7 @@ const AITalkPage: React.FC = () => {
           onClick={handleNewSession}
           aria-label="新建对话"
         >
-          ✚
+          <IconSet name="plus" size={18} />
         </button>
 
       </div>
@@ -672,6 +677,10 @@ const AITalkPage: React.FC = () => {
         onSelect={handleSelectSession}
         onDelete={handleDeleteSession}
         onRename={handleRenameSession}
+        onNewSession={() => {
+          setSessionDrawerOpen(false);
+          handleNewSession();
+        }}
       />
     </div>
   );

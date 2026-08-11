@@ -370,7 +370,7 @@ const ConfirmationCard: React.FC<Props> = ({ message, onConfirm, onCancel }) => 
 
         {message.status === 'done' && (
           <div className="ai-confirmation-done">
-            已确认 ✓
+            已确认
           </div>
         )}
       </div>

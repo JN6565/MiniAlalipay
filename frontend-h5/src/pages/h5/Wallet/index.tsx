@@ -1,34 +1,23 @@
 import { history } from 'umi';
-import { Button, SpinLoading, Toast } from 'antd-mobile';
+import { Toast } from 'antd-mobile';
 import { useCallback, useEffect, useState } from 'react';
 import * as accountService from '@/services/account';
 import { getBankCards, formatBalance, type BankCard } from '@/services/bankCard';
+import { Skeleton, RevealToggle, EmptyState, BankCardFace, IconSet } from '@/components/h5/common';
 import './index.less';
 
-/** 银行主题渐变背景：与银行卡列表页保持一致的视觉风格。 */
-const BANK_GRADIENT: Record<string, string> = {
-  ICBC: 'linear-gradient(135deg, #d43f3f, #a01f24)',
-  CCB: 'linear-gradient(135deg, #2b6cb0, #1a4a80)',
-  ABC: 'linear-gradient(135deg, #2f9e63, #1d7048)',
-  BOC: 'linear-gradient(135deg, #8a4b2d, #6b3419)',
-  CMB: 'linear-gradient(135deg, #c2453b, #8f2b2b)',
-  BCM: 'linear-gradient(135deg, #33569e, #20386b)',
-  PSBC: 'linear-gradient(135deg, #2e8b57, #1f6b41)',
-};
-
 /**
- * 充值提现页（钱包）：银行卡充值/提现的统一入口。
+ * 钱包页（原充值提现）：账户余额与银行卡的统一资金入口。
  *
- * 用户资金流入的真实渠道只有两种：他人转账、银行卡充值（卡虚拟余额 → 账户余额）；
- * 资金流出到银行卡通过提现（账户余额 → 卡虚拟余额）。本页展示账户余额与
- * 银行卡列表（含虚拟余额），每卡提供充值/提现操作，跳转既有 TCC 操作页。
+ * V2 设计：顶部柔渐变区只展示账户余额（不展示总资产）；充值/提现胶囊按钮
+ * 上移至悬浮操作卡，充值跳转 Popup 选卡流程；下方为银行卡卡面列表。
+ * 每次进入页面重拉余额与卡列表：充值/提现成功后返回本页即展示最新事实。
  */
 const WalletPage = () => {
   const [account, setAccount] = useState<accountService.AccountInfo | null>(null);
   const [cards, setCards] = useState<BankCard[]>([]);
   const [loading, setLoading] = useState(true);
 
-  // 每次进入页面重拉余额与卡列表：充值/提现成功后返回本页即展示最新事实。
   const loadData = useCallback(async () => {
     setLoading(true);
     try {
@@ -37,6 +26,7 @@ const WalletPage = () => {
         getBankCards(),
       ]);
       if (accountResp.status === 'fulfilled') {
+        // 请求拦截器已拆包 ApiResponse，运行时返回值为业务数据而非 AxiosResponse
         setAccount(accountResp.value as unknown as accountService.AccountInfo);
       }
       if (cardsResp.status === 'fulfilled') {
@@ -56,8 +46,14 @@ const WalletPage = () => {
   if (loading) {
     return (
       <div className="wallet-page">
-        <div className="wallet-loading">
-          <SpinLoading />
+        <div className="wallet-hero">
+          <Skeleton variant="card" height={72} />
+        </div>
+        <div style={{ marginTop: 14 }}>
+          <Skeleton variant="card" height={120} />
+        </div>
+        <div style={{ marginTop: 14 }}>
+          <Skeleton variant="card" height={120} />
         </div>
       </div>
     );
@@ -65,74 +61,59 @@ const WalletPage = () => {
 
   return (
     <div className="wallet-page">
-      {/* 账户余额卡片 */}
-      <div className="wallet-account-card">
-        <div className="account-title">账户余额（元）</div>
-        <div className="account-available">{formatBalance(account?.availableFen || 0)}</div>
-        <div className="account-cols">
-          <div>
-            <span>冻结金额</span>
-            <b>{formatBalance(account?.frozenFen || 0)}</b>
-          </div>
-          <div>
-            <span>总资产</span>
-            <b>{formatBalance(account?.totalFen || 0)}</b>
-          </div>
+      {/* 顶部品牌区：柔渐变 + 账户余额（掩码切换，不展示总资产） */}
+      <div className="wallet-hero">
+        <div className="hero-label">账户余额（元）</div>
+        <div className="hero-balance">
+          <RevealToggle
+            defaultRevealed
+            mask="****"
+            value={formatBalance(account?.availableFen || 0)}
+            valueClassName="hero-num"
+          />
         </div>
       </div>
 
-      {/* 银行卡列表与充值/提现入口 */}
+      {/* 悬浮操作卡：充值（渐变实心）/ 提现（蓝描边），位于银行卡列表上方 */}
+      <div className="wallet-action-card">
+        <div className="wallet-action-btn primary" onClick={() => history.push('/h5/recharge')}>
+          充值
+        </div>
+        <div className="wallet-action-btn outline" onClick={() => history.push('/h5/withdraw')}>
+          提现
+        </div>
+      </div>
+
+      {/* 银行卡列表 */}
       <div className="wallet-section-head">
-        <span>银行卡</span>
-        <span className="wallet-section-link" onClick={() => history.push('/h5/bank-cards')}>
-          管理银行卡 &gt;
+        <span className="section-title">银行卡</span>
+        <span className="section-link" onClick={() => history.push('/h5/bank-cards')}>
+          管理银行卡 <IconSet name="chevronRight" size={12} />
         </span>
       </div>
 
       {cards.length === 0 ? (
-        <div className="wallet-empty">
-          <div className="empty-icon">💳</div>
-          <p>还没有绑定银行卡</p>
-          <p className="empty-hint">绑定后可从银行卡充值到账户余额</p>
-          <Button color="primary" size="small" onClick={() => history.push('/h5/bank-cards')}>
-            去绑卡
-          </Button>
-        </div>
+        <EmptyState
+          icon={<IconSet name="card" size={30} color="var(--h5-primary)" />}
+          text="还没有绑定银行卡"
+          hint="绑定后可从银行卡充值到账户余额"
+          actionText="去绑卡"
+          onAction={() => history.push('/h5/bank-cards')}
+        />
       ) : (
         <div className="wallet-card-list">
           {cards.map((card) => (
-            <div
+            <BankCardFace
               key={card.cardId}
-              className="wallet-card-item"
-              style={{ background: BANK_GRADIENT[card.bankCode] || 'linear-gradient(135deg, #3a4a63, #232f42)' }}
-            >
-              <div className="card-head" onClick={() => history.push(`/h5/bank-cards/${card.cardId}`)}>
-                <span className="bank-name">{card.bankName}</span>
-                <span className="card-number">**** **** **** {card.cardLast4}</span>
-                {card.isDefault && <span className="default-badge">默认</span>}
-              </div>
-              <div className="card-balance">
-                卡内余额 <b>¥ {formatBalance(card.balanceFen || 0)}</b>
-              </div>
-              <div className="card-actions">
-                <Button
-                  size="small"
-                  fill="outline"
-                  className="card-action-btn"
-                  onClick={() => history.push(`/h5/bank-cards/${card.cardId}/recharge`)}
-                >
-                  充值
-                </Button>
-                <Button
-                  size="small"
-                  fill="outline"
-                  className="card-action-btn"
-                  onClick={() => history.push(`/h5/bank-cards/${card.cardId}/withdraw`)}
-                >
-                  提现
-                </Button>
-              </div>
-            </div>
+              bankCode={card.bankCode}
+              bankName={card.bankName}
+              cardType={card.cardType}
+              cardLast4={card.cardLast4}
+              isDefault={card.isDefault}
+              balanceFen={card.balanceFen}
+              balanceRevealed={false}
+              onClick={() => history.push(`/h5/bank-cards/${card.cardId}`)}
+            />
           ))}
         </div>
       )}

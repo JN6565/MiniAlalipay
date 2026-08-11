@@ -1,9 +1,9 @@
 import React, { useEffect, useState } from 'react';
 import { history, useParams, useLocation } from 'umi';
-import { Card, Button, Result, SpinLoading } from 'antd-mobile';
-import { CheckCircleFill, CloseCircleFill } from 'antd-mobile-icons';
+import { SpinLoading } from 'antd-mobile';
 import * as transferService from '@/services/transfer';
-import { AmountDisplay } from '@/components/h5/AmountDisplay';
+import { formatBalance } from '@/services/bankCard';
+import { IconSet, type IconName } from '@/components/h5/common';
 import { formatTime, maskName } from '@/utils/format';
 import './index.less';
 
@@ -65,74 +65,81 @@ const TransferResultPage: React.FC = () => {
   }
 
   const isSuccess = result?.status === 'SUCCESS';
-  const isProcessing = result?.status === 'PROCESSING';
+  const isProcessing = result?.status === 'PROCESSING' || result?.status === 'COMPENSATING';
+
+  // 三态统一版式：success 绿 / fail 红 / processing 橙，圆形状态图标 + 标题 + 金额 + 说明
+  const statusCfg = isSuccess
+    ? { color: 'var(--h5-success)', icon: 'check' as IconName }
+    : isProcessing
+      ? { color: 'var(--h5-warning)', icon: 'clock' as IconName }
+      : { color: 'var(--h5-amount-in)', icon: 'close' as IconName };
 
   const getStatusText = () => {
     if (isSuccess) return '转账成功';
-    if (result?.status === 'REVERSED') return '转账已冲正';
+    if (result?.status === 'REVERSED') return '转账失败';
     if (result?.status === 'CANCELLED') return '转账已取消';
-    if (isProcessing) return '转账处理中';
+    if (isProcessing) return '处理中';
     return '转账状态未知';
   };
 
   const getStatusDescription = () => {
-    if (isSuccess) return '资金已到账';
-    if (result?.status === 'REVERSED') return '资金已退回';
-    if (result?.status === 'CANCELLED') return '转账已取消';
-    if (isProcessing) return '请稍后查看结果';
+    if (isSuccess) return '资金已实时到账对方账户';
+    if (result?.status === 'REVERSED') return '资金已冲正退回，可稍后重试';
+    if (result?.status === 'CANCELLED') return '转账已取消，资金未扣除';
+    if (isProcessing) return '系统处理中，请稍后在账单中查看结果';
     return '请联系客服查询';
   };
 
+  const detailRows: Array<[string, string]> = [
+    ['交易号', result?.transactionId || '-'],
+    [
+      '付款人',
+      `${result?.payerDisplayName || result?.payerUserId || '-'}` +
+        (result?.payerMaskedAccountNumber ? ` (${result.payerMaskedAccountNumber})` : ''),
+    ],
+    [
+      '收款人',
+      `${result?.payeeDisplayName || maskName(navState.payeeNickname) || result?.payeeUserId || '-'}` +
+        (result?.payeeMaskedAccountNumber ? ` (${result.payeeMaskedAccountNumber})` : ''),
+    ],
+    ['备注', result?.remark || '-'],
+    ['时间', result?.createdAt ? formatTime(result.createdAt) : '-'],
+  ];
+
   return (
     <div className="transfer-result-page">
-      <Result
-        icon={isSuccess ? <CheckCircleFill /> : isProcessing ? <SpinLoading /> : <CloseCircleFill />}
-        status={isSuccess ? 'success' : isProcessing ? 'waiting' : 'error'}
-        title={getStatusText()}
-        description={getStatusDescription()}
-      />
+      {/* 状态区：圆形状态图标 + 标题 + 金额 + 说明 + 双入口 */}
+      <div className="result-status">
+        <div className="status-icon" style={{ background: statusCfg.color }}>
+          <IconSet name={statusCfg.icon} size={26} width={2.4} color="#fff" />
+        </div>
+        <div className="status-title">{getStatusText()}</div>
+        {result && (
+          <div className="status-amount">¥{formatBalance(result.amountFen)}</div>
+        )}
+        <div className="status-desc">{getStatusDescription()}</div>
+        <div className="status-actions">
+          <div className="result-btn outline" onClick={() => history.push('/h5/home')}>
+            返回首页
+          </div>
+          <div
+            className="h5-btn-gradient result-btn"
+            onClick={() => history.push('/h5/account/transactions')}
+          >
+            查看账单
+          </div>
+        </div>
+      </div>
 
-      <Card className="result-card">
-        <div className="result-row">
-          <span className="result-label">交易号</span>
-          <span className="result-value">{result?.transactionId || '-'}</span>
-        </div>
-        <div className="result-row">
-          <span className="result-label">付款人</span>
-          <span className="result-value">
-            {result?.payerDisplayName || result?.payerUserId || '-'}
-            {result?.payerMaskedAccountNumber && ` (${result.payerMaskedAccountNumber})`}
-          </span>
-        </div>
-        <div className="result-row">
-          <span className="result-label">收款人</span>
-          <span className="result-value">
-            {result?.payeeDisplayName || maskName(navState.payeeNickname) || result?.payeeUserId || '-'}
-            {result?.payeeMaskedAccountNumber && ` (${result.payeeMaskedAccountNumber})`}
-          </span>
-        </div>
-        <div className="result-row">
-          <span className="result-label">金额</span>
-          <span className="result-value">
-            {result && <AmountDisplay amountFen={result.amountFen} />}
-          </span>
-        </div>
-        <div className="result-row">
-          <span className="result-label">备注</span>
-          <span className="result-value">{result?.remark || '-'}</span>
-        </div>
-        <div className="result-row">
-          <span className="result-label">时间</span>
-          <span className="result-value">
-            {result?.createdAt ? formatTime(result.createdAt) : '-'}
-          </span>
-        </div>
-      </Card>
-
-      <div className="result-actions">
-        <Button block color="primary" onClick={() => history.push('/h5/home')}>
-          返回首页
-        </Button>
+      {/* 交易凭证字段 */}
+      <div className="result-receipt">
+        <div className="receipt-divider" />
+        {detailRows.map(([label, value]) => (
+          <div className="receipt-row" key={label}>
+            <span className="receipt-label">{label}</span>
+            <span className="receipt-value">{value}</span>
+          </div>
+        ))}
       </div>
     </div>
   );

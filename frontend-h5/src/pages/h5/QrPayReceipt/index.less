@@ -1,30 +1,65 @@
+/* 扫码支付回执页（V2）：白底凭证样式 */
 .qr-pay-receipt-page {
   min-height: 100vh;
-  background: #f5f5f5;
-  padding: 16px;
+  background: #fff;
+  padding: 20px 16px 30px;
 }
 
-.receipt-card {
-  margin: 24px 0 16px;
+.receipt-head {
+  text-align: center;
+
+  .receipt-icon {
+    width: 46px;
+    height: 46px;
+    margin: 0 auto;
+    border-radius: 50%;
+    background: var(--h5-success);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    box-shadow: var(--h5-shadow-icon);
+  }
+
+  .receipt-title {
+    font-size: 16px;
+    font-weight: 700;
+    color: var(--h5-text);
+    margin-top: 10px;
+  }
+
+  .receipt-amount {
+    font-size: 26px;
+    font-weight: 800;
+    color: var(--h5-text);
+    margin-top: 6px;
+    letter-spacing: 0.5px;
+  }
+}
+
+.receipt-divider {
+  border-top: 1px dashed var(--h5-divider);
+  margin: 18px 0 12px;
 }
 
 .receipt-row {
   display: flex;
   justify-content: space-between;
-  padding: 12px 0;
-  border-bottom: 1px solid #f0f0f0;
+  gap: 14px;
+  padding: 6px 0;
+  font-size: 12.5px;
+
+  .receipt-label {
+    color: var(--h5-text-3);
+    flex-shrink: 0;
+  }
+
+  .receipt-value {
+    color: var(--h5-text);
+    text-align: right;
+    word-break: break-all;
+  }
 }
 
-.receipt-row:last-child {
-  border-bottom: none;
-}
-
-.receipt-label {
-  font-size: 14px;
-  color: #999;
-}
-
-.receipt-value {
-  font-size: 14px;
-  color: #333;
+.receipt-done {
+  margin-top: 20px;
 }

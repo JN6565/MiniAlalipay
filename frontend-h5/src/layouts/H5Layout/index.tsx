@@ -3,6 +3,7 @@ import { Outlet, useLocation, history } from '@umijs/max';
 import { ConfigProvider } from 'antd-mobile';
 import zhCN from 'antd-mobile/es/locales/zh-CN';
 import TabBar, { isTabPath } from '@/components/h5/TabBar';
+import IconSet from '@/components/h5/common/IconSet';
 import TabViews from './TabViews';
 import './index.less';
 
@@ -55,7 +56,9 @@ const H5Layout: React.FC = () => {
           <div className="navbar">
             <div className="navbar-left">
               {showBack && (
-                <span className="navbar-back" onClick={handleBack}>←</span>
+                <span className="navbar-back" onClick={handleBack}>
+                  <IconSet name="back" size={18} />
+                </span>
               )}
             </div>
             <div className="navbar-title">{getPageTitle(location.pathname)}</div>
@@ -90,12 +93,12 @@ function getPageTitle(pathname: string): string {
     '/h5/settings/privacy-policy': '隐私政策',
     '/h5/transfer': '转账',
     '/h5/transfer/confirm': '确认转账',
-    '/h5/wallet': '充值提现',
+    '/h5/wallet': '钱包',
     '/h5/ai-talk': 'AI助手',
     '/h5/contacts': '联系人',
     '/h5/friend-requests': '新朋友',
     '/h5/profile': '我的',
-    '/h5/profile/edit': '个人资料',
+    '/h5/profile-detail': '个人详情',
     '/h5/scan': '扫一扫',
     '/h5/collection': '收款',
     '/h5/collection/pay': '付款',
@@ -103,8 +106,9 @@ function getPageTitle(pathname: string): string {
     '/h5/credit': 'Mini花呗',
     '/h5/credit/bills': '账单',
     '/h5/credit/repay': '还款',
-    '/h5/account/transactions': '交易明细',
-    '/h5/account/analytics': '资产分析',
+    '/h5/account/transactions': '账单',
+    '/h5/recharge': '充值',
+    '/h5/withdraw': '提现',
     '/h5/payment-password/setup': '设置支付密码',
     '/h5/payment-password/change': '修改支付密码',
     '/h5/bank-cards': '银行卡',
@@ -122,6 +126,10 @@ function getPageTitle(pathname: string): string {
   }
   if (/^\/h5\/bank-cards\/[^/]+\/withdraw$/.test(pathname)) {
     return '提现';
+  }
+  // 银行卡账单页带路径参数：卡内余额视角的充值/提现历史
+  if (/^\/h5\/bank-cards\/[^/]+\/bills$/.test(pathname)) {
+    return '卡账单';
   }
 
   // 银行卡详情页带路径参数，无法精确命中，统一展示「卡片详情」

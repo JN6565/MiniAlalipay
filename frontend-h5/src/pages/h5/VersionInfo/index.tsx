@@ -1,62 +1,55 @@
 import React from 'react';
+import { IconSet } from '@/components/h5/common';
 import './index.less';
+
+/** V1.0.0 更新说明（第二轮视觉升级内容）。 */
+const UPDATE_ITEMS = [
+  '全新视觉升级，卡片质感与图标体系焕新',
+  '账单页新增收支分析视图',
+  '扫一扫支持手动输入码内容降级',
+  'AI 助手沉浸式深蓝对话体验',
+  '个人中心支持内置头像与资料编辑',
+];
 
 const VersionInfoPage: React.FC = () => {
   return (
     <div className="version-info-page">
-      <div className="version-header">
-        <div className="app-icon">💰</div>
-        <div className="app-name">MiniAlalipay</div>
-        <div className="app-version">V1.0.0</div>
+      {/* 应用标识：渐变底 + 品牌图标 */}
+      <div className="vi-logo">
+        <IconSet name="wallet" size={26} color="#fff" />
+      </div>
+      <div className="vi-name">MiniAI 支付</div>
+      <div className="vi-version">当前版本 V1.0.0</div>
+
+      {/* 版本更新说明 */}
+      <div className="vi-card">
+        <div className="vi-card-title">版本更新说明</div>
+        {UPDATE_ITEMS.map((text) => (
+          <div key={text} className="vi-update-item">
+            <span className="vi-update-dot" />
+            <span className="vi-update-text">{text}</span>
+          </div>
+        ))}
       </div>
 
-      <div className="version-content">
-        <div className="section">
-          <div className="section-title">关于应用</div>
-          <div className="section-text">
-            MiniAlalipay 是一款 AI 驱动的金融信任平台，提供虚拟资金管理、转账、收款、信用服务等功能。
-          </div>
+      {/* 技术栈说明 */}
+      <div className="vi-card">
+        <div className="vi-card-title">技术栈</div>
+        <div className="vi-tech-row">
+          <span className="vi-tech-label">前端</span>
+          <span className="vi-tech-value">React + Umi + Ant Design Mobile</span>
         </div>
-
-        <div className="section">
-          <div className="section-title">技术栈</div>
-          <div className="tech-list">
-            <div className="tech-item">
-              <span className="tech-label">前端</span>
-              <span className="tech-value">React + Umi + Ant Design Mobile</span>
-            </div>
-            <div className="tech-item">
-              <span className="tech-label">后端</span>
-              <span className="tech-value">Spring Boot + Spring Cloud + Seata</span>
-            </div>
-            <div className="tech-item">
-              <span className="tech-label">数据库</span>
-              <span className="tech-value">MySQL 8.0 + Redis</span>
-            </div>
-            <div className="tech-item">
-              <span className="tech-label">AI 引擎</span>
-              <span className="tech-value">DeepSeek</span>
-            </div>
-          </div>
+        <div className="vi-tech-row">
+          <span className="vi-tech-label">后端</span>
+          <span className="vi-tech-value">Spring Boot + Spring Cloud + Seata</span>
         </div>
-
-        <div className="section">
-          <div className="section-title">更新日志</div>
-          <div className="update-log">
-            <div className="log-item">
-              <div className="log-version">V1.0.0</div>
-              <div className="log-date">2026-08-08</div>
-              <div className="log-content">
-                <p>• 首次发布</p>
-                <p>• 支持转账、收款、充值功能</p>
-                <p>• 集成 AI 智能助手</p>
-                <p>• 支持 Mini 花呗信用服务</p>
-                <p>• 好友系统与联系人管理</p>
-              </div>
-            </div>
-          </div>
+        <div className="vi-tech-row last">
+          <span className="vi-tech-label">AI 引擎</span>
+          <span className="vi-tech-value">DeepSeek</span>
         </div>
       </div>
+
+      <div className="vi-footer">© 2026 MiniAI 支付 · 演示环境，不接入真实资金通道</div>
     </div>
   );
 };

@@ -1,145 +1,84 @@
+/* 设置页（V2 重设计）：入口列表卡 + 底部双描边按钮。配色引用 --h5-* 令牌。 */
+
 .settings-page {
   min-height: 100vh;
-  background: #f5f5f5;
+  background: var(--h5-bg);
+  padding: 12px 12px 24px;
 
-  .settings-user {
-    background: #1677ff;
-    padding: 20px 16px;
+  .settings-list {
+    background: var(--h5-card-bg);
+    border-radius: var(--h5-radius-card);
+    box-shadow: var(--h5-shadow-card);
+    padding: 4px 14px;
+  }
+
+  .settings-item {
     display: flex;
     align-items: center;
-    gap: 14px;
+    gap: 12px;
+    padding: 14px 0;
+    border-bottom: 1px solid var(--h5-divider);
+    cursor: pointer;
 
-    .avatar {
-      width: 56px;
-      height: 56px;
-      border-radius: 50%;
-      background: rgba(255,255,255,0.3);
+    &:active { opacity: 0.7; }
+
+    &.last { border-bottom: none; }
+
+    .item-icon {
+      width: 32px;
+      height: 32px;
+      border-radius: 9px;
+      background: var(--h5-primary-bg);
       display: flex;
       align-items: center;
       justify-content: center;
-      font-size: 28px;
-
-      img {
-        width: 100%;
-        height: 100%;
-        border-radius: 50%;
-        object-fit: cover;
-      }
+      flex: none;
     }
 
-    .user-info {
+    .item-content {
       flex: 1;
+      min-width: 0;
 
-      .name {
-        font-size: 18px;
-        font-weight: 600;
-        color: #fff;
-        margin-bottom: 4px;
-      }
-
-      .id {
-        font-size: 13px;
-        color: rgba(255,255,255,0.8);
+      .item-title {
+        font-size: 14px;
+        font-weight: 500;
+        color: var(--h5-text);
       }
     }
 
-    .arrow {
-      color: rgba(255,255,255,0.6);
-      font-size: 16px;
+    .item-desc {
+      font-size: 12px;
+      color: var(--h5-text-3);
     }
   }
 
-  .settings-section {
-    margin: 12px 0;
+  /* 底部操作：蓝描边切换账号 + 红描边退出登录 */
+  .settings-actions {
+    margin-top: 24px;
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
 
-    .section-title {
-      padding: 12px 16px 8px;
-      font-size: 13px;
-      color: #999;
-    }
-
-    .settings-list {
-      background: #fff;
-      border-radius: 12px;
-      margin: 0 12px;
-      overflow: hidden;
-
-      .settings-item {
-        display: flex;
-        align-items: center;
-        padding: 16px;
-        position: relative;
-        cursor: pointer;
-
-        &:active {
-          background: #f7f8fa;
-        }
-
-        &::after {
-          content: '';
-          position: absolute;
-          bottom: 0;
-          left: 16px;
-          right: 0;
-          height: 0.5px;
-          background: #f0f0f0;
-        }
-
-        &:last-child::after {
-          display: none;
-        }
-
-        .item-icon {
-          width: 36px;
-          height: 36px;
-          border-radius: 8px;
-          display: flex;
-          align-items: center;
-          justify-content: center;
-          font-size: 18px;
-          margin-right: 12px;
-        }
-
-        .item-content {
-          flex: 1;
-
-          .item-title {
-            font-size: 15px;
-            color: #333;
-          }
-
-          .item-desc {
-            font-size: 12px;
-            color: #999;
-            margin-top: 2px;
-          }
-        }
-
-        .item-arrow {
-          color: #ccc;
-          font-size: 14px;
-        }
-      }
-    }
-  }
-
-  .settings-footer {
-    padding: 40px 16px;
-
-    .logout-btn {
-      width: 100%;
-      height: 48px;
-      border: none;
-      border-radius: 24px;
-      background: #fff;
-      color: #333;
-      font-size: 16px;
-      font-weight: 500;
+    .action-btn {
+      text-align: center;
+      padding: 12px 0;
+      border-radius: var(--h5-radius-btn);
+      font-size: 14px;
+      font-weight: 600;
       cursor: pointer;
-      box-shadow: 0 2px 8px rgba(0,0,0,0.04);
 
-      &:active {
-        background: #f7f8fa;
+      &:active { opacity: 0.8; }
+
+      &.switch {
+        color: var(--h5-primary);
+        background: var(--h5-card-bg);
+        border: 1.5px solid var(--h5-primary);
+      }
+
+      &.logout {
+        color: var(--h5-danger);
+        background: var(--h5-card-bg);
+        border: 1.5px solid var(--h5-danger);
       }
     }
   }

@@ -1,134 +1,210 @@
 .bank-card-operate-page {
-  padding: 16px;
-  min-height: 100%;
-  background: #f5f6f8;
+  padding-bottom: 24px;
+  min-height: 100vh;
+  background: var(--h5-bg);
+  box-sizing: border-box;
 }
 
-// 提现来源：账户余额卡片
-.operate-target-card {
-  background: linear-gradient(135deg, #1677ff, #4096ff);
-  border-radius: 12px;
+/* ===== 顶部品牌区：柔渐变，充值/提现目标均为账户余额 ===== */
+.operate-hero {
+  background: var(--h5-grad-soft);
+  padding: 16px 18px 30px;
   color: #fff;
-  padding: 20px 16px;
-  margin-bottom: 12px;
 
-  .target-label {
-    font-size: 13px;
+  .hero-label {
+    font-size: 12px;
     opacity: 0.9;
   }
 
-  .target-balance {
+  .hero-num {
+    margin-top: 4px;
     font-size: 28px;
-    font-weight: 600;
-    margin: 6px 0 4px;
+    font-weight: 700;
+    letter-spacing: 0.5px;
+    font-variant-numeric: tabular-nums;
   }
 
-  .target-hint {
-    font-size: 12px;
+  .hero-hint {
+    margin-top: 2px;
+    font-size: 11px;
     opacity: 0.75;
   }
 }
 
-// 到账方式行：银行卡仅作到账渠道，不展示卡内余额
-.operate-source-row {
-  background: #fff;
-  border-radius: 12px;
+/* ===== 金额输入卡 ===== */
+.operate-amount-card {
+  margin: -16px 12px 0;
   padding: 14px 16px;
-  margin-bottom: 12px;
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
+  background: var(--h5-card-bg);
+  border-radius: var(--h5-radius-card);
+  box-shadow: var(--h5-shadow-card);
+  position: relative;
 
-  .source-label {
-    font-size: 14px;
-    color: #666;
-  }
-
-  .source-value {
-    font-size: 14px;
-    color: #333;
-    font-weight: 500;
-  }
-}
-
-.balance-insufficient {
-  background: #fff;
-  border-radius: 12px;
-  padding: 40px 24px;
-  text-align: center;
-
-  .insufficient-icon {
-    font-size: 48px;
-    margin-bottom: 12px;
-  }
-
-  .insufficient-title {
-    font-size: 16px;
-    font-weight: 600;
-    color: #333;
-    margin: 0 0 8px;
-  }
-
-  .insufficient-hint {
-    font-size: 13px;
-    color: #999;
-    margin: 0;
-  }
-}
-
-.operate-form {
-  background: #fff;
-  border-radius: 12px;
-  padding: 16px;
-  margin-bottom: 20px;
-
-  .form-label {
-    font-size: 14px;
-    color: #666;
-    margin-bottom: 8px;
+  .amount-label {
+    font-size: 12px;
+    color: var(--h5-text-2);
   }
 
   .amount-input-wrapper {
-    margin-bottom: 4px;
+    margin-top: 6px;
   }
 
-  .form-hint {
+  .amount-divider {
+    height: 1px;
+    background: var(--h5-divider);
+    margin: 10px 0 8px;
+  }
+
+  .amount-hint {
+    font-size: 11px;
+    color: var(--h5-text-3);
+  }
+}
+
+/* ===== 余额不足提示（提现页） ===== */
+.balance-insufficient {
+  margin: 16px 12px 0;
+  padding: 32px 24px;
+  background: var(--h5-card-bg);
+  border-radius: var(--h5-radius-card);
+  box-shadow: var(--h5-shadow-card);
+  text-align: center;
+
+  .insufficient-icon {
+    width: 48px;
+    height: 48px;
+    margin: 0 auto 12px;
+    border-radius: var(--h5-radius-tile);
+    background: var(--h5-warning-bg);
+    color: var(--h5-warning);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+  }
+
+  .insufficient-title {
+    margin: 0 0 6px;
+    font-size: 15px;
+    font-weight: 600;
+    color: var(--h5-text);
+  }
+
+  .insufficient-hint {
+    margin: 0;
     font-size: 12px;
-    color: #999;
-    margin-top: 4px;
+    color: var(--h5-text-3);
+  }
+}
 
-    &.warning {
-      color: #ff8f1f;
-    }
+/* ===== 提现页表单：全部提现链接 ===== */
+.operate-form-extra {
+  margin-top: 8px;
+  display: flex;
+  justify-content: flex-end;
 
-    &.link {
-      color: #1677ff;
-      cursor: pointer;
-      display: inline-block;
-      margin-top: 8px;
-    }
+  .form-hint-link {
+    font-size: 12px;
+    color: var(--h5-primary);
+    cursor: pointer;
   }
 }
 
 .operate-submit {
-  margin-top: 8px;
+  margin: 16px 12px 0;
 }
 
-/* 支付密码弹窗 */
+/* ===== 底部 Popup：选择银行卡 ===== */
+.card-select-popup {
+  .popup-handle {
+    width: 30px;
+    height: 3.5px;
+    border-radius: 2px;
+    background: var(--h5-divider);
+    margin: 0 auto 10px;
+  }
+
+  .popup-title {
+    font-size: 15px;
+    font-weight: 700;
+    color: var(--h5-text);
+    margin-bottom: 12px;
+  }
+
+  .card-select-row {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 11px 12px;
+    border-radius: var(--h5-radius-input);
+    border: 1.5px solid var(--h5-divider);
+    background: var(--h5-card-bg);
+    margin-bottom: 8px;
+    cursor: pointer;
+    -webkit-tap-highlight-color: transparent;
+
+    &.active {
+      border-color: var(--h5-primary);
+      background: var(--h5-primary-bg);
+    }
+
+    .card-select-logo {
+      width: 26px;
+      height: 26px;
+      border-radius: 8px;
+      background: var(--h5-fill);
+      color: var(--h5-text-2);
+      font-size: 11px;
+      font-weight: 700;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      flex: none;
+
+      &.active {
+        background: var(--h5-grad-brand);
+        color: #fff;
+      }
+    }
+
+    .card-select-name {
+      flex: 1;
+      font-size: 13px;
+      color: var(--h5-text);
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+
+    .card-select-radio {
+      width: 16px;
+      height: 16px;
+      border-radius: 50%;
+      border: 1.5px solid var(--h5-divider);
+      box-sizing: border-box;
+      flex: none;
+    }
+  }
+
+  .card-select-confirm {
+    margin-top: 6px;
+  }
+}
+
+/* ===== 支付密码弹窗 ===== */
 .password-popup {
   .popup-title {
-    font-size: 18px;
-    font-weight: 600;
+    font-size: 17px;
+    font-weight: 700;
     text-align: center;
-    margin-bottom: 20px;
-    color: #333;
+    margin-bottom: 18px;
+    color: var(--h5-text);
   }
 
   .popup-summary {
-    background: #f5f6f8;
-    border-radius: 8px;
+    background: var(--h5-fill);
+    border-radius: var(--h5-radius-input);
     padding: 14px 16px;
-    margin-bottom: 20px;
+    margin-bottom: 18px;
 
     .summary-row {
       display: flex;
@@ -137,7 +213,7 @@
       padding: 4px 0;
 
       &:not(:last-child) {
-        border-bottom: 1px solid #eee;
+        border-bottom: 1px solid var(--h5-divider);
         padding-bottom: 10px;
         margin-bottom: 6px;
       }
@@ -145,16 +221,16 @@
 
     .summary-label {
       font-size: 13px;
-      color: #999;
+      color: var(--h5-text-3);
     }
 
     .summary-value {
       font-size: 14px;
-      color: #333;
+      color: var(--h5-text);
       font-weight: 500;
 
       &.amount {
-        color: #ff4d4f;
+        color: var(--h5-amount-in);
         font-size: 18px;
         font-weight: 600;
       }
@@ -162,22 +238,32 @@
   }
 
   .popup-password {
-    margin-bottom: 20px;
+    margin-bottom: 18px;
 
     .password-field {
       --font-size: 18px;
       --text-align: center;
       letter-spacing: 8px;
       padding: 12px 0;
-      border-bottom: 2px solid #eee;
+      border-bottom: 2px solid var(--h5-divider);
 
       &:focus-within {
-        border-bottom-color: #1677ff;
+        border-bottom-color: var(--h5-primary);
       }
     }
   }
 
   .popup-actions {
-    padding: 0 4px;
+    padding: 0 2px;
   }
+}
+
+/* 取消按钮：弹窗内次级操作 */
+.operate-cancel-btn {
+  margin-top: 10px;
+  text-align: center;
+  font-size: 14px;
+  color: var(--h5-text-2);
+  padding: 10px 0;
+  cursor: pointer;
 }

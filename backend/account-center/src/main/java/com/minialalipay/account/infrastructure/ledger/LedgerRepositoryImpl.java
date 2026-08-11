@@ -74,6 +74,24 @@ public class LedgerRepositoryImpl implements LedgerRepository {
                         + "WHERE voucher_id=? AND status='PREPARED'",
                 now, voucher.getVoucherId());
         if (updated != 1) return false;
+        // 过账成功后回填「交易后余额」展示列：以账户当前可用余额为基准，
+        // 加上/减去本分录自身影响（同一凭证内同账户另一笔分录的净影响已由当前余额体现）。
+        // 前提：余额参与者的 Confirm 先于账本参与者提交（分支注册顺序保证），
+        // 当前余额已反映本交易。该列仅供 C 端明细展示，不参与对账与平衡校验。
+        // 采用标准相关子查询而非 MySQL 专有 UPDATE JOIN，保证 H2 集成测试同构。
+        jdbcTemplate.update("UPDATE ledger_db.ledger_entry e "
+                        + "SET e.balance_after_fen = ("
+                        + "  SELECT ab.available_fen "
+                        + "    + CASE WHEN e.direction='DEBIT' THEN e.amount_fen ELSE -e.amount_fen END "
+                        + "  FROM ledger_db.ledger_account la "
+                        + "  JOIN account_db.account a ON a.user_id=la.owner_id "
+                        + "    AND a.account_type='PERSONAL' AND a.currency='CNY' "
+                        + "  JOIN account_db.account_balance ab ON ab.account_id=a.account_id "
+                        + "  WHERE la.ledger_account_id=e.ledger_account_id AND la.owner_type='USER' LIMIT 1) "
+                        + "WHERE e.voucher_id=? AND EXISTS ("
+                        + "  SELECT 1 FROM ledger_db.ledger_account la2 "
+                        + "  WHERE la2.ledger_account_id=e.ledger_account_id AND la2.owner_type='USER')",
+                voucher.getVoucherId());
         String payload = "{\"voucherId\":\"" + voucher.getVoucherId()
                 + "\",\"transactionId\":\"" + voucher.getTransactionId() + "\"}";
         jdbcTemplate.update("INSERT INTO ledger_db.outbox_event "
@@ -164,6 +182,8 @@ public class LedgerRepositoryImpl implements LedgerRepository {
     private LedgerEntry.WithCounterparty mapEntryWithCounterparty(ResultSet rs, int rowNum) throws SQLException {
         LedgerEntry entry = mapEntry(rs, rowNum);
         String counterpartyUserId = rs.getString("counterparty_user_id");
-        return new LedgerEntry.WithCounterparty(entry, counterpartyUserId);
+        long balanceAfter = rs.getLong("balance_after_fen");
+        Long balanceAfterFen = rs.wasNull() ? null : balanceAfter;
+        return new LedgerEntry.WithCounterparty(entry, counterpartyUserId, balanceAfterFen);
     }
 }

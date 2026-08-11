@@ -1,0 +1,244 @@
+/* C 端 H5 公共组件样式：骨架屏、掩码切换、空态、月分组列表。
+   配色一律引用 --h5-* 设计令牌（见 src/overrides.css）。 */
+
+/* ===== 骨架屏 ===== */
+@keyframes h5-skeleton-shimmer {
+  0% {
+    background-position: -200px 0;
+  }
+  100% {
+    background-position: 200px 0;
+  }
+}
+
+.h5-skeleton {
+  border-radius: var(--h5-radius-card);
+  background: linear-gradient(90deg, #eef2f8 25%, #f7f9fc 50%, #eef2f8 75%);
+  background-size: 400px 100%;
+  animation: h5-skeleton-shimmer 1.2s ease-in-out infinite;
+}
+
+.h5-skeleton-card {
+  width: 100%;
+}
+
+.h5-skeleton-list {
+  background: var(--h5-card-bg);
+  padding: 4px 14px;
+  box-shadow: var(--h5-shadow-card);
+}
+
+.h5-skeleton-row {
+  display: flex;
+  align-items: center;
+  padding: 12px 0;
+  gap: 12px;
+
+  &:not(:last-child) {
+    border-bottom: 1px solid var(--h5-divider);
+  }
+}
+
+.h5-skeleton-circle {
+  width: 36px;
+  height: 36px;
+  border-radius: 50%;
+  flex-shrink: 0;
+  background: linear-gradient(90deg, #eef2f8 25%, #f7f9fc 50%, #eef2f8 75%);
+  background-size: 400px 100%;
+  animation: h5-skeleton-shimmer 1.2s ease-in-out infinite;
+}
+
+.h5-skeleton-lines {
+  flex: 1;
+
+  .h5-skeleton-line {
+    height: 10px;
+    border-radius: 5px;
+    background: linear-gradient(90deg, #eef2f8 25%, #f7f9fc 50%, #eef2f8 75%);
+    background-size: 400px 100%;
+    animation: h5-skeleton-shimmer 1.2s ease-in-out infinite;
+
+    &.long {
+      width: 60%;
+    }
+
+    &.short {
+      width: 35%;
+      margin-top: 8px;
+    }
+  }
+}
+
+/* ===== 掩码切换 ===== */
+.h5-reveal {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  cursor: pointer;
+
+  .h5-reveal-icon {
+    font-size: 13px;
+    opacity: 0.75;
+  }
+}
+
+/* ===== 空态 ===== */
+.h5-empty {
+  background: var(--h5-card-bg);
+  border-radius: var(--h5-radius-card);
+  box-shadow: var(--h5-shadow-card);
+  padding: 40px 24px;
+  text-align: center;
+
+  .h5-empty-icon {
+    margin-bottom: 10px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 40px;
+  }
+
+  .h5-empty-text {
+    font-size: 15px;
+    font-weight: 600;
+    color: var(--h5-text);
+    margin: 0 0 6px;
+  }
+
+  .h5-empty-hint {
+    font-size: 13px;
+    color: var(--h5-text-3);
+    margin: 0;
+  }
+
+  .h5-empty-action {
+    margin-top: 16px;
+    padding: 8px 28px;
+    font-size: 14px;
+    color: #fff;
+    background: var(--h5-grad-brand);
+    border: none;
+    border-radius: var(--h5-radius-btn);
+  }
+}
+
+/* ===== 仿真银行卡面 ===== */
+.bank-card-face {
+  position: relative;
+  border-radius: var(--h5-radius-card);
+  padding: 16px 18px 14px;
+  color: #fff;
+  box-shadow: var(--h5-shadow-card);
+  overflow: hidden;
+  cursor: pointer;
+  -webkit-tap-highlight-color: transparent;
+
+  .face-top {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+  }
+
+  .face-bank {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    min-width: 0;
+  }
+
+  .face-logo {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    min-width: 26px;
+    height: 26px;
+    padding: 0 5px;
+    border-radius: 50%;
+    background: rgba(255, 255, 255, 0.22);
+    font-size: 9px;
+    font-weight: 700;
+    letter-spacing: 0.5px;
+    flex-shrink: 0;
+  }
+
+  .face-name {
+    font-size: 15px;
+    font-weight: 600;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+
+  .face-default {
+    flex-shrink: 0;
+    font-size: 10px;
+    padding: 2px 8px;
+    border-radius: 10px;
+    background: rgba(255, 255, 255, 0.28);
+    border: 1px solid rgba(255, 255, 255, 0.4);
+  }
+
+  .face-number {
+    margin: 22px 0 18px;
+    font-size: 19px;
+    font-weight: 500;
+    letter-spacing: 3px;
+    font-family: 'Courier New', Courier, monospace;
+    text-shadow: 0 1px 2px rgba(0, 0, 0, 0.18);
+  }
+
+  .face-bottom {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    font-size: 12px;
+    color: rgba(255, 255, 255, 0.88);
+  }
+
+  .face-type {
+    padding: 1px 8px;
+    border-radius: 8px;
+    background: rgba(255, 255, 255, 0.16);
+  }
+
+  .face-balance {
+    font-size: 12px;
+
+    b {
+      font-size: 14px;
+      font-weight: 600;
+      margin-left: 2px;
+    }
+  }
+}
+
+/* ===== 月分组列表（V2：汇总头并入卡片，fill 底） ===== */
+.h5-month-group {
+  margin-bottom: 12px;
+
+  .h5-month-group-head {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 9px 14px;
+    background: var(--h5-fill);
+    border-radius: var(--h5-radius-card) var(--h5-radius-card) 0 0;
+
+    .h5-month-group-label {
+      font-size: 13px;
+      font-weight: 700;
+      color: var(--h5-text);
+    }
+
+    .h5-month-group-summary {
+      font-size: 11px;
+      color: var(--h5-text-2);
+    }
+  }
+
+  .h5-month-group-body {
+    padding: 4px 14px;
+    border-radius: 0 0 var(--h5-radius-card) var(--h5-radius-card);
+  }
+}

@@ -1215,13 +1215,14 @@ status           = ACTIVE
 | `ledger_account_id` | `CHAR(26)` | FK，必填 | 借贷科目 |
 | `direction` | `VARCHAR(8)` | 必填 | `DEBIT/CREDIT` |
 | `amount_fen` | `BIGINT UNSIGNED` | 必填 | 分录金额，必须大于 0 |
+| `balance_after_fen` | `BIGINT UNSIGNED` | 可空 | 交易后余额展示列：分录所属用户账户在交易完成后的可用余额（分），凭证过账时按当时账户余额回填；仅供 C 端明细展示，不参与对账与平衡校验；存量分录与系统账户分录为 NULL |
 | `sequence_no` | `SMALLINT UNSIGNED` | 必填 | 凭证内稳定顺序 |
 | `memo` | `VARCHAR(255)` | 可空 | 脱敏分录摘要 |
 | `created_at` | `DATETIME(3)` | 必填 | 分录创建时间 |
 
 **键与索引**：UK `(voucher_id,sequence_no)`；索引 `(ledger_account_id,created_at,entry_id)`、`(transaction_id)`。
 
-**写入规则**：分录只随 `PREPARED` 凭证创建，过账后不可修改或删除。
+**写入规则**：分录只随 `PREPARED` 凭证创建，过账后不可修改或删除；唯一例外是过账成功同事务内回填的 `balance_after_fen` 展示列，该列不改变借贷金额与分录事实。
 
 MySQL `CHECK` 不能跨多行验证分录合计。因此凭证从 `PREPARED` 迁移到 `POSTED` 前，账本服务必须锁定凭证、汇总实际分录并验证：
 

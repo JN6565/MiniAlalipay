@@ -1,140 +1,200 @@
+// 注册页（V2 重设计）：与登录页同款骨架（柔渐变头图 + 悬浮表单卡）
 .register-page {
   min-height: 100vh;
-  background: #f5f5f5;
+  background: var(--h5-bg);
+}
 
-  .register-top {
-    background: #1677ff;
-    padding: 40px 0 30px;
-    text-align: center;
+.register-hero {
+  background: var(--h5-grad-soft);
+  padding: 30px 0 52px;
+  text-align: center;
 
-    h1 {
-      font-size: 22px;
-      font-weight: 700;
-      color: #fff;
-      margin-bottom: 6px;
+  .register-hero-title {
+    font-size: 18px;
+    font-weight: 700;
+    color: #fff;
+    letter-spacing: 1px;
+  }
+
+  .register-hero-sub {
+    font-size: 12px;
+    color: rgba(255, 255, 255, 0.8);
+    margin-top: 4px;
+  }
+}
+
+.register-card {
+  margin: -28px 14px 0;
+  background: var(--h5-card-bg);
+  border-radius: var(--h5-radius-card);
+  box-shadow: var(--h5-shadow-card);
+  padding: 18px 16px 20px;
+}
+
+// 步骤指示
+.register-steps {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  margin-bottom: 16px;
+
+  .register-step {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    font-size: 12px;
+    color: var(--h5-text-3);
+    font-weight: 500;
+
+    .register-step-dot {
+      width: 18px;
+      height: 18px;
+      border-radius: 50%;
+      background: var(--h5-fill);
+      color: var(--h5-text-3);
+      font-size: 11px;
+      font-weight: 600;
+      display: flex;
+      align-items: center;
+      justify-content: center;
     }
 
-    p {
-      font-size: 13px;
-      color: rgba(255,255,255,0.8);
+    &.active {
+      color: var(--h5-primary);
+
+      .register-step-dot {
+        background: var(--h5-grad-brand);
+        color: #fff;
+        box-shadow: var(--h5-shadow-icon);
+      }
+    }
+
+    &.done {
+      color: var(--h5-success);
+
+      .register-step-dot {
+        background: var(--h5-success-bg);
+        color: var(--h5-success);
+      }
     }
   }
 
-  .register-card {
-    background: #fff;
-    margin: -16px 18px 0;
-    border-radius: 14px;
-    padding: 26px 22px;
-    box-shadow: 0 2px 12px rgba(0,0,0,0.06);
-    position: relative;
-    z-index: 1;
+  .register-step-line {
+    width: 26px;
+    height: 1.5px;
+    background: var(--h5-divider);
+  }
+}
 
-    .step-bar {
-      display: flex;
-      justify-content: center;
-      gap: 30px;
-      margin-bottom: 24px;
+// 输入框容器
+.register-field-box {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  background: var(--h5-bg);
+  border: 1.5px solid var(--h5-divider);
+  border-radius: var(--h5-radius-input);
+  padding: 12px 14px;
+  margin-bottom: 10px;
+  transition: border-color 0.15s;
 
-      .step {
-        display: flex;
-        align-items: center;
-        gap: 8px;
-        font-size: 13px;
-        color: #999;
+  &:focus-within {
+    border-color: var(--h5-primary);
+  }
 
-        .step-num {
-          width: 24px;
-          height: 24px;
-          border-radius: 50%;
-          background: #eee;
-          display: flex;
-          align-items: center;
-          justify-content: center;
-          font-size: 12px;
-          font-weight: 600;
-        }
+  .register-field-input {
+    flex: 1;
+    min-width: 0;
+    border: none;
+    outline: none;
+    background: transparent;
+    font-size: 14px;
+    color: var(--h5-text);
 
-        &.active {
-          color: #1677ff;
-
-          .step-num {
-            background: #1677ff;
-            color: #fff;
-          }
-        }
-
-        &.done {
-          color: #00b578;
-
-          .step-num {
-            background: #00b578;
-            color: #fff;
-          }
-        }
-      }
+    &::placeholder {
+      color: var(--h5-text-3);
     }
+  }
 
-    .field {
-      margin-bottom: 14px;
+  .register-eye {
+    flex: none;
+    display: flex;
+    align-items: center;
+    cursor: pointer;
+  }
+}
 
-      label {
-        display: block;
-        font-size: 14px;
-        color: #333;
-        margin-bottom: 8px;
-        font-weight: 500;
-      }
+.register-field-error {
+  font-size: 12px;
+  color: var(--h5-amount-in);
+  padding: 0 2px;
+  margin: -4px 0 8px;
+}
 
-      input {
-        width: 100%;
-        height: 50px;
-        border: 1.5px solid #eee;
-        border-radius: 10px;
-        padding: 0 14px;
-        font-size: 15px;
-        color: #333;
-        outline: none;
-        transition: border 0.2s;
+// 验证码行
+.register-sms-row {
+  display: flex;
+  gap: 8px;
+  align-items: stretch;
 
-        &:focus { border-color: #1677ff; }
-        &::placeholder { color: #bbb; }
-      }
+  .sms-box {
+    flex: 1;
+    margin-bottom: 10px;
+  }
 
-      &.has-error input { border-color: #ff4d4f; }
+  .register-sms-send {
+    flex: none;
+    align-self: center;
+    font-size: 12px;
+    color: var(--h5-primary);
+    font-weight: 600;
+    padding: 0 2px 10px;
+    cursor: pointer;
 
-      .field-error {
-        margin-top: 6px;
-        color: #ff4d4f;
-        font-size: 12px;
-        line-height: 18px;
-      }
+    &.cooling {
+      color: var(--h5-text-3);
+      cursor: default;
     }
+  }
+}
 
-    .register-btn {
-      width: 100%;
-      height: 48px;
-      border: none;
-      border-radius: 24px;
-      background: #1677ff;
-      color: #fff;
-      font-size: 16px;
-      font-weight: 600;
-      cursor: pointer;
-      margin-top: 6px;
+.register-submit {
+  text-align: center;
+  padding: 13px 0;
+  border-radius: 22px;
+  background: var(--h5-grad-brand);
+  color: #fff;
+  font-size: 15px;
+  font-weight: 700;
+  letter-spacing: 2px;
+  box-shadow: 0 6px 16px rgba(37, 108, 255, 0.3);
+  margin-top: 4px;
+  cursor: pointer;
 
-      &:active { opacity: 0.85; }
-      &:disabled { opacity: 0.5; }
-    }
+  &.disabled {
+    opacity: 0.55;
+    pointer-events: none;
+  }
+}
 
-    .links {
-      display: flex;
-      justify-content: center;
-      gap: 10px;
-      margin-top: 18px;
-      font-size: 13px;
-      color: #1677ff;
+.register-back-step {
+  text-align: center;
+  font-size: 12px;
+  color: var(--h5-text-3);
+  margin-top: 12px;
+  cursor: pointer;
+}
 
-      span { cursor: pointer; }
-    }
+.register-login-tip {
+  text-align: center;
+  font-size: 12px;
+  color: var(--h5-text-3);
+  margin-top: 14px;
+
+  span {
+    color: var(--h5-primary);
+    font-weight: 600;
+    cursor: pointer;
   }
 }

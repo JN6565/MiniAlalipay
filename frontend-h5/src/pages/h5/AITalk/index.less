@@ -1,29 +1,32 @@
-/* AI 对话页：浅色主题，与首页/联系人/我的等页面统一 */
+/* AI 对话页 V2：深蓝渐变沉浸风格（与 h5-v2-modules 设计稿 1:1），
+   局部令牌桥接全局 --h5-* 设计令牌。 */
 
 /* ==================== 设计令牌 ==================== */
 :root {
-  --ai-bg: #f5f5f5;
-  --ai-bg-elev: #ffffff;
-  --ai-bg-message: #f0f2f5;
-  --ai-bg-message-hover: #e8eaed;
-  --ai-bg-user: #1677ff;
-  --ai-text: #333333;
-  --ai-text-secondary: #666666;
-  --ai-text-muted: #999999;
-  --ai-border: rgba(0, 0, 0, 0.08);
-  --ai-brand: #1677ff;
-  --ai-brand-soft: rgba(22, 119, 255, 0.1);
-  --ai-danger: #ff4d4f;
-  --ai-success: #52c41a;
-  --ai-radius-bubble: 18px;
-  --ai-radius-card: 14px;
+  --ai-deep: linear-gradient(165deg, #0e1c3f 0%, #16306b 55%, #1f4a8f 100%);
+  --ai-bg: var(--h5-bg);
+  --ai-bg-elev: var(--h5-card-bg);
+  --ai-bg-message: var(--h5-fill);
+  --ai-bg-message-hover: var(--h5-divider);
+  --ai-bg-user: var(--h5-grad-brand);
+  --ai-text: var(--h5-text);
+  --ai-text-secondary: var(--h5-text-2);
+  --ai-text-muted: var(--h5-text-3);
+  --ai-border: var(--h5-divider);
+  --ai-brand: var(--h5-primary);
+  --ai-brand-soft: var(--h5-primary-bg);
+  --ai-danger: var(--h5-danger);
+  --ai-success: var(--h5-success);
+  --ai-radius-bubble: 14px;
+  --ai-radius-card: var(--h5-radius-card);
 }
 
 /* ==================== 页面骨架 ==================== */
 .ai-talk-page {
   /* 聊天应用标准模式：页面自然滚动，输入区和 tabbar 用 fixed 固定在视口底部 */
-  background: var(--ai-bg);
-  color: var(--ai-text);
+  background: var(--ai-deep);
+  min-height: 100vh;
+  color: #fff;
   padding-bottom: calc(120px + env(safe-area-inset-bottom, 0px));
 }
 
@@ -32,22 +35,20 @@
   display: flex;
   align-items: center;
   justify-content: space-between;
-  padding: 8px 12px;
-  padding-top: calc(8px + env(safe-area-inset-top, 0px));
-  background: var(--ai-bg);
-  border-bottom: 1px solid var(--ai-border);
+  padding: 10px 14px;
+  padding-top: calc(10px + env(safe-area-inset-top, 0px));
+  background: transparent;
   z-index: 98;
   position: sticky;
   top: 0;
 }
 
 .ai-top-icon-btn {
-  width: 36px;
-  height: 36px;
+  width: 34px;
+  height: 34px;
   border: none;
-  background: transparent;
-  color: var(--ai-text);
-  font-size: 18px;
+  background: rgba(255, 255, 255, 0.08);
+  color: rgba(255, 255, 255, 0.9);
   display: flex;
   align-items: center;
   justify-content: center;
@@ -56,7 +57,7 @@
   transition: background 0.15s;
 
   &:active {
-    background: rgba(0, 0, 0, 0.04);
+    background: rgba(255, 255, 255, 0.18);
   }
 }
 
@@ -67,63 +68,53 @@
 }
 
 .ai-top-title {
-  font-size: 15px;
-  font-weight: 600;
-  color: var(--ai-text);
-  line-height: 1.2;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.ai-top-subtitle {
-  font-size: 11px;
-  color: var(--ai-brand);
-  margin-top: 2px;
   display: inline-flex;
   align-items: center;
-  gap: 3px;
+  gap: 6px;
+  max-width: 100%;
+  font-size: 14px;
+  font-weight: 600;
+  color: #fff;
+  line-height: 1.2;
 
-  &::before {
-    content: '⚡';
-    font-size: 10px;
+  .ai-top-title-text {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
   }
 }
 
 /* ==================== 消息流 ==================== */
 .ai-messages {
-  padding: 16px 14px;
+  padding: 10px 12px 16px;
 }
 
 /* ==================== 欢迎区 ==================== */
 .ai-welcome {
   text-align: center;
-  padding: 40px 16px 20px;
+  padding: 34px 18px 20px;
 }
 
-.ai-welcome-avatar {
-  width: 56px;
-  height: 56px;
-  margin: 0 auto 14px;
+.ai-welcome-orb {
+  width: 52px;
+  height: 52px;
+  margin: 0 auto 12px;
   border-radius: 50%;
-  background: var(--ai-bg-message);
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  font-size: 28px;
+  background: radial-gradient(circle at 32% 28%, #9fd2ff 0%, #4d9bff 45%, #256cff 100%);
+  box-shadow: 0 0 26px rgba(77, 155, 255, 0.55);
 }
 
 .ai-welcome-title {
-  font-size: 18px;
-  font-weight: 600;
-  color: var(--ai-text);
-  margin-bottom: 8px;
+  font-size: 17px;
+  font-weight: 700;
+  color: #fff;
+  margin-bottom: 6px;
 }
 
 .ai-welcome-desc {
-  font-size: 13px;
-  color: var(--ai-text-secondary);
-  margin-bottom: 22px;
+  font-size: 12px;
+  color: rgba(255, 255, 255, 0.62);
+  margin-bottom: 16px;
   line-height: 1.6;
 }
 
@@ -138,30 +129,25 @@
 .ai-suggestion-chip {
   display: inline-flex;
   align-items: center;
-  gap: 6px;
-  padding: 8px 14px;
-  border: 1px solid var(--ai-border);
-  border-radius: 9999px;
-  background: var(--ai-bg-elev);
-  color: var(--ai-text);
-  font-size: 13px;
+  padding: 6px 12px;
+  border: 1px solid rgba(143, 194, 255, 0.35);
+  border-radius: 14px;
+  background: rgba(255, 255, 255, 0.06);
+  color: #cfe3ff;
+  font-size: 12px;
   transition: background 0.15s;
 
   &:active {
-    background: var(--ai-bg-message);
+    background: rgba(255, 255, 255, 0.14);
   }
-}
-
-.ai-suggestion-icon {
-  font-size: 14px;
 }
 
 /* ==================== 消息气泡 ==================== */
 .ai-message {
-  margin-bottom: 18px;
+  margin-bottom: 16px;
   display: flex;
   align-items: flex-start;
-  gap: 0;
+  gap: 6px;
 }
 
 .ai-message-user {
@@ -172,14 +158,25 @@
   justify-content: flex-start;
 }
 
+/* AI 气泡前的小 Orb 头像 */
+.ai-assistant-orb {
+  width: 24px;
+  height: 24px;
+  border-radius: 50%;
+  background: radial-gradient(circle at 32% 28%, #9fd2ff, #256cff);
+  flex: none;
+  margin-top: 2px;
+}
+
 .ai-message-body {
   display: flex;
   flex-direction: column;
-  max-width: 85%;
+  max-width: 78%;
 }
 
 .ai-message-user .ai-message-body {
   align-items: flex-end;
+  max-width: 72%;
 }
 
 .ai-message-assistant .ai-message-body {
@@ -187,30 +184,31 @@
 }
 
 .ai-message-content {
-  padding: 10px 14px;
+  padding: 9px 12px;
   border-radius: var(--ai-radius-bubble);
-  font-size: 15px;
+  font-size: 14px;
   line-height: 1.65;
   word-break: break-word;
-  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.06);
 }
 
 .ai-message-user .ai-message-content {
-  background: var(--ai-brand);
+  background: var(--ai-bg-user);
   color: #fff;
-  border-bottom-right-radius: 4px;
+  border-radius: 14px 4px 14px 14px;
+  box-shadow: 0 4px 12px rgba(37, 108, 255, 0.35);
 }
 
 .ai-message-assistant .ai-message-content {
-  background: var(--ai-bg-message);
+  background: #fff;
   color: var(--ai-text);
-  border-bottom-left-radius: 4px;
+  border-radius: 4px 14px 14px 14px;
+  box-shadow: 0 2px 10px rgba(8, 20, 50, 0.25);
 }
 
 .ai-message-time {
   margin-top: 4px;
   font-size: 11px;
-  color: var(--ai-text-muted);
+  color: rgba(255, 255, 255, 0.5);
 }
 
 /* ==================== Markdown 渲染 ==================== */
@@ -246,7 +244,7 @@
   }
 
   code {
-    background: rgba(0, 0, 0, 0.04);
+    background: var(--h5-fill);
     border-radius: 4px;
     padding: 1px 5px;
     font-size: 13px;
@@ -254,7 +252,7 @@
   }
 
   pre {
-    background: #f6f8fa;
+    background: var(--h5-fill);
     border-radius: 8px;
     padding: 10px 12px;
     overflow-x: auto;
@@ -278,7 +276,7 @@
     }
 
     th {
-      background: #fafafa;
+      background: var(--h5-fill);
       font-weight: 600;
     }
   }
@@ -309,14 +307,14 @@
   padding: 4px 0;
   background: transparent;
   border: none;
-  color: var(--ai-text-secondary);
-  font-size: 13px;
+  color: rgba(255, 255, 255, 0.62);
+  font-size: 12px;
   cursor: pointer;
 }
 
 .ai-thinking-icon {
   font-size: 12px;
-  color: var(--ai-brand);
+  color: #8fc2ff;
   transition: transform 0.15s;
 }
 
@@ -327,10 +325,10 @@
 .ai-thinking-body {
   margin-top: 6px;
   padding: 10px 12px;
-  background: rgba(0, 0, 0, 0.02);
+  background: rgba(255, 255, 255, 0.08);
   border-radius: 8px;
-  font-size: 13px;
-  color: var(--ai-text-secondary);
+  font-size: 12px;
+  color: rgba(255, 255, 255, 0.72);
   line-height: 1.6;
 }
 
@@ -402,18 +400,18 @@
   width: 28px;
   height: 28px;
   border: none;
-  background: transparent;
-  color: var(--ai-text-muted);
+  background: rgba(255, 255, 255, 0.08);
+  color: rgba(255, 255, 255, 0.62);
   font-size: 14px;
   display: flex;
   align-items: center;
   justify-content: center;
   cursor: pointer;
-  border-radius: 6px;
+  border-radius: 8px;
   transition: background 0.15s, color 0.15s;
 
   &:active:not(:disabled) {
-    background: rgba(0, 0, 0, 0.04);
+    background: rgba(255, 255, 255, 0.18);
   }
 
   &:disabled {
@@ -422,14 +420,14 @@
   }
 
   &--active {
-    color: var(--ai-brand);
-    background: var(--ai-brand-soft);
+    color: #8fc2ff;
+    background: rgba(77, 155, 255, 0.22);
   }
 }
 
 /* ==================== 澄清气泡 ==================== */
 .ai-clarification {
-  padding: 12px 14px;
+  padding: 10px 12px;
 }
 
 .ai-clarification-question {
@@ -461,14 +459,24 @@
   display: flex;
   align-items: center;
   gap: 8px;
-  background: rgba(255, 77, 79, 0.06) !important;
+  background: #fff3f3 !important;
   color: var(--ai-danger);
   font-size: 13px;
-  border: 1px solid rgba(255, 77, 79, 0.15);
+  border: 1px solid rgba(240, 72, 78, 0.2);
 }
 
 .ai-error-icon {
   flex: none;
+  width: 18px;
+  height: 18px;
+  border-radius: 50%;
+  background: var(--ai-danger);
+  color: #fff;
+  font-size: 12px;
+  font-weight: 700;
+  display: flex;
+  align-items: center;
+  justify-content: center;
 }
 
 .ai-error-text {
@@ -485,7 +493,7 @@
   font-size: 12px;
 
   &:active {
-    background: rgba(255, 77, 79, 0.06);
+    background: rgba(240, 72, 78, 0.08);
   }
 }
 
@@ -496,18 +504,17 @@
   right: 0;
   bottom: calc(60px + env(safe-area-inset-bottom, 0px));
   z-index: 99;
-  background: var(--ai-bg);
-  border-top: 1px solid var(--ai-border);
+  background: transparent;
 }
 
 .ai-input-bar {
-  padding: 10px 12px 6px;
+  padding: 8px 12px 6px;
   display: flex;
   flex-direction: column;
-  gap: 8px;
+  gap: 6px;
 }
 
-/* ==================== 输入区功能按钮（已删除“深度思考/智能搜索”，保留样式以备后续扩展） ==================== */
+/* ==================== 输入区功能按钮（已删除"深度思考/智能搜索"，保留样式以备后续扩展） ==================== */
 .ai-input-features {
   display: none;
 }
@@ -526,11 +533,11 @@
   gap: 8px;
 }
 
-
 .ai-input-wrapper {
   flex: 1;
-  background: var(--ai-bg-message);
-  border-radius: 18px;
+  background: rgba(255, 255, 255, 0.1);
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  border-radius: 22px;
   padding: 8px 14px;
   min-height: 36px;
   display: flex;
@@ -543,14 +550,14 @@
   border: none;
   outline: none;
   resize: none;
-  color: var(--ai-text);
-  font-size: 15px;
+  color: #fff;
+  font-size: 14px;
   line-height: 1.5;
   max-height: 120px;
   font-family: inherit;
 
   &::placeholder {
-    color: var(--ai-text-muted);
+    color: rgba(255, 255, 255, 0.45);
   }
 
   &:disabled {
@@ -564,8 +571,8 @@
   height: 36px;
   border: none;
   border-radius: 50%;
-  background: rgba(0, 0, 0, 0.06);
-  color: var(--ai-text-muted);
+  background: rgba(255, 255, 255, 0.12);
+  color: rgba(255, 255, 255, 0.55);
   display: flex;
   align-items: center;
   justify-content: center;
@@ -577,8 +584,9 @@
   }
 
   &--ready {
-    background: var(--ai-brand);
+    background: var(--h5-grad-brand);
     color: #fff;
+    box-shadow: 0 4px 10px rgba(37, 108, 255, 0.4);
   }
 
   &:active:not(:disabled) {
@@ -603,8 +611,8 @@
 
 .ai-input-disclaimer {
   text-align: center;
-  font-size: 11px;
-  color: var(--ai-text-muted);
+  font-size: 10px;
+  color: rgba(255, 255, 255, 0.4);
   padding-top: 2px;
 }
 
@@ -612,7 +620,7 @@
 /* 内嵌在气泡中时增加间距和视觉区分 */
 .ai-message-content .ai-card {
   margin-top: 12px;
-  background: var(--ai-bg-elev);
+  background: #fafcff;
   box-shadow: none;
   border: 1px solid var(--ai-border);
   max-width: 100%;
@@ -620,16 +628,22 @@
 }
 
 .ai-card {
-  background: var(--ai-bg-message);
-  border-radius: var(--ai-radius-card);
-  padding: 14px;
+  background: #fafcff;
+  border-radius: 12px;
+  padding: 12px;
   min-width: 220px;
   border: 1px solid var(--ai-border);
 }
 
 .ai-card-icon {
-  font-size: 24px;
-  margin-bottom: 6px;
+  width: 34px;
+  height: 34px;
+  border-radius: 10px;
+  background: var(--h5-fill);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  margin: 0 auto 8px;
 }
 
 .ai-card-label {
@@ -657,6 +671,7 @@
   margin-bottom: 4px;
   display: flex;
   align-items: center;
+  justify-content: center;
   gap: 4px;
 }
 
@@ -667,20 +682,22 @@
 
 .ai-card-bar {
   height: 6px;
-  background: rgba(0, 0, 0, 0.06);
+  background: var(--h5-divider);
   border-radius: 3px;
   margin: 8px 0;
   overflow: hidden;
 
   .ai-card-bar-fill {
     height: 100%;
-    background: linear-gradient(90deg, var(--ai-brand), #69b1ff);
+    background: linear-gradient(90deg, #7b6cff, #4a8dff);
     border-radius: 3px;
     transition: width 0.6s ease;
   }
 }
 
 .ai-card-list {
+  text-align: left;
+
   .ai-card-label {
     font-weight: 600;
     color: var(--ai-text);
@@ -726,7 +743,7 @@
 .ai-card-amount-out {
   font-size: 14px;
   font-weight: 600;
-  color: var(--ai-danger);
+  color: var(--h5-amount-in);
 }
 
 .ai-card-empty {
@@ -737,9 +754,13 @@
 }
 
 .ai-card-failed {
-  background: rgba(255, 77, 79, 0.06);
+  background: #fff3f3;
   text-align: center;
-  border-color: rgba(255, 77, 79, 0.2);
+  border-color: rgba(240, 72, 78, 0.2);
+
+  .ai-card-icon {
+    background: rgba(240, 72, 78, 0.1);
+  }
 
   .ai-card-label {
     color: var(--ai-danger);
@@ -759,12 +780,16 @@
   background: var(--ai-brand-soft);
   color: var(--ai-brand);
   font-size: 13px;
+
+  .ai-card-icon {
+    margin: 0;
+  }
 }
 
 .ai-card-spinner {
   width: 14px;
   height: 14px;
-  border: 2px solid rgba(22, 119, 255, 0.2);
+  border: 2px solid rgba(37, 108, 255, 0.2);
   border-top-color: var(--ai-brand);
   border-radius: 50%;
   animation: spin 0.8s linear infinite;
@@ -772,6 +797,10 @@
 
 .ai-card-generic {
   text-align: center;
+
+  .ai-card-icon {
+    background: var(--h5-success-bg);
+  }
 
   .ai-card-label {
     color: var(--ai-success);
@@ -782,16 +811,26 @@
 .ai-card-balance,
 .ai-card-transfer {
   text-align: center;
+
+  .ai-card-icon {
+    background: var(--h5-fill);
+  }
 }
 
 .ai-card-credit {
+  text-align: center;
+
+  .ai-card-icon {
+    background: #f3efff;
+  }
+
   .ai-card-label {
     font-weight: 600;
     color: var(--ai-text);
   }
 }
 
-/* ==================== 会话侧边抽屉 ==================== */
+/* ==================== 会话侧边抽屉（白色面板） ==================== */
 .session-list {
   display: flex;
   flex-direction: column;
@@ -799,35 +838,45 @@
   padding: 16px 12px;
   background: #fff;
   color: var(--ai-text);
+  box-sizing: border-box;
 }
 
 .session-list-header {
   flex: none;
   padding-bottom: 12px;
-  border-bottom: 1px solid var(--ai-border);
+
+  .session-list-header-title {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    font-size: 14px;
+    font-weight: 700;
+    color: var(--ai-text);
+    margin-bottom: 10px;
+  }
 }
 
 .session-list-new {
   display: flex;
   align-items: center;
-  gap: 8px;
+  justify-content: center;
+  gap: 6px;
   width: 100%;
   padding: 10px 14px;
-  border: 1px solid var(--ai-brand);
-  border-radius: 10px;
-  background: var(--ai-brand-soft);
-  color: var(--ai-brand);
-  font-size: 14px;
+  border: none;
+  border-radius: 18px;
+  background: var(--h5-grad-brand);
+  color: #fff;
+  font-size: 13px;
+  font-weight: 600;
   cursor: pointer;
-  transition: background 0.15s;
+  box-shadow: var(--h5-shadow-icon);
+  box-sizing: border-box;
+  transition: opacity 0.15s;
 
   &:active {
-    background: rgba(22, 119, 255, 0.15);
+    opacity: 0.85;
   }
-}
-
-.session-list-new-icon {
-  font-size: 14px;
 }
 
 .session-list-body {
@@ -838,12 +887,12 @@
 }
 
 .session-list-group {
-  margin-top: 14px;
+  margin-top: 12px;
 }
 
 .session-list-group-title {
   font-size: 11px;
-  color: #999;
+  color: var(--ai-text-muted);
   margin-bottom: 4px;
   padding: 0 6px;
   text-transform: none;
@@ -854,72 +903,82 @@
   text-align: center;
   padding: 40px 0;
   font-size: 13px;
-  color: #999;
+  color: var(--ai-text-muted);
 }
 
 .session-list-item {
   display: flex;
   align-items: center;
-  padding: 10px 8px;
-  border-radius: 8px;
+  padding: 9px 10px;
+  border-radius: 12px;
   cursor: pointer;
   transition: background 0.15s;
+  margin-bottom: 2px;
 
   &:active {
-    background: rgba(0, 0, 0, 0.04);
+    background: var(--h5-fill);
   }
 
   &--active {
-    background: var(--ai-brand-soft);
+    background: var(--h5-fill);
 
     .session-list-item-title {
       color: var(--ai-brand);
-      font-weight: 500;
+      font-weight: 600;
     }
   }
 }
 
-.session-list-item-title {
-  font-size: 14px;
-  color: var(--ai-text);
+.session-list-item-main {
   flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.session-list-item-title {
+  font-size: 13px;
+  color: var(--ai-text);
+  font-weight: 500;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+
+.session-list-item-time {
+  font-size: 11px;
+  color: var(--ai-text-muted);
 }
 
 /* 会话项操作按钮区（移动端始终可见） */
 .session-list-item-actions {
   display: flex;
   align-items: center;
-  gap: 2px;
+  gap: 4px;
   flex: none;
   margin-left: 4px;
 }
 
 .session-action-btn {
-  width: 28px;
-  height: 28px;
   border: none;
   background: transparent;
-  border-radius: 6px;
-  font-size: 14px;
+  font-size: 11px;
   cursor: pointer;
-  display: flex;
-  align-items: center;
-  justify-content: center;
+  padding: 3px 6px;
+  border-radius: 6px;
   transition: background 0.15s;
-  color: #999;
+  color: var(--ai-text-muted);
 
   &:active {
-    background: rgba(255, 255, 255, 0.1);
+    background: var(--h5-divider);
   }
 
   &.session-action-delete {
-    color: #ff4d4f;
+    color: var(--ai-danger);
 
     &:active {
-      background: rgba(255, 77, 79, 0.12);
+      background: rgba(240, 72, 78, 0.1);
     }
   }
 }
@@ -934,10 +993,10 @@
 
 .session-list-item-input {
   flex: 1;
-  font-size: 14px;
-  background: rgba(255, 255, 255, 0.08);
+  font-size: 13px;
+  background: var(--h5-fill);
   border: 1px solid var(--ai-border);
-  border-radius: 6px;
+  border-radius: 8px;
   padding: 4px 8px;
   color: var(--ai-text);
   outline: none;
@@ -974,56 +1033,11 @@
   }
 
   &.session-edit-cancel {
-    color: #999;
-
-    &:active {
-      background: rgba(255, 255, 255, 0.1);
-    }
-  }
-}
-
-/* ==================== 底部导航栏 ==================== */
-.tabbar {
-  position: fixed;
-  left: 0;
-  right: 0;
-  bottom: 0;
-  background: var(--ai-bg);
-  display: flex;
-  align-items: center;
-  justify-content: space-around;
-  border-top: 1px solid var(--ai-border);
-  height: calc(60px + env(safe-area-inset-bottom, 0px));
-  padding-bottom: env(safe-area-inset-bottom, 0px);
-  z-index: 100;
-
-  .tab {
-    flex: 1;
-    display: flex;
-    flex-direction: column;
-    align-items: center;
-    justify-content: center;
-    gap: 4px;
-    cursor: pointer;
     color: var(--ai-text-muted);
 
-    &.on {
-      color: var(--ai-brand);
-
-      .tab-icon {
-        transform: scale(1.1);
-      }
+    &:active {
+      background: var(--h5-fill);
     }
-  }
-
-  .tab-icon {
-    font-size: 22px;
-    transition: transform 0.2s;
-  }
-
-  .tab-label {
-    font-size: 10px;
-    transition: color 0.2s;
   }
 }
 
@@ -1042,20 +1056,21 @@
 }
 
 .ai-confirmation-card {
-  background: var(--ai-bg-elev);
-  border-radius: var(--ai-radius-card);
-  padding: 16px;
-  min-width: 280px;
+  background: #fafcff;
+  border-radius: 12px;
+  padding: 14px;
+  min-width: 260px;
   max-width: 340px;
   border: 1px solid var(--ai-border);
-  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.06);
+  box-sizing: border-box;
+  --adm-color-primary: #256cff;
 }
 
 .ai-confirmation-title {
-  font-size: 15px;
-  font-weight: 600;
+  font-size: 14px;
+  font-weight: 700;
   color: var(--ai-text);
-  margin-bottom: 12px;
+  margin-bottom: 10px;
   text-align: center;
 }
 
@@ -1090,7 +1105,7 @@
   border-radius: 8px;
   font-size: 14px;
   color: var(--ai-text);
-  background: var(--ai-bg-message);
+  background: var(--h5-fill);
   outline: none;
   box-sizing: border-box;
 
@@ -1129,7 +1144,7 @@
   min-height: 18px;
   margin-top: 3px;
   font-size: 12px;
-  color: var(--ai-danger, #d9363e);
+  color: var(--ai-danger);
 }
 
 .ai-field-select {
@@ -1139,7 +1154,7 @@
   border-radius: 8px;
   font-size: 14px;
   color: var(--ai-text);
-  background: var(--ai-bg-message);
+  background: var(--h5-fill);
   outline: none;
   box-sizing: border-box;
   appearance: auto;
@@ -1159,8 +1174,16 @@
   gap: 10px;
   margin-top: 16px;
 
-  button {
+  .adm-button {
     flex: 1;
+    border-radius: 16px;
+    font-size: 13px;
+  }
+
+  .adm-button-primary {
+    background: var(--h5-grad-brand);
+    border: none;
+    box-shadow: 0 4px 10px rgba(37, 108, 255, 0.3);
   }
 }
 
@@ -1171,7 +1194,7 @@
   font-weight: 500;
   margin-top: 12px;
   padding: 8px;
-  background: rgba(82, 196, 26, 0.06);
+  background: var(--h5-success-bg);
   border-radius: 8px;
 }
 

@@ -1,71 +1,173 @@
 .bank-card-bind-page {
-  padding: 16px;
-  background: #f5f5f9;
   min-height: 100vh;
+  background: var(--h5-bg);
+  padding: 12px;
+  padding-bottom: 28px;
+  box-sizing: border-box;
+}
 
-  .registered-cards-section {
-    background: #fff;
-    border-radius: 8px;
-    padding: 12px 16px;
-    margin-bottom: 16px;
+// 通用白卡
+.bcb-card {
+  background: var(--h5-card-bg);
+  border-radius: var(--h5-radius-card);
+  box-shadow: var(--h5-shadow-card);
+  padding: 14px;
+}
 
-    .section-label {
-      font-size: 14px;
-      color: #666;
-      margin-bottom: 8px;
-    }
+// 已注册卡提示卡
+.registered-cards-section {
+  margin-bottom: 12px;
 
-    .registered-card-item {
+  .section-label {
+    font-size: 13px;
+    font-weight: 600;
+    color: var(--h5-text);
+    margin-bottom: 8px;
+  }
+
+  .registered-card-item {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 10px 0;
+    border-bottom: 1px solid var(--h5-divider);
+
+    .registered-card-icon {
+      width: 30px;
+      height: 30px;
+      border-radius: 9px;
+      background: var(--h5-primary-bg);
       display: flex;
-      justify-content: space-between;
       align-items: center;
-      padding: 10px 0;
-      border-bottom: 1px solid #f0f0f0;
-      cursor: pointer;
-
-      &:last-of-type {
-        border-bottom: none;
-      }
-
-      .bank-name {
-        font-size: 15px;
-        color: #333;
-      }
-
-      .card-last4 {
-        font-size: 14px;
-        color: #888;
-      }
+      justify-content: center;
+      flex: none;
     }
 
-    .registered-tip {
+    .bank-name {
+      font-size: 13px;
+      font-weight: 500;
+      color: var(--h5-text);
+      flex: 1;
+    }
+
+    .card-last4 {
       font-size: 12px;
-      color: #999;
-      margin-top: 8px;
+      color: var(--h5-text-3);
     }
   }
 
-  .bind-section {
-    background: #fff;
-    border-radius: 8px;
-    padding: 12px 16px;
-    margin-bottom: 16px;
+  .registered-tip {
+    font-size: 11px;
+    color: var(--h5-text-3);
+    margin-top: 8px;
+    line-height: 1.6;
+  }
+}
 
-    .section-label {
-      font-size: 14px;
-      color: #666;
-      margin: 12px 0 6px;
+// 表单字段
+.bind-form-card {
+  .field-label {
+    font-size: 12px;
+    color: var(--h5-text-3);
+    padding: 8px 2px 5px;
 
-      &:first-child {
-        margin-top: 0;
+    &:first-child {
+      padding-top: 2px;
+    }
+  }
+
+  .field-box {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    background: var(--h5-bg);
+    border: 1.5px solid var(--h5-divider);
+    border-radius: var(--h5-radius-input);
+    padding: 11px 12px;
+    transition: border-color 0.2s;
+
+    &:focus-within {
+      border-color: var(--h5-primary);
+      background: var(--h5-card-bg);
+    }
+
+    .field-input {
+      --font-size: 14px;
+      flex: 1;
+
+      &.mono {
+        letter-spacing: 1px;
+        font-family: 'Courier New', Courier, monospace;
+      }
+
+      &.code {
+        letter-spacing: 6px;
       }
     }
   }
 
-  .bind-tip {
-    font-size: 12px;
-    color: #999;
-    margin-bottom: 16px;
-    line-height: 1.5;
+  .sms-row {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+
+    .sms-box {
+      flex: 1;
+    }
+
+    .sms-send {
+      flex: none;
+      font-size: 13px;
+      font-weight: 600;
+      color: var(--h5-primary);
+      white-space: nowrap;
+
+      &.cooling {
+        color: var(--h5-text-3);
+        font-weight: 400;
+      }
+    }
   }
+}
+
+// 协议勾选
+.bind-agreement {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 14px 4px 10px;
+
+  .agreement-box {
+    width: 16px;
+    height: 16px;
+    border-radius: 5px;
+    border: 1.5px solid var(--h5-text-3);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    flex: none;
+    transition: all 0.2s;
+
+    &.checked {
+      background: var(--h5-primary);
+      border-color: var(--h5-primary);
+    }
+  }
+
+  .agreement-text {
+    font-size: 12px;
+    color: var(--h5-text-3);
+  }
+}
+
+.bind-tip {
+  font-size: 12px;
+  color: var(--h5-text-3);
+  line-height: 1.7;
+  padding: 0 4px;
+  margin-bottom: 18px;
+}
+
+.bind-submit {
+  width: 100%;
 }

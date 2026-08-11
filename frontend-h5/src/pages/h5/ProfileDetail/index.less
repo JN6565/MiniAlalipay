@@ -1,0 +1,155 @@
+// 个人详情页（V2 设计稿 1:1）：卡片白底圆角 16，头像区 + 可编辑资料 + 只读账户信息。
+.profile-detail {
+  min-height: 100vh;
+  background: var(--h5-bg);
+  padding: 12px 12px 24px;
+
+  .pd-card {
+    background: var(--h5-card-bg);
+    border-radius: var(--h5-radius-card);
+    box-shadow: var(--h5-shadow-card);
+    padding: 14px;
+    margin-bottom: 10px;
+  }
+
+  .pd-card-title {
+    font-size: 14px;
+    font-weight: 700;
+    color: var(--h5-text);
+    margin-bottom: 12px;
+  }
+
+  .pd-tip {
+    font-size: 11px;
+    color: var(--h5-text-3);
+    margin-top: 10px;
+    line-height: 1.6;
+  }
+
+  // ---- 头像区 ----
+  .pd-avatar-row {
+    display: flex;
+    gap: 10px;
+    flex-wrap: wrap;
+  }
+
+  .pd-avatar-item {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 5px;
+    cursor: pointer;
+
+    span {
+      font-size: 10px;
+      color: var(--h5-text-2);
+    }
+
+    &.on span {
+      color: var(--h5-primary);
+      font-weight: 600;
+    }
+  }
+
+  .pd-upload-tile {
+    width: 52px;
+    height: 52px;
+    border-radius: 50%;
+    background: var(--h5-primary-bg);
+    border: 1.5px dashed var(--h5-primary);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+  }
+
+  .pd-upload-preview {
+    width: 52px;
+    height: 52px;
+    border-radius: 50%;
+    object-fit: cover;
+    display: block;
+    box-shadow: 0 0 0 2px #fff, 0 0 0 4px var(--h5-primary);
+  }
+
+  // ---- 可编辑资料 ----
+  .pd-field {
+    display: flex;
+    align-items: center;
+    padding: 9px 0;
+    border-bottom: 1px solid var(--h5-divider);
+
+    &:last-child {
+      border-bottom: none;
+    }
+  }
+
+  .pd-label {
+    width: 72px;
+    flex: none;
+    font-size: 13px;
+    color: var(--h5-text-2);
+  }
+
+  .pd-field input {
+    flex: 1;
+    min-width: 0;
+    background: transparent;
+    font-size: 14px;
+    color: var(--h5-text);
+    text-align: right;
+
+    &::placeholder {
+      color: var(--h5-text-3);
+    }
+  }
+
+  .pd-chips {
+    flex: 1;
+    display: flex;
+    gap: 8px;
+    justify-content: flex-end;
+  }
+
+  .pd-chip {
+    font-size: 12px;
+    color: var(--h5-text-2);
+    background: var(--h5-fill);
+    border-radius: 14px;
+    padding: 5px 14px;
+    cursor: pointer;
+
+    &.on {
+      color: var(--h5-primary);
+      background: var(--h5-primary-bg);
+      font-weight: 600;
+      box-shadow: inset 0 0 0 1px var(--h5-primary);
+    }
+  }
+
+  // ---- 只读账户信息 ----
+  .pd-readonly {
+    display: flex;
+    align-items: center;
+    padding: 10px 0;
+    border-bottom: 1px solid var(--h5-divider);
+
+    &:last-of-type {
+      border-bottom: none;
+    }
+  }
+
+  .pd-value {
+    flex: 1;
+    display: flex;
+    align-items: center;
+    justify-content: flex-end;
+    gap: 6px;
+    font-size: 14px;
+    color: var(--h5-text);
+  }
+
+  // ---- 保存按钮 ----
+  .pd-footer {
+    margin-top: 16px;
+  }
+}

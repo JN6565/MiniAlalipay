@@ -1,6 +1,7 @@
 package com.minialalipay.account.application.bankcard;
 
 import com.minialalipay.account.application.bankcard.dto.BankCardDTO;
+import com.minialalipay.account.application.credit.PaymentProofPort;
 import com.minialalipay.account.domain.account.Account;
 import com.minialalipay.account.domain.account.AccountErrorCode;
 import com.minialalipay.account.domain.account.AccountRepository;
@@ -38,20 +39,25 @@ public class BankCardApplicationService {
     private static final int MAX_ACTIVE_CARDS = 10;
     /** 中国大陆手机号格式：1 开头的 11 位数字。 */
     private static final Pattern PHONE_PATTERN = Pattern.compile("^1\\d{10}$");
+    /** 查看完整卡号的支付证明用途：证明必须专为此用途签发，不得与转账、还款等用途复用。 */
+    private static final String FULL_CARD_NUMBER_PURPOSE = "BANK_CARD_NUMBER_VIEW";
 
     private final BankCardRepository bankCardRepository;
     private final AccountRepository accountRepository;
     private final RegisteredCardRepository registeredCardRepository;
     private final UserCenterIdentityPort userCenterIdentityPort;
+    private final PaymentProofPort paymentProofPort;
 
     public BankCardApplicationService(BankCardRepository bankCardRepository,
                                       AccountRepository accountRepository,
                                       RegisteredCardRepository registeredCardRepository,
-                                      UserCenterIdentityPort userCenterIdentityPort) {
+                                      UserCenterIdentityPort userCenterIdentityPort,
+                                      PaymentProofPort paymentProofPort) {
         this.bankCardRepository = bankCardRepository;
         this.accountRepository = accountRepository;
         this.registeredCardRepository = registeredCardRepository;
         this.userCenterIdentityPort = userCenterIdentityPort;
+        this.paymentProofPort = paymentProofPort;
     }
 
     /**
@@ -249,6 +255,34 @@ public class BankCardApplicationService {
                 updateOrConflict(next, nextExpected);
             });
         }
+    }
+
+    /**
+     * 查询本人银行卡完整卡号：需消费一次性支付证明后才从注册记录返回明文。
+     *
+     * <p>安全约束：
+     * <ul>
+     *   <li>先验归属再消费证明，非本人卡片直接拒绝，不浪费用户证明；</li>
+     *   <li>证明校验成功后即被用户中心原子消费，不可重放；</li>
+     *   <li>返回值含卡号明文，调用方不得写入日志、存储或 URL。</li>
+     * </ul>
+     *
+     * @param userId 网关会话用户 ID
+     * @param cardId 银行卡 ID
+     * @param paymentProof 用途为 BANK_CARD_NUMBER_VIEW 的一次性支付证明
+     * @return 完整卡号明文
+     * @throws BusinessException 卡片不存在、证明无效或注册记录缺失
+     */
+    @Transactional
+    public String getFullCardNumber(String userId, String cardId, String paymentProof) {
+        BankCard card = loadOwnedCard(userId, cardId);
+        // 证明无效会由用户中心返回 PAYMENT_PROOF_INVALID；消费成功后证明不可再用
+        paymentProofPort.verify(userId, paymentProof, FULL_CARD_NUMBER_PURPOSE);
+        // 完整卡号仅存于绑卡注册表：按用户+BIN+尾号定位 BOUND 注册记录
+        RegisteredCard registration = registeredCardRepository
+                .findBoundByUserAndCard(userId, card.getCardBin(), card.getCardLast4())
+                .orElseThrow(() -> new BusinessException(BankCardErrorCode.REGISTRATION_NOT_FOUND));
+        return registration.getCardNumber();
     }
 
     /** 加载本人卡片；他人卡片与不存在统一返回 BANK_CARD_NOT_FOUND，不暴露资源归属。 */

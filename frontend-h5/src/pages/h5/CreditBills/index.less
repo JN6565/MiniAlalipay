@@ -1,103 +1,140 @@
+/* 花呗账单页（V2）：月份胶囊 + 月汇总卡 + 消费列表 */
 .credit-bills-page {
   min-height: 100vh;
-  background: #f5f5f5;
+  background: var(--h5-bg);
+  padding: 12px 14px 26px;
+}
+
+.cb-chips {
+  display: flex;
+  gap: 8px;
+  overflow-x: auto;
+  margin-bottom: 10px;
+
+  .cb-chip {
+    flex-shrink: 0;
+    font-size: 12px;
+    padding: 6px 14px;
+    border-radius: 15px;
+    color: var(--h5-text-2);
+    background: #fff;
+    cursor: pointer;
+
+    &.active {
+      color: #fff;
+      font-weight: 700;
+      background: var(--h5-grad-credit);
+    }
+  }
+}
+
+/* 月汇总卡 */
+.cb-summary {
+  display: flex;
+  background: #fff;
+  border-radius: var(--h5-radius-card);
+  box-shadow: var(--h5-shadow-card);
+  padding: 14px 6px;
+  margin-bottom: 10px;
+
+  .summary-item {
+    flex: 1;
+    text-align: center;
+  }
+
+  .summary-label {
+    font-size: 11.5px;
+    color: var(--h5-text-3);
+  }
+
+  .summary-value {
+    font-size: 15px;
+    font-weight: 700;
+    color: var(--h5-text);
+    margin-top: 4px;
+
+    &.paid {
+      color: var(--h5-success);
+    }
+
+    &.outstanding {
+      color: #7b6cff;
+    }
+  }
+}
+
+/* 列表卡 */
+.cb-card {
+  background: #fff;
+  border-radius: var(--h5-radius-card);
+  box-shadow: var(--h5-shadow-card);
+  padding: 4px 14px;
+
+  .cb-row {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 12px 2px;
+    border-bottom: 1px solid var(--h5-divider);
+    cursor: pointer;
+
+    &:last-child {
+      border-bottom: none;
+    }
+  }
+
+  .cb-row-icon {
+    width: 32px;
+    height: 32px;
+    border-radius: 10px;
+    background: #f3efff;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    flex-shrink: 0;
+  }
+
+  .cb-row-main {
+    flex: 1;
+    min-width: 0;
+  }
+
+  .cb-row-title {
+    font-size: 13.5px;
+    font-weight: 600;
+    color: var(--h5-text);
+  }
+
+  .cb-row-sub {
+    font-size: 11.5px;
+    color: var(--h5-text-3);
+    margin-top: 2px;
+  }
+
+  .cb-row-amount {
+    font-size: 13px;
+    font-weight: 700;
+    color: var(--h5-text);
+    flex-shrink: 0;
+  }
+}
+
+.cb-notice {
+  margin-top: 12px;
+  text-align: center;
+  font-size: 11.5px;
+  color: var(--h5-text-3);
+
+  .cb-notice-link {
+    margin-left: 8px;
+    color: var(--h5-primary);
+    cursor: pointer;
+  }
 }
 
 .loading-container {
   display: flex;
+  align-items: center;
   justify-content: center;
-  align-items: center;
   height: 100vh;
-}
-
-.bill-desc {
-  display: flex;
-  flex-direction: column;
-}
-
-.bill-due {
-  font-size: 12px;
-  color: #999;
-  margin-top: 4px;
-}
-
-.bill-extra {
-  display: flex;
-  flex-direction: column;
-  align-items: flex-end;
-}
-
-.bill-status {
-  font-size: 12px;
-  padding: 2px 6px;
-  border-radius: 4px;
-  margin-bottom: 4px;
-}
-
-.bill-status-open {
-  background: #e6f7ff;
-  color: #1677ff;
-}
-
-.bill-status-partially_paid {
-  background: #fff7e6;
-  color: #fa8c16;
-}
-
-.bill-status-paid {
-  background: #f6ffed;
-  color: #52c41a;
-}
-
-.bill-status-overdue {
-  background: #fff2e8;
-  color: #ff4d4f;
-}
-
-.bill-status-unbilled {
-  background: #e6f7ff;
-  color: #1677ff;
-}
-
-// 未出账消费区块：展示当月尚未生成账单的花呗消费明细
-.unbilled-section {
-  margin-bottom: 12px;
-  background: #fff;
-}
-
-.unbilled-section-header {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  padding: 12px 16px;
-}
-
-.unbilled-section-title {
-  font-size: 15px;
-  font-weight: bold;
-  color: #333;
-}
-
-.unbilled-section-link {
-  font-size: 13px;
-  color: #1677ff;
-  cursor: pointer;
-}
-
-.unbilled-section-notice {
-  padding: 8px 16px;
-  font-size: 12px;
-  color: #999;
-  background: #fafafa;
-}
-
-.bill-info {
-  display: flex;
-  flex-direction: column;
-}
-
-.bill-total,
-.bill-paid {
-  font-size: 14px;
-  color: #333;
 }

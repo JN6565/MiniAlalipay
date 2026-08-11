@@ -65,11 +65,12 @@ class LedgerApplicationServiceTest {
         repository.queryEntries = List.of(new LedgerEntry.WithCounterparty(
                 new LedgerEntry(9L, "voucher", "transaction", "ledger",
                         LedgerDirection.DEBIT, 500L, 1, "付款", NOW),
-                "counterparty-user"));
+                "counterparty-user", 1500L));
 
         var page = new LedgerApplicationService(repository, new NoopUserInfoPort()).listMyEntries("user", null, 1);
 
         assertThat(page.items()).hasSize(1);
+        assertThat(page.items().getFirst().balanceAfterFen()).isEqualTo(1500L);
         assertThat(page.nextCursor()).isNull();
         assertThat(repository.requestedLimit).isEqualTo(2);
     }
@@ -81,11 +82,11 @@ class LedgerApplicationServiceTest {
                 new LedgerEntry.WithCounterparty(
                         new LedgerEntry(9L, "voucher", "transaction", "ledger", LedgerDirection.DEBIT,
                                 500L, 1, "付款", NOW),
-                        "counterparty-user"),
+                        "counterparty-user", null),
                 new LedgerEntry.WithCounterparty(
                         new LedgerEntry(8L, "voucher", "transaction", "ledger", LedgerDirection.CREDIT,
                                 500L, 2, "收款", NOW.minusMillis(1)),
-                        "counterparty-user"));
+                        "counterparty-user", null));
         LedgerApplicationService service = new LedgerApplicationService(repository, new NoopUserInfoPort());
 
         var firstPage = service.listMyEntries("user", null, 1);

@@ -1,5 +1,5 @@
 import React, { KeyboardEvent } from 'react';
-import { SendOutline } from 'antd-mobile-icons';
+import { IconSet } from '@/components/h5/common';
 
 interface Props {
   value: string;
@@ -39,7 +39,7 @@ const InputBar: React.FC<Props> = ({
         <div className="ai-input-wrapper">
           <textarea
             className="ai-input"
-            placeholder="发送消息给财喵…"
+            placeholder="和小智说点什么…"
             value={value}
             onChange={(e) => onChange(e.target.value)}
             onKeyDown={handleKeyDown}
@@ -60,7 +60,7 @@ const InputBar: React.FC<Props> = ({
           {loading ? (
             <span className="ai-send-spinner" />
           ) : (
-            <SendOutline fontSize={18} />
+            <IconSet name="send" size={15} />
           )}
         </button>
       </div>

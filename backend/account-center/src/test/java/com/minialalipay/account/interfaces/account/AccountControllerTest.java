@@ -57,7 +57,7 @@ class AccountControllerTest {
         Instant occurredAt = Instant.parse("2026-08-04T08:00:00Z");
         when(requestIdGenerator.resolve("request-1")).thenReturn("request-1");
         when(ledgerApplicationService.listMyEntries("user-1", null, 1)).thenReturn(new LedgerEntryPageDTO(
-                List.of(new LedgerEntryDTO(9L, "transaction", "DEBIT", 500L, "付款", "", occurredAt)),
+                List.of(new LedgerEntryDTO(9L, "transaction", "DEBIT", 500L, "付款", "", null, occurredAt)),
                 "opaque-cursor"));
 
         mockMvc.perform(get("/api/v1/accounts/me/entries?limit=1")

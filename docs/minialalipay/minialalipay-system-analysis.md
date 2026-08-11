@@ -2457,7 +2457,7 @@ erDiagram
 | Mini Credit | credit/me、purchases、bills、repayment-drafts、repayments | 固定额度、账单、余额还款、额度/应收一致性 |
 | P2P Collection | p2p-collections/codes、requests、token-exchanges、orders、events | 长期码、固定请求 CAS、仅余额、对象授权、SSE |
 | Manual | manual-cases/decisions | 角色、状态机、审计 |
-| Bank Card | bank-cards（绑卡、列表、详情、设默认、解绑）、bank-card-registrations（注册银行卡、查询已注册卡）、identity（绑定身份、查询身份） | Luhn 校验、BIN 识别、三要素跨服务校验、掩码存储、默认卡互斥 |
+| Bank Card | bank-cards（绑卡、列表、详情、设默认、解绑、凭一次性支付证明查看完整卡号）、bank-card-registrations（注册银行卡、查询已注册卡）、identity（绑定身份、查询身份） | Luhn 校验、BIN 识别、三要素跨服务校验、掩码存储、默认卡互斥；完整卡号仅存于注册表，需以 BANK_CARD_NUMBER_VIEW 用途验密签发证明后消费换取，证明不可重放 |
 | Ops | metrics、alerts、quality、trace | 脱敏、只读/处置权限 |
 
 #### 12.2.1 按调用端划分
@@ -2592,7 +2592,7 @@ erDiagram
 | GET | `/api/v1/contacts` | 登录用户 | 查询成功转账历史生成的常用收款人，返回脱敏展示名与脱敏手机号 | 次数、最近成功时间和置顶排序；游标分页 |
 | PATCH | `/api/v1/contacts/{payeeUserId}` | 登录用户 | 设置已有常用收款人的置顶、隐藏或备注 | 只能修改成功转账生成的记录；`version` CAS |
 | GET | `/api/v1/accounts/me` | 登录用户 | 查询本人账户和实时余额 | 不使用过期缓存代替资金事实 |
-| GET | `/api/v1/accounts/me/entries` | 登录用户 | 查询本人账本明细 | `cursor` + `limit<=100` |
+| GET | `/api/v1/accounts/me/entries` | 登录用户 | 查询本人账本明细，含交易后余额 `balanceAfterFen`（可空，存量与系统账户分录无值） | `cursor` + `limit<=100` |
 | GET | `/api/v1/accounts/me/analytics?range=7d\|30d\|month` | 登录用户 | 查询本人收支、余额资金流、信用消费/还款和对象分布 | 返回指标口径版本；充值不计收入、还款不重复计消费 |
 | GET | `/api/v1/qr-pay/me/qr-collection-analytics?range=today\|month` | 普通用户本人 | 查询本人动态扫码收款、订单、支付方式、退款、净收款和对账摘要 | 业务中心从会话派生本人收款账户；基于统一交易投影，只统计确定终态并按订单去重 |
 | POST | `/api/v1/refunds` | 原收款方本人 | 对本人已成功动态扫码交易创建受控退款订单 | `Idempotency-Key`；原交易为 SUCCESS QR_PAY 且收款方为本人，同一原交易至多一个退款订单 |

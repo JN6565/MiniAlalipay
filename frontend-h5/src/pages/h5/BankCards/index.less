@@ -1,26 +1,28 @@
 .bank-cards-page {
-  padding: 16px;
-  min-height: 100%;
-  background: #f5f6f8;
+  padding: 12px;
+  min-height: 100vh;
+  background: var(--h5-bg);
+  box-sizing: border-box;
 }
 
-.bank-cards-empty {
-  text-align: center;
-  padding: 64px 0 24px;
-  color: #999;
+// 顶部工具条：卡数量 + 余额批量掩码切换
+.bank-cards-toolbar {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 2px 4px 10px;
 
-  .empty-icon {
-    font-size: 48px;
-  }
-
-  p {
-    margin: 8px 0 0;
-    font-size: 15px;
-  }
-
-  .empty-hint {
+  .toolbar-count {
     font-size: 12px;
-    color: #bbb;
+    color: var(--h5-text-3);
+  }
+
+  .toolbar-reveal {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    font-size: 12px;
+    color: var(--h5-text-2);
   }
 }
 
@@ -28,62 +30,6 @@
   display: flex;
   flex-direction: column;
   gap: 14px;
-}
-
-.bank-card-item {
-  border-radius: 12px;
-  padding: 18px 16px;
-  color: #fff;
-  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.08);
-}
-
-.bank-card-head {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-
-  .bank-name {
-    font-size: 16px;
-    font-weight: 600;
-  }
-
-  .card-type {
-    font-size: 12px;
-    opacity: 0.85;
-  }
-
-  .default-badge {
-    margin-left: auto;
-    font-size: 11px;
-    background: rgba(255, 255, 255, 0.25);
-    border-radius: 8px;
-    padding: 2px 8px;
-  }
-}
-
-.bank-card-number {
-  margin-top: 24px;
-  font-size: 20px;
-  letter-spacing: 2px;
-  font-family: 'Courier New', monospace;
-}
-
-.bank-card-balance {
-  margin-top: 12px;
-  display: flex;
-  align-items: baseline;
-  gap: 6px;
-
-  .balance-label {
-    font-size: 12px;
-    opacity: 0.75;
-  }
-
-  .balance-value {
-    font-size: 18px;
-    font-weight: 600;
-    letter-spacing: 0.5px;
-  }
 }
 
 .bank-card-actions {
@@ -99,15 +45,16 @@
     justify-content: center;
     gap: 6px;
     height: 48px;
-    border-radius: 12px;
-    border: 1px dashed #c8ccd4;
-    color: #666;
+    border-radius: var(--h5-radius-card);
+    border: 1px dashed var(--h5-text-3);
+    color: var(--h5-text-2);
     font-size: 15px;
-    background: #fff;
+    background: var(--h5-card-bg);
 
     .add-icon {
-      font-size: 18px;
-      color: #1677ff;
+      display: flex;
+      align-items: center;
+      color: var(--h5-primary);
     }
   }
 }

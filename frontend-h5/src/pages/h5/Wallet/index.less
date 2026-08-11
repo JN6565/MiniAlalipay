@@ -1,162 +1,120 @@
 .wallet-page {
   min-height: 100vh;
-  background: #f5f6f8;
-  padding: 12px;
+  background: var(--h5-bg);
+  padding-bottom: 24px;
   box-sizing: border-box;
 }
 
-.wallet-loading {
-  display: flex;
-  justify-content: center;
-  padding-top: 120px;
-}
-
-// 账户余额卡片
-.wallet-account-card {
-  background: linear-gradient(135deg, #1677ff, #4096ff);
-  border-radius: 12px;
+/* ===== 顶部品牌区：柔渐变 + 账户余额 ===== */
+.wallet-hero {
+  background: var(--h5-grad-soft);
+  padding: 16px 18px 30px;
   color: #fff;
-  padding: 16px;
 
-  .account-title {
-    font-size: 13px;
-    opacity: 0.85;
+  .hero-label {
+    font-size: 12px;
+    opacity: 0.9;
   }
 
-  .account-available {
-    font-size: 32px;
-    font-weight: 600;
-    margin: 6px 0 12px;
-  }
+  .hero-balance {
+    margin-top: 4px;
 
-  .account-cols {
-    display: flex;
-    gap: 32px;
+    .hero-num {
+      font-size: 30px;
+      font-weight: 700;
+      letter-spacing: 0.5px;
+      font-variant-numeric: tabular-nums;
+    }
 
-    > div {
-      display: flex;
-      flex-direction: column;
-      font-size: 12px;
-
-      span {
-        opacity: 0.85;
-      }
-
-      b {
-        margin-top: 2px;
-        font-size: 14px;
-      }
+    .h5-reveal-icon {
+      opacity: 0.85;
     }
   }
 }
 
-// 区块标题
+/* ===== 悬浮操作卡：充值/提现按钮上移至银行卡列表上方 ===== */
+.wallet-action-card {
+  display: flex;
+  gap: 10px;
+  margin: -16px 12px 0;
+  padding: 10px;
+  background: var(--h5-card-bg);
+  border-radius: var(--h5-radius-card);
+  box-shadow: var(--h5-shadow-card);
+  position: relative;
+
+  .wallet-action-btn {
+    flex: 1;
+    text-align: center;
+    padding: 9px 0;
+    border-radius: var(--h5-radius-btn);
+    font-size: 14px;
+    font-weight: 600;
+    cursor: pointer;
+    -webkit-tap-highlight-color: transparent;
+
+    &.primary {
+      background: var(--h5-grad-brand);
+      color: #fff;
+      box-shadow: var(--h5-shadow-icon);
+    }
+
+    &.outline {
+      border: 1.5px solid var(--h5-primary);
+      color: var(--h5-primary);
+      background: var(--h5-card-bg);
+      box-sizing: border-box;
+    }
+
+    &:active {
+      opacity: 0.88;
+    }
+  }
+}
+
+/* ===== 区块标题 ===== */
 .wallet-section-head {
   display: flex;
   justify-content: space-between;
   align-items: center;
-  margin: 16px 4px 8px;
-  font-size: 15px;
-  font-weight: 600;
+  margin: 16px 14px 10px;
 
-  .wallet-section-link {
+  .section-title {
+    font-size: 15px;
+    font-weight: 700;
+    color: var(--h5-text);
+  }
+
+  .section-link {
+    display: inline-flex;
+    align-items: center;
+    gap: 2px;
     font-size: 12px;
-    font-weight: 400;
-    color: #1677ff;
+    color: var(--h5-primary);
+    cursor: pointer;
   }
 }
 
-// 无卡空态
-.wallet-empty {
-  background: #fff;
-  border-radius: 12px;
-  text-align: center;
-  padding: 32px 16px;
-
-  .empty-icon {
-    font-size: 36px;
-  }
-
-  p {
-    margin: 8px 0 4px;
-    color: #333;
-  }
-
-  .empty-hint {
-    color: #999;
-    font-size: 12px;
-    margin-bottom: 12px;
-  }
-}
-
-// 银行卡列表
+/* ===== 银行卡列表 ===== */
 .wallet-card-list {
   display: flex;
   flex-direction: column;
-  gap: 12px;
+  gap: 10px;
+  padding: 0 12px;
 }
 
-.wallet-card-item {
-  border-radius: 12px;
-  color: #fff;
-  padding: 14px 16px;
-
-  .card-head {
-    display: flex;
-    align-items: center;
-    gap: 8px;
-
-    .bank-name {
-      font-size: 15px;
-      font-weight: 600;
-    }
-
-    .card-number {
-      font-size: 12px;
-      opacity: 0.85;
-      flex: 1;
-    }
-
-    .default-badge {
-      font-size: 10px;
-      border: 1px solid rgba(255, 255, 255, 0.7);
-      border-radius: 8px;
-      padding: 1px 6px;
-    }
-  }
-
-  .card-balance {
-    margin: 10px 0 12px;
-    font-size: 12px;
-    opacity: 0.9;
-
-    b {
-      font-size: 16px;
-      margin-left: 4px;
-    }
-  }
-
-  .card-actions {
-    display: flex;
-    gap: 10px;
-
-    .card-action-btn {
-      flex: 1;
-      --border-color: rgba(255, 255, 255, 0.8);
-      --text-color: #fff;
-      --background-color: transparent;
-    }
-  }
-}
-
-// 资金渠道说明
+/* ===== 资金渠道说明 ===== */
 .wallet-tips {
-  margin-top: 16px;
-  padding: 0 4px;
+  margin: 12px 12px 0;
+  padding: 10px 14px;
+  background: var(--h5-card-bg);
+  border-radius: var(--h5-radius-card);
+  box-shadow: var(--h5-shadow-card);
 
   p {
-    margin: 4px 0;
-    font-size: 12px;
-    color: #999;
+    margin: 3px 0;
+    font-size: 11px;
+    line-height: 1.7;
+    color: var(--h5-text-3);
   }
 }

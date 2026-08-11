@@ -1,12 +1,25 @@
 import React, { useEffect, useState } from 'react';
 import { history } from '@umijs/max';
-import { Toast, Dialog } from 'antd-mobile';
-import { clearSession } from '@/services/request';
 import * as userService from '@/services/user';
 import { getIdentity } from '@/services/identity';
-import { formatAccountName, getAvatarDisplay, getProfilePreference } from '@/utils/profile';
+import { getProfilePreference } from '@/utils/profile';
+import { AvatarView, IconSet, IconName } from '@/components/h5/common';
 import './index.less';
 
+/** 六入口配置（V2 定稿）：身份绑定/余额/花呗/银行卡/账单/设置。 */
+const MENU_ITEMS: { label: string; icon: IconName; path: string; desc?: string }[] = [
+  { label: '身份绑定', icon: 'shield', path: '/h5/identity-bind' },
+  { label: '余额', icon: 'wallet', path: '/h5/wallet' },
+  { label: '花呗', icon: 'huabei', path: '/h5/credit' },
+  { label: '银行卡', icon: 'card', path: '/h5/bank-cards' },
+  { label: '账单', icon: 'receipt', path: '/h5/account/transactions' },
+  { label: '设置', icon: 'setting', path: '/h5/settings' },
+];
+
+/**
+ * 我的页（V2 重设计）：渐变摘要头（头像+昵称+已绑定身份徽章+掩码账户信息，
+ * 点击进个人详情）+ 六入口列表；密码修改与退出登录收敛至设置页。
+ */
 const ProfilePage: React.FC = () => {
   const profilePreference = getProfilePreference();
   const nickname = profilePreference.nickname;
@@ -25,131 +38,45 @@ const ProfilePage: React.FC = () => {
     }).catch(() => {});
   }, []);
 
-  const handleLogout = async () => {
-    const result = await Dialog.confirm({
-      content: '确定退出登录吗？',
-    });
-
-    if (result) {
-      clearSession();
-      Toast.show({ icon: 'success', content: '已退出登录' });
-      window.location.replace('/h5/login');
-    }
-  };
+  /** 账户号本地掩码：前 3 位 + ****，明文不进存储。 */
+  const maskedAccount = accountNumber ? `${accountNumber.slice(0, 3)} **** ${accountNumber.slice(-4)}` : '';
 
   return (
-    <div className="profile-page">
-      {/* 用户信息 */}
-      <div className="profile-user">
-        <div className="avatar">
-          {profilePreference.avatarDataUrl ? (
-            <img src={profilePreference.avatarDataUrl} alt="头像" />
-          ) : (
-            getAvatarDisplay(profilePreference.avatarCode)
-          )}
+    <div className="mine-page">
+      {/* 渐变摘要头：点击整体进入个人详情页 */}
+      <div className="mine-hero" onClick={() => history.push('/h5/profile-detail')}>
+        <AvatarView size={46} />
+        <div className="mine-info">
+          <div className="mine-name-row">
+            <span className="mine-name">{nickname}</span>
+            {identityBound && <span className="mine-badge">已绑定身份</span>}
+          </div>
+          <div className="mine-account">{maskedPhone || '加载中...'}{maskedAccount ? ` · ${maskedAccount}` : ''}</div>
+          <div className="mine-sub">点击查看个人详情</div>
         </div>
-        <div className="user-info">
-          <div className="name">{nickname}</div>
-          {identityBound && <div className="identity-status">已绑定身份</div>}
-          <div className="account-name">{formatAccountName(accountNumber)}</div>
-          <div className="id">{maskedPhone || '加载中...'}</div>
-        </div>
-        <button
-          type="button"
-          className="profile-settings-button"
-          aria-label="编辑个人资料"
-          onClick={() => history.push('/h5/profile/edit')}
-        >
-          <span aria-hidden="true">›</span>
-        </button>
+        <IconSet name="chevronRight" size={18} color="rgba(255,255,255,0.85)" />
       </div>
 
-      {/* 账号与安全 */}
-      <div className="profile-section">
-        <div className="section-title">账号与安全</div>
-        <div className="profile-list">
-          <div className="profile-item" onClick={() => history.push('/h5/identity-bind')}>
-            <div className="item-icon" style={{ background: '#f0f5ff' }}>🪪</div>
-            <div className="item-content">
-              <div className="item-title">身份绑定</div>
-              <div className="item-desc">{identityBound ? '已绑定' : '未绑定'}</div>
+      {/* 六入口列表 */}
+      <div className="mine-body">
+        <div className="mine-list">
+          {MENU_ITEMS.map((item, index) => (
+            <div
+              key={item.label}
+              className={`mine-item${index < MENU_ITEMS.length - 1 ? '' : ' last'}`}
+              onClick={() => history.push(item.path)}
+            >
+              <div className="item-icon">
+                <IconSet name={item.icon} size={17} color="var(--h5-primary)" />
+              </div>
+              <div className="item-content">
+                <div className="item-title">{item.label}</div>
+                {item.desc && <div className="item-desc">{item.desc}</div>}
+              </div>
+              <IconSet name="chevronRight" size={14} color="var(--h5-text-3)" />
             </div>
-            <span className="item-arrow">›</span>
-          </div>
-          <div className="profile-item" onClick={() => history.push('/h5/settings/change-login-password')}>
-            <div className="item-icon" style={{ background: '#e6f7ff' }}>🔒</div>
-            <div className="item-content">
-              <div className="item-title">修改登录密码</div>
-            </div>
-            <span className="item-arrow">›</span>
-          </div>
-          <div className="profile-item" onClick={() => history.push('/h5/payment-password/change')}>
-            <div className="item-icon" style={{ background: '#fff7e6' }}>💳</div>
-            <div className="item-content">
-              <div className="item-title">修改支付密码</div>
-            </div>
-            <span className="item-arrow">›</span>
-          </div>
+          ))}
         </div>
-      </div>
-
-      {/* 关于 */}
-      <div className="profile-section">
-        <div className="section-title">关于</div>
-        <div className="profile-list">
-          <div className="profile-item" onClick={() => history.push('/h5/settings/version')}>
-            <div className="item-icon" style={{ background: '#f6ffed' }}>ℹ️</div>
-            <div className="item-content">
-              <div className="item-title">版本信息</div>
-              <div className="item-desc">V1.0.0</div>
-            </div>
-            <span className="item-arrow">›</span>
-          </div>
-          <div className="profile-item" onClick={() => history.push('/h5/settings/user-agreement')}>
-            <div className="item-icon" style={{ background: '#f9f0ff' }}>📋</div>
-            <div className="item-content">
-              <div className="item-title">用户协议</div>
-            </div>
-            <span className="item-arrow">›</span>
-          </div>
-          <div className="profile-item" onClick={() => history.push('/h5/settings/privacy-policy')}>
-            <div className="item-icon" style={{ background: '#fff2f0' }}>🔐</div>
-            <div className="item-content">
-              <div className="item-title">隐私政策</div>
-            </div>
-            <span className="item-arrow">›</span>
-          </div>
-        </div>
-      </div>
-
-      {/* 账号操作 */}
-      <div className="profile-section">
-        <div className="section-title">账号操作</div>
-        <div className="profile-list">
-          <div className="profile-item" onClick={() => {
-            Dialog.confirm({
-              content: '确定切换账号吗？',
-            }).then((result) => {
-              if (result) {
-                localStorage.removeItem('accessToken');
-                history.push('/h5/login');
-              }
-            });
-          }}>
-            <div className="item-icon" style={{ background: '#e6fffb' }}>🔄</div>
-            <div className="item-content">
-              <div className="item-title">切换账号</div>
-            </div>
-            <span className="item-arrow">›</span>
-          </div>
-        </div>
-      </div>
-
-      {/* 退出登录 */}
-      <div className="profile-footer">
-        <button className="logout-btn" onClick={handleLogout}>
-          退出登录
-        </button>
       </div>
     </div>
   );

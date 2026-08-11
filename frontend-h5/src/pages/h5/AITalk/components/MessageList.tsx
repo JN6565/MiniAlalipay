@@ -9,11 +9,10 @@ interface Props {
 }
 
 /** 欢迎页快捷建议：与后端 8 类意图对应，降低用户输入成本 */
-const SUGGESTIONS: { icon: string; text: string }[] = [
-  { icon: '💰', text: '查一下我的余额' },
-  { icon: '💸', text: '给张三转账100元' },
-  { icon: '📋', text: '查看最近的交易记录' },
-  { icon: '🌸', text: '我的花呗账单' },
+const SUGGESTIONS: string[] = [
+  '帮我转 100 元给小李',
+  '本月花了多少',
+  '花呗什么时候还',
 ];
 
 /** 距底部多少像素内视为“贴底” */
@@ -93,23 +92,18 @@ const MessageList: React.FC<Props> = ({ messages, renderMessage, onSuggestionCli
     <div className="ai-messages" ref={containerRef} onScroll={handleScroll}>
       {messages.length === 0 && (
         <div className="ai-welcome">
-          <div className="ai-welcome-avatar">🐱</div>
-          <div className="ai-welcome-title">你好，我是财喵</div>
-          <div className="ai-welcome-desc">
-            转账、查余额、查账单、花呗还款
-            <br />
-            一句话搞定
-          </div>
+          <div className="ai-welcome-orb" />
+          <div className="ai-welcome-title">你好，我是小智</div>
+          <div className="ai-welcome-desc">转账 · 查账单 · 花呗还款，说句话就能办</div>
           <div className="ai-suggestions">
-            {SUGGESTIONS.map((s) => (
+            {SUGGESTIONS.map((text) => (
               <button
-                key={s.text}
+                key={text}
                 type="button"
                 className="ai-suggestion-chip"
-                onClick={() => onSuggestionClick?.(s.text)}
+                onClick={() => onSuggestionClick?.(text)}
               >
-                <span className="ai-suggestion-icon">{s.icon}</span>
-                {s.text}
+                {text}
               </button>
             ))}
           </div>
