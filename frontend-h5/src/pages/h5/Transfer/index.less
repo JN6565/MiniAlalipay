@@ -1,266 +1,322 @@
+/* 转账页（V2）：品牌渐变 hero + 悬浮白卡（收款人/支付方式/金额备注） */
 .transfer-page {
   min-height: 100vh;
-  background: #f5f7fa;
-  padding: 0;
+  background: var(--h5-bg);
+  padding-bottom: 30px;
 }
 
-/* 页面标题 */
-.page-header {
-  background: white;
-  padding: 20px;
-  border-bottom: 1px solid #e8e8e8;
+.transfer-hero {
+  height: 96px;
+  background: var(--h5-grad-soft);
 }
 
-.page-title {
-  font-size: 20px;
-  font-weight: 600;
-  color: #1a1a1a;
-  margin: 0;
-}
+.transfer-card {
+  margin: -56px 14px 0;
+  background: #fff;
+  border-radius: var(--h5-radius-card);
+  box-shadow: var(--h5-shadow-card);
+  padding: 14px;
 
-/* 收款人搜索区域 */
-.payee-section {
-  background: white;
-  padding: 16px 20px;
-  margin-bottom: 12px;
-}
-
-.section-label {
-  font-size: 14px;
-  color: #666;
-  margin-bottom: 12px;
-  font-weight: 500;
-}
-
-/* 最近转账列表 */
-.recent-transfers-section,
-.search-results-section {
-  background: white;
-  padding: 0 20px 16px;
-  margin-bottom: 12px;
-}
-
-.section-header {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  padding: 12px 0;
-  cursor: pointer;
-  user-select: none;
-}
-
-.section-title {
-  font-size: 15px;
-  font-weight: 600;
-  color: #1a1a1a;
-}
-
-.section-arrow {
-  font-size: 12px;
-  color: #999;
-  transition: transform 0.2s;
-  display: inline-flex;
-  align-items: center;
-
-  &.expanded {
-    transform: rotate(180deg);
+  & + .transfer-card {
+    margin-top: 10px;
   }
 }
 
-.contacts-list,
-.payee-candidates {
-  border-radius: 12px;
-  overflow: hidden;
-  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.04);
-}
-
-/* 已选收款人卡片 */
-.selected-payee-card {
-  margin: 0 20px 16px;
-  padding: 16px;
-  background: linear-gradient(135deg, #f0f4ff 0%, #e6f0ff 100%);
-  border-radius: 12px;
-  display: flex;
-  align-items: center;
-  gap: 12px;
-  border: 2px solid #667eea;
-}
-
-.payee-info {
-  flex: 1;
-}
-
-.payee-name {
-  font-size: 15px;
-  font-weight: 600;
-  color: #1a1a1a;
-  margin-bottom: 4px;
-}
-
-.payee-account {
-  font-size: 13px;
-  color: #666;
-}
-
-/* 金额输入区域 */
-.amount-section {
-  background: white;
-  padding: 20px;
-  margin-bottom: 12px;
-}
-
-.amount-input-wrapper {
+/* 收款人搜索 pill */
+.transfer-search {
   display: flex;
   align-items: center;
   gap: 8px;
-  padding: 12px 0;
-}
+  background: var(--h5-fill);
+  border-radius: 20px;
+  padding: 9px 12px;
 
-.amount-warning {
-  margin-top: 8px;
-  padding: 8px 12px;
-  background: #fff3e0;
-  border-left: 3px solid #ff9800;
-  border-radius: 6px;
-  font-size: 13px;
-  color: #e65100;
-}
+  input {
+    flex: 1;
+    border: none;
+    outline: none;
+    background: transparent;
+    font-size: 13px;
+    color: var(--h5-text);
 
-/* 备注输入 */
-.remark-section {
-  background: white;
-  padding: 20px;
-  margin-bottom: 12px;
-}
-
-/* 提交按钮 */
-.submit-section {
-  padding: 20px;
-}
-
-.submit-btn {
-  height: 52px;
-  font-size: 17px;
-  font-weight: 600;
-  border-radius: 12px;
-  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-  box-shadow: 0 4px 12px rgba(102, 126, 234, 0.4);
-  transition: all 0.3s;
-}
-
-.submit-btn:active:not(:disabled) {
-  transform: scale(0.98);
-  box-shadow: 0 2px 8px rgba(102, 126, 234, 0.3);
-}
-
-.submit-btn:disabled {
-  opacity: 0.5;
-  cursor: not-allowed;
-}
-
-/* 支付来源选择 */
-.funding-source-section {
-  background: white;
-  padding: 16px 20px;
-  margin-bottom: 12px;
-}
-
-.funding-source-options {
-  display: flex;
-  gap: 12px;
-}
-
-.funding-option {
-  flex: 1;
-  padding: 10px 0;
-  text-align: center;
-  border: 1px solid #ddd;
-  border-radius: 8px;
-  font-size: 14px;
-  color: #666;
-  cursor: pointer;
-  transition: all 0.2s;
-
-  &.active {
-    border-color: #1677ff;
-    color: #1677ff;
-    background: #f0f7ff;
-    font-weight: 500;
+    &::placeholder {
+      color: var(--h5-text-3);
+      font-size: 12px;
+    }
   }
-}
 
-.selected-card-display {
-  margin-top: 10px;
-  padding: 10px 12px;
-  background: #f7f8fa;
-  border-radius: 8px;
-  font-size: 14px;
-  color: #333;
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  cursor: pointer;
-}
-
-.no-cards-hint {
-  margin-top: 8px;
-  font-size: 12px;
-  color: #999;
-}
-
-/* 银行卡选择弹窗 */
-.card-picker-mask {
-  position: fixed;
-  top: 0;
-  left: 0;
-  right: 0;
-  bottom: 0;
-  background: rgba(0, 0, 0, 0.4);
-  z-index: 1000;
-  display: flex;
-  align-items: flex-end;
-}
-
-.card-picker-popup {
-  width: 100%;
-  background: white;
-  border-radius: 16px 16px 0 0;
-  padding: 16px 20px 32px;
-  max-height: 60vh;
-  overflow-y: auto;
-}
-
-.card-picker-header {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  font-size: 16px;
-  font-weight: 600;
-  margin-bottom: 16px;
-
-  span:last-child {
-    font-size: 18px;
-    color: #999;
+  .transfer-search-btn {
+    font-size: 12px;
+    font-weight: 600;
+    color: var(--h5-primary);
     cursor: pointer;
-    padding: 4px 8px;
+    white-space: nowrap;
   }
 }
 
-.card-picker-item {
-  padding: 14px 12px;
-  border-radius: 8px;
-  font-size: 14px;
-  color: #333;
-  cursor: pointer;
-  transition: background 0.2s;
+/* 最近转账横排头像 */
+.transfer-recent {
+  margin-top: 14px;
 
-  &:active {
-    background: #f5f5f5;
+  .recent-label {
+    font-size: 12px;
+    color: var(--h5-text-3);
+    margin-bottom: 10px;
   }
 
-  &.active {
-    background: #f0f7ff;
-    color: #1677ff;
-    font-weight: 500;
+  .recent-list {
+    display: flex;
+    gap: 20px;
+    overflow-x: auto;
+  }
+
+  .recent-item {
+    text-align: center;
+    flex-shrink: 0;
+    cursor: pointer;
+  }
+
+  .recent-name {
+    font-size: 11px;
+    color: var(--h5-text-2);
+    margin-top: 5px;
+    max-width: 52px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+}
+
+/* 已选收款人 */
+.transfer-selected {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-top: 14px;
+  padding: 10px 12px;
+  background: var(--h5-primary-bg);
+  border-radius: var(--h5-radius-tile);
+
+  .selected-info {
+    flex: 1;
+    min-width: 0;
+  }
+
+  .selected-name {
+    font-size: 14px;
+    font-weight: 600;
+    color: var(--h5-text);
+  }
+
+  .selected-sub {
+    font-size: 11.5px;
+    color: var(--h5-text-2);
+    margin-top: 2px;
+  }
+
+  .selected-change {
+    font-size: 12px;
+    color: var(--h5-primary);
+    cursor: pointer;
+  }
+}
+
+/* 搜索结果列表 */
+.transfer-candidates {
+  margin-top: 12px;
+  border-top: 1px solid var(--h5-divider);
+
+  .candidate-row {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 10px 2px;
+    border-bottom: 1px solid var(--h5-divider);
+    cursor: pointer;
+
+    &:last-child {
+      border-bottom: none;
+    }
+  }
+
+  .candidate-info {
+    flex: 1;
+    min-width: 0;
+  }
+
+  .candidate-name {
+    font-size: 13.5px;
+    font-weight: 600;
+    color: var(--h5-text);
+  }
+
+  .candidate-sub {
+    font-size: 11.5px;
+    color: var(--h5-text-3);
+    margin-top: 1px;
+  }
+}
+
+/* 支付方式双 tile */
+.card-label {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 12.5px;
+  color: var(--h5-text-2);
+}
+
+.funding-tiles {
+  display: flex;
+  gap: 10px;
+  margin-top: 10px;
+
+  .funding-tile {
+    flex: 1;
+    text-align: center;
+    padding: 11px 4px;
+    border-radius: 12px;
+    border: 1.5px solid var(--h5-divider);
+    color: var(--h5-text-2);
+    font-size: 12.5px;
+    cursor: pointer;
+    transition: all 0.2s;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+
+    &.active {
+      border-color: var(--h5-primary);
+      background: var(--h5-primary-bg);
+      color: var(--h5-primary);
+      font-weight: 600;
+    }
+  }
+}
+
+/* 金额与备注卡 */
+.amount-card {
+  text-align: center;
+
+  .amount-label {
+    font-size: 12.5px;
+    color: var(--h5-text-2);
+  }
+
+  .amount-input-wrapper {
+    margin: 6px 0 4px;
+  }
+
+  .amount-warning {
+    font-size: 11.5px;
+    color: var(--h5-amount-in);
+    margin-top: 2px;
+  }
+
+  .amount-divider {
+    height: 1px;
+    background: var(--h5-divider);
+    margin: 8px 22px;
+  }
+
+  .remark-row {
+    padding-top: 2px;
+  }
+
+  .remark-input {
+    text-align: center;
+    font-size: 12px;
+
+    input {
+      text-align: center;
+      font-size: 12px;
+      color: var(--h5-text-2);
+
+      &::placeholder {
+        color: var(--h5-text-3);
+      }
+    }
+  }
+}
+
+.transfer-submit {
+  margin: 14px 14px 0;
+}
+
+/* 银行卡选择 Popup */
+.card-picker {
+  .picker-handle {
+    width: 36px;
+    height: 4px;
+    border-radius: 2px;
+    background: var(--h5-divider);
+    margin: 0 auto 12px;
+  }
+
+  .picker-title {
+    font-size: 15px;
+    font-weight: 700;
+    color: var(--h5-text);
+    text-align: center;
+    margin-bottom: 12px;
+  }
+
+  .picker-row {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 11px 12px;
+    border-radius: var(--h5-radius-tile);
+    border: 1.5px solid transparent;
+    background: var(--h5-fill);
+    margin-bottom: 8px;
+    cursor: pointer;
+
+    &.active {
+      border-color: var(--h5-primary);
+      background: var(--h5-primary-bg);
+    }
+
+    &:last-child {
+      margin-bottom: 0;
+    }
+  }
+
+  .picker-logo {
+    width: 30px;
+    height: 30px;
+    border-radius: 9px;
+    background: #fff;
+    border: 1px solid var(--h5-divider);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 13px;
+    font-weight: 700;
+    color: var(--h5-primary);
+    flex-shrink: 0;
+
+    &.active {
+      background: var(--h5-primary);
+      border-color: var(--h5-primary);
+    }
+  }
+
+  .picker-name {
+    flex: 1;
+    font-size: 13px;
+    color: var(--h5-text);
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .picker-radio {
+    width: 17px;
+    height: 17px;
+    border-radius: 50%;
+    border: 1.5px solid var(--h5-divider);
+    flex-shrink: 0;
   }
 }

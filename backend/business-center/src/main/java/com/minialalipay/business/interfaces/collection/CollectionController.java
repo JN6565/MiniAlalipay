@@ -77,7 +77,8 @@ public class CollectionController {
     @GetMapping("/codes/me")
     public ResponseEntity<ApiResponse<CodeResponse>> getCode(@RequestHeader("X-User-Id") String userId, HttpServletRequest request) {
         PersonalCollectionCode code = service.getActiveCode(userId);
-        return ResponseEntity.ok(success(code == null ? null : CodeResponse.from(code, null), request));
+        return ResponseEntity.ok(success(code == null ? null
+                : CodeResponse.from(code, null, service.getActiveCodeShortCode(userId)), request));
     }
 
     /** 首次生成或原子换发个人码。 */
@@ -86,14 +87,14 @@ public class CollectionController {
             @RequestHeader("Idempotency-Key") String key, HttpServletRequest request) {
         CollectionApplicationService.CreatedCode created = service.regenerateCode(userId, key);
         String url = created.rawToken() == null ? null : "/api/v1/p2p-collections/by-token?t=" + created.rawToken();
-        return ResponseEntity.ok(success(CodeResponse.from(created.code(), url), request));
+        return ResponseEntity.ok(success(CodeResponse.from(created.code(), url, created.shortCode()), request));
     }
 
     /** 停用本人当前个人码。 */
     @PostMapping("/codes/me/disable")
     public ResponseEntity<ApiResponse<CodeResponse>> disable(@RequestHeader("X-User-Id") String userId,
             @RequestHeader("Idempotency-Key") String key, @Valid @RequestBody VersionRequest body, HttpServletRequest request) {
-        return ResponseEntity.ok(success(CodeResponse.from(service.disableCode(userId, body.version(), key), null), request));
+        return ResponseEntity.ok(success(CodeResponse.from(service.disableCode(userId, body.version(), key), null, null), request));
     }
 
     /** 创建固定金额收款请求；收款令牌仅在创建响应中可见。 */
@@ -102,14 +103,15 @@ public class CollectionController {
             @RequestHeader("Idempotency-Key") String key, @Valid @RequestBody CreateRequest body, HttpServletRequest request) {
         CollectionApplicationService.CreatedRequest created = service.createRequest(userId, body.amountFen(), body.subject(), key);
         String url = "/api/v1/p2p-collections/by-token?t=" + created.rawToken();
-        return ResponseEntity.status(201).body(success(RequestResponse.from(created.request(), url), request));
+        return ResponseEntity.status(201).body(success(RequestResponse.from(created.request(), url, created.shortCode()), request));
     }
 
     /** 查询本人创建的固定收款请求。 */
     @GetMapping("/requests/{id}")
     public ResponseEntity<ApiResponse<RequestResponse>> getRequest(@RequestHeader("X-User-Id") String userId,
             @PathVariable String id, HttpServletRequest request) {
-        return ResponseEntity.ok(success(RequestResponse.from(service.getRequest(userId, id)), request));
+        return ResponseEntity.ok(success(RequestResponse.from(service.getRequest(userId, id),
+                service.getRequestShortCode(userId, id)), request));
     }
 
     /** 取消尚未有支付受理的固定收款请求。 */
@@ -117,7 +119,7 @@ public class CollectionController {
     public ResponseEntity<ApiResponse<RequestResponse>> cancelRequest(@RequestHeader("X-User-Id") String userId,
             @RequestHeader("Idempotency-Key") String key, @PathVariable String id, @Valid @RequestBody VersionRequest body,
             HttpServletRequest request) {
-        return ResponseEntity.ok(success(RequestResponse.from(service.cancelRequest(userId, id, body.version(), key)), request));
+        return ResponseEntity.ok(success(RequestResponse.from(service.cancelRequest(userId, id, body.version(), key), null), request));
     }
 
     /**
@@ -299,17 +301,20 @@ public class CollectionController {
     public record ConfirmationResponse(String confirmationToken, String subjectHash, Instant expiresAt) { }
     /** 资金受理响应；PROCESSING 不代表资金已成功。 */
     public record PaymentResponse(String collectionOrderId, String transactionId, String status, String statusUrl, Instant updatedAt) { }
-    /** 脱敏个人码响应。 */
-    public record CodeResponse(String codeId, String status, String collectionUrl, long version) {
-        static CodeResponse from(PersonalCollectionCode code, String url) { return new CodeResponse(code.getCodeId(), code.getStatus().name(), url, code.getVersion()); }
+    /** 脱敏个人码响应；短码只是订单指针，供不支持扫码时手动输入。 */
+    public record CodeResponse(String codeId, String status, String collectionUrl, String shortCode, long version) {
+        static CodeResponse from(PersonalCollectionCode code, String url, String shortCode) {
+            return new CodeResponse(code.getCodeId(), code.getStatus().name(), url, shortCode, code.getVersion());
+        }
     }
-    /** 固定收款请求响应；collectionUrl 仅创建响应携带，令牌服务端只存摘要不可重读。 */
+    /** 固定收款请求响应；collectionUrl 仅创建响应携带，令牌服务端只存摘要不可重读；短码随有效期可重读展示。 */
     public record RequestResponse(String requestId, long amountFen, String subject, String status, String activeOrderId,
-                                  String transactionId, Instant expiresAt, long version, String collectionUrl) {
-        static RequestResponse from(CollectionRequest request) { return from(request, null); }
-        static RequestResponse from(CollectionRequest request, String collectionUrl) {
+                                  String transactionId, Instant expiresAt, long version, String collectionUrl, String shortCode) {
+        static RequestResponse from(CollectionRequest request, String shortCode) { return from(request, null, shortCode); }
+        static RequestResponse from(CollectionRequest request, String collectionUrl, String shortCode) {
             return new RequestResponse(request.getRequestId(), request.getAmountFen(), request.getSubject(),
-                    request.getStatus().name(), request.getActiveOrderId(), null, request.getExpiresAt(), request.getVersion(), collectionUrl);
+                    request.getStatus().name(), request.getActiveOrderId(), null, request.getExpiresAt(), request.getVersion(),
+                    collectionUrl, shortCode);
         }
     }
     /** C2C 订单响应，禁止返回双方账户、原始令牌和会话标识。 */

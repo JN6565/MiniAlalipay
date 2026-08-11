@@ -1,5 +1,6 @@
 import React from 'react';
 import type { ToolResultMessage } from '../types';
+import { IconSet, type IconName } from '@/components/h5/common';
 
 interface Props {
   message: ToolResultMessage;
@@ -14,6 +15,13 @@ function formatFen(fen: unknown): string {
   return (n / 100).toFixed(2);
 }
 
+/** 卡片图标：统一线性图标替代 emoji。 */
+const CardIcon: React.FC<{ name: IconName; color?: string }> = ({ name, color }) => (
+  <div className="ai-card-icon">
+    <IconSet name={name} size={20} color={color || 'var(--h5-primary)'} />
+  </div>
+);
+
 /**
  * 余额查询卡片。
  */
@@ -22,7 +30,7 @@ const BalanceCard: React.FC<{ data: Record<string, any> }> = ({ data }) => {
   const frozenFen = data.frozenFen;
   return (
     <div className="ai-card ai-card-balance">
-      <div className="ai-card-icon">💰</div>
+      <CardIcon name="wallet" />
       <div className="ai-card-label">可用余额</div>
       <div className="ai-card-amount">¥{formatFen(availableFen)}</div>
       {frozenFen != null && (
@@ -42,7 +50,7 @@ const CreditSummaryCard: React.FC<{ data: Record<string, any> }> = ({ data }) =>
   const pct = totalLimitFen > 0 ? Math.round((Number(usedFen) / Number(totalLimitFen)) * 100) : 0;
   return (
     <div className="ai-card ai-card-credit">
-      <div className="ai-card-icon">🌸</div>
+      <CardIcon name="huabei" color="#7b6cff" />
       <div className="ai-card-label">Mini 花呗</div>
       <div className="ai-card-row">
         <span>已用</span>
@@ -61,6 +69,11 @@ const CreditSummaryCard: React.FC<{ data: Record<string, any> }> = ({ data }) =>
 
 /**
  * 交易明细卡片（列表）。
+ *
+ * 金额方向判定：账本金额恒为正数，收支方向由 direction 字段决定
+ * （账本原始为 DEBIT/CREDIT，AI 工具链路已归一为 IN/OUT）。
+ * CREDIT/IN 为收入（+ 绿色），DEBIT/OUT 为支出（− 红色）；
+ * 无 direction 字段时回退 amountFen 符号逻辑兼容旧数据。
  */
 const TransactionsCard: React.FC<{ data: Record<string, any> }> = ({ data }) => {
   const list = (data.transactions ?? data.items ?? data.list ?? []) as any[];
@@ -68,17 +81,21 @@ const TransactionsCard: React.FC<{ data: Record<string, any> }> = ({ data }) => 
   return (
     <div className="ai-card ai-card-list">
       <div className="ai-card-label">最近交易</div>
-      {list.slice(0, 5).map((txn: any, i: number) => (
-        <div key={txn.id ?? i} className="ai-card-list-row">
-          <div className="ai-card-list-left">
-            <span className="ai-card-list-title">{txn.title ?? txn.remark ?? txn.type ?? '交易'}</span>
-            <span className="ai-card-list-date">{txn.time ?? txn.createdAt ?? ''}</span>
+      {list.slice(0, 5).map((txn: any, i: number) => {
+        const dir = typeof txn.direction === 'string' ? txn.direction.toUpperCase() : '';
+        const income = dir ? dir === 'IN' || dir === 'CREDIT' : Number(txn.amountFen) >= 0;
+        return (
+          <div key={txn.id ?? i} className="ai-card-list-row">
+            <div className="ai-card-list-left">
+              <span className="ai-card-list-title">{txn.title ?? txn.remark ?? txn.memo ?? txn.type ?? '交易'}</span>
+              <span className="ai-card-list-date">{txn.time ?? txn.createdAt ?? ''}</span>
+            </div>
+            <span className={income ? 'ai-card-amount-in' : 'ai-card-amount-out'}>
+              {income ? '+' : '−'}¥{formatFen(Math.abs(Number(txn.amountFen ?? 0)))}
+            </span>
           </div>
-          <span className={Number(txn.amountFen) >= 0 ? 'ai-card-amount-in' : 'ai-card-amount-out'}>
-            {Number(txn.amountFen) >= 0 ? '+' : ''}¥{formatFen(Math.abs(Number(txn.amountFen ?? 0)))}
-          </span>
-        </div>
-      ))}
+        );
+      })}
     </div>
   );
 };
@@ -88,7 +105,7 @@ const TransactionsCard: React.FC<{ data: Record<string, any> }> = ({ data }) => 
  */
 const TransferCard: React.FC<{ data: Record<string, any> }> = ({ data }) => (
   <div className="ai-card ai-card-transfer">
-    <div className="ai-card-icon">💸</div>
+    <CardIcon name="transfer" />
     <div className="ai-card-label">转账</div>
     {data.payeeNickname && <div className="ai-card-row">收款人：{data.payeeNickname}</div>}
     {data.amountFen != null && (
@@ -125,7 +142,7 @@ const CreditBillsCard: React.FC<{ data: Record<string, any> }> = ({ data }) => {
  */
 const TransactionStatusCard: React.FC<{ data: Record<string, any> }> = ({ data }) => (
   <div className="ai-card ai-card-status">
-    <div className="ai-card-icon">📋</div>
+    <CardIcon name="receipt" />
     <div className="ai-card-label">交易状态</div>
     <div className="ai-card-row">
       <span>状态：</span>
@@ -147,7 +164,7 @@ const FailedCard: React.FC<{ summary: string }> = ({ summary }) => {
       : '操作未能完成，请稍后重试或改用传统操作表单。';
   return (
     <div className="ai-card ai-card-failed">
-      <div className="ai-card-icon">⚠️</div>
+      <CardIcon name="close" color="var(--h5-danger)" />
       <div className="ai-card-label">操作未成功</div>
       <div className="ai-card-sub">{safeSummary}</div>
     </div>
@@ -171,7 +188,7 @@ const LoadingCard: React.FC<{ tool: string }> = ({ tool }) => {
   };
   return (
     <div className="ai-card ai-card-loading">
-      <div className="ai-card-icon">⏳</div>
+      <CardIcon name="clock" />
       <span>{labels[tool] ?? '正在执行操作…'}</span>
       <div className="ai-card-spinner" />
     </div>
@@ -234,7 +251,7 @@ const ToolResultCard: React.FC<Props> = ({ message }) => {
       // 通用卡片：展示摘要
       return (
         <div className="ai-card ai-card-generic">
-          <div className="ai-card-icon">✅</div>
+          <CardIcon name="check" color="var(--h5-success)" />
           <div className="ai-card-label">操作完成</div>
           <div className="ai-card-sub">{message.summary}</div>
         </div>

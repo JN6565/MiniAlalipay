@@ -35,7 +35,14 @@ public record LedgerEntry(long entryId, String voucherId, String transactionId, 
         if (value == null || value.isBlank()) throw new IllegalArgumentException(message);
     }
 
-    /** 携带交易对方用户 ID 的查询投影，仅用于展示，不参与过账。 */
-    public record WithCounterparty(LedgerEntry entry, String counterpartyUserId) {
+    /**
+     * 携带交易对方用户 ID 与交易后余额的查询投影，仅用于展示，不参与过账。
+     *
+     * @param entry 不可变分录
+     * @param counterpartyUserId 交易对方用户 ID，可为空
+     * @param balanceAfterFen 交易完成后本人账户可用余额（分），过账时回填；
+     *                        存量分录与系统账户分录为 null，展示层需回退处理
+     */
+    public record WithCounterparty(LedgerEntry entry, String counterpartyUserId, Long balanceAfterFen) {
     }
 }

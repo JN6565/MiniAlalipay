@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { history } from '@umijs/max';
-import { Form, Input, Button, Toast } from 'antd-mobile';
+import { Toast } from 'antd-mobile';
 import * as paymentPasswordService from '@/services/paymentPassword';
 import { ApiError } from '@/services/request';
 import { PasswordInput } from '@/components/h5/PasswordInput';
@@ -52,31 +52,30 @@ const PaymentPasswordChangePage: React.FC = () => {
 
   return (
     <div className="payment-password-change-page">
-      <div className="change-form">
-        <div className="form-item">
-          <div className="form-label">当前支付密码</div>
+      <div className="ppc-card">
+        <div className="ppc-field">
+          <div className="ppc-field-label">当前支付密码</div>
           <PasswordInput value={currentPassword} onChange={setCurrentPassword} length={6} />
         </div>
 
-        <div className="form-item">
-          <div className="form-label">新支付密码</div>
+        <div className="ppc-field">
+          <div className="ppc-field-label">新支付密码</div>
           <PasswordInput value={newPassword} onChange={setNewPassword} length={6} />
         </div>
 
-        <div className="form-item">
-          <div className="form-label">确认新支付密码</div>
+        <div className="ppc-field">
+          <div className="ppc-field-label">确认新支付密码</div>
           <PasswordInput value={confirmPassword} onChange={setConfirmPassword} length={6} />
         </div>
 
-        <Button
-          block
-          color="primary"
-          size="large"
-          loading={loading}
-          onClick={handleSubmit}
-        >
-          确认修改
-        </Button>
+        <div className="ppc-tip">支付密码为 6 位数字，用于转账、充值、提现等资金操作确认</div>
+      </div>
+
+      <div
+        className={`ppc-submit ${loading ? 'disabled' : ''}`}
+        onClick={() => { if (!loading) handleSubmit(); }}
+      >
+        {loading ? '提交中...' : '确认修改'}
       </div>
     </div>
   );

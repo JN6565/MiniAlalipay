@@ -15,6 +15,8 @@ export interface Transaction {
   direction: 'IN' | 'OUT';
   memo: string | null;
   counterpartyName: string;
+  /** 交易后余额（分）；存量数据与系统账户分录为 null，展示时回退隐藏。 */
+  balanceAfterFen: number | null;
   createdAt: string;
 }
 
@@ -25,6 +27,7 @@ interface LedgerEntryResponse {
   amountFen: number;
   memo: string | null;
   counterpartyName: string;
+  balanceAfterFen: number | null;
   createdAt: string;
 }
 
@@ -39,9 +42,13 @@ export const toCashFlowDirection = (direction: LedgerEntryResponse['direction'])
 
 /** 使用后端已脱敏的账本摘要作为列表标题，避免凭空显示未知交易。 */
 export const getLedgerEntryTitle = (entry: Pick<LedgerEntryResponse, 'memo'>): string =>
-  entry.memo?.includes('充值')
-    ? '账户充值'
-    : entry.memo?.trim() || '账本明细';
+  entry.memo?.includes('银行卡充值')
+    ? '银行卡充值'
+    : entry.memo?.includes('银行卡提现')
+      ? '银行卡提现'
+      : entry.memo?.includes('充值')
+        ? '账户充值'
+        : entry.memo?.trim() || '账户账单';
 
 export interface AnalyticsData {
   incomeFen: number;

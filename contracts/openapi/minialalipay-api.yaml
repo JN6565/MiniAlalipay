@@ -343,6 +343,38 @@ paths:
         '401': { $ref: '#/components/responses/Unauthorized' }
         '404': { $ref: '#/components/responses/NotFound' }
         '409': { $ref: '#/components/responses/Conflict' }
+  /api/v1/bank-cards/{cardId}/full-card-number:
+    post:
+      summary: 查看本人银行卡完整卡号（需消费一次性支付证明）
+      description: |
+        完整卡号仅存于绑卡注册表，默认任何查询接口只返回尾号。
+        前端需先以用途 BANK_CARD_NUMBER_VIEW 调用 POST /api/v1/payment-password/proof
+        验密签发一次性支付证明，再凭证明调用本接口；证明校验成功后即被原子消费，不可重放。
+        采用 POST 请求体承载证明的原因：确认令牌禁止出现在 URL（会进入访问日志与浏览器历史）。
+        响应含卡号明文，客户端仅内存展示，禁止写入日志、浏览器存储或埋点。
+      operationId: getFullCardNumber
+      x-client-scope: C
+      parameters:
+        - $ref: '#/components/parameters/RequestIdHeader'
+        - name: cardId
+          in: path
+          required: true
+          schema: { type: string, minLength: 1, maxLength: 26 }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/FullCardNumberRequest' }
+      responses:
+        '200':
+          description: 返回完整卡号明文，仅本次响应可见
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/FullCardNumberResponse' }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '422': { $ref: '#/components/responses/UnprocessableEntity' }
   /api/v1/bank-cards/{cardId}/balance:
     get:
       summary: 查询银行卡虚拟余额
@@ -1872,6 +1904,23 @@ paths:
         '401': { $ref: '#/components/responses/Unauthorized' }
         '404': { $ref: '#/components/responses/NotFound' }
         '409': { $ref: '#/components/responses/Conflict' }
+  /api/v1/p2p-collections/short-code-exchanges:
+    post:
+      summary: 登录付款人兑换 8 位收款短码并创建或绑定支付订单
+      description: 短码兑换等价于扫描对应二维码。个人码或固定请求创建新订单并绑定当前会话；动态扫码订单将既有订单绑定到当前会话。短码只是订单指针而非凭据，失效、过期或已消费的码一律返回 404；10 分钟内失败 5 次锁定 30 分钟并返回 429。
+      operationId: exchangeCollectionShortCode
+      x-client-scope: C
+      parameters:
+        - $ref: '#/components/parameters/RequestIdHeader'
+        - $ref: '#/components/parameters/CsrfTokenHeader'
+      requestBody:
+        required: true
+        content: { application/json: { schema: { $ref: '#/components/schemas/ShortCodeExchangeRequest' } } }
+      responses:
+        '200': { description: 返回码类型与订单 ID, content: { application/json: { schema: { $ref: '#/components/schemas/ShortCodeExchangeResponse' } } } }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '429': { $ref: '#/components/responses/TooManyRequests' }
   /api/v1/p2p-collections/orders/{id}:
     parameters:
       - $ref: '#/components/parameters/RequestIdHeader'
@@ -3810,6 +3859,22 @@ components:
         holderName: { type: string, minLength: 1, maxLength: 32, description: 持卡人姓名明文 }
         idCard: { type: string, minLength: 18, maxLength: 18, description: 身份证号，18 位，末位可为 X/x }
         phone: { type: string, minLength: 11, maxLength: 11, description: 预留手机号，11 位 }
+    FullCardNumberRequest:
+      type: object
+      required: [paymentProof]
+      properties:
+        paymentProof: { type: string, minLength: 1, maxLength: 256, description: 一次性支付证明，必须专以 BANK_CARD_NUMBER_VIEW 用途签发；禁止写入日志、浏览器存储、埋点或 URL }
+    FullCardNumberResponse:
+      allOf:
+        - $ref: '#/components/schemas/ApiResponse'
+        - type: object
+          required: [data]
+          properties:
+            data:
+              type: object
+              required: [fullCardNumber]
+              properties:
+                fullCardNumber: { type: string, description: 完整卡号明文，仅本次响应可见，客户端仅内存展示 }
     BankCard:
       type: object
       required: [cardId, bankCode, bankName, cardType, cardLast4, holderMasked, idCardMasked, phoneMasked, balanceFen, isDefault, status, boundAt]
@@ -3914,6 +3979,13 @@ components:
           type: [string, 'null']
           maxLength: 255
           description: 已脱敏的分录摘要。
+        balanceAfterFen:
+          type: [integer, 'null']
+          format: int64
+          minimum: 0
+          description: |
+            该分录所属用户账户在交易完成后的可用余额（分），仅供 C 端明细展示。
+            过账时按当时账户余额回填；存量分录与系统账户分录为空，前端需回退为不展示。
         createdAt:
           type: string
           format: date-time
@@ -4225,6 +4297,28 @@ components:
           maxLength: 256
           writeOnly: true
           description: 原始短期令牌，仅用于本次交换；不得写入日志、URL 或持久化字段。
+    ShortCodeExchangeRequest:
+      type: object
+      additionalProperties: false
+      required: [shortCode]
+      properties:
+        shortCode:
+          type: string
+          pattern: '^\d{8}$'
+          description: 8 位纯数字收款短码，由收款方展示给付款人手动输入。
+    ShortCodeExchangeResponse:
+      allOf:
+        - $ref: '#/components/schemas/ApiResponse'
+        - type: object
+          required: [data]
+          properties:
+            data:
+              type: object
+              additionalProperties: false
+              required: [codeType, orderId]
+              properties:
+                codeType: { type: string, enum: [PERSONAL_CODE, COLLECTION_REQUEST, QR_PAY_ORDER], description: 短码对应的码类型。 }
+                orderId: { type: string, description: 兑换成功后的订单 ID，付款页以此 ID 直接进入。 }
     QrPayOrder:
       type: object
       additionalProperties: false
@@ -4237,6 +4331,7 @@ components:
         status: { type: string, description: 订单状态；SUCCESS 才表示资金事实已成立，其余状态必须回源统一交易。 }
         transactionId: { type: [string, 'null'], description: 已受理时的统一资金交易 ID。 }
         qrCodeUrl: { type: [string, 'null'], description: 短期引导地址，仅创建响应携带。 }
+        shortCode: { type: [string, 'null'], description: 手动输入收款短码，仅创建响应携带，查询响应不返回。 }
         expiresAt: { type: [string, 'null'], format: date-time, description: 订单过期时间。 }
         version: { type: integer, format: int64, description: 订单版本，用于 CAS。 }
     QrPayOrderResponse:
@@ -4386,6 +4481,7 @@ components:
                 transactionId: { type: [string, 'null'], description: 已受理时的统一资金交易 ID。 }
                 expiresAt: { type: [string, 'null'], format: date-time, description: 请求过期时间。 }
                 version: { type: integer, format: int64, description: 请求版本，用于 CAS。 }
+                shortCode: { type: [string, 'null'], description: 手动输入收款短码，随请求生成，有效期内可重读。 }
     PersonalCollectionCodeResponse:
       allOf:
         - $ref: '#/components/schemas/ApiResponse'
@@ -4400,6 +4496,7 @@ components:
                 codeId: { type: string, description: 个人码标识。 }
                 status: { type: string, description: 个人码状态。 }
                 collectionUrl: { type: [string, 'null'], description: 引导地址，仅生成响应携带。 }
+                shortCode: { type: [string, 'null'], description: 手动输入收款短码，长期有效，换发后旧码失效。 }
                 version: { type: integer, format: int64, description: 个人码版本，用于 CAS。 }
     DecideManualCaseRequest:
       type: object

@@ -88,7 +88,7 @@ const RechargePage: React.FC = () => {
     <div className="recharge-page">
       {/* 充值说明 */}
       <div className="notice">
-        <p>💰 模拟充值 - 虚拟资金</p>
+        <p>模拟充值 - 虚拟资金</p>
         <p>充值金额将添加到您的可用余额</p>
       </div>
 

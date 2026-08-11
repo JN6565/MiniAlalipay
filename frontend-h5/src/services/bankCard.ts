@@ -1,5 +1,6 @@
 import type { AxiosResponse } from 'axios';
 import request from './request';
+import { issuePaymentProof } from './paymentPassword';
 
 /**
  * 响应拦截器已拆包 ApiResponse 直接返回 data，但 axios 类型签名仍为 AxiosResponse；
@@ -94,6 +95,21 @@ export const unbindBankCard = (cardId: string): Promise<void> =>
 /** 查询银行卡虚拟余额（分）。 */
 export const getBankCardBalance = (cardId: string): Promise<{ balanceFen: number }> =>
   unwrap(request.get<{ balanceFen: number }>(`/api/v1/bank-cards/${cardId}/balance`));
+
+/**
+ * 查看完整卡号：先用支付密码签发一次性证明（专用途 BANK_CARD_NUMBER_VIEW），
+ * 再以 POST 请求体提交（证明令牌不进 URL）。明文仅本次返回值可见，
+ * 调用方只可在内存展示，禁止写日志/localStorage/URL。
+ */
+export const getFullCardNumber = async (cardId: string, paymentPassword: string): Promise<string> => {
+  const { paymentProof } = await issuePaymentProof(paymentPassword, 'BANK_CARD_NUMBER_VIEW');
+  const resp = await unwrap(
+    request.post<{ fullCardNumber: string }>(`/api/v1/bank-cards/${cardId}/full-card-number`, {
+      paymentProof,
+    }),
+  );
+  return resp.fullCardNumber;
+};
 
 /** 生成 UUID v4 作为幂等键。 */
 const generateIdempotencyKey = (): string =>

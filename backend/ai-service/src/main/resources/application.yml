@@ -90,7 +90,10 @@ ai:
     account-center:
       base-url: ${AI_GATEWAY_BASE_URL:http://minialalipay-gateway}
   mcp:
-    tool-timeout: 3s
+    # 工具超时须大于 ai.client.timeout-ms（3000ms）：两者相等时下游 HTTP 错误还没返回
+    # ToolRouter 就先抛 TimeoutException，把真实业务错误吞成"工具调用超时"；
+    # 预留 2s 余量保证 HTTP 层错误先于工具超时被判定。
+    tool-timeout: 5s
     max-retries: 1
   session:
     timeout: 30m

@@ -146,6 +146,29 @@ public class JdbcQrPayStore implements QrPayStore {
         }
     }
 
+    @Override
+    public Optional<QrPayOrder> findByShortCode(String shortCode) {
+        return jdbc.query("SELECT " + ORDER_COLUMNS + ORDER_FROM + "WHERE o.short_code=?", rs ->
+                rs.next() ? Optional.of(mapOrder(rs)) : Optional.empty(), shortCode);
+    }
+
+    @Override
+    public boolean assignShortCode(String orderId, String shortCode) {
+        try {
+            return jdbc.update("UPDATE business_db.qr_pay_order SET short_code=? WHERE qr_order_id=?",
+                    shortCode, orderId) == 1;
+        } catch (DuplicateKeyException duplicate) { return false; }
+    }
+
+    @Override
+    public void clearExpiredShortCodes(java.time.Instant now) {
+        // 过期或已进入受理、终态的订单短码一律释放，供新码复用
+        jdbc.update("UPDATE business_db.qr_pay_order SET short_code=NULL "
+                        + "WHERE short_code IS NOT NULL AND (expires_at<? OR status NOT IN "
+                        + "('CREATED','SCANNED','PENDING_CONFIRMATION','RISK_REVIEW'))",
+                Timestamp.from(now));
+    }
+
     private static QrPayOrder mapOrder(java.sql.ResultSet rs) throws java.sql.SQLException {
         return new QrPayOrder(rs.getString("qr_order_id"), rs.getString("payee_user_id"), rs.getString("payee_account_id"),
                 rs.getLong("amount_fen"), rs.getString("subject"),

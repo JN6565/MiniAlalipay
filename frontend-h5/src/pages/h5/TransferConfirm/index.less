@@ -1,65 +1,127 @@
+/* 转账确认页（V2）：收款人居中卡 + 行卡 + 密码卡 + 渐变确认钮 */
 .transfer-confirm-page {
   min-height: 100vh;
-  background: #f5f5f5;
-  padding: 16px;
+  background: var(--h5-bg);
+  padding: 12px 14px 30px;
 }
 
 .confirm-card {
-  margin-bottom: 16px;
+  background: #fff;
+  border-radius: var(--h5-radius-card);
+  box-shadow: var(--h5-shadow-card);
+  padding: 14px;
+
+  & + .confirm-card {
+    margin-top: 10px;
+  }
 }
 
-.confirm-title {
-  font-size: 18px;
-  font-weight: bold;
-  color: #333;
-  margin-bottom: 16px;
-  padding-bottom: 12px;
-  border-bottom: 1px solid #f0f0f0;
+/* 收款人信息卡 */
+.payee-card {
+  text-align: center;
+  padding: 20px 14px;
+
+  .payee-title {
+    font-size: 14px;
+    font-weight: 600;
+    color: var(--h5-text);
+    margin-top: 8px;
+  }
+
+  .payee-amount {
+    font-size: 30px;
+    font-weight: 800;
+    color: var(--h5-text);
+    margin-top: 8px;
+    letter-spacing: 0.5px;
+  }
+
+  .payee-remark {
+    font-size: 12px;
+    color: var(--h5-text-3);
+    margin-top: 6px;
+  }
 }
 
-.confirm-row {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  padding: 12px 0;
-  border-bottom: 1px solid #f0f0f0;
+/* 付款方式 / 到账方式行卡 */
+.info-rows {
+  padding: 4px 14px;
+
+  .info-row {
+    display: flex;
+    align-items: center;
+    padding: 12px 0;
+
+    &:first-child {
+      border-bottom: 1px solid var(--h5-divider);
+    }
+  }
+
+  .row-label {
+    flex: 1;
+    font-size: 13px;
+    color: var(--h5-text-2);
+  }
+
+  .row-value {
+    font-size: 13px;
+    color: var(--h5-text);
+
+    &.strong {
+      font-weight: 600;
+    }
+  }
 }
 
-.confirm-row:last-child {
-  border-bottom: none;
-}
-
-.confirm-label {
-  font-size: 14px;
-  color: #999;
-}
-
-.confirm-value {
-  font-size: 14px;
-  color: #333;
-}
-
+/* 支付密码卡 */
 .password-card {
-  margin-bottom: 16px;
+  text-align: center;
+
+  .password-title {
+    font-size: 14px;
+    font-weight: 700;
+    color: var(--h5-text);
+    margin-bottom: 12px;
+  }
 }
 
-.password-title {
-  font-size: 16px;
-  font-weight: bold;
-  color: #333;
-  margin-bottom: 16px;
+.confirm-payer-hint {
+  margin-top: 12px;
+  text-align: center;
+  font-size: 11.5px;
+  color: var(--h5-text-3);
 }
 
-.confirm-actions {
+.confirm-submit {
+  margin-top: 16px;
+}
+
+.confirm-back {
+  margin-top: 12px;
+  text-align: center;
+  font-size: 13px;
+  color: var(--h5-text-2);
+  cursor: pointer;
+}
+
+.loading-container {
   display: flex;
   flex-direction: column;
-  gap: 12px;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  height: 100vh;
+
+  .loading-text {
+    font-size: 13px;
+    color: var(--h5-text-3);
+  }
 }
 
 .error-state {
   display: flex;
-  justify-content: center;
   align-items: center;
+  justify-content: center;
   height: 100vh;
-  color: #999;
+  color: var(--h5-text-3);
 }

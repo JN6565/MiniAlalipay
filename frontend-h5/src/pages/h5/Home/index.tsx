@@ -1,225 +1,154 @@
-import React, { useState, useEffect, useContext, useRef } from 'react';
+import React, { useState, useEffect } from 'react';
 import { history } from 'umi';
-import { Toast, SpinLoading } from 'antd-mobile';
-import { ScanCodeOutline } from 'antd-mobile-icons';
-import * as accountService from '@/services/account';
+import { Toast } from 'antd-mobile';
 import * as creditService from '@/services/credit';
+import { formatAmount } from '@/utils/format';
 import { useTabActiveRefresh } from '@/utils/useTabActiveRefresh';
-import { getAvatarDisplay, getProfilePreference } from '@/utils/profile';
-import { TabActiveContext } from '@/layouts/H5Layout/TabViews';
-import { POLL_INTERVAL } from '@/constants';
+import { getProfilePreference } from '@/utils/profile';
+import { Skeleton, IconSet, AvatarView, IconName } from '@/components/h5/common';
 import './index.less';
+
+/**
+ * 快捷功能入口（V2.1 定稿）：两行 x 4 共 8 个入口。
+ * 第一行为高频资金动作（扫一扫/收款/转账/钱包），第二行为资产与智能入口（账单/银行卡/花呗/AI 助手）。
+ * tint 决定图标底色渐变（见 index.less 的 quick-icon 色系 class）。
+ */
+const QUICK_ACTIONS: { label: string; icon: IconName; path: string; tint?: 'brand' | 'orange' | 'green' | 'credit' | 'aipur' }[] = [
+  { label: '扫一扫', icon: 'scan', path: '/h5/scan' },
+  { label: '收款', icon: 'collect', path: '/h5/collection' },
+  { label: '转账', icon: 'transfer', path: '/h5/transfer' },
+  { label: '钱包', icon: 'wallet', path: '/h5/wallet' },
+  { label: '账单', icon: 'receipt', path: '/h5/account/transactions', tint: 'orange' },
+  { label: '银行卡', icon: 'card', path: '/h5/bank-cards', tint: 'green' },
+  { label: '花呗', icon: 'huabei', path: '/h5/credit', tint: 'credit' },
+  { label: 'AI助手', icon: 'ai', path: '/h5/ai-talk', tint: 'aipur' },
+];
+
+/** 生活服务区：仅 UI 占位，点击提示功能开发中，不做路由与后端。 */
+const LIFE_SERVICES: { label: string; icon: IconName }[] = [
+  { label: '生活缴费', icon: 'bill' },
+  { label: '手机营业厅', icon: 'phone' },
+  { label: '火车', icon: 'train' },
+  { label: '机票', icon: 'plane' },
+  { label: '医疗健康', icon: 'health' },
+  { label: '市民中心', icon: 'citizen' },
+  { label: '哈喽出行', icon: 'travel' },
+  { label: '美团', icon: 'food' },
+];
+
+/** 按时段生成问候语（设计稿：昵称 + 时段问候）。 */
+const getGreeting = (): string => {
+  const hour = new Date().getHours();
+  if (hour < 6) return '夜深了';
+  if (hour < 12) return '早上好';
+  if (hour < 18) return '下午好';
+  return '晚上好';
+};
 
 const HomePage: React.FC = () => {
   const profilePreference = getProfilePreference();
   const nickname = profilePreference.nickname;
   const [loading, setLoading] = useState(true);
-  const [account, setAccount] = useState<accountService.AccountInfo | null>(null);
   const [credit, setCredit] = useState<creditService.CreditSummary | null>(null);
-  const [transactions, setTransactions] = useState<accountService.Transaction[]>([]);
-  const [balanceHidden, setBalanceHidden] = useState(false);
 
   useEffect(() => {
     loadData();
   }, []);
 
-  // 首页保活常驻，转账/充值等业务完成后回切时静默重拉，
-  // 余额与最近交易始终以服务端最新事实为准。
+  // 首页保活常驻，还款/消费等业务完成后回切时静默重拉花呗摘要。
   useTabActiveRefresh('/h5/home', () => loadData(true));
 
-  // 首页保活后只在首次挂载加载一次，他人转入不会主动触达本页；
-  // 通过后台轮询近实时刷新总资产与最近交易。仅在首页激活且页面可见时轮询，
-  // 切到其他 Tab 或浏览器退到后台时暂停，避免无效请求；上一轮未完成时跳过本轮。
-  const activePath = useContext(TabActiveContext);
-  const pollingRef = useRef(false);
-  useEffect(() => {
-    const timer = setInterval(() => {
-      if (document.hidden || activePath !== '/h5/home' || pollingRef.current) {
-        return;
-      }
-      pollingRef.current = true;
-      loadData(true).finally(() => {
-        pollingRef.current = false;
-      });
-    }, POLL_INTERVAL.HOME_BALANCE);
-    return () => clearInterval(timer);
-  }, [activePath]);
-
   const loadData = async (silent = false) => {
-    // 静默刷新不进入全屏加载态：保留旧内容直至新数据到达，避免回切时闪加载圈。
+    // 静默刷新不进入加载态：保留旧内容直至新数据到达，避免回切时闪骨架屏。
     if (!silent) {
       setLoading(true);
     }
     try {
-      const [accountResult, creditResult, txResult] = await Promise.allSettled([
-        accountService.getMyAccount(),
-        creditService.getCreditSummary(),
-        accountService.getTransactions({ pageSize: 5 }),
-      ]);
-
-      if (accountResult.status === 'fulfilled') {
-        setAccount(accountResult.value);
-      }
-
-      if (creditResult.status === 'fulfilled') {
-        setCredit(creditResult.value);
-      }
-      // 信用 API 失败时保持 credit 为 null，UI 层显示"暂无数据"
-
-      if (txResult.status === 'fulfilled') {
-        setTransactions(txResult.value.items || []);
-      }
+      // V2 改版：总资产与余额信息收敛至钱包页，首页只拉取花呗摘要
+      const creditResult = await creditService.getCreditSummary();
+      setCredit(creditResult as unknown as creditService.CreditSummary);
     } catch (error) {
+      // 信用 API 失败时保持 credit 为 null，UI 层显示占位文案
       console.error('加载数据失败:', error);
     } finally {
       setLoading(false);
     }
   };
 
-  const formatAmount = (fen: number) => {
-    return (fen / 100).toFixed(2);
-  };
-
-  const displayAmount = (fen: number) => {
-    return balanceHidden ? '****' : formatAmount(fen);
-  };
-
-  const formatRelativeTime = (dateStr: string) => {
-    const now = new Date();
-    const date = new Date(dateStr);
-    const diffMs = now.getTime() - date.getTime();
-    const diffMins = Math.floor(diffMs / 60000);
-    const diffHours = Math.floor(diffMs / 3600000);
-    const diffDays = Math.floor(diffMs / 86400000);
-    if (diffMins < 1) return '刚刚';
-    if (diffMins < 60) return `${diffMins}分钟前`;
-    if (diffHours < 24) return `${diffHours}小时前`;
-    if (diffDays < 7) return `${diffDays}天前`;
-    return date.toLocaleDateString('zh-CN');
-  };
-
   if (loading) {
     return (
-      <div className="loading-container">
-        <SpinLoading />
+      <div className="home">
+        <div className="home-hero home-hero-skeleton" />
+        <div className="home-body">
+          <Skeleton variant="card" height={110} />
+          <Skeleton variant="card" height={96} />
+          <Skeleton variant="list" rows={4} />
+        </div>
       </div>
     );
   }
 
   return (
     <div className="home">
-      {/* 顶部资产区域 */}
-      <div className="header">
-        <div className="header-row">
-          <div className="hi">
-            <div className="avatar">
-              {profilePreference.avatarDataUrl ? (
-                <img src={profilePreference.avatarDataUrl} alt="头像" />
-              ) : (
-                getAvatarDisplay(profilePreference.avatarCode)
-              )}
-            </div>
-            <span>{nickname}</span>
-          </div>
-          <div className="header-btns">
-            <span onClick={() => history.push('/h5/scan')}><ScanCodeOutline /></span>
+      {/* 顶部品牌区：柔渐变头图 + 头像昵称（点击进个人详情）+ 设置入口；不展示总资产 */}
+      <div className="home-hero">
+        <div className="hero-user" onClick={() => history.push('/h5/profile-detail')}>
+          <AvatarView size={38} />
+          <div className="hero-text">
+            <div className="hero-nickname">{nickname}，{getGreeting()}</div>
+            <div className="hero-sub">点击查看个人详情</div>
           </div>
         </div>
-
-        <div className="asset-box">
-          <div className="asset-top">
-            <span>总资产(元)</span>
-            <span className="eye" onClick={() => setBalanceHidden(!balanceHidden)}>
-              {balanceHidden ? '🙈' : '👁️'}
-            </span>
-          </div>
-          <div className="asset-num">{displayAmount(account?.totalFen || 0)}</div>
-          <div className="asset-cols">
-            <div>
-              <span>可用余额</span>
-              <b>{displayAmount(account?.availableFen || 0)}</b>
-            </div>
-            <div>
-              <span>冻结金额</span>
-              <b>{displayAmount(account?.frozenFen || 0)}</b>
-            </div>
-            <div>
-              <span>花呗可用</span>
-              <b>{credit ? displayAmount(credit.availableFen) : '--'}</b>
-            </div>
-          </div>
+        <div className="hero-actions">
+          <span onClick={() => history.push('/h5/settings')}>
+            <IconSet name="setting" size={20} color="#fff" />
+          </span>
         </div>
       </div>
 
-      {/* 功能入口 */}
-      <div className="funcs">
-        <div className="func-item" onClick={() => history.push('/h5/transfer')}>
-          <div className="func-icon" style={{ background: '#e6f7ff' }}>💸</div>
-          <span>转账</span>
-        </div>
-        <div className="func-item" onClick={() => history.push('/h5/ai-talk')}>
-          <div className="func-icon" style={{ background: '#f6ffed' }}>🤖</div>
-          <span>AI助手</span>
-        </div>
-        <div className="func-item" onClick={() => history.push('/h5/collection')}>
-          <div className="func-icon" style={{ background: '#fff7e6' }}>📱</div>
-          <span>收款</span>
-        </div>
-        <div className="func-item" onClick={() => history.push('/h5/credit')}>
-          <div className="func-icon" style={{ background: '#fff2f0' }}>💳</div>
-          <span>花呗</span>
-        </div>
-        <div className="func-item" onClick={() => history.push('/h5/account/transactions')}>
-          <div className="func-icon" style={{ background: '#f9f0ff' }}>📊</div>
-          <span>明细</span>
-        </div>
-        <div className="func-item" onClick={() => history.push('/h5/account/analytics')}>
-          <div className="func-icon" style={{ background: '#e6fffb' }}>📈</div>
-          <span>分析</span>
-        </div>
-        <div className="func-item" onClick={() => history.push('/h5/wallet')}>
-          <div className="func-icon" style={{ background: '#f5f5f5' }}>🏦</div>
-          <span>充值提现</span>
-        </div>
-        <div className="func-item" onClick={() => history.push('/h5/bank-cards')}>
-          <div className="func-icon" style={{ background: '#f5f5f5' }}>💳</div>
-          <span>银行卡</span>
-        </div>
-      </div>
-
-      {/* 最近交易 */}
-      <div className="tx-box">
-        <div className="tx-head">
-          <span>最近交易</span>
-          <span className="more" onClick={() => history.push('/h5/account/transactions')}>查看全部 &gt;</span>
-        </div>
-
-        {transactions.length === 0 ? (
-          <div style={{ padding: '40px 0', textAlign: 'center', color: '#999', fontSize: 14 }}>
-            暂无交易记录
-          </div>
-        ) : (
-          transactions.map((tx) => {
-            // 优先显示交易对方，否则显示摘要
-            const title = tx.counterpartyName
-              ? (tx.direction === 'IN' ? `来自 ${tx.counterpartyName}` : `转给 ${tx.counterpartyName}`)
-              : accountService.getLedgerEntryTitle(tx);
-            return (
-              <div key={tx.transactionId} className="tx-item">
-                <div className="tx-icon">
-                  {tx.direction === 'IN' ? '📥' : '📤'}
-                </div>
-                <div className="tx-mid">
-                  <div className="tx-name">{title}</div>
-                  <div className="tx-time">{formatRelativeTime(tx.createdAt)}</div>
-                </div>
-                <div className={`tx-amt ${tx.direction === 'IN' ? 'in' : 'out'}`}>
-                  {`${tx.direction === 'IN' ? '+' : '-'}${formatAmount(tx.amountFen)}`}
-                </div>
+      <div className="home-body">
+        {/* 快捷功能：两行 x 4 共 8 个入口（品牌渐变图标底，账单橙/银行卡绿/花呗紫蓝/AI 紫粉） */}
+        <div className="quick-card">
+          {QUICK_ACTIONS.map((item) => (
+            <div key={item.label} className="quick-item" onClick={() => history.push(item.path)}>
+              <div className={`quick-icon${item.tint ? ` ${item.tint}` : ''}`}>
+                <IconSet name={item.icon} size={20} color="#fff" />
               </div>
-            );
-          })
-        )}
+              <span>{item.label}</span>
+            </div>
+          ))}
+        </div>
+
+        {/* 花呗摘要卡：待还金额 + 额度入口 */}
+        <div className="credit-card" onClick={() => history.push('/h5/credit')}>
+          <div className="credit-left">
+            <div className="credit-label">Mini 花呗 · 本期应还(元)</div>
+            <div className="credit-amount amount-text">{formatAmount(credit?.billedFen || 0)}</div>
+            <div className="credit-sub">
+              {credit ? `可用额度 ${formatAmount(credit.availableFen)} 元` : '额度信息暂不可用'}
+            </div>
+          </div>
+          <div className="credit-btn">去还款</div>
+        </div>
+
+        {/* 生活服务区：占位入口，点击仅提示开发中 */}
+        <div className="life-card">
+          <div className="card-title">生活服务</div>
+          <div className="life-grid">
+            {LIFE_SERVICES.map((item) => (
+              <div
+                key={item.label}
+                className="life-item"
+                onClick={() => Toast.show({ content: '功能开发中，敬请期待' })}
+              >
+                <div className="life-icon">
+                  <IconSet name={item.icon} size={18} color="var(--h5-primary)" />
+                </div>
+                <span>{item.label}</span>
+              </div>
+            ))}
+          </div>
+        </div>
       </div>
     </div>
   );

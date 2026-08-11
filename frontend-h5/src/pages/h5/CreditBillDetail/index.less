@@ -1,141 +1,199 @@
+/* 花呗账单详情（V2）：概览卡 + 消费/还款列表卡 + credit 渐变还款钮 */
 .credit-bill-detail-page {
   min-height: 100vh;
-  background: #f5f5f5;
-  padding-bottom: 20px;
+  background: var(--h5-bg);
+  padding: 12px 14px 26px;
+}
+
+.cbd-card {
+  background: #fff;
+  border-radius: var(--h5-radius-card);
+  box-shadow: var(--h5-shadow-card);
+  padding: 14px;
+
+  & + .cbd-card {
+    margin-top: 10px;
+  }
+}
+
+/* 概览卡 */
+.overview-card {
+  .overview-head {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+
+    .bill-period {
+      font-size: 15px;
+      font-weight: 700;
+      color: var(--h5-text);
+    }
+
+    .bill-status {
+      font-size: 11px;
+      padding: 3px 10px;
+      border-radius: 10px;
+
+      &.bill-status-paid {
+        color: var(--h5-success);
+        background: rgba(22, 179, 135, 0.1);
+      }
+
+      &.bill-status-overdue {
+        color: var(--h5-amount-in);
+        background: rgba(240, 72, 78, 0.08);
+      }
+
+      &.bill-status-open,
+      &.bill-status-partially_paid {
+        color: var(--h5-warning);
+        background: rgba(245, 159, 45, 0.1);
+      }
+    }
+  }
+
+  .overview-cols {
+    display: flex;
+    margin-top: 14px;
+    padding: 12px 0;
+    background: var(--h5-fill);
+    border-radius: var(--h5-radius-tile);
+  }
+
+  .overview-col {
+    flex: 1;
+    text-align: center;
+  }
+
+  .col-label {
+    font-size: 11.5px;
+    color: var(--h5-text-3);
+  }
+
+  .col-value {
+    font-size: 15px;
+    font-weight: 700;
+    color: var(--h5-text);
+    margin-top: 4px;
+
+    &.paid {
+      color: var(--h5-success);
+    }
+
+    &.outstanding {
+      color: #7b6cff;
+    }
+  }
+
+  .overview-dates {
+    display: flex;
+    justify-content: space-between;
+    margin-top: 12px;
+    font-size: 12px;
+    color: var(--h5-text-2);
+  }
+
+  .bill-notice {
+    margin-top: 8px;
+    font-size: 11px;
+    color: var(--h5-text-3);
+  }
+}
+
+/* 列表区 */
+.cbd-section-title {
+  font-size: 13.5px;
+  font-weight: 700;
+  color: var(--h5-text);
+  margin-bottom: 4px;
+}
+
+.cbd-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 11px 2px;
+  border-bottom: 1px solid var(--h5-divider);
+
+  .cbd-row-icon {
+    width: 32px;
+    height: 32px;
+    border-radius: 10px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    flex-shrink: 0;
+
+    &.spend {
+      background: #f3efff;
+    }
+
+    &.repay {
+      background: #e6f8f2;
+    }
+  }
+
+  .cbd-row-main {
+    flex: 1;
+    min-width: 0;
+  }
+
+  .cbd-row-title {
+    font-size: 13px;
+    font-weight: 600;
+    color: var(--h5-text);
+  }
+
+  .cbd-row-sub {
+    font-size: 11.5px;
+    color: var(--h5-text-3);
+    margin-top: 2px;
+  }
+
+  .cbd-row-amount {
+    font-size: 13px;
+    font-weight: 700;
+    color: var(--h5-text);
+    flex-shrink: 0;
+
+    &.in {
+      color: var(--h5-success);
+    }
+  }
+}
+
+.cbd-empty {
+  padding: 18px 0;
+  text-align: center;
+  font-size: 12.5px;
+  color: var(--h5-text-3);
+}
+
+.cbd-repay-cta {
+  margin-top: 16px;
+  text-align: center;
+  padding: 12px 0;
+  border-radius: 24px;
+  background: var(--h5-grad-credit);
+  color: #fff;
+  font-size: 14px;
+  font-weight: 700;
+  letter-spacing: 1px;
+  box-shadow: 0 6px 16px rgba(90, 108, 255, 0.35);
+  cursor: pointer;
 }
 
 .loading-container {
   display: flex;
-  justify-content: center;
   align-items: center;
+  justify-content: center;
   height: 100vh;
 }
 
 .error-state {
   display: flex;
+  align-items: center;
   justify-content: center;
-  align-items: center;
   height: 100vh;
-  color: #999;
-}
-
-.bill-card {
-  margin: 16px;
-}
-
-.bill-header {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  margin-bottom: 16px;
-}
-
-.bill-period {
-  font-size: 18px;
-  font-weight: bold;
-  color: #333;
-}
-
-.bill-status {
-  font-size: 12px;
-  padding: 4px 8px;
-  border-radius: 4px;
-}
-
-.bill-status-open {
-  background: #e6f7ff;
-  color: #1677ff;
-}
-
-.bill-status-partially_paid {
-  background: #fff7e6;
-  color: #fa8c16;
-}
-
-.bill-status-paid {
-  background: #f6ffed;
-  color: #52c41a;
-}
-
-.bill-status-overdue {
-  background: #fff2e8;
-  color: #ff4d4f;
-}
-
-.bill-amounts {
-  padding: 16px 0;
-  border-bottom: 1px solid #f0f0f0;
-  margin-bottom: 16px;
-}
-
-.amount-row {
-  display: flex;
-  justify-content: space-between;
-  padding: 8px 0;
-}
-
-.amount-label {
-  font-size: 14px;
-  color: #999;
-}
-
-.amount-value {
-  font-size: 14px;
-  color: #333;
-}
-
-.amount-value.highlight {
-  font-weight: bold;
-}
-
-.bill-dates {
-  margin-bottom: 16px;
-}
-
-.date-row {
-  display: flex;
-  justify-content: space-between;
-  padding: 8px 0;
-}
-
-.date-label {
-  font-size: 14px;
-  color: #999;
-}
-
-.date-value {
-  font-size: 14px;
-  color: #333;
-}
-
-.bill-notice {
-  padding: 12px;
-  background: #f6ffed;
-  border-radius: 8px;
-  font-size: 12px;
-  color: #52c41a;
-  text-align: center;
-}
-
-.items-card,
-.allocations-card {
-  margin: 16px;
-}
-
-.items-title,
-.allocations-title {
-  font-size: 16px;
-  font-weight: bold;
-  color: #333;
-  margin-bottom: 12px;
-}
-
-.empty-state {
-  text-align: center;
-  padding: 20px;
-  color: #999;
-}
-
-.bill-actions {
-  padding: 16px;
+  color: var(--h5-text-3);
 }

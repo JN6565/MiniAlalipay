@@ -5,6 +5,7 @@ import com.minialalipay.business.domain.collection.CollectionOrder;
 import com.minialalipay.business.domain.collection.CollectionOrderEvent;
 import com.minialalipay.business.domain.collection.PersonalCollectionCode;
 
+import java.time.Instant;
 import java.util.List;
 import java.util.Optional;
 
@@ -103,4 +104,25 @@ public interface CollectionStore {
 
     /** 幂等事实只暴露请求摘要与资源标识。 */
     record IdempotencyRecord(byte[] requestDigest, String resourceId) { }
+
+    /** 按手动输入短码查询当前有效个人码。 */
+    default Optional<PersonalCollectionCode> findActiveCodeByShortCode(String shortCode) { return Optional.empty(); }
+
+    /** 按手动输入短码查询固定收款请求。 */
+    default Optional<CollectionRequest> findRequestByShortCode(String shortCode) { return Optional.empty(); }
+
+    /** 查询个人码当前绑定的短码，用于收款页展示。 */
+    default Optional<String> findCodeShortCode(String codeId) { return Optional.empty(); }
+
+    /** 查询固定请求当前绑定的短码，用于收款页展示。 */
+    default Optional<String> findRequestShortCode(String requestId) { return Optional.empty(); }
+
+    /** 为个人码分配短码；短码唯一冲突返回 false。 */
+    default boolean assignCodeShortCode(String codeId, String shortCode) { return true; }
+
+    /** 为固定请求分配短码；短码唯一冲突返回 false。 */
+    default boolean assignRequestShortCode(String requestId, String shortCode) { return true; }
+
+    /** 清理已失效个人码与过期、终态请求占用的短码，释放给新码复用。 */
+    default void clearExpiredShortCodes(Instant now) { }
 }

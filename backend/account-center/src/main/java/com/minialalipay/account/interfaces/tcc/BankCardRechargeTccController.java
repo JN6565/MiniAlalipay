@@ -42,11 +42,24 @@ public class BankCardRechargeTccController {
         return ResponseEntity.ok(new Result(branch.getStatus().name()));
     }
 
+    /**
+     * 银行卡充值 TCC 命令参数。
+     *
+     * <p>xid、transactionId 与 cardId 共同定位幂等屏障，Try/Confirm/Cancel 重试时
+     * 必须保持完全一致，否则会被识别为不同请求。金额单位为分。</p>
+     *
+     * @param xid 业务屏障标识（由交易 ID 派生）
+     * @param transactionId 统一交易 ID，26 位
+     * @param userId 发起充值用户 ID，用于校验银行卡归属
+     * @param cardId 银行卡 ID
+     * @param amountFen 充值金额（分），必须为正数
+     */
     public record Request(@NotBlank @Size(max = 128) String xid,
                           @NotBlank @Size(min = 26, max = 26) String transactionId,
                           @NotBlank @Size(min = 26, max = 26) String userId,
                           @NotBlank @Size(min = 26, max = 26) String cardId,
                           @Positive long amountFen) { }
 
+    /** TCC 动作执行结果；status 为分支当前状态（INIT/TRIED/CONFIRMED/CANCELLED/MANUAL_REVIEW，空回滚以 CANCELLED 记录）。 */
     public record Result(String status) { }
 }

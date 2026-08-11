@@ -1,12 +1,18 @@
 import React, { useEffect, useState } from 'react';
 import { useParams, history } from 'umi';
-import { Card, List, Button, Toast, SpinLoading } from 'antd-mobile';
+import { Toast, SpinLoading } from 'antd-mobile';
 import * as creditService from '@/services/credit';
-import { AmountDisplay } from '@/components/h5/AmountDisplay';
+import { formatBalance } from '@/services/bankCard';
+import { IconSet } from '@/components/h5/common';
 import { BILL_STATUS_TEXT } from '@/constants';
 import { formatTime } from '@/utils/format';
 import './index.less';
 
+/**
+ * 花呗账单详情页：按路由参数中的账单 ID 拉取单期账单，
+ * 展示账单概览（消费总额/已还/剩余应还、出账日与到期日）、消费明细与还款记录。
+ * 账单状态非 PAID（已结清）时展示「立即还款」入口，跳转还款页。
+ */
 const CreditBillDetailPage: React.FC = () => {
   const { id } = useParams();
   const [loading, setLoading] = useState(true);
@@ -43,102 +49,87 @@ const CreditBillDetailPage: React.FC = () => {
 
   return (
     <div className="credit-bill-detail-page">
-      {/* 账单概览 */}
-      <Card className="bill-card">
-        <div className="bill-header">
-          <div className="bill-period">{bill.period}</div>
+      {/* 账单概览卡 */}
+      <div className="cbd-card overview-card">
+        <div className="overview-head">
+          <div className="bill-period">{bill.period} 账单</div>
           <div className={`bill-status bill-status-${bill.status.toLowerCase()}`}>
             {BILL_STATUS_TEXT[bill.status] || bill.status}
           </div>
         </div>
-
-        <div className="bill-amounts">
-          <div className="amount-row">
-            <span className="amount-label">消费总额</span>
-            <span className="amount-value">
-              <AmountDisplay amountFen={bill.totalFen} />
-            </span>
+        <div className="overview-cols">
+          <div className="overview-col">
+            <div className="col-label">消费总额</div>
+            <div className="col-value">¥{formatBalance(bill.totalFen)}</div>
           </div>
-          <div className="amount-row">
-            <span className="amount-label">已还金额</span>
-            <span className="amount-value">
-              <AmountDisplay amountFen={bill.paidFen} />
-            </span>
+          <div className="overview-col">
+            <div className="col-label">已还金额</div>
+            <div className="col-value paid">¥{formatBalance(bill.paidFen)}</div>
           </div>
-          <div className="amount-row">
-            <span className="amount-label">剩余应还</span>
-            <span className="amount-value highlight">
-              <AmountDisplay amountFen={bill.outstandingFen} />
-            </span>
+          <div className="overview-col">
+            <div className="col-label">剩余应还</div>
+            <div className="col-value outstanding">¥{formatBalance(bill.outstandingFen)}</div>
           </div>
         </div>
-
-        <div className="bill-dates">
-          <div className="date-row">
-            <span className="date-label">出账日</span>
-            <span className="date-value">{formatTime(bill.statementDate, 'YYYY-MM-DD')}</span>
-          </div>
-          <div className="date-row">
-            <span className="date-label">到期日</span>
-            <span className="date-value">{formatTime(bill.dueAt, 'YYYY-MM-DD')}</span>
-          </div>
+        <div className="overview-dates">
+          <span>出账日 {formatTime(bill.statementDate, 'YYYY-MM-DD')}</span>
+          <span>到期日 {formatTime(bill.dueAt, 'YYYY-MM-DD')}</span>
         </div>
-
         <div className="bill-notice">费率：0（无利息、服务费或罚息）</div>
-      </Card>
+      </div>
 
-      {/* 消费明细 */}
-      <Card className="items-card">
-        <div className="items-title">消费明细</div>
+      {/* 消费账单 */}
+      <div className="cbd-card">
+        <div className="cbd-section-title">消费账单</div>
         {bill.items && bill.items.length > 0 ? (
-          <List>
-            {bill.items.map((item) => (
-              <List.Item
-                key={item.purchaseId}
-                description={formatTime(item.occurredAt)}
-                extra={
-                  <AmountDisplay amountFen={item.amountFen} size="small" />
-                }
-              >
-                {item.merchantName || '商户消费'}
-              </List.Item>
-            ))}
-          </List>
+          bill.items.map((item, index) => (
+            <div
+              className="cbd-row"
+              key={item.purchaseId}
+              style={index === bill.items.length - 1 ? { borderBottom: 'none' } : undefined}
+            >
+              <span className="cbd-row-icon spend">
+                <IconSet name="receipt" size={15} color="#7b6cff" />
+              </span>
+              <div className="cbd-row-main">
+                <div className="cbd-row-title">{item.merchantName || '商户消费'}</div>
+                <div className="cbd-row-sub">{formatTime(item.occurredAt, 'MM-DD HH:mm')}</div>
+              </div>
+              <span className="cbd-row-amount">-¥{formatBalance(item.amountFen)}</span>
+            </div>
+          ))
         ) : (
-          <div className="empty-state">暂无消费明细</div>
+          <div className="cbd-empty">暂无消费账单</div>
         )}
-      </Card>
+      </div>
 
       {/* 还款记录 */}
       {bill.allocations && bill.allocations.length > 0 && (
-        <Card className="allocations-card">
-          <div className="allocations-title">还款记录</div>
-          <List>
-            {bill.allocations.map((allocation) => (
-              <List.Item
-                key={allocation.repaymentId}
-                description={formatTime(allocation.createdAt)}
-                extra={
-                  <AmountDisplay amountFen={allocation.amountFen} size="small" />
-                }
-              >
-                还款
-              </List.Item>
-            ))}
-          </List>
-        </Card>
+        <div className="cbd-card">
+          <div className="cbd-section-title">还款记录</div>
+          {bill.allocations.map((allocation, index) => (
+            <div
+              className="cbd-row"
+              key={allocation.repaymentId}
+              style={index === bill.allocations.length - 1 ? { borderBottom: 'none' } : undefined}
+            >
+              <span className="cbd-row-icon repay">
+                <IconSet name="check" size={15} color="var(--h5-success)" />
+              </span>
+              <div className="cbd-row-main">
+                <div className="cbd-row-title">还款</div>
+                <div className="cbd-row-sub">{formatTime(allocation.createdAt)}</div>
+              </div>
+              <span className="cbd-row-amount in">+¥{formatBalance(allocation.amountFen)}</span>
+            </div>
+          ))}
+        </div>
       )}
 
-      {/* 操作按钮 */}
+      {/* 立即还款 */}
       {bill.status !== 'PAID' && (
-        <div className="bill-actions">
-          <Button
-            block
-            color="primary"
-            onClick={() => history.push('/h5/credit/repay')}
-          >
-            立即还款
-          </Button>
+        <div className="cbd-repay-cta" onClick={() => history.push('/h5/credit/repay')}>
+          立即还款
         </div>
       )}
     </div>

@@ -1,13 +1,27 @@
-// @ts-nocheck
-import React, { useEffect, useState, useRef, useCallback } from 'react';
+import React, { useEffect, useState, useRef, useCallback, useMemo } from 'react';
 import { history } from 'umi';
-import { Button, Toast, Empty, SearchBar } from 'antd-mobile';
+import { Toast } from 'antd-mobile';
 import * as userService from '@/services/user';
 import { useTabActiveRefresh } from '@/utils/useTabActiveRefresh';
+import { IconSet, EmptyState, Skeleton, BuiltinAvatar, AVATAR_KINDS, AvatarKind } from '@/components/h5/common';
 import './index.less';
+
+/** 按昵称稳定取一个内置头像种类（无真实头像数据，哈希取模保证同人同头像）。 */
+function avatarKindOf(name?: string): AvatarKind {
+  let h = 0;
+  for (const ch of name || '') h = (h * 31 + ch.charCodeAt(0)) % 997;
+  return AVATAR_KINDS[h % AVATAR_KINDS.length];
+}
+
+/** 首字母分组键：英文取大写字母，其余归入 #。 */
+function groupKeyOf(name?: string): string {
+  const ch = (name || '').charAt(0).toUpperCase();
+  return /^[A-Z]$/.test(ch) ? ch : '#';
+}
 
 const ContactsPage: React.FC = () => {
   const [friends, setFriends] = useState<userService.Friend[]>([]);
+  const [loading, setLoading] = useState(true);
   const [searchKeyword, setSearchKeyword] = useState('');
   const [searchResults, setSearchResults] = useState<userService.PayeeInfo[]>([]);
   const [searching, setSearching] = useState(false);
@@ -27,17 +41,20 @@ const ContactsPage: React.FC = () => {
   });
 
   const loadFriends = async () => {
+    setLoading(true);
     try {
-      const res = await userService.getFriends();
+      const res = (await userService.getFriends()) as unknown as userService.Friend[];
       setFriends(res || []);
     } catch (e: any) {
       Toast.show(e.message || '加载失败');
+    } finally {
+      setLoading(false);
     }
   };
 
   const loadPendingCount = async () => {
     try {
-      const res = await userService.getPendingFriendRequests();
+      const res = (await userService.getPendingFriendRequests()) as unknown as userService.FriendRequest[];
       setPendingCount((res || []).length);
     } catch {
       // ignore
@@ -51,7 +68,7 @@ const ContactsPage: React.FC = () => {
     }
     setSearching(true);
     try {
-      const res = await userService.searchUsers(keyword.trim(), 10);
+      const res = (await userService.searchUsers(keyword.trim(), 10)) as unknown as userService.PayeeInfo[];
       setSearchResults(res || []);
     } catch (e: any) {
       console.warn('搜索失败:', e.message);
@@ -90,99 +107,130 @@ const ContactsPage: React.FC = () => {
     history.push(`/h5/transfer?${params.toString()}`);
   };
 
+  // 好友按首字母分组（A-Z 优先，# 收尾），组内保持后端返回顺序
+  const friendGroups = useMemo(() => {
+    const map = new Map<string, userService.Friend[]>();
+    friends.forEach((f) => {
+      const key = groupKeyOf(f.friendName);
+      if (!map.has(key)) map.set(key, []);
+      map.get(key)!.push(f);
+    });
+    return Array.from(map.entries()).sort(([a], [b]) => {
+      if (a === '#') return 1;
+      if (b === '#') return -1;
+      return a.localeCompare(b);
+    });
+  }, [friends]);
+
+  const showSearchSection = searchKeyword.trim().length > 0;
+
   return (
     <div className="contacts-page">
-      {/* 搜索栏 */}
-      <div className="search-section">
-        <SearchBar
-          placeholder="搜索手机号添加好友"
-          value={searchKeyword}
-          onChange={handleSearch}
-        />
-      </div>
+      {/* 柔渐变头部带：搜索卡悬浮其上 */}
+      <div className="contacts-head" />
+      <div className="contacts-body">
+        <div className="contacts-card">
+          {/* 搜索框：搜索手机号添加好友 */}
+          <div className="contacts-search">
+            <IconSet name="search" size={14} color="#94a3ba" />
+            <input
+              className="contacts-search-input"
+              placeholder="搜索手机号添加好友"
+              value={searchKeyword}
+              onChange={(e) => handleSearch(e.target.value)}
+            />
+            {searchKeyword && (
+              <span className="contacts-search-clear" onClick={() => handleSearch('')}>
+                <IconSet name="close" size={12} />
+              </span>
+            )}
+          </div>
 
-      {/* 搜索结果 */}
-      {searchResults.length > 0 && (
-        <div className="section-card">
-          <div className="section-title">搜索结果</div>
-          {searchResults.map((user) => {
-            const isFriend = friends.some((f) => f.friendUserId === user.userId);
-            return (
-              <div key={user.userId} className="search-item">
-                <div className="user-info">
-                  <div className="avatar-circle">{user.nickname?.charAt(0) || '?'}</div>
-                  <div className="user-meta">
-                    <div className="user-name">{user.nickname}</div>
-                    <div className="user-phone">{user.maskedPhone || user.accountNumber}</div>
-                  </div>
-                </div>
-                {isFriend ? (
-                  <Button size="small" fill="outline" disabled>
-                    已是好友
-                  </Button>
-                ) : (
-                  <Button size="small" color="primary" onClick={() => handleSendRequest(user.userId)}>
-                    添加好友
-                  </Button>
-                )}
-              </div>
-            );
-          })}
-        </div>
-      )}
-
-      {/* 好友请求入口 */}
-      <div className="request-entry" onClick={() => history.push('/h5/friend-requests')}>
-        <div className="request-left">
-          <span className="request-icon">📬</span>
-          <span>新朋友</span>
-        </div>
-        {pendingCount > 0 && <span className="badge">{pendingCount}</span>}
-      </div>
-
-      {/* 好友列表 */}
-      <div className="section-card">
-        <div className="section-title">联系人 ({friends.length})</div>
-        {friends.length === 0 ? (
-          <Empty description="暂无联系人，搜索手机号添加好友" style={{ padding: '40px 0' }} />
-        ) : (
-          friends.map((friend) => (
-            <div key={friend.friendUserId} className="friend-item">
-              <div className="user-info">
-                <div className="avatar-circle">{friend.friendName?.charAt(0) || '?'}</div>
-                <div className="user-meta">
-                  <div className="user-name">
-                    {friend.friendName}
-                    {friend.alias ? <span className="alias-tag">({friend.alias})</span> : null}
-                  </div>
-                  <div className="user-phone">{friend.maskedPhone || friend.accountNumber}</div>
-                </div>
-              </div>
-              <Button size="small" color="primary" onClick={() => handleTransfer(friend)}>
-                转账
-              </Button>
+          {/* 搜索结果区 */}
+          {showSearchSection && (
+            <div className="contacts-section">
+              <div className="contacts-section-label">搜索结果</div>
+              {searching ? (
+                <Skeleton rows={2} />
+              ) : searchResults.length === 0 ? (
+                <div className="contacts-search-empty">未找到相关用户</div>
+              ) : (
+                searchResults.map((user) => {
+                  const isFriend = friends.some((f) => f.friendUserId === user.userId);
+                  return (
+                    <div key={user.userId} className="contact-row">
+                      <BuiltinAvatar kind={avatarKindOf(user.nickname)} size={40} />
+                      <div className="contact-meta">
+                        <div className="contact-name">{user.nickname}</div>
+                        <div className="contact-sub">{user.maskedPhone || user.accountNumber}</div>
+                      </div>
+                      {isFriend ? (
+                        <span className="contact-pill disabled">已是好友</span>
+                      ) : (
+                        <span className="contact-pill" onClick={() => handleSendRequest(user.userId)}>
+                          添加好友
+                        </span>
+                      )}
+                    </div>
+                  );
+                })
+              )}
             </div>
-          ))
-        )}
-      </div>
+          )}
 
-      {/* 底部导航栏 */}
-      <div className="tabbar">
-        <div className="tab" onClick={() => history.push('/h5/home')}>
-          <span className="tab-icon">🏠</span>
-          <span className="tab-label">首页</span>
-        </div>
-        <div className="tab" onClick={() => history.push('/h5/ai-talk')}>
-          <span className="tab-icon">💬</span>
-          <span className="tab-label">AI助手</span>
-        </div>
-        <div className="tab on">
-          <span className="tab-icon">👥</span>
-          <span className="tab-label">联系人</span>
-        </div>
-        <div className="tab" onClick={() => history.push('/h5/profile')}>
-          <span className="tab-icon">👤</span>
-          <span className="tab-label">我的</span>
+          {/* 新朋友入口：待处理好友请求角标 */}
+          {!showSearchSection && (
+            <div className="contacts-section">
+              <div className="contact-row new-friend-row" onClick={() => history.push('/h5/friend-requests')}>
+                <span className="new-friend-icon">
+                  <IconSet name="plus" size={16} color="#256cff" />
+                </span>
+                <div className="contact-meta">
+                  <div className="contact-name">新朋友</div>
+                  <div className="contact-sub">查看好友请求</div>
+                </div>
+                {pendingCount > 0 && <span className="new-friend-badge">{pendingCount}</span>}
+                <IconSet name="chevronRight" size={14} color="#94a3ba" />
+              </div>
+            </div>
+          )}
+
+          {/* 好友列表：按首字母分组 */}
+          {!showSearchSection && (
+            <div className="contacts-section">
+              <div className="contacts-section-label">联系人 ({friends.length})</div>
+              {loading ? (
+                <Skeleton rows={4} />
+              ) : friends.length === 0 ? (
+                <EmptyState
+                  icon={<IconSet name="contacts" size={30} color="#94a3ba" />}
+                  text="暂无联系人"
+                  hint="搜索手机号添加好友"
+                />
+              ) : (
+                friendGroups.map(([letter, list]) => (
+                  <div key={letter} className="contact-group">
+                    <div className="contact-group-label">{letter}</div>
+                    {list.map((friend) => (
+                      <div key={friend.friendUserId} className="contact-row">
+                        <BuiltinAvatar kind={avatarKindOf(friend.friendName)} size={40} />
+                        <div className="contact-meta">
+                          <div className="contact-name">
+                            {friend.friendName}
+                            {friend.alias ? <span className="contact-alias">({friend.alias})</span> : null}
+                          </div>
+                          <div className="contact-sub">{friend.maskedPhone || friend.accountNumber}</div>
+                        </div>
+                        <span className="contact-pill" onClick={() => handleTransfer(friend)}>
+                          转账
+                        </span>
+                      </div>
+                    ))}
+                  </div>
+                ))
+              )}
+            </div>
+          )}
         </div>
       </div>
     </div>

@@ -138,7 +138,7 @@ public class LedgerApplicationService {
         }
         LedgerEntry entry = wc.entry();
         return new LedgerEntryDTO(entry.entryId(), entry.transactionId(), entry.direction().name(),
-                entry.amountFen(), entry.memo(), counterpartyName, entry.createdAt());
+                entry.amountFen(), entry.memo(), counterpartyName, wc.balanceAfterFen(), entry.createdAt());
     }
 
     private Cursor decodeCursor(String cursor) {

@@ -1,12 +1,12 @@
 import React, { useEffect, useState } from 'react';
 import { history, useSearchParams, useLocation } from 'umi';
-import { Card, Button, Toast, SpinLoading, Dialog } from 'antd-mobile';
+import { Toast, SpinLoading, Dialog } from 'antd-mobile';
 import * as transferService from '@/services/transfer';
 import * as userService from '@/services/user';
 import * as paymentPasswordService from '@/services/paymentPassword';
-import { generateIdempotencyKey } from '@/services/utils';
-import { AmountDisplay } from '@/components/h5/AmountDisplay';
 import { PasswordInput } from '@/components/h5/PasswordInput';
+import { BuiltinAvatar } from '@/components/h5/common';
+import { formatBalance } from '@/services/bankCard';
 import { maskName, maskAccount } from '@/utils/format';
 import './index.less';
 
@@ -176,64 +176,49 @@ const TransferConfirmPage: React.FC = () => {
 
   return (
     <div className="transfer-confirm-page">
-      <Card className="confirm-card">
-        <div className="confirm-title">请确认转账信息</div>
-
-        <div className="confirm-row">
-          <span className="confirm-label">付款方</span>
-          <span className="confirm-value">{formatPayer()}</span>
+      {/* 收款人信息卡：头像 + 转账给 XX + 金额大字 + 备注 */}
+      <div className="confirm-card payee-card">
+        <BuiltinAvatar kind="user" size={44} />
+        <div className="payee-title">转账给 {formatPayeeName()}</div>
+        {draft && (
+          <div className="payee-amount">¥{formatBalance(draft.amountFen)}</div>
+        )}
+        <div className="payee-remark">
+          {draft?.remark ? `备注：${draft.remark}` : '无备注'}
+          {formatPayeeAccount() && ` · ${formatPayeeAccount()}`}
         </div>
+      </div>
 
-        <div className="confirm-row">
-          <span className="confirm-label">收款方</span>
-          <span className="confirm-value">
-            {formatPayeeName()}
-            {formatPayeeAccount() && ` (${formatPayeeAccount()})`}
+      {/* 支付方式 / 到账方式行卡 */}
+      <div className="confirm-card info-rows">
+        <div className="info-row">
+          <span className="row-label">付款方式</span>
+          <span className="row-value strong">
+            {fundingSource === 'BANK_CARD' ? '银行卡' : '账户余额'}
           </span>
         </div>
-
-        <div className="confirm-row">
-          <span className="confirm-label">金额</span>
-          <span className="confirm-value amount">
-            {draft && <AmountDisplay amountFen={draft.amountFen} size="large" />}
-          </span>
+        <div className="info-row">
+          <span className="row-label">到账方式</span>
+          <span className="row-value">实时到账</span>
         </div>
+      </div>
 
-        <div className="confirm-row">
-          <span className="confirm-label">备注</span>
-          <span className="confirm-value">{draft?.remark || '无'}</span>
-        </div>
-
-        <div className="confirm-row">
-          <span className="confirm-label">支付方式</span>
-          <span className="confirm-value">{fundingSource === 'BANK_CARD' ? '银行卡' : '账户余额'}</span>
-        </div>
-
-        <div className="confirm-row">
-          <span className="confirm-label">手续费</span>
-          <span className="confirm-value">¥0.00</span>
-        </div>
-      </Card>
-
-      <Card className="password-card">
+      {/* 支付密码卡 */}
+      <div className="confirm-card password-card">
         <div className="password-title">请输入支付密码</div>
         <PasswordInput value={password} onChange={setPassword} length={6} />
-      </Card>
+      </div>
 
-      <div className="confirm-actions">
-        <Button
-          block
-          color="primary"
-          size="large"
-          loading={loading}
-          onClick={handleConfirm}
-          disabled={!password || password.length !== 6}
-        >
-          确认转账
-        </Button>
-        <Button block size="large" onClick={() => history.back()}>
-          返回修改
-        </Button>
+      <div className="confirm-payer-hint">付款方：{formatPayer()} · 手续费 ¥0.00</div>
+
+      <div
+        className={`h5-btn-gradient confirm-submit${loading || !password || password.length !== 6 ? ' disabled' : ''}`}
+        onClick={() => !loading && handleConfirm()}
+      >
+        {loading ? '提交中...' : '确认转账'}
+      </div>
+      <div className="confirm-back" onClick={() => history.back()}>
+        返回修改
       </div>
     </div>
   );

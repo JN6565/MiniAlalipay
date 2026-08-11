@@ -64,6 +64,7 @@ class AccountLedgerRepositoryIntegrationTest {
                 + "UNIQUE(transaction_id, voucher_type, reversal_no))");
         jdbcTemplate.execute("CREATE TABLE ledger_db.ledger_entry (entry_id BIGINT PRIMARY KEY, voucher_id VARCHAR(26), "
                 + "transaction_id VARCHAR(26), ledger_account_id VARCHAR(26), direction VARCHAR(8), amount_fen BIGINT, "
+                + "balance_after_fen BIGINT, "
                 + "sequence_no SMALLINT, memo VARCHAR(255), created_at TIMESTAMP, UNIQUE(voucher_id, sequence_no))");
         jdbcTemplate.execute("CREATE TABLE ledger_db.outbox_event (event_id VARCHAR(26) PRIMARY KEY, "
                 + "aggregate_type VARCHAR(32), aggregate_id VARCHAR(26), aggregate_version BIGINT, "
@@ -101,6 +102,12 @@ class AccountLedgerRepositoryIntegrationTest {
         jdbcTemplate.update("INSERT INTO ledger_db.ledger_account VALUES (?,?,?,?,?,?,?,?,?,?,?)",
                 "payer-ledger", "USER", "user", "USER_BALANCE_user", "USER_BALANCE_LIABILITY",
                 "LIABILITY", "CREDIT", "CNY", "ACTIVE", NOW, NOW);
+        // 本人个人账户与余额：模拟余额参与者 Confirm 已提交后的事实（原 1000 扣减 500），
+        // 过账时应回填付款分录的交易后余额为 1000
+        jdbcTemplate.update("INSERT INTO account_db.account VALUES (?,?,?,?,?,?,?,?,?)",
+                "account", "user", "registration", "PERSONAL", "CNY", "ACTIVE", 1L, NOW, NOW);
+        jdbcTemplate.update("INSERT INTO account_db.account_balance VALUES (?,?,?,?,?)",
+                "account", 500L, 0L, 1L, NOW);
         LedgerVoucher voucher = LedgerVoucher.prepare("voucher", "transaction", "TRANSFER", 0, null,
                 500L, 500L, List.of(
                         new LedgerEntry(1L, "voucher", "transaction", "payer-ledger", LedgerDirection.DEBIT,
@@ -124,5 +131,13 @@ class AccountLedgerRepositoryIntegrationTest {
                 .isEqualTo(1);
         assertThat(ledgerRepository.findEntriesByUserId("user", null, 0L, 100))
                 .extracting(LedgerEntry::entryId).containsExactly(1L);
+        // 交易后余额回填：付款分录 = 当前余额 500 + 本分录借记影响 500 = 1000；
+        // 收款分录无对应 USER 账本科目，保持 NULL
+        assertThat(jdbcTemplate.queryForObject(
+                "SELECT balance_after_fen FROM ledger_db.ledger_entry WHERE entry_id=1", Long.class))
+                .isEqualTo(1000L);
+        assertThat(jdbcTemplate.queryForObject(
+                "SELECT balance_after_fen FROM ledger_db.ledger_entry WHERE entry_id=2", Long.class))
+                .isNull();
     }
 }

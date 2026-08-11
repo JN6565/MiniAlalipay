@@ -1,187 +1,206 @@
+/* 首页（V2.1 重设计）：柔渐变头图 + 头像昵称（进个人详情）+ 设置入口，
+   快捷宫格（两行 x 4 共 8 入口，品牌渐变图标底）+ 花呗摘要 + 生活服务区；总资产收敛至钱包页。
+   配色一律引用 --h5-* 设计令牌（见 src/overrides.css）。 */
+
 .home {
   min-height: 100vh;
-  background: #f5f5f5;
+  background: var(--h5-bg);
   padding-bottom: 70px;
 
-  .header {
-    background: #1677ff;
-    padding: 16px 16px 20px;
+  /* ===== 顶部品牌区：柔渐变 + 头像昵称 ===== */
+  .home-hero {
+    background: var(--h5-grad-soft);
+    padding: 18px 16px 34px;
     color: #fff;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
 
-    .header-row {
+    .hero-user {
       display: flex;
-      justify-content: space-between;
       align-items: center;
-      margin-bottom: 20px;
+      gap: 10px;
+      cursor: pointer;
+      min-width: 0;
 
-      .hi {
-        display: flex;
-        align-items: center;
-        gap: 10px;
-        font-size: 17px;
-        font-weight: 600;
-
-        .avatar {
-          width: 34px;
-          height: 34px;
-          border-radius: 50%;
-          background: rgba(255,255,255,0.3);
-          display: flex;
-          align-items: center;
-          justify-content: center;
-          font-size: 15px;
-
-          img {
-            width: 100%;
-            height: 100%;
-            border-radius: 50%;
-            object-fit: cover;
-          }
-        }
+      /* 头像白色描边圈，提升头部层次 */
+      img, svg {
+        box-shadow: 0 0 0 2px rgba(255, 255, 255, 0.55);
+        border-radius: 50%;
       }
 
-      .header-btns {
-        display: flex;
-        gap: 14px;
-        font-size: 18px;
+      .hero-text {
+        min-width: 0;
 
-        span { cursor: pointer; }
+        .hero-nickname {
+          font-size: 16px;
+          font-weight: 700;
+          white-space: nowrap;
+          overflow: hidden;
+          text-overflow: ellipsis;
+        }
+
+        .hero-sub {
+          font-size: 11px;
+          opacity: 0.82;
+          margin-top: 2px;
+        }
       }
     }
 
-    .asset-box {
-      background: rgba(255,255,255,0.15);
-      border-radius: 14px;
-      padding: 18px;
+    .hero-actions {
+      display: flex;
+      gap: 14px;
+      flex: none;
 
-      .asset-top {
+      span {
+        cursor: pointer;
+        width: 32px;
+        height: 32px;
+        border-radius: 50%;
+        background: rgba(255, 255, 255, 0.16);
         display: flex;
         align-items: center;
-        gap: 6px;
-        font-size: 13px;
-        opacity: 0.85;
-        margin-bottom: 6px;
-
-        .eye {
-          cursor: pointer;
-          margin-left: 4px;
-          transition: transform 0.2s ease;
-          &:active { transform: scale(0.85); }
-        }
-      }
-
-      .asset-num {
-        font-size: 34px;
-        font-weight: 700;
-        font-family: -apple-system, 'Helvetica Neue', monospace;
-        margin-bottom: 18px;
-      }
-
-      .asset-cols {
-        display: flex;
-        border-top: 1px solid rgba(255,255,255,0.15);
-        padding-top: 14px;
-
-        > div {
-          flex: 1;
-          text-align: center;
-
-          span { display: block; font-size: 11px; opacity: 0.7; margin-bottom: 3px; }
-          b { font-size: 15px; font-weight: 600; font-family: -apple-system, 'Helvetica Neue', monospace; }
-        }
+        justify-content: center;
       }
     }
   }
 
-  .funcs {
+  .home-hero-skeleton {
+    height: 110px;
+  }
+
+  .home-body {
+    margin-top: -20px;
+    padding: 0 12px;
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+  }
+
+  /* ===== 快捷功能：两行 x 4 共 8 入口，品牌渐变图标底 ===== */
+  .quick-card {
     display: grid;
     grid-template-columns: repeat(4, 1fr);
-    background: #fff;
-    margin: -10px 12px 12px;
-    border-radius: 14px;
-    padding: 16px 8px 8px;
-    box-shadow: 0 1px 4px rgba(0,0,0,0.04);
+    row-gap: 14px;
+    background: var(--h5-card-bg);
+    border-radius: var(--h5-radius-card);
+    padding: 16px 4px 12px;
+    box-shadow: var(--h5-shadow-card);
 
-    .func-item {
+    .quick-item {
       display: flex;
       flex-direction: column;
       align-items: center;
-      padding: 8px 0 12px;
       cursor: pointer;
 
       &:active { opacity: 0.7; }
 
-      .func-icon {
+      .quick-icon {
         width: 44px;
         height: 44px;
-        border-radius: 12px;
+        border-radius: var(--h5-radius-tile);
+        background: var(--h5-grad-brand);
+        box-shadow: var(--h5-shadow-icon);
         display: flex;
         align-items: center;
         justify-content: center;
-        font-size: 22px;
         margin-bottom: 6px;
+
+        /* 花呗专属紫蓝 credit 渐变 */
+        &.credit { background: var(--h5-grad-credit); }
+
+        /* 账单橙渐变 */
+        &.orange { background: linear-gradient(135deg, #ff9f43 0%, #ffcf5c 100%); }
+
+        /* 银行卡绿渐变 */
+        &.green { background: linear-gradient(135deg, #12b76a 0%, #4ade80 100%); }
+
+        /* AI 助手紫粉渐变 */
+        &.aipur { background: linear-gradient(135deg, #8b5cf6 0%, #ec6fae 100%); }
       }
 
-      span { font-size: 12px; color: #333; }
+      span { font-size: 12px; color: var(--h5-text); }
     }
   }
 
-  .tx-box {
-    background: #fff;
-    margin: 0 12px;
-    border-radius: 14px;
-    overflow: hidden;
+  /* ===== 生活服务区：浅蓝方形图标底 ===== */
+  .life-card {
+    background: var(--h5-card-bg);
+    border-radius: var(--h5-radius-card);
+    padding: 14px 8px 6px;
+    box-shadow: var(--h5-shadow-card);
 
-    .tx-head {
-      display: flex;
-      justify-content: space-between;
-      padding: 16px 16px 10px;
+    .card-title {
       font-size: 15px;
       font-weight: 600;
-      color: #333;
-
-      .more { font-size: 13px; color: #999; font-weight: 400; cursor: pointer; }
+      color: var(--h5-text);
+      padding: 0 10px 8px;
     }
 
-    .tx-item {
-      display: flex;
-      align-items: center;
-      padding: 14px 16px;
-      cursor: pointer;
+    .life-grid {
+      display: grid;
+      grid-template-columns: repeat(4, 1fr);
 
-      &:active { background: #f7f8fa; }
-
-      .tx-icon {
-        width: 42px;
-        height: 42px;
-        border-radius: 10px;
-        background: #f5f5f5;
+      .life-item {
         display: flex;
+        flex-direction: column;
         align-items: center;
-        justify-content: center;
-        font-size: 20px;
-        margin-right: 12px;
-        flex-shrink: 0;
+        padding: 10px 0;
+        cursor: pointer;
+
+        &:active { opacity: 0.7; }
+
+        .life-icon {
+          width: 40px;
+          height: 40px;
+          border-radius: 12px;
+          background: var(--h5-primary-bg);
+          display: flex;
+          align-items: center;
+          justify-content: center;
+          margin-bottom: 6px;
+        }
+
+        span { font-size: 11px; color: var(--h5-text-2); }
+      }
+    }
+  }
+
+  /* ===== 花呗摘要卡 ===== */
+  .credit-card {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    background: var(--h5-card-bg);
+    border-radius: var(--h5-radius-card);
+    padding: 16px;
+    box-shadow: var(--h5-shadow-card);
+    cursor: pointer;
+
+    &:active { opacity: 0.85; }
+
+    .credit-left {
+      .credit-label { font-size: 12px; color: var(--h5-text-2); }
+
+      .credit-amount {
+        font-size: 24px;
+        font-weight: 700;
+        color: var(--h5-text);
+        margin: 4px 0;
       }
 
-      .tx-mid {
-        flex: 1;
-        min-width: 0;
+      .credit-sub { font-size: 12px; color: var(--h5-text-3); }
+    }
 
-        .tx-name { font-size: 14px; color: #333; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-        .tx-time { font-size: 12px; color: #999; margin-top: 2px; }
-      }
-
-      .tx-amt {
-        font-size: 16px;
-        font-weight: 600;
-        font-family: -apple-system, 'Helvetica Neue', monospace;
-        margin-left: 10px;
-        white-space: nowrap;
-
-        &.in { color: #00b578; }
-        &.out { color: #333; }
-      }
+    .credit-btn {
+      font-size: 13px;
+      font-weight: 500;
+      color: #fff;
+      background: var(--h5-grad-credit);
+      padding: 8px 18px;
+      border-radius: 999px;
+      box-shadow: 0 5px 12px rgba(90, 108, 255, 0.3);
     }
   }
 }

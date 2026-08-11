@@ -1,56 +1,188 @@
+// 身份绑定页（V2 重设计）：认证状态头 + 证件信息卡 / 未认证表单引导
 .identity-bind-page {
-  padding: 16px;
-  background: #f5f5f9;
   min-height: 100vh;
+  background: var(--h5-bg);
+  padding: 12px;
+}
 
-  .bind-section {
-    background: #fff;
-    border-radius: 8px;
-    padding: 12px 16px;
-    margin-bottom: 16px;
+// 已认证状态头：浅绿渐变 + 盾牌徽章
+.ib-status-head {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  border-radius: var(--h5-radius-card);
+  padding: 16px;
+  background: linear-gradient(135deg, #e9fff6 0%, #f2fbff 100%);
+  border: 1px solid #d2f2e6;
+  margin-bottom: 12px;
 
-    .section-label {
-      font-size: 14px;
-      color: #666;
-      margin: 12px 0 6px;
-
-      &:first-child {
-        margin-top: 0;
-      }
-    }
-
-    // 已绑定查看态的只读展示值：脱敏姓名和身份证号
-    .readonly-value {
-      font-size: 16px;
-      color: #333;
-      padding: 6px 0 2px;
-      letter-spacing: 1px;
-    }
-
-    // 身份证号输入过程内联提示：错误红字 / 进度灰字 / 通过绿字
-    .field-hint {
-      font-size: 12px;
-      margin-top: 4px;
-      line-height: 1.4;
-    }
-
-    .field-hint-error {
-      color: #ff3141;
-    }
-
-    .field-hint-info {
-      color: #999;
-    }
-
-    .field-hint-ok {
-      color: #00b578;
-    }
+  .ib-status-icon {
+    width: 42px;
+    height: 42px;
+    border-radius: 13px;
+    background: var(--h5-success);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    flex: none;
+    box-shadow: 0 5px 12px rgba(22, 179, 135, 0.28);
   }
 
-  .bind-tip {
+  .ib-status-meta {
+    flex: 1;
+    min-width: 0;
+  }
+
+  .ib-status-title {
+    font-size: 14px;
+    font-weight: 700;
+    color: var(--h5-text);
+  }
+
+  .ib-status-sub {
     font-size: 12px;
-    color: #999;
-    margin-bottom: 16px;
-    line-height: 1.5;
+    color: var(--h5-text-3);
+    margin-top: 2px;
   }
+
+  .ib-status-pill {
+    font-size: 11px;
+    color: var(--h5-success);
+    background: #e6f8f2;
+    border-radius: 10px;
+    padding: 4px 10px;
+    font-weight: 700;
+    flex: none;
+  }
+}
+
+// 证件信息卡 / 表单卡
+.ib-card {
+  background: var(--h5-card-bg);
+  border-radius: var(--h5-radius-card);
+  box-shadow: var(--h5-shadow-card);
+  padding: 4px 16px;
+}
+
+.ib-row {
+  display: flex;
+  align-items: center;
+  padding: 14px 2px;
+  border-bottom: 1px solid var(--h5-divider);
+
+  &.last {
+    border-bottom: none;
+  }
+
+  .ib-row-label {
+    font-size: 13px;
+    color: var(--h5-text-3);
+    flex: 1;
+  }
+
+  .ib-row-value {
+    font-size: 14px;
+    color: var(--h5-text);
+    font-weight: 500;
+    font-variant-numeric: tabular-nums;
+  }
+}
+
+// 编辑态字段
+.ib-field {
+  padding: 12px 0;
+
+  & + .ib-field {
+    border-top: 1px solid var(--h5-divider);
+  }
+}
+
+.ib-field-label {
+  font-size: 12px;
+  color: var(--h5-text-3);
+  padding: 0 2px 8px;
+}
+
+.ib-field-box {
+  display: flex;
+  align-items: center;
+  background: var(--h5-bg);
+  border: 1.5px solid var(--h5-divider);
+  border-radius: var(--h5-radius-input);
+  padding: 12px 14px;
+  transition: border-color 0.15s;
+
+  &:focus-within {
+    border-color: var(--h5-primary);
+  }
+
+  .ib-field-input {
+    flex: 1;
+    min-width: 0;
+    border: none;
+    outline: none;
+    background: transparent;
+    font-size: 14px;
+    color: var(--h5-text);
+
+    &::placeholder {
+      color: var(--h5-text-3);
+    }
+  }
+}
+
+.ib-field-hint {
+  font-size: 12px;
+  padding: 6px 2px 0;
+
+  &.ib-hint-error {
+    color: var(--h5-amount-in);
+  }
+
+  &.ib-hint-info {
+    color: var(--h5-text-3);
+  }
+
+  &.ib-hint-ok {
+    color: var(--h5-success);
+  }
+}
+
+.ib-tip {
+  font-size: 12px;
+  color: var(--h5-text-3);
+  padding: 12px 6px 0;
+  line-height: 1.7;
+}
+
+.ib-submit {
+  margin-top: 16px;
+  text-align: center;
+  padding: 13px 0;
+  border-radius: var(--h5-radius-btn);
+  background: var(--h5-grad-brand);
+  color: #fff;
+  font-size: 15px;
+  font-weight: 700;
+  letter-spacing: 2px;
+  box-shadow: 0 6px 16px rgba(37, 108, 255, 0.3);
+  cursor: pointer;
+
+  &.disabled {
+    opacity: 0.55;
+    pointer-events: none;
+  }
+}
+
+.ib-cancel {
+  margin-top: 12px;
+  text-align: center;
+  padding: 12px 0;
+  border-radius: var(--h5-radius-btn);
+  border: 1px solid var(--h5-divider);
+  color: var(--h5-text-2);
+  font-size: 14px;
+  font-weight: 500;
+  background: var(--h5-card-bg);
+  cursor: pointer;
 }

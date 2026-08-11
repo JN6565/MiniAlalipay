@@ -92,6 +92,54 @@ class FundTransactionTest {
                 .isInstanceOf(IllegalArgumentException.class);
     }
 
+    @Test
+    void 银行卡出资转账受理成功且付款账户为空() {
+        FundTransaction transaction = FundTransaction.acceptBankCardOperation("01K1TXBC02GH3JK4MN5PQRSTV",
+                TransactionType.TRANSFER, SourceType.TRANSFER_DRAFT, "01K1DRF002GH3JK4MN5PQRSTV",
+                "user-1", "payee-account", "card-1", FundingSource.BANK_CARD, 8800L,
+                "idem-bank-transfer", "LOW", "0123456789abcdef0123456789abcdef", NOW);
+
+        assertThat(transaction.getPayerAccountId()).isNull();
+        assertThat(transaction.getPayeeAccountId()).isEqualTo("payee-account");
+        assertThat(transaction.getBankCardId()).isEqualTo("card-1");
+        assertThat(transaction.getStatus()).isEqualTo(TransactionStatus.PROCESSING);
+    }
+
+    @Test
+    void 银行卡出资扫码支付受理成功() {
+        FundTransaction transaction = FundTransaction.acceptBankCardOperation("01K1QRBC02GH3JK4MN5PQRSTV",
+                TransactionType.QR_PAY, SourceType.QR_PAY_ORDER, "01K1QR0002GH3JK4MN5PQRSTV",
+                "user-1", "payee-account", "card-1", FundingSource.BANK_CARD, 5200L,
+                "idem-bank-qrpay", "LOW", "0123456789abcdef0123456789abcdef", NOW);
+
+        assertThat(transaction.getBusinessType()).isEqualTo(TransactionType.QR_PAY);
+        assertThat(transaction.getPayerAccountId()).isNull();
+        assertThat(transaction.getBankCardId()).isEqualTo("card-1");
+    }
+
+    @Test
+    void 银行卡出资交易不得指定付款账户() {
+        assertThatThrownBy(() -> new FundTransaction("01K1TXBC02GH3JK4MN5PQRSTV", TransactionType.TRANSFER,
+                SourceType.TRANSFER_DRAFT, "01K1DRF002GH3JK4MN5PQRSTV", "user-1", "payer-account", "payee-account",
+                FundingSource.BANK_CARD, 8800L, "idem-bank-transfer", TransactionStatus.PROCESSING, "LOW",
+                "0123456789abcdef0123456789abcdef", 0L, NOW, NOW, null, "card-1"))
+                .isInstanceOf(IllegalArgumentException.class);
+    }
+
+    @Test
+    void 银行卡受理门禁拒绝范围外业务类型与非银行卡资金来源() {
+        assertThatThrownBy(() -> FundTransaction.acceptBankCardOperation("01K1TXBC02GH3JK4MN5PQRSTV",
+                TransactionType.RECHARGE, SourceType.RECHARGE_ORDER, "01K1RCHOD2GH3JK4MN5PQRSTV",
+                "user-1", "payee-account", "card-1", FundingSource.BANK_CARD, 100L,
+                "idem-x", "LOW", "0123456789abcdef0123456789abcdef", NOW))
+                .isInstanceOf(IllegalArgumentException.class);
+        assertThatThrownBy(() -> FundTransaction.acceptBankCardOperation("01K1TXBC02GH3JK4MN5PQRSTV",
+                TransactionType.TRANSFER, SourceType.TRANSFER_DRAFT, "01K1DRF002GH3JK4MN5PQRSTV",
+                "user-1", "payee-account", "card-1", FundingSource.BALANCE, 100L,
+                "idem-y", "LOW", "0123456789abcdef0123456789abcdef", NOW))
+                .isInstanceOf(IllegalArgumentException.class);
+    }
+
     private static FundTransaction transaction() {
         return FundTransaction.accept("01K1TX0002GH3JK4MN5PQRSTV", TransactionType.CREDIT_PAY,
                 SourceType.QR_PAY_ORDER, "01K1QR0002GH3JK4MN5PQRSTV", "payer-user",

@@ -129,7 +129,35 @@ public class BankCardController {
         return ResponseEntity.ok(ApiResponse.success(null, requestId(request), request.getHeader("X-Trace-Id")));
     }
 
+    /**
+     * 查看本人银行卡完整卡号：需先以 BANK_CARD_NUMBER_VIEW 用途验密签发一次性支付证明，
+     * 再凭证明换取明文；证明校验成功后即被消费，不可重放。
+     *
+     * <p>权限：有效登录会话且卡片属于本人；幂等：证明一次性消费，重复请求需重新验密；
+     * 事务边界在应用服务；主要异常：卡片不存在（404）、证明无效（422）、注册记录缺失（404）。
+     * 响应体含卡号明文，禁止记录响应日志；前端仅内存展示，不落存储。</p>
+     *
+     * @param userId 网关从会话解析的用户 ID
+     * @param cardId 银行卡 ID
+     * @param body 含一次性支付证明的请求体，证明不得进入 URL 与日志
+     * @param request HTTP 请求上下文
+     * @return 完整卡号明文响应
+     */
+    @PostMapping("/{cardId}/full-card-number")
+    public ResponseEntity<ApiResponse<FullCardNumberResponse>> getFullCardNumber(
+            @RequestHeader("X-User-Id") String userId,
+            @PathVariable String cardId,
+            @Valid @RequestBody FullCardNumberRequest body,
+            HttpServletRequest request) {
+        String fullCardNumber = bankCardApplicationService.getFullCardNumber(userId, cardId, body.paymentProof());
+        return ResponseEntity.ok(ApiResponse.success(
+                new FullCardNumberResponse(fullCardNumber), requestId(request), request.getHeader("X-Trace-Id")));
+    }
+
     private String requestId(HttpServletRequest request) {
         return requestIdGenerator.resolve(request.getHeader("X-Request-Id"));
     }
+
+    /** 完整卡号响应；卡号明文属敏感数据，仅本次响应可见，禁止落日志与存储。 */
+    public record FullCardNumberResponse(String fullCardNumber) { }
 }

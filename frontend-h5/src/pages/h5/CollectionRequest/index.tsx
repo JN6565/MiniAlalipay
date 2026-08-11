@@ -161,6 +161,13 @@ const CollectionRequestPage: React.FC = () => {
 
           {request.subject && <div className="qr-subject">备注：{request.subject}</div>}
 
+          {request.status === 'OPEN' && request.shortCode && (
+            <div className="qr-short-code">
+              <div className="qr-short-code-value">{request.shortCode}</div>
+              <div className="qr-short-code-tip">对方也可手动输入此码完成支付</div>
+            </div>
+          )}
+
           <div className="request-actions">
             {request.status === 'OPEN' ? (
               <>

@@ -1,15 +1,16 @@
 import React, { useCallback, useEffect, useState } from 'react';
 import { history } from '@umijs/max';
-import { Button, Input, Toast } from 'antd-mobile';
+import { Toast } from 'antd-mobile';
 import { bindIdentity, getIdentity, IdentityInfo } from '@/services/identity';
 import { ApiError } from '@/services/request';
 import { maskRealName, validateIdCard } from '@/services/utils';
+import { IconSet, Skeleton } from '@/components/h5/common';
 import './index.less';
 
 /**
  * 身份绑定页：
  * - 未绑定：填写真实姓名 + 身份证号完成绑定
- * - 已绑定：脱敏只读展示姓名和身份证号，提供「更新身份信息」入口
+ * - 已绑定：认证状态头 + 脱敏只读展示，提供「更新身份信息」入口
  * 绑定/更新成功后停留在查看态展示最新脱敏信息。
  */
 const IdentityBindPage: React.FC = () => {
@@ -121,7 +122,7 @@ const IdentityBindPage: React.FC = () => {
   if (loading) {
     return (
       <div className="identity-bind-page">
-        <div className="bind-tip">加载中...</div>
+        <Skeleton variant="card" height={180} />
       </div>
     );
   }
@@ -129,66 +130,90 @@ const IdentityBindPage: React.FC = () => {
   return (
     <div className="identity-bind-page">
       {viewMode && identity ? (
-        <div className="bind-section">
-          <div className="section-label">真实姓名</div>
-          <div className="readonly-value">{maskRealName(identity.realName || '')}</div>
+        <>
+          {/* 认证状态头：绿色盾牌徽章 */}
+          <div className="ib-status-head">
+            <div className="ib-status-icon">
+              <IconSet name="shield" size={20} color="#fff" />
+            </div>
+            <div className="ib-status-meta">
+              <div className="ib-status-title">已完成实名认证</div>
+              <div className="ib-status-sub">实名信息已通过三要素校验</div>
+            </div>
+            <span className="ib-status-pill">已认证</span>
+          </div>
 
-          <div className="section-label">身份证号</div>
-          <div className="readonly-value">{identity.idCardMasked || '****'}</div>
-        </div>
-      ) : (
-        <div className="bind-section">
-          <div className="section-label">真实姓名</div>
-          <Input
-            placeholder="请输入真实姓名"
-            value={realName}
-            onChange={setRealName}
-            maxLength={32}
-            clearable
-          />
+          {/* 证件信息卡：只读掩码展示 */}
+          <div className="ib-card">
+            <div className="ib-row">
+              <span className="ib-row-label">真实姓名</span>
+              <span className="ib-row-value">{maskRealName(identity.realName || '')}</span>
+            </div>
+            <div className="ib-row">
+              <span className="ib-row-label">证件类型</span>
+              <span className="ib-row-value">居民身份证</span>
+            </div>
+            <div className="ib-row last">
+              <span className="ib-row-label">证件号码</span>
+              <span className="ib-row-value">{identity.idCardMasked || '****'}</span>
+            </div>
+          </div>
 
-          <div className="section-label">身份证号</div>
-          <Input
-            placeholder="请输入 18 位身份证号"
-            value={idCard}
-            onChange={setIdCard}
-            maxLength={18}
-            clearable
-          />
-          {idCardHint && (
-            <div className={`field-hint field-hint-${idCardHint.type}`}>{idCardHint.text}</div>
-          )}
-        </div>
-      )}
+          <div className="ib-tip">
+            实名信息提交后不可自助随意修改，身份信息用于银行卡绑定时的三要素交叉校验。平台只保存身份证号哈希值，不保存明文。
+          </div>
 
-      <div className="bind-tip">
-        身份信息用于银行卡绑定时的三要素交叉校验，身份信息如需变更可在本页更新。平台只保存身份证号哈希值，不保存明文。
-      </div>
-
-      {viewMode ? (
-        <Button block color="primary" size="large" onClick={handleStartUpdate}>
-          更新身份信息
-        </Button>
+          <div className="ib-submit" onClick={handleStartUpdate}>
+            更新身份信息
+          </div>
+        </>
       ) : (
         <>
-          <Button
-            block
-            color="primary"
-            size="large"
-            loading={submitting}
-            onClick={handleSubmit}
+          {/* 未认证/编辑态：表单引导 */}
+          <div className="ib-card">
+            <div className="ib-field">
+              <div className="ib-field-label">真实姓名</div>
+              <div className="ib-field-box">
+                <input
+                  className="ib-field-input"
+                  placeholder="请输入真实姓名"
+                  value={realName}
+                  maxLength={32}
+                  onChange={(e) => setRealName(e.target.value)}
+                />
+              </div>
+            </div>
+            <div className="ib-field">
+              <div className="ib-field-label">身份证号</div>
+              <div className="ib-field-box">
+                <input
+                  className="ib-field-input"
+                  placeholder="请输入 18 位身份证号"
+                  value={idCard}
+                  maxLength={18}
+                  onChange={(e) => setIdCard(e.target.value)}
+                />
+              </div>
+              {idCardHint && (
+                <div className={`ib-field-hint ib-hint-${idCardHint.type}`}>{idCardHint.text}</div>
+              )}
+            </div>
+          </div>
+
+          <div className="ib-tip">
+            身份信息用于银行卡绑定时的三要素交叉校验。平台只保存身份证号哈希值，不保存明文。
+          </div>
+
+          <div
+            className={`ib-submit ${submitting ? 'disabled' : ''}`}
+            onClick={() => { if (!submitting) handleSubmit(); }}
           >
-            {bound ? '保存更新' : '绑定身份'}
-          </Button>
+            {submitting ? '提交中...' : bound ? '保存更新' : '绑定身份'}
+          </div>
           {bound && (
-            <Button
-              block
-              size="large"
-              style={{ marginTop: 12 }}
-              onClick={() => setViewMode(true)}
-            >
+            <div className="ib-cancel" onClick={() => setViewMode(true)}>
               取消
-            </Button>
+            </div>
           )}
         </>
       )}

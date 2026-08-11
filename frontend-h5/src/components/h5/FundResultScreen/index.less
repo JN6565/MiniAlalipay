@@ -1,0 +1,107 @@
+/* 充值/提现结果屏：与页面共用 .bank-card-operate-page 容器，
+   处理中态与结果态均为居中白卡，风格对齐设计稿（对勾绿/受理橙）。 */
+.fund-result-screen {
+  padding: 40px 12px 0;
+  display: flex;
+  justify-content: center;
+
+  .fund-result-card {
+    width: 100%;
+    background: var(--h5-card-bg);
+    border-radius: var(--h5-radius-card);
+    box-shadow: var(--h5-shadow-card);
+    padding: 32px 20px 24px;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    text-align: center;
+  }
+
+  .fund-result-icon {
+    width: 56px;
+    height: 56px;
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    margin-bottom: 14px;
+
+    /* 成功对勾：品牌绿 */
+    &.success { background: linear-gradient(135deg, #12b76a 0%, #4ade80 100%); }
+
+    /* 受理未确认：暖橙提示 */
+    &.pending { background: linear-gradient(135deg, #ff9f43 0%, #ffcf5c 100%); }
+  }
+
+  .fund-result-title {
+    font-size: 17px;
+    font-weight: 700;
+    color: var(--h5-text);
+  }
+
+  .fund-result-amount {
+    margin-top: 10px;
+    font-size: 28px;
+    font-weight: 700;
+    color: var(--h5-text);
+    font-variant-numeric: tabular-nums;
+
+    /* 充值入账金额绿色强调 */
+    &.in { color: var(--h5-amount-in); }
+  }
+
+  .fund-result-hint {
+    margin-top: 8px;
+    font-size: 13px;
+    color: var(--h5-text-2);
+  }
+
+  .fund-result-tip {
+    margin-top: 18px;
+    font-size: 12px;
+    color: var(--h5-text-3);
+  }
+
+  /* 超时未确认时的手动刷新入口 */
+  .fund-result-refresh {
+    margin-top: 14px;
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    font-size: 13px;
+    color: var(--h5-primary);
+    padding: 7px 18px;
+    border-radius: 999px;
+    border: 1px solid var(--h5-primary);
+    cursor: pointer;
+  }
+
+  .fund-result-actions {
+    margin-top: 24px;
+    width: 100%;
+    display: flex;
+    gap: 12px;
+
+    .fund-result-btn {
+      flex: 1;
+      text-align: center;
+      padding: 12px 0;
+      border-radius: 999px;
+      font-size: 14px;
+      font-weight: 600;
+      cursor: pointer;
+
+      &.primary {
+        color: #fff;
+        background: var(--h5-grad-brand);
+        box-shadow: 0 6px 14px rgba(37, 108, 255, 0.28);
+      }
+
+      &.outline {
+        color: var(--h5-primary);
+        border: 1px solid var(--h5-primary);
+        background: transparent;
+      }
+    }
+  }
+}

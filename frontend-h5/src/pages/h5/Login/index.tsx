@@ -4,12 +4,14 @@ import { Toast } from 'antd-mobile';
 import { login } from '@/services/auth';
 import { ApiError } from '@/services/request';
 import { seedNicknamePreference } from '@/utils/profile';
+import { IconSet } from '@/components/h5/common';
 import './index.less';
 
 const LoginPage: React.FC = () => {
   const [searchParams] = useSearchParams();
   const [loginIdentifier, setLoginIdentifier] = useState('');
   const [loginPassword, setLoginPassword] = useState('');
+  const [showPassword, setShowPassword] = useState(false);
   const [loading, setLoading] = useState(false);
   const [errors, setErrors] = useState<Record<string, string>>({});
 
@@ -74,10 +76,10 @@ const LoginPage: React.FC = () => {
     } catch (error: any) {
       const code = error instanceof ApiError ? error.code : 'UNKNOWN';
       const messages: Record<string, string> = {
-        LOGIN_INVALID: '手机号、账户号或密码错误',
-        LOGIN_LOCKED: '登录已被临时锁定，请稍后再试',
-        REGISTRATION_PROCESSING: '注册开户处理中，请稍后再试',
-        NETWORK_ERROR: '网络异常，请检查网络连接',
+        LOGIN_INVALID: '手机号、账户号或密码错误，请核对后重新输入',
+        LOGIN_LOCKED: '连续失败次数过多，登录已临时锁定，请15分钟后重试',
+        REGISTRATION_PROCESSING: '注册开户处理中，请稍后重试登录',
+        NETWORK_ERROR: '网络异常，请检查网络连接后重试',
       };
       Toast.show({ content: messages[code] || error.message || '登录失败', icon: 'fail' });
     } finally {
@@ -87,23 +89,23 @@ const LoginPage: React.FC = () => {
 
   return (
     <div className="login-page">
-      {/* 顶部蓝色区域 */}
-      <div className="login-top">
-        <div className="logo">💰</div>
-        <h1>MiniAlalipay</h1>
-        <p>AI加持的确定性金融信任平台</p>
+      {/* 品牌头图：柔渐变底 + 品牌 Orb 标识 */}
+      <div className="login-hero">
+        <div className="login-hero-logo">
+          <IconSet name="wallet" size={28} color="#fff" />
+        </div>
+        <div className="login-hero-title">MiniAI 支付</div>
+        <div className="login-hero-sub">安全 · 便捷 · 智能</div>
       </div>
 
-
-      {/* 登录卡片 */}
+      {/* 登录表单卡：悬浮于头图之上 */}
       <div className="login-card">
-        <h2>登录</h2>
-
-        <div className={`field ${errors.loginIdentifier ? 'has-error' : ''}`}>
+        <div className="login-field-box">
           <input
+            className="login-field-input"
             type="text"
             inputMode="numeric"
-            placeholder="请输入手机号或账户号"
+            placeholder="手机号或账户号"
             value={loginIdentifier}
             maxLength={16}
             aria-invalid={Boolean(errors.loginIdentifier)}
@@ -114,13 +116,14 @@ const LoginPage: React.FC = () => {
               if (errors.loginIdentifier) updateError('loginIdentifier', validateIdentifier(value));
             }}
           />
-          {errors.loginIdentifier && <div className="field-error">{errors.loginIdentifier}</div>}
         </div>
+        {errors.loginIdentifier && <div className="login-field-error">{errors.loginIdentifier}</div>}
 
-        <div className={`field ${errors.loginPassword ? 'has-error' : ''}`}>
+        <div className="login-field-box">
           <input
-            type="password"
-            placeholder="请输入密码"
+            className="login-field-input"
+            type={showPassword ? 'text' : 'password'}
+            placeholder="登录密码"
             value={loginPassword}
             maxLength={32}
             aria-invalid={Boolean(errors.loginPassword)}
@@ -131,21 +134,25 @@ const LoginPage: React.FC = () => {
               if (errors.loginPassword) updateError('loginPassword', validatePassword(value));
             }}
           />
-          {errors.loginPassword && <div className="field-error">{errors.loginPassword}</div>}
+          <span className="login-eye" onClick={() => setShowPassword((v) => !v)}>
+            <IconSet name={showPassword ? 'eyeOn' : 'eyeOff'} size={16} color="#94a3ba" />
+          </span>
+        </div>
+        {errors.loginPassword && <div className="login-field-error">{errors.loginPassword}</div>}
+
+        <div className="login-forgot" onClick={() => Toast.show({ content: '忘记密码功能暂未开放' })}>
+          忘记密码？
         </div>
 
-        <button
-          className="login-btn"
-          onClick={handleSubmit}
-          disabled={loading}
+        <div
+          className={`login-submit ${loading ? 'disabled' : ''}`}
+          onClick={() => { if (!loading) handleSubmit(); }}
         >
           {loading ? '登录中...' : '登录'}
-        </button>
+        </div>
 
-        <div className="links">
-          <span onClick={() => history.push('/h5/register')}>注册账号</span>
-          <span>|</span>
-          <span onClick={() => Toast.show({ content: '忘记密码功能暂未开放' })}>忘记密码</span>
+        <div className="login-register-tip">
+          还没有账号？<span onClick={() => history.push('/h5/register')}>立即注册</span>
         </div>
       </div>
     </div>

@@ -139,10 +139,10 @@ export default [
         auth: true,
       },
       {
-        path: '/h5/profile/edit',
-        component: '@/pages/h5/ProfileEdit',
+        path: '/h5/profile-detail',
+        component: '@/pages/h5/ProfileDetail',
         exact: true,
-        title: '个人资料',
+        title: '个人详情',
         auth: true,
       },
       {
@@ -177,14 +177,21 @@ export default [
         path: '/h5/account/transactions',
         component: '@/pages/h5/Transactions',
         exact: true,
-        title: '交易明细',
+        title: '账单',
         auth: true,
       },
       {
-        path: '/h5/account/analytics',
-        component: '@/pages/h5/Analytics',
+        path: '/h5/recharge',
+        component: '@/pages/h5/BankCardRecharge',
         exact: true,
-        title: '资产分析',
+        title: '充值',
+        auth: true,
+      },
+      {
+        path: '/h5/withdraw',
+        component: '@/pages/h5/BankCardWithdraw',
+        exact: true,
+        title: '提现',
         auth: true,
       },
       {
@@ -241,6 +248,13 @@ export default [
         component: '@/pages/h5/BankCardDetail',
         exact: true,
         title: '卡片详情',
+        auth: true,
+      },
+      {
+        path: '/h5/bank-cards/:id/bills',
+        component: '@/pages/h5/BankCardBills',
+        exact: true,
+        title: '卡账单',
         auth: true,
       },
       {

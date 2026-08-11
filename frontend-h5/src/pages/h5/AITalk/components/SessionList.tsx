@@ -2,6 +2,7 @@ import React, { useMemo, useState, useRef, useEffect } from 'react';
 import { Popup, Dialog, Input } from 'antd-mobile';
 import dayjs from 'dayjs';
 import type { SessionInfo } from '../types';
+import { IconSet } from '@/components/h5/common';
 
 interface Props {
   visible: boolean;
@@ -12,6 +13,8 @@ interface Props {
   onSelect: (sessionId: string) => void;
   onDelete: (sessionId: string) => void;
   onRename: (sessionId: string, newTitle: string) => void;
+  /** 抽屉内新建会话 */
+  onNewSession?: () => void;
 }
 
 /** 会话分组键 */
@@ -33,6 +36,7 @@ const SessionList: React.FC<Props> = ({
   onSelect,
   onDelete,
   onRename,
+  onNewSession,
 }) => {
   /** 当前正在编辑标题的会话 ID，null 表示非编辑状态 */
   const [editingId, setEditingId] = useState<string | null>(null);
@@ -131,7 +135,7 @@ const SessionList: React.FC<Props> = ({
                 className="session-edit-btn session-edit-confirm"
                 onClick={submitEdit}
               >
-                ✓
+                <IconSet name="check" size={15} />
               </button>
               <button
                 type="button"
@@ -141,15 +145,15 @@ const SessionList: React.FC<Props> = ({
                   setEditValue('');
                 }}
               >
-                ✕
+                <IconSet name="close" size={15} />
               </button>
             </div>
           </div>
         ) : (
           /* 正常展示模式 */
           <>
-            <span
-              className="session-list-item-title"
+            <div
+              className="session-list-item-main"
               onClick={() => {
                 if (!isCurrent) {
                   onSelect(s.sessionId);
@@ -157,8 +161,11 @@ const SessionList: React.FC<Props> = ({
                 }
               }}
             >
-              {s.title || '未命名会话'}
-            </span>
+              <span className="session-list-item-title">{s.title || '未命名会话'}</span>
+              <span className="session-list-item-time">
+                {dayjs(s.lastActiveAt).format('MM-DD HH:mm')}
+              </span>
+            </div>
             <div className="session-list-item-actions">
               <button
                 type="button"
@@ -169,7 +176,7 @@ const SessionList: React.FC<Props> = ({
                 }}
                 aria-label="编辑会话名称"
               >
-                ✎
+                编辑
               </button>
               <button
                 type="button"
@@ -180,7 +187,7 @@ const SessionList: React.FC<Props> = ({
                 }}
                 aria-label="删除会话"
               >
-                🗑
+                删除
               </button>
             </div>
           </>
@@ -198,14 +205,25 @@ const SessionList: React.FC<Props> = ({
       onClose={onClose}
       position="left"
       bodyStyle={{
-        width: '78vw',
+        width: '74%',
         maxWidth: 320,
         height: '100%',
-        background: '#1f1f1f',
-        color: '#e8e8e8',
+        background: '#fff',
+        borderRadius: '0 18px 18px 0',
       }}
     >
       <div className="session-list">
+        {/* 头部：历史会话 + 新建会话 */}
+        <div className="session-list-header">
+          <div className="session-list-header-title">
+            <IconSet name="ai" size={16} color="var(--h5-primary)" />
+            <span>历史会话</span>
+          </div>
+          <div className="session-list-new" onClick={onNewSession}>
+            <IconSet name="plus" size={14} color="#fff" />
+            <span>新建会话</span>
+          </div>
+        </div>
         {/* 列表区 */}
         <div className="session-list-body">
           {loading && sessions.length === 0 && (

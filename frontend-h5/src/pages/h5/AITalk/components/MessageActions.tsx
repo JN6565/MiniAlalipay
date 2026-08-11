@@ -1,5 +1,6 @@
 import React, { useState, useCallback } from 'react';
 import { Toast } from 'antd-mobile';
+import { IconSet } from '@/components/h5/common';
 
 /**
  * 消息操作按钮栏（参考 DeepSeek 风格）。
@@ -72,7 +73,7 @@ const MessageActions: React.FC<Props> = ({
         title="复制"
         aria-label="复制"
       >
-        {copied ? '✓' : '⧉'}
+        {copied ? <IconSet name="check" size={14} /> : <IconSet name="copy" size={14} />}
       </button>
       <button
         type="button"
@@ -82,7 +83,7 @@ const MessageActions: React.FC<Props> = ({
         title="重新生成"
         aria-label="重新生成"
       >
-        ↻
+        <IconSet name="refresh" size={14} />
       </button>
       <button
         type="button"
@@ -92,7 +93,7 @@ const MessageActions: React.FC<Props> = ({
         title="有帮助"
         aria-label="有帮助"
       >
-        👍
+        <IconSet name="thumbUp" size={14} />
       </button>
       <button
         type="button"
@@ -102,7 +103,7 @@ const MessageActions: React.FC<Props> = ({
         title="没帮助"
         aria-label="没帮助"
       >
-        👎
+        <IconSet name="thumbDown" size={14} />
       </button>
     </div>
   );

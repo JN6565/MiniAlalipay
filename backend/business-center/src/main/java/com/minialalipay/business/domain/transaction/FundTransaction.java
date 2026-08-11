@@ -44,21 +44,38 @@ public final class FundTransaction {
                 TransactionStatus.PROCESSING, riskLevel, traceId, 0L, now, now, relatedTransactionId);
     }
 
-    /** 受理银行卡充值或提现，初始状态固定为 PROCESSING。 */
+    /**
+     * 受理银行卡出资的资金交易，初始状态固定为 PROCESSING。
+     *
+     * <p>适用范围：银行卡充值（{@link TransactionType#BANK_CARD_RECHARGE}）、
+     * 提现（{@link TransactionType#BANK_CARD_WITHDRAW}），以及银行卡出资的
+     * 转账（{@link TransactionType#TRANSFER}）与扫码支付（{@link TransactionType#QR_PAY}）。
+     * 银行卡出资一律从银行卡虚拟余额扣款，不占用付款方账户余额，因此付款账户固定为空；
+     * {@code targetAccountId} 对充值/提现是用户本人账户，对转账/扫码支付是实际收款方账户。</p>
+     */
     public static FundTransaction acceptBankCardOperation(String transactionId, TransactionType businessType,
                                                          SourceType sourceType, String sourceOrderId,
                                                          String initiatorUserId, String targetAccountId,
                                                          String bankCardId, FundingSource fundingSource,
                                                          long amountFen, String idempotencyKey,
                                                          String riskLevel, String traceId, Instant now) {
-        if (businessType != TransactionType.BANK_CARD_RECHARGE && businessType != TransactionType.BANK_CARD_WITHDRAW) {
-            throw new IllegalArgumentException("银行卡操作只允许 BANK_CARD_RECHARGE 或 BANK_CARD_WITHDRAW");
+        if (!isBankCardOperation(businessType, fundingSource)) {
+            throw new IllegalArgumentException("银行卡操作只允许银行卡充值/提现，或银行卡出资的转账/扫码支付");
         }
         FundTransaction tx = new FundTransaction(transactionId, businessType, sourceType, sourceOrderId,
                 initiatorUserId, null, targetAccountId, fundingSource, amountFen, idempotencyKey,
                 TransactionStatus.PROCESSING, riskLevel, traceId, 0L, now, now, null,
                 required(bankCardId));
         return tx;
+    }
+
+    /** 银行卡出资的业务范围：充值、提现，以及资金来源为银行卡的转账/扫码支付。 */
+    private static boolean isBankCardOperation(TransactionType businessType, FundingSource fundingSource) {
+        if (businessType == TransactionType.BANK_CARD_RECHARGE || businessType == TransactionType.BANK_CARD_WITHDRAW) {
+            return true;
+        }
+        return fundingSource == FundingSource.BANK_CARD
+                && (businessType == TransactionType.TRANSFER || businessType == TransactionType.QR_PAY);
     }
 
     /** 从持久化事实重建交易；退款等场景通过关联字段带回原支付交易号。 */
@@ -94,11 +111,16 @@ public final class FundTransaction {
         this.transactionId = required(transactionId); this.businessType = Objects.requireNonNull(businessType);
         this.sourceType = Objects.requireNonNull(sourceType); this.sourceOrderId = required(sourceOrderId);
         this.initiatorUserId = required(initiatorUserId);
+        // 银行卡出资的转账/扫码支付与充值、银行卡充值/提现一样从银行卡虚拟余额扣款，
+        // 不占用付款方账户余额，付款账户必须为空；其余交易必须显式给出付款账户。
+        boolean bankCardFundedTransfer = fundingSource == FundingSource.BANK_CARD
+                && (businessType == TransactionType.TRANSFER || businessType == TransactionType.QR_PAY);
         if (businessType == TransactionType.RECHARGE
                 || businessType == TransactionType.BANK_CARD_RECHARGE
-                || businessType == TransactionType.BANK_CARD_WITHDRAW) {
+                || businessType == TransactionType.BANK_CARD_WITHDRAW
+                || bankCardFundedTransfer) {
             if (payerAccountId != null && !payerAccountId.isBlank()) {
-                throw new IllegalArgumentException("充值/银行卡交易不得指定付款账户");
+                throw new IllegalArgumentException("充值/银行卡出资交易不得指定付款账户");
             }
             if (businessType == TransactionType.RECHARGE && fundingSource != FundingSource.SYSTEM_ISSUANCE) {
                 throw new IllegalArgumentException("充值交易必须使用系统发行资金");

@@ -1,57 +1,66 @@
+// 用户协议页（V2 长文阅读模板）：浅底 + 白卡标题 + 正文 1.9 行高
 .agreement-page {
   min-height: 100vh;
-  background: #fff;
-  padding-bottom: 20px;
+  background: var(--h5-bg);
+  padding: 12px;
+}
 
-  .agreement-header {
-    background: linear-gradient(135deg, #1677ff 0%, #0958d9 100%);
-    padding: 24px 20px;
-    color: #fff;
+.agreement-header {
+  padding: 8px 4px 12px;
 
-    h1 {
-      font-size: 24px;
-      font-weight: 600;
+  h1 {
+    font-size: 18px;
+    font-weight: 700;
+    color: var(--h5-text);
+    margin: 0;
+  }
+
+  .update-time {
+    font-size: 12px;
+    color: var(--h5-text-3);
+    margin-top: 4px;
+  }
+}
+
+.agreement-content {
+  background: var(--h5-card-bg);
+  border-radius: var(--h5-radius-card);
+  box-shadow: var(--h5-shadow-card);
+  padding: 16px;
+
+  .section {
+    margin-bottom: 18px;
+
+    &:last-child {
+      margin-bottom: 0;
+    }
+
+    h2 {
+      font-size: 14px;
+      font-weight: 700;
+      color: var(--h5-text);
       margin: 0 0 8px;
     }
 
-    .update-time {
-      font-size: 14px;
-      opacity: 0.8;
+    p {
+      font-size: 13px;
+      color: var(--h5-text-2);
+      line-height: 1.9;
+      margin: 0 0 6px;
+
+      &:last-child {
+        margin-bottom: 0;
+      }
     }
-  }
 
-  .agreement-content {
-    padding: 16px 20px;
+    ul {
+      margin: 0;
+      padding-left: 18px;
 
-    .section {
-      margin-bottom: 24px;
-
-      h2 {
-        font-size: 18px;
-        font-weight: 600;
-        color: #333;
-        margin: 0 0 12px;
-        padding-bottom: 8px;
-        border-bottom: 2px solid #1677ff;
-      }
-
-      p {
-        font-size: 15px;
-        color: #666;
-        line-height: 1.8;
-        margin: 0 0 12px;
-      }
-
-      ul {
-        padding-left: 20px;
-        margin: 0 0 12px;
-
-        li {
-          font-size: 15px;
-          color: #666;
-          line-height: 1.8;
-          margin-bottom: 4px;
-        }
+      li {
+        font-size: 13px;
+        color: var(--h5-text-2);
+        line-height: 1.9;
       }
     }
   }

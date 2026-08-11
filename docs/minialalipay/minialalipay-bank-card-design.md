@@ -108,6 +108,7 @@ CREATE TABLE IF NOT EXISTS account_db.bank_card (
 | GET | `/api/v1/bank-cards` | 我的银行卡列表 | 仅返回 ACTIVE 卡，默认卡在前 |
 | POST | `/api/v1/bank-cards` | 绑定银行卡 | 请求体含完整卡号、姓名、证件号、手机号；服务端 Luhn 校验、模拟四要素校验、重复绑卡校验；首张卡自动设为默认 |
 | GET | `/api/v1/bank-cards/{cardId}` | 卡详情 | 全部字段为掩码 |
+| POST | `/api/v1/bank-cards/{cardId}/full-card-number` | 查看完整卡号 | 请求体携 `paymentProof`（用途 `BANK_CARD_NUMBER_VIEW` 签发的一次性证明，原子消费不可重放）；证明不进 URL；从注册表取完整卡号明文，客户端仅内存展示 |
 | PUT | `/api/v1/bank-cards/{cardId}/default` | 设为默认卡 | 事务内先清旧默认再置新 |
 | DELETE | `/api/v1/bank-cards/{cardId}` | 解绑 | 软删：status=UNBOUND，记录 unbound_at |
 

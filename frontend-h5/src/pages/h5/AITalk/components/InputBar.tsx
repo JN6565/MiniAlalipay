@@ -1,5 +1,5 @@
 import React, { KeyboardEvent } from 'react';
-import { SendOutline } from 'antd-mobile-icons';
+import { IconSet } from '@/components/h5/common';
 
 interface Props {
   value: string;
@@ -30,6 +30,17 @@ const InputBar: React.FC<Props> = ({
     }
   };
 
+  /**
+   * 键盘适配：移动端软键盘弹出时可视区域收缩，延迟等滚动容器高度
+   * 变化后再把输入框滚入可见区域，避免输入框被键盘遮挡。
+   */
+  const handleFocus = (e: React.FocusEvent<HTMLTextAreaElement>) => {
+    const target = e.target;
+    setTimeout(() => {
+      target.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
+    }, 300);
+  };
+
   const hasContent = !!value.trim();
 
   return (
@@ -39,10 +50,11 @@ const InputBar: React.FC<Props> = ({
         <div className="ai-input-wrapper">
           <textarea
             className="ai-input"
-            placeholder="发送消息给财喵…"
+            placeholder="和小智说点什么…"
             value={value}
             onChange={(e) => onChange(e.target.value)}
             onKeyDown={handleKeyDown}
+            onFocus={handleFocus}
             maxLength={2000}
             rows={1}
             disabled={loading}
@@ -60,7 +72,7 @@ const InputBar: React.FC<Props> = ({
           {loading ? (
             <span className="ai-send-spinner" />
           ) : (
-            <SendOutline fontSize={18} />
+            <IconSet name="send" size={15} />
           )}
         </button>
       </div>

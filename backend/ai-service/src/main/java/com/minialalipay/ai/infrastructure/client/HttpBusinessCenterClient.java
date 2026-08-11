@@ -151,7 +151,8 @@ public class HttpBusinessCenterClient implements BusinessCenterPort {
                         if (status == 409) {
                             throw new BusinessException(AgentErrorCode.VERSION_CONFLICT);
                         }
-                        throw new BusinessException(AgentErrorCode.TOOL_UNAVAILABLE);
+                        // 其余 4xx 为下游业务错误（余额不足、超限等），透传下游中文文案而非掩盖为不可用
+                        throw DownstreamErrorTranslator.translate("business-center", res);
                     })
                     .onStatus(HttpStatusCode::is5xxServerError, (req, res) ->
                             { throw new BusinessException(AgentErrorCode.TOOL_UNAVAILABLE); })
@@ -182,7 +183,8 @@ public class HttpBusinessCenterClient implements BusinessCenterPort {
                         if (status == 409) {
                             throw new BusinessException(AgentErrorCode.VERSION_CONFLICT);
                         }
-                        throw new BusinessException(AgentErrorCode.TOOL_UNAVAILABLE);
+                        // 其余 4xx 为下游业务错误（余额不足、超限等），透传下游中文文案而非掩盖为不可用
+                        throw DownstreamErrorTranslator.translate("business-center", res);
                     })
                     .onStatus(HttpStatusCode::is5xxServerError, (req, res) ->
                             { throw new BusinessException(AgentErrorCode.TOOL_UNAVAILABLE); })

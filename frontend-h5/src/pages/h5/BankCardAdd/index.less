@@ -1,69 +1,123 @@
 .bank-card-add-page {
-  padding: 16px;
-  min-height: 100%;
-  background: #f5f6f8;
+  min-height: 100vh;
+  background: var(--h5-bg);
+  padding: 12px;
+  padding-bottom: 28px;
+  box-sizing: border-box;
 }
 
-.add-section {
-  background: #fff;
-  border-radius: 12px;
-  padding: 4px 16px;
-  margin-bottom: 14px;
+// 通用白卡
+.bca-card {
+  background: var(--h5-card-bg);
+  border-radius: var(--h5-radius-card);
+  box-shadow: var(--h5-shadow-card);
+  padding: 14px;
 }
 
-.section-label {
-  font-size: 12px;
-  color: #999;
-  padding-top: 12px;
-}
-
-.card-input {
-  font-size: 20px;
-  letter-spacing: 1px;
-}
-
-.bank-hint {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  padding: 10px 0 12px;
-
-  .bank-hint-name {
-    font-size: 13px;
-    color: #1677ff;
-  }
-
-  .bank-hint-type {
+// 表单字段
+.add-form-card {
+  .field-label {
     font-size: 12px;
-    color: #999;
+    color: var(--h5-text-3);
+    padding: 8px 2px 5px;
+
+    &:first-child {
+      padding-top: 2px;
+    }
+  }
+
+  .field-box {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    background: var(--h5-bg);
+    border: 1.5px solid var(--h5-divider);
+    border-radius: var(--h5-radius-input);
+    padding: 11px 12px;
+    transition: border-color 0.2s;
+
+    &:focus-within {
+      border-color: var(--h5-primary);
+      background: var(--h5-card-bg);
+    }
+
+    .field-input {
+      --font-size: 14px;
+      flex: 1;
+    }
+
+    .field-value {
+      flex: 1;
+      font-size: 14px;
+      font-weight: 500;
+      color: var(--h5-text);
+
+      &.placeholder {
+        color: var(--h5-text-3);
+        font-weight: 400;
+      }
+    }
   }
 }
 
-.bank-hint-error {
-  padding: 10px 0 12px;
-  font-size: 13px;
-  color: #fa5151;
+// 注册成功卡
+.registered-card-section {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  padding: 24px 16px;
+
+  .registered-icon {
+    width: 48px;
+    height: 48px;
+    border-radius: 50%;
+    background: var(--h5-success-bg);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    margin-bottom: 12px;
+  }
+
+  .section-label {
+    font-size: 15px;
+    font-weight: 600;
+    color: var(--h5-text);
+  }
+
+  .registered-card-number {
+    margin-top: 12px;
+    font-size: 20px;
+    font-weight: 700;
+    letter-spacing: 2px;
+    color: var(--h5-primary);
+    font-family: 'Courier New', Courier, monospace;
+    word-break: break-all;
+    text-align: center;
+  }
+
+  .registered-card-info {
+    margin-top: 8px;
+    font-size: 12px;
+    color: var(--h5-text-3);
+  }
 }
 
 .add-tip {
   font-size: 12px;
-  color: #999;
-  line-height: 1.6;
-  margin: 4px 4px 16px;
+  color: var(--h5-text-3);
+  line-height: 1.7;
+  padding: 0 4px;
+  margin: 14px 0 18px;
 }
 
-.registered-card-number {
-  font-size: 22px;
-  font-family: 'Courier New', monospace;
-  letter-spacing: 2px;
-  color: #1677ff;
-  padding: 16px 0 8px;
-  font-weight: 600;
-  word-break: break-all;
+.add-submit {
+  width: 100%;
 }
 
-.registered-card-info {
-  font-size: 13px;
-  color: #666;
-  padding-bottom: 12px;
+.add-later {
+  margin-top: 12px;
+  text-align: center;
+  font-size: 14px;
+  color: var(--h5-text-2);
+  padding: 12px 0;
 }

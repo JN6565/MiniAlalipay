@@ -1,6 +1,6 @@
-// 底部导航栏：由 H5Layout 常驻渲染，切换 Tab 时不重绘。
-// 样式合并自原 Home/AITalk/Contacts/Profile 四份重复定义，统一为浅色主题，
-// 高度叠加底部安全区，与 AI 助手页输入区的 bottom 偏移保持一致。
+// 底部导航栏（V2 设计稿定稿）：由 H5Layout 常驻渲染，切换 Tab 时不重绘。
+// 图标为 IconSet 自绘 SVG（选中态线宽 2.0 + 品牌蓝，未选中 #94a3ba），
+// 选中项底部带 12x2.5 品牌渐变指示条；高度叠加底部安全区。
 .tabbar {
   position: fixed;
   bottom: 0;
@@ -12,7 +12,7 @@
   display: flex;
   align-items: center;
   justify-content: space-around;
-  border-top: 1px solid #eee;
+  border-top: 1px solid var(--h5-divider);
   z-index: 100;
 
   .tab {
@@ -21,28 +21,37 @@
     flex-direction: column;
     align-items: center;
     justify-content: center;
-    gap: 4px;
+    gap: 2px;
     cursor: pointer;
 
+    svg {
+      transition: transform 0.2s;
+    }
+
     &.on {
-      .tab-icon {
-        transform: scale(1.1);
+      svg {
+        transform: scale(1.05);
       }
       .tab-label {
-        color: #1677ff;
+        color: var(--h5-primary);
         font-weight: 600;
       }
     }
   }
 
-  .tab-icon {
-    font-size: 22px;
-    transition: transform 0.2s;
-  }
-
   .tab-label {
     font-size: 10px;
-    color: #666;
+    line-height: 1.2;
+    color: var(--h5-text-3);
     transition: color 0.2s;
+  }
+
+  // 选中态渐变指示条
+  .tab-indicator {
+    width: 12px;
+    height: 2.5px;
+    border-radius: 2px;
+    background: var(--h5-grad-brand);
+    margin-top: 2px;
   }
 }

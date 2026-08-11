@@ -31,6 +31,7 @@ class StageFiveOpenApiContractTest {
                 "/api/v1/p2p-collections/codes/me/disable", "/api/v1/p2p-collections/requests",
                 "/api/v1/p2p-collections/requests/{id}", "/api/v1/p2p-collections/requests/{id}/cancel",
                 "/api/v1/p2p-collections/by-token", "/api/v1/p2p-collections/token-exchanges",
+                "/api/v1/p2p-collections/short-code-exchanges",
                 "/api/v1/p2p-collections/orders/{id}", "/api/v1/p2p-collections/orders/{id}/confirmations",
                 "/api/v1/p2p-collections/orders/{id}/pay", "/api/v1/p2p-collections/requests/{id}/events",
                 "/api/v1/manual-cases", "/api/v1/manual-cases/{id}/decisions",
@@ -59,6 +60,7 @@ class StageFiveOpenApiContractTest {
 
         Map<String, Object> schemas = contractSchemas();
         for (String name : List.of("CreateRechargeRequest", "CreateQrPayOrderRequest", "TokenExchangeRequest",
+                "ShortCodeExchangeRequest",
                 "IssueScenarioConfirmationRequest", "PayScenarioOrderRequest", "CreateCollectionRequest",
                 "LockPersonalCollectionOrderRequest", "IssueCollectionConfirmationRequest", "PayCollectionOrderRequest",
                 "DecideManualCaseRequest", "AcknowledgeAlertRequest", "ResolveAlertRequest", "CloseAlertRequest")) {

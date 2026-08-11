@@ -1,6 +1,9 @@
 package com.minialalipay.business.application.monitoring;
 
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Value;
+import org.springframework.dao.ConcurrencyFailureException;
 import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Service;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
@@ -15,6 +18,7 @@ import org.springframework.transaction.annotation.Transactional;
 @Service
 @ConditionalOnProperty(name = "minialalipay.monitoring.enabled", havingValue = "true", matchIfMissing = true)
 public class MonitoringStreamConsumer {
+    private static final Logger log = LoggerFactory.getLogger(MonitoringStreamConsumer.class);
     private static final String CONSUMER_NAME = "ops-projection";
 
     private final MonitoringStreamPort stream;
@@ -37,14 +41,20 @@ public class MonitoringStreamConsumer {
             initialDelayString = "${minialalipay.monitoring.consumer.initial-delay-ms:3000}")
     @Transactional
     public void consumeAvailableEvents() {
-        String cursor = store.currentStreamCursor(CONSUMER_NAME);
-        for (MonitoringStreamPort.StreamMessage message : stream.readAfter(cursor, batchSize)) {
-            EventConsumeResult result = consumer.consume(message.event());
-            if (result == EventConsumeResult.RETRYABLE_FAILURE) return;
-            if (!store.advanceStreamCursor(CONSUMER_NAME, cursor, message.cursor())) {
-                throw new IllegalStateException("监控事件消费游标并发冲突");
+        try {
+            String cursor = store.currentStreamCursor(CONSUMER_NAME);
+            for (MonitoringStreamPort.StreamMessage message : stream.readAfter(cursor, batchSize)) {
+                EventConsumeResult result = consumer.consume(message.event());
+                if (result == EventConsumeResult.RETRYABLE_FAILURE) return;
+                if (!store.advanceStreamCursor(CONSUMER_NAME, cursor, message.cursor())) {
+                    throw new IllegalStateException("监控事件消费游标并发冲突");
+                }
+                cursor = message.cursor();
             }
-            cursor = message.cursor();
+        } catch (ConcurrencyFailureException lockFailure) {
+            // 多实例并发领取同一事件仍可能被 MySQL 判为死锁受害者：事务已被服务端整体回滚，
+            // 投影与游标都未提交，下一轮调度从原游标重读即可，降级日志避免调度器 ERROR 噪音。
+            log.warn("监控事件消费因锁竞争中断，保留游标待下轮重试: {}", lockFailure.getMessage());
         }
     }
 }

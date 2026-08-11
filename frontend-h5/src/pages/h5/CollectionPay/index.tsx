@@ -1,18 +1,23 @@
 import React, { useEffect, useState } from 'react';
-import { useParams, history } from 'umi';
-import { Card, Button, Input, Radio, Toast, SpinLoading } from 'antd-mobile';
+import { useParams, history, useLocation } from 'umi';
+import { Input, Toast, SpinLoading } from 'antd-mobile';
 import * as collectionService from '@/services/collection';
 import * as paymentPasswordService from '@/services/paymentPassword';
 import * as accountService from '@/services/account';
 import * as creditService from '@/services/credit';
 import { AMOUNT_MIN, AMOUNT_MAX } from '@/constants';
+import { formatBalance } from '@/services/bankCard';
 import { AmountInput } from '@/components/h5/AmountInput';
 import { PasswordInput } from '@/components/h5/PasswordInput';
-import { AmountDisplay } from '@/components/h5/AmountDisplay';
+import { IconSet } from '@/components/h5/common';
 import './index.less';
 
 const CollectionPayPage: React.FC = () => {
   const { token } = useParams();
+  const location = useLocation();
+  // 短码兑换路径：兑换端点已建单并绑定会话，路由参数是订单 ID，
+  // 无需再走 bootstrap/令牌交换，直接按 ID 查单。
+  const viaShortCode = new URLSearchParams(location.search).get('via') === 'short-code';
   const [loading, setLoading] = useState(true);
   const [locking, setLocking] = useState(false);
   const [submitting, setSubmitting] = useState(false);
@@ -29,19 +34,27 @@ const CollectionPayPage: React.FC = () => {
     if (token) {
       loadOrder(token);
     }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [token]);
 
   const loadOrder = async (t: string) => {
     try {
       // 付款人身份依赖登录态；未登录先跳登录页，登录成功后按 redirect 回到本页继续付款
       if (!localStorage.getItem('accessToken')) {
-        history.replace(`/h5/login?redirect=${encodeURIComponent(`/h5/collection/pay/${t}`)}`);
+        const current = `/h5/collection/pay/${t}${viaShortCode ? '?via=short-code' : ''}`;
+        history.replace(`/h5/login?redirect=${encodeURIComponent(current)}`);
         return;
       }
-      // 必须先建立匿名引导会话再交换令牌：后端要求令牌交换与后续支付
-      // 都发生在同一 bootstrap 会话中，直接交换会因缺少会话返回未授权
-      await collectionService.bootstrapSession(t);
-      const data = await collectionService.exchangeToken(t);
+      let data: collectionService.CollectionOrder;
+      if (viaShortCode) {
+        // 短码兑换已在服务端完成建单与会话绑定，此处 t 为订单 ID
+        data = await collectionService.getOrderStatus(t) as unknown as collectionService.CollectionOrder;
+      } else {
+        // 必须先建立匿名引导会话再交换令牌：后端要求令牌交换与后续支付
+        // 都发生在同一 bootstrap 会话中，直接交换会因缺少会话返回未授权
+        await collectionService.bootstrapSession(t);
+        data = await collectionService.exchangeToken(t);
+      }
       setOrder(data);
       setLoading(false);
       const [accountResult, creditResult] = await Promise.allSettled([
@@ -148,125 +161,99 @@ const CollectionPayPage: React.FC = () => {
   // 个人码草稿阶段：先填写金额与备注并锁定，锁定后才进入支付
   const draftStage = order.editable;
 
+  // 支付方式行（余额 / Mini 花呗）自定义单选
+  const fundingRows: Array<{ key: 'BALANCE' | 'MINI_CREDIT'; label: string; value: string }> = [
+    { key: 'BALANCE', label: '账户余额', value: `可用 ¥${formatBalance(account?.availableFen || 0)}` },
+    { key: 'MINI_CREDIT', label: 'Mini 花呗', value: `可用额度 ¥${formatBalance(credit?.availableFen || 0)}` },
+  ];
+
+  const renderFundingRows = () => (
+    <div className="cp-card funding-rows">
+      {fundingRows.map((row) => {
+        const on = fundingSource === row.key;
+        return (
+          <div
+            className="funding-row"
+            key={row.key}
+            onClick={() => {
+              setFundingSource(row.key);
+              setPassword('');
+            }}
+          >
+            <span className="funding-label">{row.label}</span>
+            <span className="funding-value">{row.value}</span>
+            <span className={`funding-radio${on ? ' active' : ''}`}>
+              {on && <span className="funding-radio-dot" />}
+            </span>
+          </div>
+        );
+      })}
+    </div>
+  );
+
   return (
     <div className="collection-pay-page">
-      <Card className="payee-card">
-        <div className="payee-title">收款人</div>
-        <div className="payee-name">{order.payeeName}</div>
-      </Card>
+      <div className="cp-hero" />
 
-      {draftStage ? (
-        <>
-        <Card className="amount-card">
-          <div className="amount-title">填写金额</div>
-          <AmountInput
-            value={amount}
-            onChange={setAmount}
-            placeholder="请输入付款金额"
-          />
-          <Input
-            placeholder="备注（选填）"
-            value={subject}
-            onChange={setSubject}
-            maxLength={50}
-          />
-          <Button
-            block
-            color="primary"
-            loading={locking}
-            onClick={handleLockAmount}
-            style={{ marginTop: 12 }}
-          >
-            确认信息
-          </Button>
-        </Card>
-        <Card className="funding-card">
-          <div className="funding-title">选择支付方式</div>
-          <Radio.Group value={fundingSource || undefined} onChange={(value) => {
-            setFundingSource(value as 'BALANCE' | 'MINI_CREDIT');
-            setPassword('');
-          }}>
-            <div className="funding-options">
-              <div className="funding-option"><Radio value="BALANCE">余额支付（可用 {((account?.availableFen || 0) / 100).toFixed(2)} 元）</Radio></div>
-              <div className="funding-option"><Radio value="MINI_CREDIT">Mini 花呗支付（可用 {((credit?.availableFen || 0) / 100).toFixed(2)} 元）</Radio></div>
-            </div>
-          </Radio.Group>
-        </Card>
-        </>
-      ) : (
-        <>
-          <Card className="amount-card">
-            <div className="amount-title">付款金额</div>
-            <div className="amount-value">
-              <AmountDisplay amountFen={order.amountFen || 0} size="large" />
-            </div>
-            {/* 固定码备注只能由收款人创建时填写，付款方只读；无备注时展示“无备注” */}
-            <div className="amount-subject">备注：{subject || '无备注'}</div>
-          </Card>
-
-          <Card className="info-card">
-            <div className="info-row">
-              <span className="info-label">收款人</span>
-              <span className="info-value">{order.payeeName}</span>
-            </div>
-            {order.payerName && (
-              <div className="info-row">
-                <span className="info-label">付款人</span>
-                <span className="info-value">{order.payerName}</span>
-              </div>
-            )}
-            <div className="info-row">
-              <span className="info-label">手续费</span>
-              <span className="info-value">免手续费</span>
-            </div>
-            <div className="info-row">
-              <span className="info-label">实际扣款</span>
-              <span className="info-value">
-                <AmountDisplay amountFen={Math.round(amount * 100)} />
-              </span>
-            </div>
-          </Card>
-
-          <Card className="password-card">
-            <div className="funding-title">选择支付方式</div>
-            <Radio.Group value={fundingSource || undefined} onChange={(value) => {
-              setFundingSource(value as 'BALANCE' | 'MINI_CREDIT');
-              setPassword('');
-            }}>
-              <div className="funding-options">
-                <div className="funding-option"><Radio value="BALANCE">余额支付（可用 {((account?.availableFen || 0) / 100).toFixed(2)} 元）</Radio></div>
-                <div className="funding-option"><Radio value="MINI_CREDIT">Mini 花呗支付（可用 {((credit?.availableFen || 0) / 100).toFixed(2)} 元）</Radio></div>
-              </div>
-            </Radio.Group>
-            <div className="password-title">请输入支付密码</div>
-            <PasswordInput value={password} onChange={setPassword} length={6} />
-          </Card>
-
-          <div className="pay-actions">
-            <Button
-              block
-              color="primary"
-              size="large"
-              loading={submitting}
-              disabled={!fundingSource}
-              onClick={handlePay}
-            >
-              确认支付
-            </Button>
-            <Button block size="large" onClick={() => history.back()}>
-              取消
-            </Button>
+      <div className="cp-body">
+        {/* 收款方信息卡 */}
+        <div className="cp-card payee-card">
+          <div className="payee-tile">
+            <IconSet name="collect" size={18} color="#fff" />
           </div>
-        </>
-      )}
-
-      {draftStage && (
-        <div className="pay-actions">
-          <Button block size="large" onClick={() => history.back()}>
-            取消
-          </Button>
+          <div className="payee-name">收款方：{order.payeeName}</div>
+          {!draftStage && <div className="payee-subject">备注：{subject || '无备注'}</div>}
         </div>
-      )}
+
+        {draftStage ? (
+          <>
+            {/* 草稿阶段：金额与备注可编辑，确认后锁定 */}
+            <div className="cp-card amount-card">
+              <div className="amount-label">填写金额</div>
+              <AmountInput value={amount} onChange={setAmount} placeholder="0.00" />
+              <div className="amount-divider" />
+              <Input
+                placeholder="备注（选填）"
+                value={subject}
+                onChange={setSubject}
+                maxLength={50}
+                className="amount-subject-input"
+              />
+            </div>
+            {renderFundingRows()}
+            <div
+              className={`h5-btn-gradient cp-submit${locking ? ' disabled' : ''}`}
+              onClick={() => !locking && handleLockAmount()}
+            >
+              {locking ? '锁定中...' : '确认信息'}
+            </div>
+          </>
+        ) : (
+          <>
+            {/* 锁定阶段：金额只读 */}
+            <div className="cp-card amount-card">
+              <div className="amount-label">支付金额</div>
+              <div className="amount-value">¥{formatBalance(order.amountFen || 0)}</div>
+              <div className="amount-locked-tips">固定金额收款码，金额不可修改</div>
+            </div>
+            {renderFundingRows()}
+            <div className="cp-card password-card">
+              <div className="password-title">请输入支付密码</div>
+              <PasswordInput value={password} onChange={setPassword} length={6} />
+            </div>
+            <div
+              className={`h5-btn-gradient cp-submit${submitting || !fundingSource ? ' disabled' : ''}`}
+              onClick={() => !submitting && handlePay()}
+            >
+              {submitting ? '提交中...' : '确认付款'}
+            </div>
+          </>
+        )}
+
+        <div className="cp-cancel" onClick={() => history.back()}>
+          取消
+        </div>
+      </div>
     </div>
   );
 };

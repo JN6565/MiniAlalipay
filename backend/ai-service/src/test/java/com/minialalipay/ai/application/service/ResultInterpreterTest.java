@@ -87,6 +87,17 @@ class ResultInterpreterTest {
     }
 
     @Test
+    void shouldPassThroughDownstreamBusinessErrorMessage() {
+        // ToolRouter 对下游 4xx 业务错误返回 BUSINESS_ERROR + 下游中文 message，
+        // 解释引擎必须原样透传，而不是降级为"服务暂不可用"
+        ToolResult result = new ToolResult("BUSINESS_ERROR",
+                Map.of(), "账户余额不足", 120);
+        String explanation = interpreter.interpret("submit_confirmed_transfer", result);
+        assertThat(explanation).isEqualTo("账户余额不足");
+        assertThat(explanation).doesNotContain("暂不可用");
+    }
+
+    @Test
     void shouldNotInventBalanceWhenRequiredFieldIsMissing() {
         ToolResult result = new ToolResult("SUCCESS", Map.of(), null, 10);
 

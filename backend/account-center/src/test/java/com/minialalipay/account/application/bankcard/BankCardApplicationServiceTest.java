@@ -1,5 +1,6 @@
 package com.minialalipay.account.application.bankcard;
 
+import com.minialalipay.account.application.credit.PaymentProofPort;
 import com.minialalipay.account.domain.account.Account;
 import com.minialalipay.account.domain.account.AccountErrorCode;
 import com.minialalipay.account.domain.account.AccountRepository;
@@ -50,6 +51,7 @@ class BankCardApplicationServiceTest {
     private AccountRepository accountRepository;
     private RegisteredCardRepository registeredCardRepository;
     private UserCenterIdentityPort identityPort;
+    private PaymentProofPort paymentProofPort;
     private BankCardApplicationService service;
 
     @BeforeEach
@@ -58,8 +60,9 @@ class BankCardApplicationServiceTest {
         accountRepository = mock(AccountRepository.class);
         registeredCardRepository = mock(RegisteredCardRepository.class);
         identityPort = mock(UserCenterIdentityPort.class);
+        paymentProofPort = mock(PaymentProofPort.class);
         service = new BankCardApplicationService(cardRepository, accountRepository,
-                registeredCardRepository, identityPort);
+                registeredCardRepository, identityPort, paymentProofPort);
 
         Account account = mock(Account.class);
         when(account.getAccountId()).thenReturn("ACC001");
@@ -323,5 +326,32 @@ class BankCardApplicationServiceTest {
         // 重绑：注册记录已回到 REGISTERED，校验链路与新绑一致，生成新绑定记录
         service.bindCard(USER, cardNumber, HOLDER, ID_CARD, PHONE);
         verify(cardRepository, times(2)).save(any());
+    }
+
+    @Test
+    void fullCardNumberConsumesProofThenReturnsRegistrationNumber() {
+        // 完整卡号：先验归属、消费一次性证明后从注册记录返回明文
+        String cardNumber = validCard("621226");
+        when(cardRepository.findById("CARD_A"))
+                .thenReturn(Optional.of(card("CARD_A", false, Instant.now())));
+        when(paymentProofPort.verify(USER, "proof-token", "BANK_CARD_NUMBER_VIEW"))
+                .thenReturn(new PaymentProofPort.VerifiedProof("PROOF_ID", 1L));
+        when(registeredCardRepository.findBoundByUserAndCard(USER, "621226", "1234"))
+                .thenReturn(Optional.of(boundRegistrationFor(cardNumber)));
+
+        assertThat(service.getFullCardNumber(USER, "CARD_A", "proof-token")).isEqualTo(cardNumber);
+        verify(paymentProofPort).verify(USER, "proof-token", "BANK_CARD_NUMBER_VIEW");
+    }
+
+    @Test
+    void fullCardNumberMissingCardDoesNotConsumeProof() {
+        // 非本人或不存在的卡直接拒绝，不得浪费用户的一次性证明
+        when(cardRepository.findById("CARD_X")).thenReturn(Optional.empty());
+
+        assertThatThrownBy(() -> service.getFullCardNumber(USER, "CARD_X", "proof-token"))
+                .isInstanceOf(BusinessException.class)
+                .extracting(e -> ((BusinessException) e).errorCode())
+                .isEqualTo(BankCardErrorCode.BANK_CARD_NOT_FOUND);
+        verify(paymentProofPort, never()).verify(any(), any(), any());
     }
 }

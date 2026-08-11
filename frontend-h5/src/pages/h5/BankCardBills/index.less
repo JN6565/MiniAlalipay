@@ -1,0 +1,122 @@
+.bank-card-bills-page {
+  min-height: 100vh;
+  background: var(--h5-bg);
+  padding: 12px;
+  box-sizing: border-box;
+}
+
+// 卡片摘要头
+.bills-card-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  background: var(--h5-card-bg);
+  border-radius: var(--h5-radius-card);
+  box-shadow: var(--h5-shadow-card);
+  padding: 14px 16px;
+
+  .head-bank {
+    font-size: 14px;
+    font-weight: 600;
+    color: var(--h5-text);
+  }
+
+  .head-balance {
+    font-size: 12px;
+    color: var(--h5-text-2);
+    font-variant-numeric: tabular-nums;
+  }
+}
+
+// 筛选：全部 / 收入 / 支出
+.bills-filters {
+  display: flex;
+  gap: 8px;
+  margin: 12px 2px;
+
+  .bills-filter-chip {
+    font-size: 12px;
+    color: var(--h5-text-2);
+    background: var(--h5-card-bg);
+    border-radius: var(--h5-radius-btn);
+    padding: 6px 14px;
+    font-weight: 500;
+
+    &.active {
+      color: #fff;
+      font-weight: 600;
+      background: var(--h5-grad-brand);
+      box-shadow: var(--h5-shadow-icon);
+    }
+  }
+}
+
+// 账单行
+.bill-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 12px 0;
+
+  &:not(:last-child) {
+    border-bottom: 1px solid var(--h5-divider);
+  }
+
+  .bill-icon {
+    width: 36px;
+    height: 36px;
+    border-radius: 10px;
+    background: var(--h5-fill);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    flex-shrink: 0;
+  }
+
+  .bill-main {
+    flex: 1;
+    min-width: 0;
+  }
+
+  .bill-title {
+    font-size: 14px;
+    font-weight: 500;
+    color: var(--h5-text);
+    display: flex;
+    align-items: center;
+    gap: 8px;
+
+    .bill-status {
+      font-size: 10px;
+      color: var(--h5-warning);
+      background: var(--h5-warning-bg);
+      border-radius: 6px;
+      padding: 1px 6px;
+    }
+  }
+
+  .bill-time {
+    font-size: 12px;
+    color: var(--h5-text-3);
+    margin-top: 3px;
+  }
+
+  .bill-amount {
+    font-size: 16px;
+    font-weight: 600;
+    font-variant-numeric: tabular-nums;
+    flex-shrink: 0;
+
+    &.amount-out {
+      color: var(--h5-text);
+    }
+
+    &.amount-in {
+      color: var(--h5-amount-in);
+    }
+
+    &.muted {
+      color: var(--h5-text-3);
+    }
+  }
+}

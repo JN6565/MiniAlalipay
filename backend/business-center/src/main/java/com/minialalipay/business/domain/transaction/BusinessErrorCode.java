@@ -56,6 +56,8 @@ public enum BusinessErrorCode implements ErrorCode {
     /** 原交易不支持受控退款。 */ REFUND_NOT_ALLOWED("REFUND_NOT_ALLOWED", "当前交易不支持受控退款", 422),
     /** 原交易已存在退款订单。 */ REFUND_ALREADY_EXISTS("REFUND_ALREADY_EXISTS", "该交易已经存在退款订单", 409),
     /** 分页游标无效或已过期。 */ INVALID_CURSOR("INVALID_CURSOR", "分页游标无效", 400),
+    /** 收款短码不存在、已过期或已停用。 */ SHORT_CODE_INVALID("SHORT_CODE_INVALID", "短码不存在或已过期", 404),
+    /** 短码兑换尝试过于频繁，已被临时锁定。 */ SHORT_CODE_RATE_LIMITED("SHORT_CODE_RATE_LIMITED", "短码尝试过于频繁，请稍后再试", 429),
     /** 银行卡不存在或不属于当前用户。 */ BANK_CARD_NOT_FOUND("BANK_CARD_NOT_FOUND", "银行卡不存在", 404);
 
     private final String code; private final String message; private final int httpStatus;

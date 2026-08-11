@@ -1,86 +1,94 @@
+// 好友请求页（V2 重设计）：柔渐变头 + 悬浮白卡列表
 .friend-requests-page {
   min-height: 100vh;
-  background: #f5f5f5;
+  background: var(--h5-bg);
 }
 
-.page-header {
-  display: flex;
-  align-items: center;
-  padding: 12px 16px;
-  background: #fff;
-  gap: 12px;
+.fr-head {
+  background: var(--h5-grad-soft);
+  height: 36px;
 }
 
-.back-btn {
-  font-size: 16px;
-  color: #1677ff;
-  cursor: pointer;
+.fr-body {
+  padding: 0 12px 12px;
 }
 
-.page-title {
-  font-size: 18px;
-  font-weight: 600;
-  color: #333;
+.fr-card {
+  margin-top: -18px;
+  background: var(--h5-card-bg);
+  border-radius: var(--h5-radius-card);
+  box-shadow: var(--h5-shadow-card);
+  padding: 6px 14px;
 }
 
-.requests-content {
-  padding: 12px 0;
-}
-
-.request-item {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  padding: 14px 16px;
-  background: #fff;
-  margin-bottom: 1px;
-}
-
-.request-info {
+.fr-row {
   display: flex;
   align-items: center;
   gap: 12px;
-  flex: 1;
+  padding: 12px 2px;
+  border-bottom: 1px solid var(--h5-divider);
+
+  &:last-child {
+    border-bottom: none;
+  }
 }
 
-.avatar-circle {
-  width: 44px;
-  height: 44px;
-  border-radius: 50%;
-  background: linear-gradient(135deg, #1677ff, #69b1ff);
-  color: #fff;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  font-size: 18px;
-  font-weight: 600;
-  flex-shrink: 0;
-}
-
-.request-meta {
+.fr-meta {
   flex: 1;
   min-width: 0;
 }
 
-.request-name {
-  font-size: 16px;
-  color: #333;
-  font-weight: 500;
+.fr-name {
+  font-size: 15px;
+  color: var(--h5-text);
+  font-weight: 600;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
-.request-message {
+.fr-message {
   font-size: 12px;
-  color: #999;
-  margin-top: 4px;
+  color: var(--h5-text-3);
+  margin-top: 2px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
-.request-actions {
+.fr-actions {
   display: flex;
   gap: 8px;
   align-items: center;
+  flex: none;
 }
 
-.status-text {
-  font-size: 14px;
-  color: #999;
+// 接受：品牌渐变胶囊
+.fr-accept {
+  font-size: 12px;
+  color: #fff;
+  background: var(--h5-grad-brand);
+  border-radius: 14px;
+  padding: 5px 14px;
+  font-weight: 700;
+  box-shadow: var(--h5-shadow-icon);
+  cursor: pointer;
+}
+
+// 拒绝：描边胶囊
+.fr-reject {
+  font-size: 12px;
+  color: var(--h5-text-2);
+  background: transparent;
+  border: 1px solid var(--h5-divider);
+  border-radius: 14px;
+  padding: 4px 13px;
+  font-weight: 500;
+  cursor: pointer;
+}
+
+// 已处理灰态
+.fr-done {
+  font-size: 12px;
+  color: var(--h5-text-3);
 }

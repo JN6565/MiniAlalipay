@@ -1,6 +1,6 @@
 .scan-page {
   min-height: 100vh;
-  background: #000;
+  background: #0d1526;
   display: flex;
   flex-direction: column;
 }
@@ -9,77 +9,45 @@
   display: flex;
   align-items: center;
   justify-content: space-between;
-  padding: 16px;
-  background: rgba(0, 0, 0, 0.5);
-  color: white;
+  padding: 10px 14px;
+  color: #fff;
 
   .back-btn {
-    font-size: 24px;
-    cursor: pointer;
-    width: 40px;
-    height: 40px;
+    width: 32px;
+    height: 32px;
     display: flex;
     align-items: center;
     justify-content: center;
+    cursor: pointer;
   }
 
   .title {
-    font-size: 18px;
+    font-size: 16px;
     font-weight: 600;
   }
 
   .placeholder {
-    width: 40px;
+    width: 32px;
   }
 }
 
+/* ===== 摄像头取景态 ===== */
 .scan-content {
   flex: 1;
   display: flex;
   flex-direction: column;
   align-items: center;
-  justify-content: center;
-  padding: 20px;
-}
-
-.loading-container {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  gap: 16px;
-
-  .loading-text {
-    color: white;
-    font-size: 14px;
-  }
+  padding: 24px 20px 30px;
 }
 
 .qr-reader-container {
   width: 100%;
-  max-width: 300px;
-  height: 300px;
-  border: 2px solid white;
-  border-radius: 12px;
+  max-width: 260px;
+  height: 260px;
+  border-radius: 16px;
+  border: 1px solid rgba(255, 255, 255, 0.14);
   overflow: hidden;
   position: relative;
-}
-
-.loading-overlay {
-  position: absolute;
-  top: 0;
-  left: 0;
-  right: 0;
-  bottom: 0;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  background: rgba(0, 0, 0, 0.7);
-  z-index: 10;
-
-  .loading-text {
-    color: white;
-    font-size: 14px;
-  }
 }
 
 .qr-reader {
@@ -93,75 +61,243 @@
   }
 
   #qr-shaded-region {
-    border: 2px solid #1677ff !important;
+    border: 2px solid var(--h5-primary) !important;
     border-radius: 8px;
   }
 }
 
-.scan-tips {
-  margin-top: 24px;
-  text-align: center;
+/* 取景框四角：品牌蓝描边 */
+.frame-corner {
+  position: absolute;
+  width: 30px;
+  height: 30px;
+  border-color: #4d9bff;
+  border-style: solid;
+  border-width: 0;
+  z-index: 5;
+  pointer-events: none;
 
-  .tip-text {
-    color: rgba(255, 255, 255, 0.8);
-    font-size: 14px;
+  &.tl {
+    top: 6px;
+    left: 6px;
+    border-top-width: 3.5px;
+    border-left-width: 3.5px;
+    border-top-left-radius: 12px;
+  }
+
+  &.tr {
+    top: 6px;
+    right: 6px;
+    border-top-width: 3.5px;
+    border-right-width: 3.5px;
+    border-top-right-radius: 12px;
+  }
+
+  &.bl {
+    bottom: 6px;
+    left: 6px;
+    border-bottom-width: 3.5px;
+    border-left-width: 3.5px;
+    border-bottom-left-radius: 12px;
+  }
+
+  &.br {
+    bottom: 6px;
+    right: 6px;
+    border-bottom-width: 3.5px;
+    border-right-width: 3.5px;
+    border-bottom-right-radius: 12px;
   }
 }
 
-.error-container {
+/* 扫描线：品牌渐变 + 上下往复动画 */
+@keyframes scan-line-move {
+  0% {
+    top: 10%;
+  }
+  50% {
+    top: 86%;
+  }
+  100% {
+    top: 10%;
+  }
+}
+
+.scan-line {
+  position: absolute;
+  left: 10px;
+  right: 10px;
+  height: 2.5px;
+  border-radius: 2px;
+  background: var(--h5-grad-brand);
+  box-shadow: 0 0 12px rgba(72, 155, 255, 0.8);
+  z-index: 5;
+  pointer-events: none;
+  animation: scan-line-move 2.6s ease-in-out infinite;
+}
+
+.loading-overlay {
+  position: absolute;
+  inset: 0;
   display: flex;
-  flex-direction: column;
   align-items: center;
   justify-content: center;
-  padding: 40px 20px;
-  gap: 16px;
+  background: rgba(13, 21, 38, 0.7);
+  z-index: 10;
 
-  .error-icon {
-    font-size: 64px;
+  .loading-text {
+    color: #fff;
+    font-size: 13px;
+  }
+}
+
+.scan-tips {
+  margin-top: 22px;
+  text-align: center;
+  color: rgba(255, 255, 255, 0.75);
+  font-size: 12.5px;
+}
+
+/* 底部圆形操作：相册 / 开始(停止) / 手动输入 */
+.scan-bottom-actions {
+  display: flex;
+  justify-content: center;
+  gap: 44px;
+  margin-top: 34px;
+
+  .scan-action {
+    text-align: center;
+    color: #fff;
+    cursor: pointer;
+    -webkit-tap-highlight-color: transparent;
+
+    .scan-action-circle {
+      width: 44px;
+      height: 44px;
+      margin: 0 auto 6px;
+      border-radius: 50%;
+      background: rgba(255, 255, 255, 0.12);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+
+    .scan-action-label {
+      font-size: 11.5px;
+      opacity: 0.85;
+    }
+
+    &:active .scan-action-circle {
+      background: rgba(255, 255, 255, 0.2);
+    }
+  }
+}
+
+/* ===== 手动输入降级态 ===== */
+.scan-manual {
+  flex: 1;
+  padding: 26px 16px 30px;
+}
+
+.manual-card {
+  background: #fff;
+  border-radius: 16px;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.25);
+  padding: 16px 14px 18px;
+
+  .manual-head {
+    display: flex;
+    align-items: center;
+    gap: 7px;
+    font-size: 15px;
+    font-weight: 700;
+    color: var(--h5-text);
+    margin-bottom: 10px;
+  }
+
+  .manual-hint {
+    font-size: 11.5px;
+    color: var(--h5-text-2);
+    margin-bottom: 10px;
+    line-height: 1.6;
+  }
+
+  .manual-input {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    background: var(--h5-bg);
+    border: 1.5px solid var(--h5-divider);
+    border-radius: 12px;
+    padding: 11px 12px;
+
+    input {
+      flex: 1;
+      border: none;
+      outline: none;
+      background: transparent;
+      font-size: 13px;
+      color: var(--h5-text);
+      min-width: 0;
+
+      &::placeholder {
+        color: var(--h5-text-3);
+      }
+    }
+
+    .manual-clear {
+      display: flex;
+      align-items: center;
+      cursor: pointer;
+    }
+  }
+
+  .manual-submit {
+    margin-top: 14px;
+  }
+}
+
+.manual-samples {
+  margin-top: 16px;
+  padding: 14px;
+  background: rgba(255, 255, 255, 0.07);
+  border-radius: 14px;
+
+  .samples-title {
+    font-size: 11.5px;
+    color: rgba(255, 255, 255, 0.6);
     margin-bottom: 8px;
   }
 
-  .error-text {
-    color: white;
-    font-size: 18px;
-    font-weight: 500;
-    text-align: center;
-  }
+  .sample-row {
+    display: flex;
+    align-items: center;
+    padding: 9px 2px;
+    cursor: pointer;
+    -webkit-tap-highlight-color: transparent;
 
-  .error-hint {
-    color: rgba(255, 255, 255, 0.6);
-    font-size: 14px;
-    text-align: center;
+    &:not(:last-child) {
+      border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+    }
+
+    .sample-label {
+      flex: 1;
+      font-size: 12.5px;
+      color: #fff;
+    }
+
+    .sample-value {
+      font-size: 10.5px;
+      color: rgba(255, 255, 255, 0.5);
+      font-family: 'Courier New', Courier, monospace;
+    }
   }
 }
 
-.scan-actions {
-  margin-top: 40px;
-  width: 100%;
-  max-width: 300px;
-
-  .scan-btn {
-    width: 100%;
-    height: 48px;
-    border: none;
-    border-radius: 24px;
-    background: #1677ff;
-    color: white;
-    font-size: 16px;
-    font-weight: 500;
-    cursor: pointer;
-    transition: background 0.2s;
-
-    &:active {
-      background: #0958d9;
-    }
-
-    &.stop {
-      background: #ff4d4f;
-
-      &:active {
-        background: #cf1322;
-      }
-    }
-  }
+.manual-back {
+  margin-top: 20px;
+  text-align: center;
+  font-size: 13px;
+  color: rgba(255, 255, 255, 0.7);
+  cursor: pointer;
 }
