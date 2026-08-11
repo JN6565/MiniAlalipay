@@ -85,4 +85,34 @@ class ResultInterpreterTest {
         String explanation = interpreter.interpret("get_balance", null);
         assertThat(explanation).contains("暂不可用");
     }
+
+    @Test
+    void shouldNotInventBalanceWhenRequiredFieldIsMissing() {
+        ToolResult result = new ToolResult("SUCCESS", Map.of(), null, 10);
+
+        String explanation = interpreter.interpret("get_balance", result);
+
+        assertThat(explanation).contains("数据不完整");
+        assertThat(explanation).doesNotContain("0.00");
+    }
+
+    @Test
+    void shouldNotInventCreditLimitWhenRequiredFieldsAreMissing() {
+        ToolResult result = new ToolResult("SUCCESS", Map.of("usedFen", 100L), null, 10);
+
+        String explanation = interpreter.interpret("get_credit_summary", result);
+
+        assertThat(explanation).contains("数据不完整");
+        assertThat(explanation).doesNotContain("5,000.00");
+    }
+
+    @Test
+    void shouldNotClaimNoTransactionsWhenItemsFieldIsMissing() {
+        ToolResult result = new ToolResult("SUCCESS", Map.of(), null, 10);
+
+        String explanation = interpreter.interpret("list_transactions", result);
+
+        assertThat(explanation).contains("数据不完整");
+        assertThat(explanation).doesNotContain("暂无交易");
+    }
 }

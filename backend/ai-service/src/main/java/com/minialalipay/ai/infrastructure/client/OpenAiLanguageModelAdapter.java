@@ -294,12 +294,15 @@ public class OpenAiLanguageModelAdapter {
         // 5. 检查 tool_calls
         if (assistantMsg.hasToolCalls()) {
             List<AssistantMessage.ToolCall> toolCalls = assistantMsg.getToolCalls();
-            AssistantMessage.ToolCall firstCall = toolCalls.get(0);
-            String toolName = firstCall.name();
-            String toolCallId = firstCall.id();
-            Map<String, Object> arguments = parseToolCallArguments(firstCall.arguments());
-            log.info("Agent step 决策: toolCall={}, toolCallId={}, args={}", toolName, toolCallId, arguments);
-            return new AgentDecision.ToolCall(toolName, arguments, estimatedTokens, toolCallId);
+            List<AgentDecision.ToolCall> decisions = toolCalls.stream()
+                    .map(call -> new AgentDecision.ToolCall(
+                            call.name(), parseToolCallArguments(call.arguments()), estimatedTokens, call.id()))
+                    .toList();
+            log.info("Agent step 决策: toolCallCount={}, tools={}", decisions.size(),
+                    decisions.stream().map(AgentDecision.ToolCall::toolName).toList());
+            return decisions.size() == 1
+                    ? decisions.get(0)
+                    : new AgentDecision.ToolCalls(decisions, estimatedTokens);
         }
 
         // 6. 无 tool_calls → FinalReply
@@ -309,11 +312,6 @@ public class OpenAiLanguageModelAdapter {
         log.info("Agent step 决策: finalReply(无工具调用), content={}", content.length() > 200 ? content.substring(0, 200) + "..." : content);
         return new AgentDecision.FinalReply(content, estimatedTokens);
     }
-
-    /** 最近一次 LLM 返回的 toolCallId，用于构建 ToolResponseMessage */
-    private volatile String lastToolCallId;
-    /** 最近一次 LLM 返回的 toolCall 工具名 */
-    private volatile String lastToolCallName;
 
     /**
      * 基于真实工具结果进行第二次 LLM 调用。
@@ -371,13 +369,15 @@ public class OpenAiLanguageModelAdapter {
 
         if (assistantMsg.hasToolCalls()) {
             List<AssistantMessage.ToolCall> toolCalls = assistantMsg.getToolCalls();
-            AssistantMessage.ToolCall nextCall = toolCalls.get(0);
-            lastToolCallId = nextCall.id();
-            lastToolCallName = nextCall.name();
-            Map<String, Object> arguments = parseToolCallArguments(nextCall.arguments());
-            log.info("Agent step(工具结果后) 决策: toolCall={}, toolCallId={}, args={}",
-                    nextCall.name(), lastToolCallId, arguments);
-            return new AgentDecision.ToolCall(nextCall.name(), arguments, estimatedTokens, lastToolCallId);
+            List<AgentDecision.ToolCall> decisions = toolCalls.stream()
+                    .map(call -> new AgentDecision.ToolCall(
+                            call.name(), parseToolCallArguments(call.arguments()), estimatedTokens, call.id()))
+                    .toList();
+            log.info("Agent step(工具结果后) 决策: toolCallCount={}, tools={}", decisions.size(),
+                    decisions.stream().map(AgentDecision.ToolCall::toolName).toList());
+            return decisions.size() == 1
+                    ? decisions.get(0)
+                    : new AgentDecision.ToolCalls(decisions, estimatedTokens);
         }
 
         String content = assistantMsg.getText();
