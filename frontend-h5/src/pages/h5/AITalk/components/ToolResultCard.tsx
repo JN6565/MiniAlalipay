@@ -69,6 +69,11 @@ const CreditSummaryCard: React.FC<{ data: Record<string, any> }> = ({ data }) =>
 
 /**
  * 交易明细卡片（列表）。
+ *
+ * 金额方向判定：账本金额恒为正数，收支方向由 direction 字段决定
+ * （账本原始为 DEBIT/CREDIT，AI 工具链路已归一为 IN/OUT）。
+ * CREDIT/IN 为收入（+ 绿色），DEBIT/OUT 为支出（− 红色）；
+ * 无 direction 字段时回退 amountFen 符号逻辑兼容旧数据。
  */
 const TransactionsCard: React.FC<{ data: Record<string, any> }> = ({ data }) => {
   const list = (data.transactions ?? data.items ?? data.list ?? []) as any[];
@@ -76,17 +81,21 @@ const TransactionsCard: React.FC<{ data: Record<string, any> }> = ({ data }) => 
   return (
     <div className="ai-card ai-card-list">
       <div className="ai-card-label">最近交易</div>
-      {list.slice(0, 5).map((txn: any, i: number) => (
-        <div key={txn.id ?? i} className="ai-card-list-row">
-          <div className="ai-card-list-left">
-            <span className="ai-card-list-title">{txn.title ?? txn.remark ?? txn.type ?? '交易'}</span>
-            <span className="ai-card-list-date">{txn.time ?? txn.createdAt ?? ''}</span>
+      {list.slice(0, 5).map((txn: any, i: number) => {
+        const dir = typeof txn.direction === 'string' ? txn.direction.toUpperCase() : '';
+        const income = dir ? dir === 'IN' || dir === 'CREDIT' : Number(txn.amountFen) >= 0;
+        return (
+          <div key={txn.id ?? i} className="ai-card-list-row">
+            <div className="ai-card-list-left">
+              <span className="ai-card-list-title">{txn.title ?? txn.remark ?? txn.memo ?? txn.type ?? '交易'}</span>
+              <span className="ai-card-list-date">{txn.time ?? txn.createdAt ?? ''}</span>
+            </div>
+            <span className={income ? 'ai-card-amount-in' : 'ai-card-amount-out'}>
+              {income ? '+' : '−'}¥{formatFen(Math.abs(Number(txn.amountFen ?? 0)))}
+            </span>
           </div>
-          <span className={Number(txn.amountFen) >= 0 ? 'ai-card-amount-in' : 'ai-card-amount-out'}>
-            {Number(txn.amountFen) >= 0 ? '+' : ''}¥{formatFen(Math.abs(Number(txn.amountFen ?? 0)))}
-          </span>
-        </div>
-      ))}
+        );
+      })}
     </div>
   );
 };

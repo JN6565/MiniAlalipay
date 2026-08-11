@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { useParams, history } from 'umi';
+import { useParams, history, useLocation } from 'umi';
 import { Input, Toast, SpinLoading } from 'antd-mobile';
 import * as collectionService from '@/services/collection';
 import * as paymentPasswordService from '@/services/paymentPassword';
@@ -14,6 +14,10 @@ import './index.less';
 
 const CollectionPayPage: React.FC = () => {
   const { token } = useParams();
+  const location = useLocation();
+  // 短码兑换路径：兑换端点已建单并绑定会话，路由参数是订单 ID，
+  // 无需再走 bootstrap/令牌交换，直接按 ID 查单。
+  const viaShortCode = new URLSearchParams(location.search).get('via') === 'short-code';
   const [loading, setLoading] = useState(true);
   const [locking, setLocking] = useState(false);
   const [submitting, setSubmitting] = useState(false);
@@ -30,19 +34,27 @@ const CollectionPayPage: React.FC = () => {
     if (token) {
       loadOrder(token);
     }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [token]);
 
   const loadOrder = async (t: string) => {
     try {
       // 付款人身份依赖登录态；未登录先跳登录页，登录成功后按 redirect 回到本页继续付款
       if (!localStorage.getItem('accessToken')) {
-        history.replace(`/h5/login?redirect=${encodeURIComponent(`/h5/collection/pay/${t}`)}`);
+        const current = `/h5/collection/pay/${t}${viaShortCode ? '?via=short-code' : ''}`;
+        history.replace(`/h5/login?redirect=${encodeURIComponent(current)}`);
         return;
       }
-      // 必须先建立匿名引导会话再交换令牌：后端要求令牌交换与后续支付
-      // 都发生在同一 bootstrap 会话中，直接交换会因缺少会话返回未授权
-      await collectionService.bootstrapSession(t);
-      const data = await collectionService.exchangeToken(t);
+      let data: collectionService.CollectionOrder;
+      if (viaShortCode) {
+        // 短码兑换已在服务端完成建单与会话绑定，此处 t 为订单 ID
+        data = await collectionService.getOrderStatus(t) as unknown as collectionService.CollectionOrder;
+      } else {
+        // 必须先建立匿名引导会话再交换令牌：后端要求令牌交换与后续支付
+        // 都发生在同一 bootstrap 会话中，直接交换会因缺少会话返回未授权
+        await collectionService.bootstrapSession(t);
+        data = await collectionService.exchangeToken(t);
+      }
       setOrder(data);
       setLoading(false);
       const [accountResult, creditResult] = await Promise.allSettled([

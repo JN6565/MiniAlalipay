@@ -8,6 +8,11 @@ import { BILL_STATUS_TEXT } from '@/constants';
 import { formatTime } from '@/utils/format';
 import './index.less';
 
+/**
+ * 花呗账单详情页：按路由参数中的账单 ID 拉取单期账单，
+ * 展示账单概览（消费总额/已还/剩余应还、出账日与到期日）、消费明细与还款记录。
+ * 账单状态非 PAID（已结清）时展示「立即还款」入口，跳转还款页。
+ */
 const CreditBillDetailPage: React.FC = () => {
   const { id } = useParams();
   const [loading, setLoading] = useState(true);

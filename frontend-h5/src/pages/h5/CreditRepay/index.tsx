@@ -10,6 +10,12 @@ import { AmountInput } from '@/components/h5/AmountInput';
 import { PasswordInput } from '@/components/h5/PasswordInput';
 import './index.less';
 
+/**
+ * 花呗还款页：加载信用欠款与余额账户后默认全额还款，支持修改金额。
+ * 流程为「创建还款草稿（服务端预拆分账单）→ 输入 6 位支付密码 → 提交还款」，
+ * 密码仅在提交时随请求发送，不写入本地存储；金额内部统一按分（amountFen）计算，
+ * 仅展示层换算为元。
+ */
 const CreditRepayPage: React.FC = () => {
   const [loading, setLoading] = useState(true);
   const [submitting, setSubmitting] = useState(false);

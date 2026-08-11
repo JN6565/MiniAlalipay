@@ -66,7 +66,8 @@ public class QrPayController {
             @Valid @RequestBody CreateQrPayOrderRequest body, HttpServletRequest request) {
         QrPayApplicationService.CreatedOrder created = service.create(userId, body.amountFen(), body.subject(), idempotencyKey);
         String url = created.rawToken() == null ? null : "/api/v1/qr-pay/orders/by-token?t=" + created.rawToken();
-        return ResponseEntity.status(201).body(success(QrPayOrderResponse.from(created.order(), null, url), request));
+        // 短码仅创建响应返回，查询响应不携带
+        return ResponseEntity.status(201).body(success(QrPayOrderResponse.from(created.order(), null, url, created.shortCode()), request));
     }
 
     /** 查询当前用户创建的二维码订单。 */
@@ -187,12 +188,16 @@ public class QrPayController {
     /** 资金受理响应；PROCESSING 或未知结果绝不表示成功。 */
     public record PaymentResponse(String orderId, String transactionId, String status, String statusUrl, Instant updatedAt) { }
 
-    /** 脱敏二维码订单响应，不包含收款账户、付款账户或原始令牌。 */
+    /** 脱敏二维码订单响应，不包含收款账户、付款账户或原始令牌；短码仅创建响应携带。 */
     public record QrPayOrderResponse(String qrOrderId, String payeeDisplayName, long amountFen, String subject,
-                                     String status, String transactionId, String qrCodeUrl, Instant expiresAt, long version) {
+                                     String status, String transactionId, String qrCodeUrl, String shortCode,
+                                     Instant expiresAt, long version) {
         static QrPayOrderResponse from(QrPayOrder order, String payeeDisplayName, String qrCodeUrl) {
+            return from(order, payeeDisplayName, qrCodeUrl, null);
+        }
+        static QrPayOrderResponse from(QrPayOrder order, String payeeDisplayName, String qrCodeUrl, String shortCode) {
             return new QrPayOrderResponse(order.getOrderId(), payeeDisplayName, order.getAmountFen(), order.getSubject(),
-                    order.getStatus().name(), order.getTransactionId(), qrCodeUrl, order.getExpiresAt(), order.getVersion());
+                    order.getStatus().name(), order.getTransactionId(), qrCodeUrl, shortCode, order.getExpiresAt(), order.getVersion());
         }
     }
 

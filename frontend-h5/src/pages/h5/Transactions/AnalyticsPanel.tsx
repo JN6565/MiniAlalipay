@@ -1,6 +1,6 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { Toast } from 'antd-mobile';
-import { Axis, Canvas, Chart, Line, Point, Tooltip } from '@antv/f2';
+import { Axis, Canvas, Chart, Interval, Line, Point, Tooltip } from '@antv/f2';
 import * as accountService from '@/services/account';
 import { formatAmount } from '@/utils/format';
 import { Skeleton, IconSet } from '@/components/h5/common';
@@ -12,24 +12,80 @@ const F2Axis = Axis as unknown as React.ComponentType<any>;
 const F2Line = Line as unknown as React.ComponentType<any>;
 const F2Point = Point as unknown as React.ComponentType<any>;
 const F2Tooltip = Tooltip as unknown as React.ComponentType<any>;
+const F2Interval = Interval as unknown as React.ComponentType<any>;
 
 /**
- * 账单页「分析」Tab：由原独立资产分析页迁移整合而来。
- * 内容：收支汇总三卡（收入/支出/结余）+ 收支趋势折线 + 交易对象分布占比条。
+ * 支出分类（V2.1 分析重设计）：仅统计 OUT 方向，按账本 memo 关键词归类。
+ * 归类规则与账单列表图标保持一致；色板与设计稿环形图一致。
+ */
+const EXPENSE_CATEGORIES: { key: string; label: string; color: string; match: (memo: string) => boolean }[] = [
+  { key: 'credit', label: '花呗', color: '#8b5cf6', match: (m) => /花呗|还款|消费/.test(m) },
+  { key: 'qrpay', label: '扫码支付', color: '#256cff', match: (m) => /支付|收款|扫码/.test(m) },
+  { key: 'transfer', label: '转账', color: '#18c0e8', match: (m) => m.includes('转账') },
+  { key: 'fund', label: '充值提现', color: '#12b76a', match: (m) => /充值|提现/.test(m) },
+  { key: 'other', label: '其他', color: '#94a3ba', match: () => true },
+];
+
+interface CategorySlice {
+  label: string;
+  color: string;
+  amountFen: number;
+  percent: number;
+}
+
+/**
+ * 账单页「分析」Tab（V2.1 重设计）：
+ * 收支汇总三卡 + 指标双卡（日均支出/收支比）+ 支出分类占比环形图 + 收支趋势折线 + 交易对象排行。
+ * 汇总/趋势/交易对象来自后端分析接口；分类占比由前端拉取账本分录（limit 100）
+ * 按 memo 归类聚合（后端未提供分类维度，不新增接口）。
  */
 const AnalyticsPanel: React.FC = () => {
   const [loading, setLoading] = useState(true);
   const [range, setRange] = useState<'7d' | '30d'>('7d');
   const [analytics, setAnalytics] = useState<accountService.AnalyticsData | null>(null);
+  const [slices, setSlices] = useState<CategorySlice[]>([]);
 
   useEffect(() => {
     let cancelled = false;
+    const days = range === '7d' ? 7 : 30;
     const load = async () => {
       setLoading(true);
       try {
         // 请求拦截器已拆包 ApiResponse，运行时返回值为业务数据而非 AxiosResponse
         const data = (await accountService.getAnalytics(range)) as unknown as accountService.AnalyticsData;
-        if (!cancelled) setAnalytics(data);
+        // 分类占比：拉取分录后按时间窗 + OUT 方向 + memo 归类聚合
+        // 同 getAnalytics：拦截器已拆包，运行时为业务数据而非 AxiosResponse
+        const page = (await accountService.getTransactions({ pageSize: 100 })) as unknown as {
+          items: accountService.Transaction[];
+        };
+        const since = Date.now() - days * 24 * 60 * 60 * 1000;
+        const expenses = (page.items || []).filter(
+          (tx) => tx.direction === 'OUT' && new Date(tx.createdAt).getTime() >= since,
+        );
+        const buckets = EXPENSE_CATEGORIES.map((c) => ({ ...c, amountFen: 0, matched: false }));
+        for (const tx of expenses) {
+          const memo = tx.memo?.trim() || '';
+          // 顺序匹配首个命中的业务分类，未命中落到"其他"，保证每条分录只计入一个分类
+          const bucket = buckets.find((b) => !b.matched && b.key !== 'other' && b.match(memo))
+            || buckets.find((b) => b.key === 'other');
+          if (bucket) {
+            bucket.amountFen += tx.amountFen;
+          }
+        }
+        const total = buckets.reduce((sum, b) => sum + b.amountFen, 0);
+        if (!cancelled) {
+          setAnalytics(data);
+          setSlices(
+            buckets
+              .filter((b) => b.amountFen > 0)
+              .map((b) => ({
+                label: b.label,
+                color: b.color,
+                amountFen: b.amountFen,
+                percent: total > 0 ? Math.round((b.amountFen / total) * 100) : 0,
+              })),
+          );
+        }
       } catch (error: any) {
         if (!cancelled) {
           Toast.show({ content: error?.message || '当前网络环境较差，数据暂未返回，请稍后重试', icon: 'fail' });
@@ -47,6 +103,11 @@ const AnalyticsPanel: React.FC = () => {
   const incomeFen = analytics?.incomeFen || 0;
   const expenseFen = analytics?.expenseFen || 0;
   const balanceFen = incomeFen - expenseFen;
+  const days = range === '7d' ? 7 : 30;
+  // 日均支出 = 区间支出 ÷ 天数（金额整数分，展示层转换）
+  const dailyExpenseFen = Math.round(expenseFen / days);
+  // 收支比 = 收入 ÷ 支出（保留一位小数）；支出为 0 时无意义显示 "--"
+  const ratioText = expenseFen > 0 ? `${(incomeFen / expenseFen).toFixed(1)} : 1` : '--';
   const topPayees = analytics?.topPayees ?? [];
   const maxPayeeFen = topPayees.reduce((max, p) => Math.max(max, p.totalFen), 0);
 
@@ -92,6 +153,53 @@ const AnalyticsPanel: React.FC = () => {
             </div>
           </div>
 
+          {/* 指标双卡：日均支出与收支比 */}
+          <div className="analytics-metrics">
+            <div className="metric-cell">
+              <div className="metric-icon">
+                <IconSet name="clock" size={15} color="var(--h5-primary)" />
+              </div>
+              <div className="metric-body">
+                <div className="metric-value">¥{formatAmount(dailyExpenseFen)}</div>
+                <div className="metric-label">日均支出</div>
+              </div>
+            </div>
+            <div className="metric-cell">
+              <div className="metric-icon">
+                <IconSet name="chart" size={15} color="var(--h5-primary)" />
+              </div>
+              <div className="metric-body">
+                <div className="metric-value">{ratioText}</div>
+                <div className="metric-label">收支比（收入 : 支出）</div>
+              </div>
+            </div>
+          </div>
+
+          {/* 支出分类占比：环形图 + 图例（仅 OUT 方向，前端按 memo 归类） */}
+          <div className="analytics-card">
+            <div className="analytics-card-title">
+              <IconSet name="huabei" size={15} color="var(--h5-primary)" />
+              支出分类占比
+            </div>
+            {slices.length > 0 ? (
+              <div className="category-ratio">
+                <CategoryDonut slices={slices} />
+                <div className="category-legend">
+                  {slices.map((slice) => (
+                    <div key={slice.label} className="legend-row">
+                      <i className="legend-color" style={{ background: slice.color }} />
+                      <span className="legend-name">{slice.label}</span>
+                      <span className="legend-amount">¥{formatAmount(slice.amountFen)}</span>
+                      <span className="legend-percent">{slice.percent}%</span>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            ) : (
+              <div className="chart-empty">暂无支出数据</div>
+            )}
+          </div>
+
           {/* 收支趋势 */}
           <div className="analytics-card">
             <div className="analytics-card-title">
@@ -105,9 +213,9 @@ const AnalyticsPanel: React.FC = () => {
             )}
           </div>
 
-          {/* 交易对象分布 */}
+          {/* 交易对象排行 */}
           <div className="analytics-card">
-            <div className="analytics-card-title plain">交易对象分布</div>
+            <div className="analytics-card-title plain">交易对象排行</div>
             {topPayees.length > 0 ? (
               topPayees.map((payee, index) => {
                 const percent = maxPayeeFen > 0 ? Math.round((payee.totalFen / maxPayeeFen) * 100) : 0;
@@ -132,6 +240,42 @@ const AnalyticsPanel: React.FC = () => {
           </div>
         </>
       )}
+    </div>
+  );
+};
+
+/**
+ * 支出分类环形图：F2 polar 坐标系 + Interval 堆叠（innerRadius 形成环形）。
+ * 颜色顺序与右侧图例一致；组件卸载时销毁 F2 实例。
+ */
+const CategoryDonut: React.FC<{ slices: CategorySlice[] }> = ({ slices }) => {
+  const canvasRef = useRef<HTMLCanvasElement>(null);
+
+  useEffect(() => {
+    const canvas = canvasRef.current;
+    if (!canvas) return undefined;
+    const context = canvas.getContext('2d');
+    if (!context) return undefined;
+    const data = slices.map((slice) => ({ name: slice.label, amountFen: slice.amountFen }));
+    const colors = slices.map((slice) => slice.color);
+    const { props } = (
+      <F2Canvas context={context} pixelRatio={window.devicePixelRatio || 1}>
+        <F2Chart
+          data={data}
+          coord={{ type: 'polar', transposed: true, innerRadius: 0.62, radius: 0.9 }}
+        >
+          <F2Interval x="name" y="amountFen" color={['name', colors]} adjust="stack" />
+        </F2Chart>
+      </F2Canvas>
+    );
+    const chartCanvas = new Canvas(props);
+    void chartCanvas.render();
+    return () => chartCanvas.destroy();
+  }, [slices]);
+
+  return (
+    <div className="category-donut" aria-label="支出分类占比环形图">
+      <canvas ref={canvasRef} />
     </div>
   );
 };

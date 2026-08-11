@@ -30,6 +30,8 @@ public class ToolRouter {
     private static final Logger log = LoggerFactory.getLogger(ToolRouter.class);
     private static final String RESULT_SUCCESS = "SUCCESS";
     private static final String RESULT_TOOL_UNAVAILABLE = "TOOL_UNAVAILABLE";
+    /** 下游业务错误（余额不足、超限等）：结果码区别于不可用，errorMessage 由解释引擎原样透传给用户。 */
+    private static final String RESULT_BUSINESS_ERROR = "BUSINESS_ERROR";
 
     private final UserCenterPort userCenterPort;
     private final AccountCenterPort accountCenterPort;
@@ -109,6 +111,13 @@ public class ToolRouter {
             }
             log.warn("工具调用失败: tool={}, exception={}, message={}",
                     toolName, root.getClass().getSimpleName(), root.getMessage());
+            // 下游业务错误（余额不足、超限、参数缺失等）：透传异常携带的中文文案给用户，
+            // 而非一律显示"服务暂不可用"；TOOL_UNAVAILABLE 自身仍走不可用降级话术。
+            if (root instanceof BusinessException businessError
+                    && !AgentErrorCode.TOOL_UNAVAILABLE.code().equals(businessError.errorCode().code())) {
+                return new ToolResult(RESULT_BUSINESS_ERROR, Map.of(),
+                        businessError.getMessage(), duration);
+            }
             String errorMsg = root.getMessage();
             if (errorMsg == null || errorMsg.isBlank()) {
                 errorMsg = root.getClass().getSimpleName() + "（无详细描述）";

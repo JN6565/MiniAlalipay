@@ -10,6 +10,8 @@ export interface QrPayOrder {
   status: string;
   transactionId: string | null;
   qrCodeUrl?: string | null;
+  /** 手动输入收款短码，仅创建响应携带，查询响应不返回。 */
+  shortCode?: string | null;
   version: number;
 }
 

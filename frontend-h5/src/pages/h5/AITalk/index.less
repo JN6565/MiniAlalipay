@@ -3,7 +3,8 @@
 
 /* ==================== 设计令牌 ==================== */
 :root {
-  --ai-deep: linear-gradient(165deg, #0e1c3f 0%, #16306b 55%, #1f4a8f 100%);
+  /* 基底深蓝渐变：比旧版更通透（提亮末段），避免单层渐变发闷 */
+  --ai-deep: linear-gradient(165deg, #0b1836 0%, #12295c 55%, #1b3f85 100%);
   --ai-bg: var(--h5-bg);
   --ai-bg-elev: var(--h5-card-bg);
   --ai-bg-message: var(--h5-fill);
@@ -23,11 +24,40 @@
 
 /* ==================== 页面骨架 ==================== */
 .ai-talk-page {
-  /* 聊天应用标准模式：页面自然滚动，输入区和 tabbar 用 fixed 固定在视口底部 */
-  background: var(--ai-deep);
-  min-height: 100vh;
+  /* 聊天应用标准模式：页面自然滚动，输入区和 tabbar 用 fixed 固定在视口底部。
+     背景 V2.1：基底渐变 + 双柔光光斑分层渲染——自身不设背景，由伪元素承载，
+     伪元素 fixed 固定于视口，滚动内容时背景不断裂；z-index:0 建立局部层叠上下文，
+     保证 z-index:-1 的伪元素位于内容之下、页面底色之上。 */
+  position: relative;
+  z-index: 0;
+  /* 滚动容器 .h5-content 高度为 100%，页面自身不再声明视口高度，
+     避免 100dvh 与滚动容器双重约束导致键盘弹出时高度计算错乱 */
+  min-height: 100%;
   color: #fff;
-  padding-bottom: calc(120px + env(safe-area-inset-bottom, 0px));
+  /* 底部预留输入栏实际高度（约 90px）+ 安全区，确保最后一条消息不被输入栏遮挡 */
+  padding-bottom: calc(90px + env(safe-area-inset-bottom, 0px));
+
+  /* 基底层：深蓝渐变 */
+  &::before {
+    content: '';
+    position: fixed;
+    inset: 0;
+    z-index: -1;
+    background: var(--ai-deep);
+    pointer-events: none;
+  }
+
+  /* 柔光层：右上品牌蓝 + 左下淡紫两个低透明度 radial 光斑，提升空间层次 */
+  &::after {
+    content: '';
+    position: fixed;
+    inset: 0;
+    z-index: -1;
+    background:
+      radial-gradient(520px 400px at 88% -4%, rgba(77, 155, 255, 0.24) 0%, rgba(77, 155, 255, 0) 62%),
+      radial-gradient(480px 420px at 6% 104%, rgba(155, 108, 255, 0.16) 0%, rgba(155, 108, 255, 0) 60%);
+    pointer-events: none;
+  }
 }
 
 /* ==================== 顶部操作栏 ==================== */
@@ -37,7 +67,11 @@
   justify-content: space-between;
   padding: 10px 14px;
   padding-top: calc(10px + env(safe-area-inset-top, 0px));
-  background: transparent;
+  /* sticky 在滚动容器 .h5-content 内可靠工作；半透明深色底 + 模糊
+     避免滚过内容时标题与气泡重叠不可读 */
+  background: rgba(11, 24, 54, 0.82);
+  backdrop-filter: blur(10px);
+  -webkit-backdrop-filter: blur(10px);
   z-index: 98;
   position: sticky;
   top: 0;
@@ -101,7 +135,8 @@
   margin: 0 auto 12px;
   border-radius: 50%;
   background: radial-gradient(circle at 32% 28%, #9fd2ff 0%, #4d9bff 45%, #256cff 100%);
-  box-shadow: 0 0 26px rgba(77, 155, 255, 0.55);
+  /* V2.1：外圈光晕扩大提亮，与多层背景的柔光光斑呼应 */
+  box-shadow: 0 0 34px rgba(77, 155, 255, 0.65), 0 0 0 7px rgba(77, 155, 255, 0.1);
 }
 
 .ai-welcome-title {
@@ -499,10 +534,15 @@
 
 /* ==================== 输入区 ==================== */
 .ai-input-area {
-  position: fixed;
+  /* 绝对定位锚定在页面内容底部：真实滚动容器是 .h5-content，
+     fixed 元素挂在溢出滚动容器内时移动端会随内容滚动/被遮挡，
+     改为 absolute 后输入栏成为滚动内容的末尾元素，键盘弹出时
+     视口收缩仍可滚动到达；/h5/ai-talk 不渲染 TabBar，无需 60px 偏移 */
+  position: absolute;
   left: 0;
   right: 0;
-  bottom: calc(60px + env(safe-area-inset-bottom, 0px));
+  bottom: 0;
+  padding-bottom: env(safe-area-inset-bottom, 0px);
   z-index: 99;
   background: transparent;
 }

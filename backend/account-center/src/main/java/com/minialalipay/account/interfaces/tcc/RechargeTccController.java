@@ -34,6 +34,22 @@ public class RechargeTccController {
         return ResponseEntity.ok(new Result(branch.getStatus().name()));
     }
 
+    /**
+     * 充值 TCC 命令参数。
+     *
+     * <p>除屏障标识外还携带复式账本凭证与分录的稳定标识，
+     * Try/Confirm/Cancel 重试时必须保持完全一致，否则会被识别为不同请求。金额单位为分。</p>
+     *
+     * @param xid 业务屏障标识（由交易 ID 派生）
+     * @param transactionId 统一交易 ID，26 位
+     * @param targetAccountId 充值入账的目标账户 ID，26 位
+     * @param amountFen 充值金额（分），必须为正数
+     * @param voucherId 复式账本凭证 ID，26 位
+     * @param debitEntryId 借方分录稳定标识
+     * @param creditEntryId 贷方分录稳定标识
+     * @param eventId 账本事件幂等标识，26 位
+     * @param traceId 链路追踪标识，32 位十六进制
+     */
     public record Request(@NotBlank @Size(max = 128) String xid,
                           @NotBlank @Size(min = 26, max = 26) String transactionId,
                           @NotBlank @Size(min = 26, max = 26) String targetAccountId,
@@ -42,5 +58,6 @@ public class RechargeTccController {
                           @Positive long debitEntryId, @Positive long creditEntryId,
                           @NotBlank @Size(min = 26, max = 26) String eventId,
                           @NotBlank @Pattern(regexp = "^[a-fA-F0-9]{32}$") String traceId) { }
+    /** TCC 动作执行结果；status 为分支当前状态（INIT/TRIED/CONFIRMED/CANCELLED/MANUAL_REVIEW，空回滚以 CANCELLED 记录）。 */
     public record Result(String status) { }
 }

@@ -3,15 +3,20 @@ import { Input, Popup, Toast } from 'antd-mobile';
 import { useCallback, useEffect, useState } from 'react';
 import { getBankCards, rechargeBankCard, formatBalance, type BankCard } from '@/services/bankCard';
 import { getMyAccount, type AccountInfo } from '@/services/account';
+import { confirmBalanceChange } from '@/utils/balanceConfirm';
 import { AmountInput } from '@/components/h5/AmountInput';
 import { Skeleton, EmptyState, IconSet } from '@/components/h5/common';
+import FundResultScreen from '@/components/h5/FundResultScreen';
 import './index.less';
 
 /**
- * 充值页（V2）：充值是针对账户余额的动作——银行卡付钱，账户余额增加。
+ * 充值页（V2.1）：充值是针对账户余额的动作——银行卡付钱，账户余额增加。
  *
- * 流程按设计稿：输入金额 → 确认充值 → 底部 Popup 选银行卡 → 支付密码 →
- * 成功后返回钱包页（/h5/wallet），钱包页重拉即展示最新余额。
+ * 页面内三态（form / processing / result）：
+ * - form：输入金额 → 确认充值 → 底部 Popup 选银行卡 → 支付密码；
+ * - processing：接口受理成功后轮询确认余额（后端为异步 TCC 入账，接口返回不代表已入账）；
+ * - result：确认成功后展示最新余额；超时未确认展示受理提示与手动刷新入口。
+ * 返回钱包时携带 balanceDirty 标记，钱包页静默补拉确保余额新鲜。
  * 路由参数 :id 可选（旧入口兼容）：存在时作为默认选中卡。
  * 单笔 0.01-50000.00 元；银行卡余额是否充足由服务端校验并返回明确错误。
  */
@@ -26,6 +31,13 @@ const BankCardRechargePage = () => {
   const [loadingData, setLoadingData] = useState(true);
   const [selectVisible, setSelectVisible] = useState(false);
   const [passwordVisible, setPasswordVisible] = useState(false);
+  // 页面内三态：form 表单 → processing 入账确认中 → result 结果展示
+  const [stage, setStage] = useState<'form' | 'processing' | 'result'>('form');
+  const [resultConfirmed, setResultConfirmed] = useState(false);
+  const [resultBalanceFen, setResultBalanceFen] = useState<number | null>(null);
+  // 操作前余额基准，用于轮询判断余额是否已按预期方向变化
+  const [beforeBalanceFen, setBeforeBalanceFen] = useState(0);
+  const [submittedAmountFen, setSubmittedAmountFen] = useState(0);
 
   const loadData = useCallback(async () => {
     try {
@@ -71,6 +83,19 @@ const BankCardRechargePage = () => {
     setPasswordVisible(true);
   };
 
+  /** 轮询确认余额入账：确认后切 result 态并同步页头余额展示；beforeFen 显式传入避免闭包读到旧 state。 */
+  const waitForBalanceConfirm = async (beforeFen: number) => {
+    setStage('processing');
+    const { confirmed, newBalanceFen } = await confirmBalanceChange(beforeFen, 'IN');
+    setResultConfirmed(confirmed);
+    setResultBalanceFen(newBalanceFen);
+    // 确认成功后同步页头余额，避免顶部仍显示旧值
+    if (newBalanceFen !== null) {
+      setAccount((prev) => (prev ? { ...prev, availableFen: newBalanceFen } : prev));
+    }
+    setStage('result');
+  };
+
   /** 密码弹窗中确认提交。 */
   const handleSubmit = async () => {
     if (!selectedCard) return;
@@ -81,18 +106,21 @@ const BankCardRechargePage = () => {
 
     setLoading(true);
     try {
+      const amountFen = Math.round(amount * 100);
       await rechargeBankCard(selectedCard.cardId, {
-        amountFen: Math.round(amount * 100),
+        amountFen,
         paymentPassword: password,
       });
       setPasswordVisible(false);
-      Toast.show({ icon: 'success', content: '充值成功' });
-      // 返回钱包页重拉账户余额
-      history.replace('/h5/wallet');
-    } catch (error: any) {
-      Toast.show({ icon: 'fail', content: error?.message || '充值失败，请重试' });
-    } finally {
+      // 受理成功：记录操作前余额基准后进入入账确认轮询，不再直接跳回钱包（避免看到旧余额）
+      const beforeFen = account?.availableFen || 0;
+      setBeforeBalanceFen(beforeFen);
+      setSubmittedAmountFen(amountFen);
       setLoading(false);
+      await waitForBalanceConfirm(beforeFen);
+    } catch (error: any) {
+      setLoading(false);
+      Toast.show({ icon: 'fail', content: error?.message || '充值失败，请重试' });
     }
   };
 
@@ -103,6 +131,30 @@ const BankCardRechargePage = () => {
         <div style={{ marginTop: 12 }}>
           <Skeleton variant="card" height={110} />
         </div>
+      </div>
+    );
+  }
+
+  // 处理中 / 结果态：保留页头余额区，下方展示结果屏
+  if (stage !== 'form') {
+    return (
+      <div className="bank-card-operate-page">
+        <div className="operate-hero">
+          <div className="hero-label">充值到账户余额</div>
+          <div className="hero-num">¥ {formatBalance(account?.availableFen || 0)}</div>
+          <div className="hero-hint">当前账户可用余额</div>
+        </div>
+        <FundResultScreen
+          stage={stage}
+          actionLabel="充值"
+          amountFen={submittedAmountFen}
+          direction="IN"
+          confirmed={resultConfirmed}
+          newBalanceFen={resultBalanceFen}
+          onRefresh={() => { waitForBalanceConfirm(beforeBalanceFen); }}
+          onBackHome={() => history.push('/h5/home')}
+          onBackWallet={() => history.replace('/h5/wallet', { balanceDirty: true })}
+        />
       </div>
     );
   }

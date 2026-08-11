@@ -5,6 +5,8 @@ export interface PersonalCode {
   codeId: string;
   status: 'ACTIVE' | 'DISABLED' | 'REVOKED';
   collectionUrl: string;
+  /** 手动输入收款短码（8 位纯数字），付款方可不扫码直接输入此码付款。 */
+  shortCode?: string | null;
   version?: number;
 }
 
@@ -19,6 +21,14 @@ export interface CollectionRequest {
   version: number;
   /** 收款二维码引导地址，仅创建响应携带。 */
   collectionUrl?: string;
+  /** 手动输入收款短码，随请求生成，有效期内可重读。 */
+  shortCode?: string | null;
+}
+
+/** 短码兑换结果：码类型与可直接进入付款页的订单 ID。 */
+export interface ShortCodeExchangeResult {
+  codeType: 'PERSONAL_CODE' | 'COLLECTION_REQUEST' | 'QR_PAY_ORDER';
+  orderId: string;
 }
 
 export interface CollectionOrder {
@@ -120,6 +130,15 @@ export const exchangeToken = (token: string) => {
     '/api/v1/p2p-collections/token-exchanges',
     { token },
   );
+};
+
+// 兑换 8 位收款短码：等价于扫描对应二维码，服务端直接创建或绑定订单；
+// 令牌只存摘要，兑换响应不返回原始令牌，前端按 orderId 直接进入付款页。
+export const exchangeShortCode = (shortCode: string): Promise<ShortCodeExchangeResult> => {
+  return Promise.resolve(request.post<ShortCodeExchangeResult>(
+    '/api/v1/p2p-collections/short-code-exchanges',
+    { shortCode },
+  )).then((response) => response as unknown as ShortCodeExchangeResult);
 };
 
 // 锁定订单金额；返回锁定后的最新订单（版本 +1、不可再编辑），

@@ -63,18 +63,20 @@ public class JdbcMonitoringEventStore implements MonitoringEventStore {
     @Override
     public InboxClaimResult claim(String consumerName, String eventId) {
         Instant now = clock.instant();
-        // 新事件直接预占为 PROCESSING；已存在记录不能重复领取，失败达到重试时间的记录允许重新领取，
-        // 避免一次临时异常造成永久投影缺口。
-        int inserted = jdbc.update("INSERT IGNORE INTO metrics_db.inbox_event "
-                        + "(consumer_name,event_id,status,received_at,updated_at,next_retry_at) VALUES (?,?,?,?,?,NULL)",
-                consumerName, eventId, "PROCESSING", Timestamp.from(now), Timestamp.from(now));
-        if (inserted == 1) return InboxClaimResult.CLAIMED;
+        // 语句顺序是刻意安排：先 UPDATE 重领失败记录，再 INSERT IGNORE 预占新事件。
+        // UPDATE 的排他锁在并发下自然串行化；若先 INSERT IGNORE（行已存在时重复键检查加 S 锁）
+        // 再 UPDATE 同一行升级 X 锁，两个进程并发领取同一事件会各持 S 锁互等形成死锁。
+        // 失败达到重试时间的记录允许重新领取，避免一次临时异常造成永久投影缺口。
         int retried = jdbc.update("UPDATE metrics_db.inbox_event SET status='PROCESSING',updated_at=?,next_retry_at=NULL "
                         + "WHERE consumer_name=? AND event_id=? AND status='FAILED' "
                         + "AND retry_count<? AND ((next_retry_at IS NULL AND updated_at<=?) OR next_retry_at<=?)",
                 Timestamp.from(now), consumerName, eventId, MAX_RETRY_COUNT,
                 Timestamp.from(now.minusSeconds(retryAfterSeconds)), Timestamp.from(now));
         if (retried == 1) return InboxClaimResult.CLAIMED;
+        int inserted = jdbc.update("INSERT IGNORE INTO metrics_db.inbox_event "
+                        + "(consumer_name,event_id,status,received_at,updated_at,next_retry_at) VALUES (?,?,?,?,?,NULL)",
+                consumerName, eventId, "PROCESSING", Timestamp.from(now), Timestamp.from(now));
+        if (inserted == 1) return InboxClaimResult.CLAIMED;
         String status = jdbc.query("SELECT status FROM metrics_db.inbox_event WHERE consumer_name=? AND event_id=?",
                 rs -> rs.next() ? rs.getString(1) : null, consumerName, eventId);
         // 只有 DONE 表示该消息已经形成终态投影；FAILED/PROCESSING 必须保留 Stream 游标等待恢复。

@@ -1,4 +1,4 @@
-version: 1.3.0
+version: 1.4.0
 status: FROZEN
 codes:
   OK: {httpStatus: 200, message: 成功}
@@ -68,6 +68,8 @@ codes:
   COLLECTION_REQUEST_PAID: {httpStatus: 409, message: 固定收款请求已经支付}
   REQUEST_NOT_FOUND: {httpStatus: 404, message: 收款请求不存在}
   REQUEST_NOT_CANCELLABLE: {httpStatus: 409, message: 收款请求当前不可取消}
+  SHORT_CODE_INVALID: {httpStatus: 404, message: 短码不存在或已过期}
+  SHORT_CODE_RATE_LIMITED: {httpStatus: 429, message: 短码尝试过于频繁，请稍后再试}
   AMOUNT_IMMUTABLE: {httpStatus: 422, message: 金额已经锁定，不允许修改}
   FUNDING_SOURCE_NOT_ALLOWED: {httpStatus: 422, message: 当前场景不允许该资金来源}
   BANK_CARD_INVALID: {httpStatus: 422, message: 银行卡号无效或暂不支持}

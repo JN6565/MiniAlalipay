@@ -191,7 +191,7 @@ public class SeataTccCoordinator implements TccCoordinatorPort {
         }
     }
 
-    /** 银行卡转账/扫码支付走 Seata 全局事务：注册银行卡余额扣减 + 收款方余额 + 账本分支。 */
+    /** 银行卡出资转账/扫码支付走 Seata 全局事务：注册银行卡扣减 + 收款入账两个分支，无复式账本。 */
     private void executeBankCardTransfer(FundTransaction transaction) {
         if (transaction.getStatus().hasDefinitiveOutcome()) return;
         SeataGlobalTransactionExecutor.TransferTccRequest request = request(transaction);

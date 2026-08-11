@@ -1,8 +1,9 @@
-import { history } from 'umi';
+import { history, useLocation } from 'umi';
 import { Toast } from 'antd-mobile';
 import { useCallback, useEffect, useState } from 'react';
 import * as accountService from '@/services/account';
 import { getBankCards, formatBalance, type BankCard } from '@/services/bankCard';
+import { fetchAvailableFen } from '@/utils/balanceConfirm';
 import { Skeleton, RevealToggle, EmptyState, BankCardFace, IconSet } from '@/components/h5/common';
 import './index.less';
 
@@ -11,9 +12,14 @@ import './index.less';
  *
  * V2 设计：顶部柔渐变区只展示账户余额（不展示总资产）；充值/提现胶囊按钮
  * 上移至悬浮操作卡，充值跳转 Popup 选卡流程；下方为银行卡卡面列表。
- * 每次进入页面重拉余额与卡列表：充值/提现成功后返回本页即展示最新事实。
+ *
+ * 余额新鲜度保障（两层）：
+ * 1. 每次进入页面重拉余额与卡列表；
+ * 2. 充值/提现结果屏返回时携带 balanceDirty 标记：异步 TCC 入账可能滞后于页面跳转，
+ *    标记存在时额外静默补拉最多 3 次（间隔 1s）并即时替换展示值，随后清除标记。
  */
 const WalletPage = () => {
+  const location = useLocation();
   const [account, setAccount] = useState<accountService.AccountInfo | null>(null);
   const [cards, setCards] = useState<BankCard[]>([]);
   const [loading, setLoading] = useState(true);
@@ -42,6 +48,29 @@ const WalletPage = () => {
   useEffect(() => {
     loadData();
   }, [loadData]);
+
+  // 充值/提现返回时的余额补拉：结果屏已轮询确认过一次，本页再静默补拉最多 3 次（间隔 1s）兜底滞后入账
+  useEffect(() => {
+    const navState = (location.state || {}) as { balanceDirty?: boolean };
+    if (!navState.balanceDirty) return;
+    // 先清除标记，避免 location 变更时重复触发补拉
+    history.replace('/h5/wallet', {});
+    let cancelled = false;
+    const silentRefresh = async () => {
+      for (let i = 0; i < 3; i++) {
+        await new Promise((resolve) => setTimeout(resolve, 1000));
+        if (cancelled) return;
+        const balanceFen = await fetchAvailableFen();
+        if (cancelled) return;
+        if (balanceFen !== null) {
+          // 静默替换展示值：不进骨架屏，不打断用户浏览
+          setAccount((prev) => (prev ? { ...prev, availableFen: balanceFen } : prev));
+        }
+      }
+    };
+    silentRefresh();
+    return () => { cancelled = true; };
+  }, [location.state]);
 
   if (loading) {
     return (

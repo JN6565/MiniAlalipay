@@ -149,7 +149,8 @@ public class HttpAccountCenterClient implements AccountCenterPort {
                     .retrieve()
                     .onStatus(HttpStatusCode::is4xxClientError, (req, res) -> {
                         log.warn("账户中心客户端错误: status={}, path={}", res.getStatusCode(), path);
-                        throw new BusinessException(AgentErrorCode.TOOL_UNAVAILABLE);
+                        // 4xx 为下游业务错误（额度不足、参数非法等），透传下游中文文案而非掩盖为不可用
+                        throw DownstreamErrorTranslator.translate("account-center", res);
                     })
                     .onStatus(HttpStatusCode::is5xxServerError, (req, res) -> {
                         log.warn("账户中心服务端错误: status={}, path={}", res.getStatusCode(), path);
@@ -180,7 +181,8 @@ public class HttpAccountCenterClient implements AccountCenterPort {
                     .retrieve()
                     .onStatus(HttpStatusCode::is4xxClientError, (req, res) -> {
                         log.warn("账户中心客户端错误: status={}, path={}", res.getStatusCode(), path);
-                        throw new BusinessException(AgentErrorCode.TOOL_UNAVAILABLE);
+                        // 4xx 为下游业务错误（额度不足、参数非法等），透传下游中文文案而非掩盖为不可用
+                        throw DownstreamErrorTranslator.translate("account-center", res);
                     })
                     .onStatus(HttpStatusCode::is5xxServerError, (req, res) -> {
                         log.warn("账户中心服务端错误: status={}, path={}", res.getStatusCode(), path);

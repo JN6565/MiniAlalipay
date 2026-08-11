@@ -3,6 +3,7 @@ package com.minialalipay.business.application.port;
 import com.minialalipay.business.domain.qrpay.QrPayOrder;
 import com.minialalipay.business.domain.qrpay.QrPayOrderEvent;
 
+import java.time.Instant;
 import java.util.List;
 import java.util.Optional;
 
@@ -57,4 +58,13 @@ public interface QrPayStore {
 
     /** 幂等记录只暴露请求摘要和来源订单标识。 */
     record IdempotencyRecord(byte[] requestDigest, String orderId) { }
+
+    /** 按手动输入短码查询二维码订单。 */
+    default Optional<QrPayOrder> findByShortCode(String shortCode) { return Optional.empty(); }
+
+    /** 为二维码订单分配短码；短码唯一冲突返回 false。 */
+    default boolean assignShortCode(String orderId, String shortCode) { return true; }
+
+    /** 清理过期或终态订单占用的短码，释放给新码复用。 */
+    default void clearExpiredShortCodes(Instant now) { }
 }

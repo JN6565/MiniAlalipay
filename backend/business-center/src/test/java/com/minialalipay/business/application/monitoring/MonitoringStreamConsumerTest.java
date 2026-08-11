@@ -1,6 +1,7 @@
 package com.minialalipay.business.application.monitoring;
 
 import org.junit.jupiter.api.Test;
+import org.springframework.dao.DeadlockLoserDataAccessException;
 
 import java.time.Instant;
 import java.util.ArrayList;
@@ -60,6 +61,22 @@ class MonitoringStreamConsumerTest {
         assertEquals(Set.of(), store.completed);
     }
 
+    @Test
+    void 领取遭遇死锁回滚时不抛异常也不推进游标() {
+        // 多实例并发领取同一事件时 MySQL 会选一个死锁受害者整体回滚，
+        // 消费者必须降级为保留游标待下轮重试，而不是把调度器打成 ERROR
+        RecordingStore store = new RecordingStore();
+        store.deadlockOnClaim = true;
+        RecordingStream stream = new RecordingStream(List.of(
+                new MonitoringStreamPort.StreamMessage("6-0", event("01J00000000000000000000008"))));
+
+        new MonitoringStreamConsumer(stream, new MonitoringEventConsumer("ops-projection", store), store, 10)
+                .consumeAvailableEvents();
+
+        assertEquals("0-0", store.cursor);
+        assertEquals(Set.of(), store.completed);
+    }
+
     private static MonitoringEvent event(String id) {
         return new MonitoringEvent(id, "transaction.accepted", 1, NOW, "trace-1",
                 Map.of("transactionId", "tx-1", "status", "PROCESSING"));
@@ -75,12 +92,14 @@ class MonitoringStreamConsumerTest {
     private static final class RecordingStore implements MonitoringEventStore {
         private String cursor = "0-0";
         private boolean failNext;
+        private boolean deadlockOnClaim;
         private String retryLaterEventId;
         private final Set<String> claimed = new HashSet<>();
         private final Set<String> completed = new HashSet<>();
         private final List<MonitoringEvent> projected = new ArrayList<>();
 
         @Override public InboxClaimResult claim(String consumerName, String eventId) {
+            if (deadlockOnClaim) throw new DeadlockLoserDataAccessException("Deadlock found when trying to get lock", null);
             if (eventId.equals(retryLaterEventId)) return RETRY_LATER;
             return claimed.add(eventId) ? CLAIMED : ALREADY_DONE;
         }

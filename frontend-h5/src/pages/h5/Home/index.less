@@ -1,5 +1,5 @@
-/* 首页（V2 重设计）：柔渐变头图 + 头像昵称（进个人详情）+ 设置入口，
-   快捷宫格（品牌渐变图标底）+ 花呗摘要 + 生活服务区；总资产收敛至钱包页。
+/* 首页（V2.1 重设计）：柔渐变头图 + 头像昵称（进个人详情）+ 设置入口，
+   快捷宫格（两行 x 4 共 8 入口，品牌渐变图标底）+ 花呗摘要 + 生活服务区；总资产收敛至钱包页。
    配色一律引用 --h5-* 设计令牌（见 src/overrides.css）。 */
 
 .home {
@@ -78,10 +78,11 @@
     gap: 12px;
   }
 
-  /* ===== 快捷功能：一行五个，品牌渐变图标底 ===== */
+  /* ===== 快捷功能：两行 x 4 共 8 入口，品牌渐变图标底 ===== */
   .quick-card {
     display: grid;
-    grid-template-columns: repeat(5, 1fr);
+    grid-template-columns: repeat(4, 1fr);
+    row-gap: 14px;
     background: var(--h5-card-bg);
     border-radius: var(--h5-radius-card);
     padding: 16px 4px 12px;
@@ -108,6 +109,15 @@
 
         /* 花呗专属紫蓝 credit 渐变 */
         &.credit { background: var(--h5-grad-credit); }
+
+        /* 账单橙渐变 */
+        &.orange { background: linear-gradient(135deg, #ff9f43 0%, #ffcf5c 100%); }
+
+        /* 银行卡绿渐变 */
+        &.green { background: linear-gradient(135deg, #12b76a 0%, #4ade80 100%); }
+
+        /* AI 助手紫粉渐变 */
+        &.aipur { background: linear-gradient(135deg, #8b5cf6 0%, #ec6fae 100%); }
       }
 
       span { font-size: 12px; color: var(--h5-text); }

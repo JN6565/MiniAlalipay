@@ -257,6 +257,61 @@ public class JdbcCollectionStore implements CollectionStore {
     }
 
     @Override
+    public Optional<PersonalCollectionCode> findActiveCodeByShortCode(String shortCode) {
+        return jdbc.query("SELECT code_id,owner_user_id,payee_account_id,status,version,created_at,updated_at "
+                        + "FROM business_db.personal_collection_code WHERE short_code=? AND status='ACTIVE'", rs -> rs.next()
+                        ? Optional.of(new PersonalCollectionCode(rs.getString("code_id"), rs.getString("owner_user_id"),
+                        rs.getString("payee_account_id"), PersonalCollectionCodeStatus.valueOf(rs.getString("status")),
+                        rs.getLong("version"), rs.getTimestamp("created_at").toInstant(), rs.getTimestamp("updated_at").toInstant()))
+                        : Optional.empty(), shortCode);
+    }
+
+    @Override
+    public Optional<CollectionRequest> findRequestByShortCode(String shortCode) {
+        return jdbc.query("SELECT request_id,requester_user_id,payee_account_id,amount_fen,subject,status,active_order_id,version,expires_at,created_at,updated_at "
+                        + "FROM business_db.collection_request WHERE short_code=?", rs -> rs.next()
+                        ? Optional.of(mapRequest(rs)) : Optional.empty(), shortCode);
+    }
+
+    @Override
+    public Optional<String> findCodeShortCode(String codeId) {
+        return jdbc.query("SELECT short_code FROM business_db.personal_collection_code WHERE code_id=?",
+                rs -> rs.next() ? Optional.ofNullable(rs.getString("short_code")) : Optional.empty(), codeId);
+    }
+
+    @Override
+    public Optional<String> findRequestShortCode(String requestId) {
+        return jdbc.query("SELECT short_code FROM business_db.collection_request WHERE request_id=?",
+                rs -> rs.next() ? Optional.ofNullable(rs.getString("short_code")) : Optional.empty(), requestId);
+    }
+
+    @Override
+    public boolean assignCodeShortCode(String codeId, String shortCode) {
+        try {
+            return jdbc.update("UPDATE business_db.personal_collection_code SET short_code=? WHERE code_id=?",
+                    shortCode, codeId) == 1;
+        } catch (DuplicateKeyException duplicate) { return false; }
+    }
+
+    @Override
+    public boolean assignRequestShortCode(String requestId, String shortCode) {
+        try {
+            return jdbc.update("UPDATE business_db.collection_request SET short_code=? WHERE request_id=?",
+                    shortCode, requestId) == 1;
+        } catch (DuplicateKeyException duplicate) { return false; }
+    }
+
+    @Override
+    public void clearExpiredShortCodes(java.time.Instant now) {
+        // 已停用/换发失效的个人码与过期、终态请求的短码一律释放，供新码复用
+        jdbc.update("UPDATE business_db.personal_collection_code SET short_code=NULL "
+                + "WHERE short_code IS NOT NULL AND status<>'ACTIVE'");
+        jdbc.update("UPDATE business_db.collection_request SET short_code=NULL "
+                        + "WHERE short_code IS NOT NULL AND (expires_at<? OR status NOT IN ('OPEN','PROCESSING'))",
+                Timestamp.from(now));
+    }
+
+    @Override
     public Optional<IdempotencyRecord> findIdempotency(String principal, String operation, String idempotencyKey) {
         return jdbc.query("SELECT request_digest,resource_id FROM business_db.idempotency_record WHERE principal_key=? AND api_scope=? AND idempotency_key=?",
                 rs -> rs.next() ? Optional.of(new IdempotencyRecord(rs.getBytes("request_digest"), rs.getString("resource_id"))) : Optional.empty(),

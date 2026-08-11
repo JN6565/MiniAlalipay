@@ -47,7 +47,6 @@
   gap: 8px;
   margin-bottom: 12px;
   flex-wrap: wrap;
-
   .tx-chip {
     font-size: 12px;
     font-weight: 600;
@@ -63,6 +62,29 @@
       background: var(--h5-grad-brand);
       color: #fff;
       box-shadow: var(--h5-shadow-icon);
+    }
+  }
+}
+
+/* 账单分类胶囊：横向滑动单行排布（分类较多时不换行，保持设计稿胶囊行观感） */
+.tx-chips-scroll {
+  overflow-x: auto;
+  margin: 0 -12px 12px;
+  padding: 0 12px;
+  -webkit-overflow-scrolling: touch;
+
+  &::-webkit-scrollbar {
+    display: none;
+  }
+
+  .tx-chips-inline {
+    display: inline-flex;
+    flex-wrap: nowrap;
+    margin-bottom: 0;
+    white-space: nowrap;
+
+    .tx-chip {
+      flex: none;
     }
   }
 }
@@ -129,6 +151,115 @@
 /* ===== 分析 Tab ===== */
 .analytics-panel {
   padding: 12px;
+}
+
+/* 指标双卡：日均支出 / 收支比 */
+.analytics-metrics {
+  display: flex;
+  gap: 8px;
+  margin-bottom: 10px;
+
+  .metric-cell {
+    flex: 1;
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    background: var(--h5-card-bg);
+    border-radius: var(--h5-radius-card);
+    box-shadow: var(--h5-shadow-card);
+    padding: 12px;
+
+    .metric-icon {
+      width: 30px;
+      height: 30px;
+      border-radius: 10px;
+      background: var(--h5-primary-bg);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      flex: none;
+    }
+
+    .metric-body {
+      min-width: 0;
+
+      .metric-value {
+        font-size: 16px;
+        font-weight: 800;
+        font-variant-numeric: tabular-nums;
+        color: var(--h5-text);
+      }
+
+      .metric-label {
+        margin-top: 2px;
+        font-size: 11px;
+        color: var(--h5-text-3);
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
+      }
+    }
+  }
+}
+
+/* 支出分类占比：环形图 + 图例左右排布 */
+.category-ratio {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+
+  .category-donut {
+    width: 128px;
+    height: 128px;
+    flex: none;
+
+    canvas {
+      display: block;
+      width: 128px;
+      height: 128px;
+    }
+  }
+
+  .category-legend {
+    flex: 1;
+    min-width: 0;
+
+    .legend-row {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      padding: 3px 0;
+      font-size: 12px;
+      color: var(--h5-text-2);
+
+      .legend-color {
+        width: 8px;
+        height: 8px;
+        border-radius: 50%;
+        flex: none;
+      }
+
+      .legend-name {
+        flex: 1;
+        min-width: 0;
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
+      }
+
+      .legend-amount {
+        font-variant-numeric: tabular-nums;
+        color: var(--h5-text);
+      }
+
+      .legend-percent {
+        width: 34px;
+        text-align: right;
+        color: var(--h5-text-3);
+        flex: none;
+      }
+    }
+  }
 }
 
 .analytics-summary {

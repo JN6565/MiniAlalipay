@@ -123,7 +123,10 @@ public class QrPayApplicationService {
             return replay(store.findIdempotency(userId, CREATE_OPERATION, idempotencyKey)
                     .orElseThrow(() -> new IllegalStateException("二维码订单幂等占位冲突后未找到既有记录")), requestDigest, userId);
         }
-        return new CreatedOrder(order, rawToken);
+        // 动态订单短码随 5 分钟有效期，过期后由清理逻辑释放；仅创建响应返回
+        store.clearExpiredShortCodes(now);
+        String shortCode = assignFreshShortCode(order.getOrderId());
+        return new CreatedOrder(order, rawToken, shortCode);
     }
 
     /** 交换令牌并将订单限制到同一个 H5 引导会话。 */
@@ -417,7 +420,16 @@ public class QrPayApplicationService {
 
     private CreatedOrder replay(QrPayStore.IdempotencyRecord existing, byte[] requestDigest, String userId) {
         if (!Arrays.equals(existing.requestDigest(), requestDigest)) throw new BusinessException(BusinessErrorCode.IDEMPOTENCY_CONFLICT);
-        return new CreatedOrder(getForPayee(userId, existing.orderId()), null);
+        return new CreatedOrder(getForPayee(userId, existing.orderId()), null, null);
+    }
+
+    /** 生成 8 位短码并落库；唯一冲突最多重试 5 次。 */
+    private String assignFreshShortCode(String orderId) {
+        for (int attempt = 0; attempt < 5; attempt++) {
+            String shortCode = security.newShortCode();
+            if (store.assignShortCode(orderId, shortCode)) return shortCode;
+        }
+        throw new IllegalStateException("短码生成连续冲突，请稍后重试");
     }
 
     private QrPayOrder replayCancellation(QrPayStore.IdempotencyRecord existing, byte[] requestDigest, String userId) {
@@ -506,8 +518,8 @@ public class QrPayApplicationService {
         return normalized;
     }
 
-    /** 创建响应中的订单和一次性原始令牌。 */
-    public record CreatedOrder(QrPayOrder order, String rawToken) { }
+    /** 创建响应中的订单、一次性原始令牌和仅本次可见的短码。 */
+    public record CreatedOrder(QrPayOrder order, String rawToken, String shortCode) { }
     /** 确认签发结果；原始令牌只存在于本次响应。 */
     public record IssuedConfirmation(String confirmationToken, String subjectHash, Instant expiresAt) { }
 }

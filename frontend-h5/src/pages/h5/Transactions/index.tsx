@@ -2,6 +2,7 @@ import React, { useEffect, useMemo, useState } from 'react';
 import { history } from 'umi';
 import { Toast } from 'antd-mobile';
 import * as accountService from '@/services/account';
+import * as bankCardService from '@/services/bankCard';
 import { formatAmount, formatTime } from '@/utils/format';
 import { MonthGroupList, EmptyState, Skeleton, IconSet } from '@/components/h5/common';
 import type { IconName } from '@/components/h5/common/IconSet';
@@ -23,27 +24,85 @@ const getBizType = (memo: string | null) => {
 };
 
 /**
- * 账单页（原明细页）：V2 双 Tab 结构——
- * 「账单」月分组列表 + 收支方向筛选；「分析」由原资产分析页迁移整合。
+ * 账单分类筛选（V2.1）：单行横向滑动胶囊，单选。
+ * 分类语义（前端按账本 memo 关键词归类，与列表图标归类规则保持一致）：
+ * - 全部：不过滤，天然包含花呗、银行卡等全部收支分录；
+ * - 收入/支出：按收支方向过滤；
+ * - 银行卡 / 充值提现：同义合并，均为银行卡资金流转（memo 含充值/提现）；
+ * - 花呗：memo 含花呗/还款/消费；转账：memo 含转账；
+ * - 扫码支付：memo 含支付/收款/扫码。
+ */
+export const TX_CATEGORIES: { key: string; label: string; match: (tx: accountService.Transaction) => boolean }[] = [
+  { key: 'all', label: '全部', match: () => true },
+  { key: 'income', label: '收入', match: (tx) => tx.direction === 'IN' },
+  { key: 'expense', label: '支出', match: (tx) => tx.direction === 'OUT' },
+  { key: 'bank', label: '银行卡', match: (tx) => /充值|提现/.test(tx.memo || '') },
+  { key: 'credit', label: '花呗', match: (tx) => /花呗|还款|消费/.test(tx.memo || '') },
+  { key: 'transfer', label: '转账', match: (tx) => (tx.memo || '').includes('转账') },
+  { key: 'fund', label: '充值提现', match: (tx) => /充值|提现/.test(tx.memo || '') },
+  { key: 'qrpay', label: '扫码支付', match: (tx) => /支付|收款|扫码/.test(tx.memo || '') },
+];
+
+/**
+ * 加载银行卡充值/提现流水并映射为账单展示项。
+ *
+ * 银行卡充值/提现的 TCC 只移动卡虚拟余额与账户余额，不写账本分录（无复式账本，
+ * 见系统分析 9.2），账本明细接口天然不含这两类记录；这里把银行卡流水投影成
+ * 与账本分录同形状的行，合并后在「全部」「银行卡/充值提现」分类下可见。
+ * 只取成功终态；投影行 entryId 固定为 0，列表 key 使用交易 ID 区分。
+ */
+const loadBankCardTransactions = async (): Promise<accountService.Transaction[]> => {
+  try {
+    const cards = await bankCardService.getBankCards();
+    const lists = await Promise.all(
+      cards.map((card) => bankCardService.getBankCardTransactions(card.cardId, 50)),
+    );
+    return lists.flat()
+      .filter((tx) => tx.status === 'SUCCESS')
+      .map((tx) => ({
+        entryId: 0,
+        transactionId: tx.transactionId,
+        amountFen: tx.amountFen,
+        // 充值是卡→账户（资金流入账户），提现是账户→卡（资金流出账户）
+        direction: tx.businessType === 'BANK_CARD_RECHARGE' ? 'IN' : 'OUT',
+        memo: tx.businessType === 'BANK_CARD_RECHARGE' ? '银行卡充值' : '银行卡提现',
+        counterpartyName: '',
+        balanceAfterFen: null,
+        createdAt: tx.createdAt,
+      }));
+  } catch {
+    // 银行卡流水加载失败只影响该部分投影，不阻断账本账单展示
+    return [];
+  }
+};
+
+/**
+ * 账单页（原明细页）：V2.1 双 Tab 结构——
+ * 「账单」分类胶囊筛选 + 月分组列表；「分析」汇总指标 + 分类占比 + 趋势 + 交易对象排行。
  */
 const TransactionsPage: React.FC = () => {
   const [tab, setTab] = useState<'bills' | 'analytics'>('bills');
   const [loading, setLoading] = useState(true);
   const [transactions, setTransactions] = useState<accountService.Transaction[]>([]);
-  const [direction, setDirection] = useState<'ALL' | 'IN' | 'OUT'>('ALL');
+  const [category, setCategory] = useState('all');
 
   useEffect(() => {
     let cancelled = false;
     const load = async () => {
       setLoading(true);
       try {
-        const params: any = { pageSize: 50 };
-        if (direction !== 'ALL') {
-          params.direction = direction;
-        }
-        const data = await accountService.getTransactions(params);
+        // 一次性拉取全部分录（含花呗、银行卡等），分类筛选在前端完成；
+        // 条数从 50 提升到 100，减少筛选后列表过短的问题
+        const [data, bankCardItems] = await Promise.all([
+          accountService.getTransactions({ pageSize: 100 }),
+          loadBankCardTransactions(),
+        ]);
         if (!cancelled) {
-          setTransactions(data.items || []);
+          // 账本分录与银行卡充值/提现投影按创建时间倒序合并
+          const merged = [...(data.items || []), ...bankCardItems].sort((a, b) =>
+            (b.createdAt || '').localeCompare(a.createdAt || ''),
+          );
+          setTransactions(merged);
         }
       } catch (error: any) {
         Toast.show({ content: error?.message || '当前网络环境较差，数据暂未返回，请稍后重试', icon: 'fail' });
@@ -57,9 +116,13 @@ const TransactionsPage: React.FC = () => {
     return () => {
       cancelled = true;
     };
-  }, [direction]);
+  }, []);
 
-  const visible = useMemo(() => transactions, [transactions]);
+  // 分类筛选：全部不过滤；收入/支出按方向；其余业务分类按 memo 关键词
+  const visible = useMemo(() => {
+    const filter = TX_CATEGORIES.find((c) => c.key === category) || TX_CATEGORIES[0];
+    return transactions.filter(filter.match);
+  }, [transactions, category]);
 
   return (
     <div className="transactions-page">
@@ -81,17 +144,19 @@ const TransactionsPage: React.FC = () => {
         <AnalyticsPanel />
       ) : (
         <div className="tx-bills-body">
-          {/* 收支方向筛选 */}
-          <div className="tx-chips">
-            {([['ALL', '全部'], ['IN', '收入'], ['OUT', '支出']] as const).map(([key, label]) => (
-              <span
-                key={key}
-                className={`tx-chip${direction === key ? ' active' : ''}`}
-                onClick={() => setDirection(key)}
-              >
-                {label}
-              </span>
-            ))}
+          {/* 分类筛选胶囊：横向滑动单选，覆盖全部/收支方向/业务分类 */}
+          <div className="tx-chips-scroll">
+            <div className="tx-chips tx-chips-inline">
+              {TX_CATEGORIES.map((item) => (
+                <span
+                  key={item.key}
+                  className={`tx-chip${category === item.key ? ' active' : ''}`}
+                  onClick={() => setCategory(item.key)}
+                >
+                  {item.label}
+                </span>
+              ))}
+            </div>
           </div>
 
           {loading ? (
@@ -104,13 +169,13 @@ const TransactionsPage: React.FC = () => {
           ) : visible.length === 0 ? (
             <EmptyState
               icon={<IconSet name="receipt" size={30} color="var(--h5-primary)" />}
-              text="暂无交易记录"
-              hint="充值、转账、花呗消费完成后将在这里展示"
+              text={category === 'all' ? '暂无交易记录' : '该分类下暂无账单'}
+              hint="充值、转账、花呗消费、扫码支付完成后将在这里展示"
             />
           ) : (
             <MonthGroupList
               items={visible}
-              getKey={(tx) => String(tx.entryId)}
+              getKey={(tx) => `${tx.entryId}-${tx.transactionId}`}
               renderItem={(tx) => {
                 const biz = getBizType(tx.memo);
                 const clickable = tx.memo?.includes('转账');

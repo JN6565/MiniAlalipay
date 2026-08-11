@@ -30,6 +30,17 @@ const InputBar: React.FC<Props> = ({
     }
   };
 
+  /**
+   * 键盘适配：移动端软键盘弹出时可视区域收缩，延迟等滚动容器高度
+   * 变化后再把输入框滚入可见区域，避免输入框被键盘遮挡。
+   */
+  const handleFocus = (e: React.FocusEvent<HTMLTextAreaElement>) => {
+    const target = e.target;
+    setTimeout(() => {
+      target.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
+    }, 300);
+  };
+
   const hasContent = !!value.trim();
 
   return (
@@ -43,6 +54,7 @@ const InputBar: React.FC<Props> = ({
             value={value}
             onChange={(e) => onChange(e.target.value)}
             onKeyDown={handleKeyDown}
+            onFocus={handleFocus}
             maxLength={2000}
             rows={1}
             disabled={loading}

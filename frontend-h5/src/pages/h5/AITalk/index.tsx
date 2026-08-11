@@ -656,7 +656,7 @@ const AITalkPage: React.FC = () => {
         onSuggestionClick={doSend}
       />
 
-      {/* 底部输入区：固定定位 */}
+      {/* 底部输入区：绝对定位锚定页面内容底部，随滚动容器末尾展示 */}
       <div className="ai-input-area">
         <InputBar
           value={inputValue}

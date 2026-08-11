@@ -68,7 +68,10 @@ public class CollectionApplicationService {
             return replayCode(store.findIdempotency(userId, REGENERATE_CODE, idempotencyKey)
                     .orElseThrow(() -> new IllegalStateException("个人码幂等冲突后未找到既有记录")), digest, userId);
         }
-        return new CreatedCode(newCode, token);
+        // 换发后旧码短码随失效释放；新码分配 8 位短码供手动输入兑换
+        store.clearExpiredShortCodes(now);
+        String shortCode = assignFreshShortCode(store::assignCodeShortCode, newCode.getCodeId());
+        return new CreatedCode(newCode, token, shortCode);
     }
 
     /** 查询本人当前有效个人码。 */
@@ -113,8 +116,11 @@ public class CollectionApplicationService {
             return replayRequest(store.findIdempotency(userId, CREATE_REQUEST, idempotencyKey)
                     .orElseThrow(() -> new IllegalStateException("固定请求幂等冲突后未找到既有记录")), digest, userId);
         }
+        // 固定请求随有效期分配短码，过期后由清理逻辑释放
+        store.clearExpiredShortCodes(now);
+        String shortCode = assignFreshShortCode(store::assignRequestShortCode, request.getRequestId());
         store.appendRequestEvent(requestEvent(request, null, null, "OPEN", now));
-        return new CreatedRequest(request, token);
+        return new CreatedRequest(request, token, shortCode);
     }
 
     /** 读取本人创建的固定收款请求并在读路径持久化过期终态。 */
@@ -123,6 +129,18 @@ public class CollectionApplicationService {
         CollectionRequest request = ownedRequest(userId, requestId);
         expireIfNecessary(request);
         return request;
+    }
+
+    /** 查询本人当前有效个人码的短码，供收款页展示；无码时返回 null。 */
+    @Transactional(readOnly = true)
+    public String getActiveCodeShortCode(String userId) {
+        return store.findActiveCode(userId).flatMap(code -> store.findCodeShortCode(code.getCodeId())).orElse(null);
+    }
+
+    /** 查询本人创建的固定收款请求的短码，供收款页展示；无短码时返回 null。 */
+    @Transactional(readOnly = true)
+    public String getRequestShortCode(String userId, String requestId) {
+        return store.findRequestShortCode(ownedRequest(userId, requestId).getRequestId()).orElse(null);
     }
 
     /**
@@ -277,11 +295,12 @@ public class CollectionApplicationService {
         if (!Arrays.equals(record.requestDigest(), digest)) throw new BusinessException(BusinessErrorCode.IDEMPOTENCY_CONFLICT);
         PersonalCollectionCode code = store.findCode(record.resourceId()).orElseThrow(() -> new IllegalStateException("个人码幂等记录缺少资源"));
         if (!code.getUserId().equals(userId)) throw new BusinessException(BusinessErrorCode.P2P_CODE_INVALID);
-        return new CreatedCode(code, null);
+        return new CreatedCode(code, null, store.findCodeShortCode(code.getCodeId()).orElse(null));
     }
     private CreatedRequest replayRequest(CollectionStore.IdempotencyRecord record, byte[] digest, String userId) {
         if (!Arrays.equals(record.requestDigest(), digest)) throw new BusinessException(BusinessErrorCode.IDEMPOTENCY_CONFLICT);
-        return new CreatedRequest(getRequest(userId, record.resourceId()), null);
+        CollectionRequest request = getRequest(userId, record.resourceId());
+        return new CreatedRequest(request, null, store.findRequestShortCode(request.getRequestId()).orElse(null));
     }
     private void requireKey(String key) { if (!keys.isValid(key)) throw new BusinessException(CommonErrorCode.INVALID_REQUEST); }
     private static String normalizeSubject(String value) {
@@ -296,8 +315,17 @@ public class CollectionApplicationService {
                 || status == CollectionOrderStatus.MANUAL_REVIEW || status == CollectionOrderStatus.EXPIRED;
     }
 
-    /** 新个人码和仅本次响应可见的公开令牌。 */
-    public record CreatedCode(PersonalCollectionCode code, String rawToken) { }
-    /** 新固定请求和仅本次响应可见的公开令牌。 */
-    public record CreatedRequest(CollectionRequest request, String rawToken) { }
+    /** 生成 8 位短码并经分配器落库；唯一冲突最多重试 5 次。 */
+    private String assignFreshShortCode(java.util.function.BiPredicate<String, String> assigner, String resourceId) {
+        for (int attempt = 0; attempt < 5; attempt++) {
+            String shortCode = security.newShortCode();
+            if (assigner.test(resourceId, shortCode)) return shortCode;
+        }
+        throw new IllegalStateException("短码生成连续冲突，请稍后重试");
+    }
+
+    /** 新个人码、仅本次响应可见的公开令牌和长期短码。 */
+    public record CreatedCode(PersonalCollectionCode code, String rawToken, String shortCode) { }
+    /** 新固定请求、仅本次响应可见的公开令牌和随有效期的短码。 */
+    public record CreatedRequest(CollectionRequest request, String rawToken, String shortCode) { }
 }

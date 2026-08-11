@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { useParams, history } from 'umi';
+import { useParams, history, useLocation } from 'umi';
 import { Toast, SpinLoading, Popup } from 'antd-mobile';
 import * as qrPayService from '@/services/qrPay';
 import * as paymentPasswordService from '@/services/paymentPassword';
@@ -13,6 +13,10 @@ import './index.less';
 
 const QrPayPage: React.FC = () => {
   const { token } = useParams();
+  const location = useLocation();
+  // 短码兑换路径：兑换端点已将动态订单绑定当前会话，路由参数是订单 ID，
+  // 无需再走 H5 壳加载/令牌交换，直接按 ID 查单。
+  const viaShortCode = new URLSearchParams(location.search).get('via') === 'short-code';
   const [loading, setLoading] = useState(true);
   const [submitting, setSubmitting] = useState(false);
   const [order, setOrder] = useState<qrPayService.QrPayOrder | null>(null);
@@ -29,6 +33,7 @@ const QrPayPage: React.FC = () => {
     if (token) {
       loadOrder(token);
     }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [token]);
 
   useEffect(() => {
@@ -41,13 +46,20 @@ const QrPayPage: React.FC = () => {
   const loadOrder = async (t: string) => {
     try {
       if (!localStorage.getItem('accessToken')) {
-        history.replace(`/h5/login?redirect=${encodeURIComponent(`/h5/qr-pay/${t}`)}`);
+        const current = `/h5/qr-pay/${t}${viaShortCode ? '?via=short-code' : ''}`;
+        history.replace(`/h5/login?redirect=${encodeURIComponent(current)}`);
         return;
       }
-      // 先建立匿名引导会话，再在同一会话中交换二维码令牌。
-      await qrPayService.loadH5Shell(t);
-      // 交换令牌获取订单
-      const exchanged = await qrPayService.exchangeToken(t);
+      let exchanged: qrPayService.QrPayOrder;
+      if (viaShortCode) {
+        // 短码兑换已在服务端完成会话绑定，此处 t 为订单 ID
+        exchanged = await qrPayService.getOrderStatus(t) as unknown as qrPayService.QrPayOrder;
+      } else {
+        // 先建立匿名引导会话，再在同一会话中交换二维码令牌。
+        await qrPayService.loadH5Shell(t);
+        // 交换令牌获取订单
+        exchanged = await qrPayService.exchangeToken(t);
+      }
       // 订单交换成功后立即渲染付款页；余额/额度查询失败不能把资金来源控件一起阻塞掉。
       setOrder(exchanged);
       setLoading(false);

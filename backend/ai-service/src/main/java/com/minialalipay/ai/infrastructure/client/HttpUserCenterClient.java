@@ -69,7 +69,8 @@ public class HttpUserCenterClient implements UserCenterPort {
                     .retrieve()
                     .onStatus(HttpStatusCode::is4xxClientError, (req, res) -> {
                         log.warn("搜索收款人客户端错误: status={}", res.getStatusCode());
-                        throw new BusinessException(AgentErrorCode.TOOL_UNAVAILABLE);
+                        // 4xx 为下游业务错误，透传下游中文文案而非掩盖为不可用
+                        throw DownstreamErrorTranslator.translate("user-center", res);
                     })
                     .onStatus(HttpStatusCode::is5xxServerError, (req, res) -> {
                         log.warn("搜索收款人服务端错误: status={}", res.getStatusCode());

@@ -23,7 +23,14 @@ public class SeataGlobalTransactionExecutor {
     }
 
     /**
-     * 注册付款余额、收款余额和复式账本三个 TCC 分支。
+     * 注册转账 TCC 分支。
+     *
+     * <p>余额出资：注册付款余额冻结、收款余额预占和复式账本三个分支（组合端点一次完成）。
+     * 银行卡出资：资金方向与充值相同（银行卡扣款 → 收款账户入账），复用充值组合端点
+     * 注册银行卡扣减分支（BANK_CARD_RECHARGE，Confirm 时扣减卡虚拟余额）与收款入账分支
+     * （PAYEE_BALANCE，Confirm 时增加收款方余额），无复式账本；账户中心事实核验按
+     * 银行卡充值规则集判定终态。不得改用提现分支：其 Confirm 向卡入账，方向相反且
+     * 没有收款分支，会导致收款方永远收不到钱。</p>
      *
      * @param request 稳定业务分支参数；重试时不得改变
      */
@@ -33,14 +40,14 @@ public class SeataGlobalTransactionExecutor {
         if (xid == null || xid.isBlank()) {
             throw new IllegalStateException("Seata 全局事务 XID 未建立");
         }
-        // 银行卡转账：注册银行卡余额扣减分支（替代付款方账户余额冻结）
+        // 银行卡出资转账/扫码支付：注册银行卡扣减 + 收款入账两个分支
         if (request.bankCardId() != null && !request.bankCardId().isBlank()) {
             accountClient.post()
-                    .uri("/internal/v1/seata-tcc/bank-card-balance/withdraw/try")
+                    .uri("/internal/v1/seata-tcc/bank-card-recharge/try")
                     .header(RootContext.KEY_XID, xid)
-                    .body(new BankCardWithdrawTryRequest(
-                            request.businessXid(), request.transactionId(),
-                            request.payerUserId(), request.bankCardId(), request.amountFen()))
+                    .body(new BankCardRechargeRequest(request.businessXid(), request.transactionId(),
+                            request.payerUserId(), request.payeeAccountId(), request.bankCardId(),
+                            request.amountFen(), request.payeeReservationId()))
                     .retrieve()
                     .toBodilessEntity();
         } else {
@@ -111,8 +118,4 @@ public class SeataGlobalTransactionExecutor {
     public record BankCardWithdrawRequest(String businessXid, String transactionId,
                                           String userId, String accountId, String cardId,
                                           long amountFen, String freezeId) { }
-
-    /** 银行卡转账（QR_PAY 银行卡支付）时注册银行卡扣减分支的请求体。 */
-    private record BankCardWithdrawTryRequest(String businessXid, String transactionId,
-                                               String userId, String cardId, long amountFen) { }
 }

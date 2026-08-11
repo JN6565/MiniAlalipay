@@ -3,6 +3,7 @@ import { history } from 'umi';
 import { Toast, Dialog } from 'antd-mobile';
 import { Html5Qrcode } from 'html5-qrcode';
 import { IconSet } from '@/components/h5/common';
+import * as collectionService from '@/services/collection';
 import './index.less';
 
 /** 示例码：摄像头不可用环境下一键体验完整解析流程（与真实码同前缀规则）。 */
@@ -28,6 +29,7 @@ const ScanPage: React.FC = () => {
   const [initializing, setInitializing] = useState(true);
   const [scanning, setScanning] = useState(false);
   const [manualCode, setManualCode] = useState('');
+  const [exchanging, setExchanging] = useState(false);
   const html5QrCodeRef = useRef<Html5Qrcode | null>(null);
   const mountedRef = useRef(true);
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -195,13 +197,39 @@ const ScanPage: React.FC = () => {
     }
   };
 
-  /** 手动输入降级：解析并跳转。 */
-  const handleManualParse = () => {
-    if (!manualCode.trim()) {
+  /** 手动输入降级：8 位纯数字按收款短码兑换，其余按码内容解析并跳转。 */
+  const handleManualParse = async () => {
+    const raw = manualCode.trim();
+    if (!raw) {
       Toast.show({ content: '请输入或粘贴码内容', icon: 'fail' });
       return;
     }
-    handleQrCodeContent(manualCode);
+    // 8 位纯数字：收款短码，兑换结果与扫到对应二维码等价
+    if (/^\d{8}$/.test(raw)) {
+      if (exchanging) return;
+      setExchanging(true);
+      try {
+        const result = await collectionService.exchangeShortCode(raw);
+        if (result.codeType === 'QR_PAY_ORDER') {
+          history.push(`/h5/qr-pay/${result.orderId}?via=short-code`);
+        } else {
+          // 个人码与固定请求兑换后都是 C2C 订单，统一进入收款支付页
+          history.push(`/h5/collection/pay/${result.orderId}?via=short-code`);
+        }
+      } catch (error: any) {
+        if (error?.code === 'SHORT_CODE_INVALID') {
+          Toast.show({ content: '码不存在或已过期', icon: 'fail' });
+        } else if (error?.code === 'SHORT_CODE_RATE_LIMITED') {
+          Toast.show({ content: '尝试过于频繁，请稍后再试', icon: 'fail' });
+        } else {
+          Toast.show({ content: error?.message || '兑换失败，请稍后重试', icon: 'fail' });
+        }
+      } finally {
+        setExchanging(false);
+      }
+      return;
+    }
+    handleQrCodeContent(raw);
   };
 
   return (
@@ -285,15 +313,18 @@ const ScanPage: React.FC = () => {
             </div>
             <div className="manual-hint">
               {cameraUnavailable
-                ? '当前环境无法使用摄像头，可直接粘贴二维码内容完成识别'
-                : '摄像头暂不可用，可直接粘贴二维码内容完成识别'}
+                ? !isSecureContext()
+                  // 非安全上下文（HTTP/IP 直连）：浏览器禁止调用摄像头，明确提示 HTTPS 要求与降级路径
+                  ? '摄像头扫码需要 HTTPS 环境，请使用域名 HTTPS 访问，或在下方输入 8 位收款短码 / 粘贴码内容'
+                  : '当前环境无法使用摄像头，可输入 8 位收款短码或粘贴二维码内容完成识别'
+                : '摄像头暂不可用时，可输入 8 位收款短码或粘贴二维码内容完成识别'}
             </div>
             <div className="manual-input">
               <IconSet name="qr" size={16} color="var(--h5-text-3)" />
               <input
                 value={manualCode}
                 onChange={(e) => setManualCode(e.target.value)}
-                placeholder="粘贴或输入码内容，如 MINI_COLLECT:xxx"
+                placeholder="输入 8 位收款短码，或粘贴码内容"
               />
               {manualCode && (
                 <span className="manual-clear" onClick={() => setManualCode('')}>
@@ -302,7 +333,7 @@ const ScanPage: React.FC = () => {
               )}
             </div>
             <div className="h5-btn-gradient manual-submit" onClick={handleManualParse}>
-              解析并跳转
+              {exchanging ? '兑换中...' : '解析并跳转'}
             </div>
           </div>
 

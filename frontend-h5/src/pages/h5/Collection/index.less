@@ -85,6 +85,29 @@
     margin-top: 12px;
   }
 
+  // 手动输入收款短码：8 位纯数字，付款方无摄像头扫码时的降级入口
+  .code-short-code {
+    margin-top: 12px;
+    padding: 8px 16px;
+    background: rgba(37, 108, 255, 0.06);
+    border-radius: 10px;
+    display: inline-block;
+
+    .short-code-value {
+      font-size: 20px;
+      font-weight: 600;
+      letter-spacing: 6px;
+      color: var(--h5-primary);
+      font-variant-numeric: tabular-nums;
+    }
+
+    .short-code-tip {
+      font-size: 11px;
+      color: var(--h5-text-3);
+      margin-top: 2px;
+    }
+  }
+
   .code-empty {
     padding: 40px 0;
     font-size: 13px;

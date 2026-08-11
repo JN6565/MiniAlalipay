@@ -151,6 +151,12 @@ const CollectionPage: React.FC = () => {
                 {personalCode.status !== 'ACTIVE' && (
                   <div className="code-empty">收款码已停用，请重新生成</div>
                 )}
+                {personalCode.status === 'ACTIVE' && personalCode.shortCode && (
+                  <div className="code-short-code">
+                    <div className="short-code-value">{personalCode.shortCode}</div>
+                    <div className="short-code-tip">对方也可手动输入此码完成支付</div>
+                  </div>
+                )}
                 <div className="code-tips">对方扫码后可向你付款，码长期有效</div>
                 <div className="code-actions">
                   <div className="code-btn outline" onClick={handleSaveQr}>

@@ -326,8 +326,9 @@ public class TransferApplicationService {
                 .orElseThrow(() -> new BusinessException(BusinessErrorCode.TRANSACTION_NOT_FOUND));
         if (!value.getInitiatorUserId().equals(userId)) {
             String requesterAccountId = accounts.resolvePersonalAccount(userId).accountId();
-            if (!value.getPayerAccountId().equals(requesterAccountId)
-                    && !value.getPayeeAccountId().equals(requesterAccountId)) {
+            // 银行卡出资转账的付款账户为空（资金从银行卡扣减），用常量侧 equals 比较防空指针。
+            if (!requesterAccountId.equals(value.getPayerAccountId())
+                    && !requesterAccountId.equals(value.getPayeeAccountId())) {
                 throw new BusinessException(BusinessErrorCode.TRANSACTION_NOT_FOUND);
             }
         }

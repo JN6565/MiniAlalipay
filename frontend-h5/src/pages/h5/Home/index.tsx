@@ -8,13 +8,20 @@ import { getProfilePreference } from '@/utils/profile';
 import { Skeleton, IconSet, AvatarView, IconName } from '@/components/h5/common';
 import './index.less';
 
-/** 快捷功能入口（V2 定稿）：一行五个高频资金动作，品牌渐变图标底。 */
-const QUICK_ACTIONS: { label: string; icon: IconName; path: string; credit?: boolean }[] = [
+/**
+ * 快捷功能入口（V2.1 定稿）：两行 x 4 共 8 个入口。
+ * 第一行为高频资金动作（扫一扫/收款/转账/钱包），第二行为资产与智能入口（账单/银行卡/花呗/AI 助手）。
+ * tint 决定图标底色渐变（见 index.less 的 quick-icon 色系 class）。
+ */
+const QUICK_ACTIONS: { label: string; icon: IconName; path: string; tint?: 'brand' | 'orange' | 'green' | 'credit' | 'aipur' }[] = [
   { label: '扫一扫', icon: 'scan', path: '/h5/scan' },
   { label: '收款', icon: 'collect', path: '/h5/collection' },
   { label: '转账', icon: 'transfer', path: '/h5/transfer' },
   { label: '钱包', icon: 'wallet', path: '/h5/wallet' },
-  { label: '花呗', icon: 'huabei', path: '/h5/credit', credit: true },
+  { label: '账单', icon: 'receipt', path: '/h5/account/transactions', tint: 'orange' },
+  { label: '银行卡', icon: 'card', path: '/h5/bank-cards', tint: 'green' },
+  { label: '花呗', icon: 'huabei', path: '/h5/credit', tint: 'credit' },
+  { label: 'AI助手', icon: 'ai', path: '/h5/ai-talk', tint: 'aipur' },
 ];
 
 /** 生活服务区：仅 UI 占位，点击提示功能开发中，不做路由与后端。 */
@@ -100,11 +107,11 @@ const HomePage: React.FC = () => {
       </div>
 
       <div className="home-body">
-        {/* 快捷功能：一行五个高频资金入口（品牌渐变图标底，花呗用紫蓝 credit 渐变） */}
+        {/* 快捷功能：两行 x 4 共 8 个入口（品牌渐变图标底，账单橙/银行卡绿/花呗紫蓝/AI 紫粉） */}
         <div className="quick-card">
           {QUICK_ACTIONS.map((item) => (
             <div key={item.label} className="quick-item" onClick={() => history.push(item.path)}>
-              <div className={`quick-icon${item.credit ? ' credit' : ''}`}>
+              <div className={`quick-icon${item.tint ? ` ${item.tint}` : ''}`}>
                 <IconSet name={item.icon} size={20} color="#fff" />
               </div>
               <span>{item.label}</span>
