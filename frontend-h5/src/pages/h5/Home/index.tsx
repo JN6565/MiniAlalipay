@@ -10,10 +10,10 @@ import './index.less';
 
 /**
  * 快捷功能入口（V2.1 定稿）：两行 x 4 共 8 个入口。
- * 第一行为高频资金动作（扫一扫/收款/转账/钱包），第二行为资产与智能入口（账单/银行卡/花呗/AI 助手）。
+ * 第一行为高频资金动作（扫一扫/收款/转账/钱包），第二行为资产与智能入口（账单/银行卡/花呗/招财喵）。
  * tint 决定图标底色渐变（见 index.less 的 quick-icon 色系 class）。
  */
-const QUICK_ACTIONS: { label: string; icon: IconName; path: string; tint?: 'brand' | 'orange' | 'green' | 'credit' | 'aipur' }[] = [
+const QUICK_ACTIONS: { label: string; icon: IconName; path: string; tint?: 'brand' | 'orange' | 'green' | 'credit' | 'aipink' }[] = [
   { label: '扫一扫', icon: 'scan', path: '/h5/scan' },
   { label: '收款', icon: 'collect', path: '/h5/collection' },
   { label: '转账', icon: 'transfer', path: '/h5/transfer' },
@@ -21,7 +21,7 @@ const QUICK_ACTIONS: { label: string; icon: IconName; path: string; tint?: 'bran
   { label: '账单', icon: 'receipt', path: '/h5/account/transactions', tint: 'orange' },
   { label: '银行卡', icon: 'card', path: '/h5/bank-cards', tint: 'green' },
   { label: '花呗', icon: 'huabei', path: '/h5/credit', tint: 'credit' },
-  { label: 'AI助手', icon: 'ai', path: '/h5/ai-talk', tint: 'aipur' },
+  { label: '招财喵', icon: 'ai', path: '/h5/ai-talk', tint: 'aipink' },
 ];
 
 /** 生活服务区：仅 UI 占位，点击提示功能开发中，不做路由与后端。 */

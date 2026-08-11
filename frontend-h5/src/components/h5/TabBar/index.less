@@ -14,6 +14,8 @@
   justify-content: space-around;
   border-top: 1px solid var(--h5-divider);
   z-index: 100;
+  /* 键盘弹出隐藏/恢复的平滑位移（见文件末尾 body.ai-keyboard-open 规则） */
+  transition: transform 0.18s ease;
 
   .tab {
     flex: 1;
@@ -54,4 +56,13 @@
     background: var(--h5-grad-brand);
     margin-top: 2px;
   }
+}
+
+// 键盘弹出时隐藏：AI 对话页 InputBar 按 visualViewport 实测键盘高度
+// 切换 body.ai-keyboard-open（仅点击输入框不触发，避免桌面端误隐藏）。
+// fixed 定位的 TabBar 在移动端软键盘弹出时会被顶到键盘上方产生跳动，
+// 隐藏后输入栏同时贴合键盘上沿（见 AITalk/index.less）。
+body.ai-keyboard-open .tabbar {
+  transform: translateY(100%);
+  pointer-events: none;
 }

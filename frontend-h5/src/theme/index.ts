@@ -54,8 +54,8 @@ export const h5Gradients = {
   credit: `linear-gradient(135deg, ${h5Tokens.accentViolet} 0%, #4a8dff 100%)`,
   /** 头部柔渐变（三段蓝）：首页/转账/收款等页面头部背景。 */
   soft: 'linear-gradient(160deg, #2f74ff 0%, #4d9bff 55%, #6fb6ff 100%)',
-  /** AI Talk 深蓝沉浸底：区别于全局浅蓝，体现高端质感。 */
-  aiDeep: 'linear-gradient(165deg, #0e1c3f 0%, #16306b 55%, #1f4a8f 100%)',
+  /** 招财喵（AI Talk）淡粉轻语底：上粉下白纵向渐变，与 overrides.css 的 --h5-grad-ai-deep 同源。 */
+  aiDeep: 'linear-gradient(180deg, #ffe3ea 0%, #ffccd9 30%, #fff7fa 65%, #ffffff 100%)',
 } as const;
 
 /** 阴影分层：与 overrides.css 的 --h5-shadow-* 同源，供内联样式引用。 */
@@ -68,6 +68,26 @@ export const h5Shadows = {
   icon: '0 5px 12px rgba(37, 108, 255, 0.28)',
   /** 渐变主按钮。 */
   btn: '0 6px 16px rgba(37, 108, 255, 0.3)',
+  /** 招财喵粉色系柔和投影：AI 对话页白底气泡/输入胶囊，与 --h5-shadow-ai 同源。 */
+  ai: '0 4px 16px rgba(255, 143, 176, 0.18)',
+} as const;
+
+/**
+ * 招财喵（AI Talk）粉色点缀色组：与页面淡粉渐变同源，仅用于 AI 对话页的品牌点缀
+ * （气泡描边、发送按钮、欢迎 Orb、光晕等），禁止用于全局通用组件。
+ * 与 overrides.css 的 --h5-ai-pink-* 变量同源，修改需两处同步。
+ */
+export const h5AiPink = {
+  /** 品牌深粉：渐变强调、发送按钮就绪态、确认按钮主色。 */
+  deep: '#ff8fb0',
+  /** 品牌粉：渐变中段、点缀图标。 */
+  brand: '#ffa5bf',
+  /** 中粉：渐变收尾、描边浅化。 */
+  mid: '#ffccd9',
+  /** 淡粉：填充底色、选中态背景。 */
+  soft: '#ffe4ec',
+  /** 极淡粉洗：近白过渡底色。 */
+  wash: '#fff6f9',
 } as const;
 
 /** antd-mobile ConfigProvider 主题变量：统一组件库内部配色。 */

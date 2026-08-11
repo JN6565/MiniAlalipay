@@ -28,7 +28,7 @@ const H5Layout: React.FC = () => {
     document.title = title || 'MiniAlalipay';
   }, [location.pathname]);
 
-  // 判断是否显示返回按钮（AI助手、联系人不显示）
+  // 判断是否显示返回按钮（招财喵、联系人不显示）
   const showBack = location.pathname !== '/h5/home' &&
                    location.pathname !== '/h5/login' &&
                    location.pathname !== '/h5/ai-talk' &&
@@ -94,7 +94,7 @@ function getPageTitle(pathname: string): string {
     '/h5/transfer': '转账',
     '/h5/transfer/confirm': '确认转账',
     '/h5/wallet': '钱包',
-    '/h5/ai-talk': 'AI助手',
+    '/h5/ai-talk': '招财喵',
     '/h5/contacts': '联系人',
     '/h5/friend-requests': '新朋友',
     '/h5/profile': '我的',

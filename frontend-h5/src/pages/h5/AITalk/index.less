@@ -1,21 +1,23 @@
-/* AI 对话页 V2：深蓝渐变沉浸风格（与 h5-v2-modules 设计稿 1:1），
+/* AI 对话页：招财喵淡粉轻语风格（上粉下白淡渐变 + 白底气泡 + 粉色点缀），
    局部令牌桥接全局 --h5-* 设计令牌。 */
 
 /* ==================== 设计令牌 ==================== */
 :root {
-  /* 基底深蓝渐变：比旧版更通透（提亮末段），避免单层渐变发闷 */
-  --ai-deep: linear-gradient(165deg, #0b1836 0%, #12295c 55%, #1b3f85 100%);
+  /* 页面基底：上粉下白纵向淡渐变，桥接主题令牌（theme/index.ts 的 h5Gradients.aiDeep 同源） */
+  --ai-deep: var(--h5-grad-ai-deep);
   --ai-bg: var(--h5-bg);
   --ai-bg-elev: var(--h5-card-bg);
   --ai-bg-message: var(--h5-fill);
   --ai-bg-message-hover: var(--h5-divider);
-  --ai-bg-user: var(--h5-grad-brand);
+  /* 用户气泡：白底 + 粉色描边（描边在气泡选择器内声明） */
+  --ai-bg-user: #ffffff;
   --ai-text: var(--h5-text);
   --ai-text-secondary: var(--h5-text-2);
   --ai-text-muted: var(--h5-text-3);
   --ai-border: var(--h5-divider);
-  --ai-brand: var(--h5-primary);
-  --ai-brand-soft: var(--h5-primary-bg);
+  /* 品牌点缀：招财喵粉（桥接全局 --h5-ai-pink-*，仅本页使用） */
+  --ai-brand: var(--h5-ai-pink-deep);
+  --ai-brand-soft: var(--h5-ai-pink-soft);
   --ai-danger: var(--h5-danger);
   --ai-success: var(--h5-success);
   --ai-radius-bubble: 14px;
@@ -33,11 +35,12 @@
   /* 滚动容器 .h5-content 高度为 100%，页面自身不再声明视口高度，
      避免 100dvh 与滚动容器双重约束导致键盘弹出时高度计算错乱 */
   min-height: 100%;
-  color: #fff;
-  /* 底部预留输入栏实际高度（约 90px）+ 安全区，确保最后一条消息不被输入栏遮挡 */
-  padding-bottom: calc(90px + env(safe-area-inset-bottom, 0px));
+  color: var(--ai-text);
+  /* 底部预留输入栏实际高度（约 90px）+ TabBar（60px + 安全区），
+     确保最后一条消息不被输入栏与 TabBar 遮挡 */
+  padding-bottom: calc(150px + env(safe-area-inset-bottom, 0px));
 
-  /* 基底层：深蓝渐变 */
+  /* 基底层：上粉下白淡渐变 */
   &::before {
     content: '';
     position: fixed;
@@ -47,15 +50,15 @@
     pointer-events: none;
   }
 
-  /* 柔光层：右上品牌蓝 + 左下淡紫两个低透明度 radial 光斑，提升空间层次 */
+  /* 柔光层：右上淡粉 + 左下极淡粉两个低透明度 radial 光斑，提升空间层次 */
   &::after {
     content: '';
     position: fixed;
     inset: 0;
     z-index: -1;
     background:
-      radial-gradient(520px 400px at 88% -4%, rgba(77, 155, 255, 0.24) 0%, rgba(77, 155, 255, 0) 62%),
-      radial-gradient(480px 420px at 6% 104%, rgba(155, 108, 255, 0.16) 0%, rgba(155, 108, 255, 0) 60%);
+      radial-gradient(520px 400px at 88% -4%, rgba(255, 143, 176, 0.16) 0%, rgba(255, 143, 176, 0) 62%),
+      radial-gradient(480px 420px at 6% 104%, rgba(255, 204, 217, 0.24) 0%, rgba(255, 204, 217, 0) 60%);
     pointer-events: none;
   }
 }
@@ -67,11 +70,12 @@
   justify-content: space-between;
   padding: 10px 14px;
   padding-top: calc(10px + env(safe-area-inset-top, 0px));
-  /* sticky 在滚动容器 .h5-content 内可靠工作；半透明深色底 + 模糊
-     避免滚过内容时标题与气泡重叠不可读 */
-  background: rgba(11, 24, 54, 0.82);
+  /* sticky 在滚动容器 .h5-content 内可靠工作；半透明白磨砂底 + 模糊，
+     与淡粉背景衔接，避免滚过内容时标题与气泡重叠不可读 */
+  background: rgba(255, 255, 255, 0.72);
   backdrop-filter: blur(10px);
   -webkit-backdrop-filter: blur(10px);
+  border-bottom: 1px solid rgba(232, 238, 247, 0.7);
   z-index: 98;
   position: sticky;
   top: 0;
@@ -81,8 +85,8 @@
   width: 34px;
   height: 34px;
   border: none;
-  background: rgba(255, 255, 255, 0.08);
-  color: rgba(255, 255, 255, 0.9);
+  background: rgba(255, 255, 255, 0.92);
+  color: var(--ai-text-secondary);
   display: flex;
   align-items: center;
   justify-content: center;
@@ -91,7 +95,8 @@
   transition: background 0.15s;
 
   &:active {
-    background: rgba(255, 255, 255, 0.18);
+    background: var(--ai-brand-soft);
+    color: var(--ai-brand);
   }
 }
 
@@ -108,7 +113,7 @@
   max-width: 100%;
   font-size: 14px;
   font-weight: 600;
-  color: #fff;
+  color: var(--ai-text);
   line-height: 1.2;
 
   .ai-top-title-text {
@@ -130,25 +135,47 @@
 }
 
 .ai-welcome-orb {
+  position: relative;
   width: 52px;
   height: 52px;
   margin: 0 auto 12px;
   border-radius: 50%;
-  background: radial-gradient(circle at 32% 28%, #9fd2ff 0%, #4d9bff 45%, #256cff 100%);
-  /* V2.1：外圈光晕扩大提亮，与多层背景的柔光光斑呼应 */
-  box-shadow: 0 0 34px rgba(77, 155, 255, 0.65), 0 0 0 7px rgba(77, 155, 255, 0.1);
+  background: radial-gradient(circle at 32% 28%, #ffd9e4 0%, var(--h5-ai-pink-brand) 48%, var(--h5-ai-pink-deep) 100%);
+  /* 外圈粉色柔光，与多层背景的柔光光斑呼应 */
+  box-shadow: 0 0 34px rgba(255, 143, 176, 0.55), 0 0 0 7px rgba(255, 143, 176, 0.1);
+
+  /* 猫耳：左右两块旋转 45° 的圆角方块，与招财喵形象呼应 */
+  &::before,
+  &::after {
+    content: '';
+    position: absolute;
+    top: -4px;
+    width: 12px;
+    height: 12px;
+    background: var(--h5-ai-pink-brand);
+    border-radius: 3px;
+    transform: rotate(45deg);
+  }
+
+  &::before {
+    left: 6px;
+  }
+
+  &::after {
+    right: 6px;
+  }
 }
 
 .ai-welcome-title {
   font-size: 17px;
   font-weight: 700;
-  color: #fff;
+  color: var(--ai-text);
   margin-bottom: 6px;
 }
 
 .ai-welcome-desc {
   font-size: 12px;
-  color: rgba(255, 255, 255, 0.62);
+  color: var(--ai-text-secondary);
   margin-bottom: 16px;
   line-height: 1.6;
 }
@@ -165,15 +192,16 @@
   display: inline-flex;
   align-items: center;
   padding: 6px 12px;
-  border: 1px solid rgba(143, 194, 255, 0.35);
+  border: 1px solid rgba(255, 143, 176, 0.35);
   border-radius: 14px;
-  background: rgba(255, 255, 255, 0.06);
-  color: #cfe3ff;
+  background: rgba(255, 255, 255, 0.8);
+  color: var(--ai-text);
   font-size: 12px;
   transition: background 0.15s;
 
   &:active {
-    background: rgba(255, 255, 255, 0.14);
+    background: var(--ai-brand-soft);
+    border-color: rgba(255, 143, 176, 0.55);
   }
 }
 
@@ -193,14 +221,35 @@
   justify-content: flex-start;
 }
 
-/* AI 气泡前的小 Orb 头像 */
+/* AI 气泡前的小 Orb 头像：粉色渐变 + 猫耳，与欢迎区 Orb 同源 */
 .ai-assistant-orb {
+  position: relative;
   width: 24px;
   height: 24px;
   border-radius: 50%;
-  background: radial-gradient(circle at 32% 28%, #9fd2ff, #256cff);
+  background: radial-gradient(circle at 32% 28%, #ffd9e4, var(--h5-ai-pink-deep));
   flex: none;
   margin-top: 2px;
+
+  &::before,
+  &::after {
+    content: '';
+    position: absolute;
+    top: -2px;
+    width: 6px;
+    height: 6px;
+    background: var(--h5-ai-pink-brand);
+    border-radius: 1.5px;
+    transform: rotate(45deg);
+  }
+
+  &::before {
+    left: 3px;
+  }
+
+  &::after {
+    right: 3px;
+  }
 }
 
 .ai-message-body {
@@ -227,23 +276,27 @@
 }
 
 .ai-message-user .ai-message-content {
+  /* 白底 + 粉色描边：与淡粉背景区分层次，粉色阴影呼应品牌点缀 */
   background: var(--ai-bg-user);
-  color: #fff;
+  color: var(--ai-text);
+  border: 1px solid rgba(255, 143, 176, 0.4);
   border-radius: 14px 4px 14px 14px;
-  box-shadow: 0 4px 12px rgba(37, 108, 255, 0.35);
+  box-shadow: var(--h5-shadow-ai);
 }
 
 .ai-message-assistant .ai-message-content {
   background: #fff;
   color: var(--ai-text);
+  border: 1px solid rgba(232, 238, 247, 0.9);
   border-radius: 4px 14px 14px 14px;
-  box-shadow: 0 2px 10px rgba(8, 20, 50, 0.25);
+  /* 淡粉系柔和投影，代替旧版深色投影，避免在浅底上发闷 */
+  box-shadow: 0 2px 10px rgba(255, 143, 176, 0.1);
 }
 
 .ai-message-time {
   margin-top: 4px;
   font-size: 11px;
-  color: rgba(255, 255, 255, 0.5);
+  color: var(--ai-text-muted);
 }
 
 /* ==================== Markdown 渲染 ==================== */
@@ -342,14 +395,14 @@
   padding: 4px 0;
   background: transparent;
   border: none;
-  color: rgba(255, 255, 255, 0.62);
+  color: var(--ai-text-secondary);
   font-size: 12px;
   cursor: pointer;
 }
 
 .ai-thinking-icon {
   font-size: 12px;
-  color: #8fc2ff;
+  color: var(--ai-brand);
   transition: transform 0.15s;
 }
 
@@ -360,10 +413,11 @@
 .ai-thinking-body {
   margin-top: 6px;
   padding: 10px 12px;
-  background: rgba(255, 255, 255, 0.08);
+  background: rgba(255, 255, 255, 0.75);
+  border: 1px solid var(--ai-border);
   border-radius: 8px;
   font-size: 12px;
-  color: rgba(255, 255, 255, 0.72);
+  color: var(--ai-text-secondary);
   line-height: 1.6;
 }
 
@@ -435,8 +489,8 @@
   width: 28px;
   height: 28px;
   border: none;
-  background: rgba(255, 255, 255, 0.08);
-  color: rgba(255, 255, 255, 0.62);
+  background: rgba(255, 255, 255, 0.85);
+  color: var(--ai-text-secondary);
   font-size: 14px;
   display: flex;
   align-items: center;
@@ -446,7 +500,7 @@
   transition: background 0.15s, color 0.15s;
 
   &:active:not(:disabled) {
-    background: rgba(255, 255, 255, 0.18);
+    background: var(--ai-brand-soft);
   }
 
   &:disabled {
@@ -455,8 +509,8 @@
   }
 
   &--active {
-    color: #8fc2ff;
-    background: rgba(77, 155, 255, 0.22);
+    color: var(--ai-brand);
+    background: rgba(255, 143, 176, 0.16);
   }
 }
 
@@ -534,17 +588,27 @@
 
 /* ==================== 输入区 ==================== */
 .ai-input-area {
-  /* 绝对定位锚定在页面内容底部：真实滚动容器是 .h5-content，
-     fixed 元素挂在溢出滚动容器内时移动端会随内容滚动/被遮挡，
-     改为 absolute 后输入栏成为滚动内容的末尾元素，键盘弹出时
-     视口收缩仍可滚动到达；/h5/ai-talk 不渲染 TabBar，无需 60px 偏移 */
-  position: absolute;
+  /* fixed 钉在视口底部、TabBar（60px + 安全区）上方，不随消息流滚动，
+     任何滚动位置都可直接输入；AITalk 是 display:none 隐藏的保活页，
+     fixed 不会泄漏到其他 Tab。键盘弹出时由 body.ai-keyboard-open
+     （InputBar 按 visualViewport 实测键盘高度切换，非 focus 即触发）
+     控制 TabBar 隐藏、输入栏回落贴底；iOS 上布局视口不随键盘收缩，
+     额外由 InputBar 写入内联 bottom 使输入栏贴合键盘上沿 */
+  position: fixed;
   left: 0;
   right: 0;
-  bottom: 0;
-  padding-bottom: env(safe-area-inset-bottom, 0px);
+  bottom: calc(60px + env(safe-area-inset-bottom, 0px));
   z-index: 99;
   background: transparent;
+  transition: bottom 0.18s ease;
+}
+
+/* 键盘弹出态：--ai-keyboard-offset 由 InputBar 按实测键盘高度写入 body。
+   Android：布局视口收缩，偏移为 0 即贴键盘上沿；
+   iOS：布局视口不收缩，偏移为实际键盘高度，托起输入栏 */
+body.ai-keyboard-open .ai-input-area {
+  bottom: var(--ai-keyboard-offset, 0px);
+  padding-bottom: env(safe-area-inset-bottom, 0px);
 }
 
 .ai-input-bar {
@@ -575,13 +639,21 @@
 
 .ai-input-wrapper {
   flex: 1;
-  background: rgba(255, 255, 255, 0.1);
-  border: 1px solid rgba(255, 255, 255, 0.14);
+  background: rgba(255, 255, 255, 0.92);
+  border: 1px solid rgba(232, 238, 247, 0.9);
   border-radius: 22px;
   padding: 8px 14px;
   min-height: 36px;
   display: flex;
   align-items: center;
+  box-shadow: var(--h5-shadow-ai);
+  transition: border-color 0.18s, box-shadow 0.18s;
+
+  /* 点击/聚焦反馈：描边转品牌粉 + 投影加深，明确输入激活态 */
+  &:focus-within {
+    border-color: rgba(255, 143, 176, 0.55);
+    box-shadow: 0 6px 20px rgba(255, 143, 176, 0.26);
+  }
 }
 
 .ai-input {
@@ -590,14 +662,14 @@
   border: none;
   outline: none;
   resize: none;
-  color: #fff;
+  color: var(--ai-text);
   font-size: 14px;
   line-height: 1.5;
   max-height: 120px;
   font-family: inherit;
 
   &::placeholder {
-    color: rgba(255, 255, 255, 0.45);
+    color: var(--ai-text-muted);
   }
 
   &:disabled {
@@ -611,8 +683,8 @@
   height: 36px;
   border: none;
   border-radius: 50%;
-  background: rgba(255, 255, 255, 0.12);
-  color: rgba(255, 255, 255, 0.55);
+  background: rgba(255, 143, 176, 0.12);
+  color: var(--ai-text-muted);
   display: flex;
   align-items: center;
   justify-content: center;
@@ -624,9 +696,10 @@
   }
 
   &--ready {
-    background: var(--h5-grad-brand);
+    /* 就绪态：招财喵粉色渐变，与页面品牌点缀一致 */
+    background: linear-gradient(135deg, var(--h5-ai-pink-deep) 0%, var(--h5-ai-pink-mid) 100%);
     color: #fff;
-    box-shadow: 0 4px 10px rgba(37, 108, 255, 0.4);
+    box-shadow: 0 4px 10px rgba(255, 143, 176, 0.4);
   }
 
   &:active:not(:disabled) {
@@ -652,7 +725,7 @@
 .ai-input-disclaimer {
   text-align: center;
   font-size: 10px;
-  color: rgba(255, 255, 255, 0.4);
+  color: var(--ai-text-muted);
   padding-top: 2px;
 }
 
@@ -729,7 +802,8 @@
 
   .ai-card-bar-fill {
     height: 100%;
-    background: linear-gradient(90deg, #7b6cff, #4a8dff);
+    /* 进度条：招财喵粉色渐变，与页面品牌点缀一致 */
+    background: linear-gradient(90deg, var(--h5-ai-pink-deep), var(--h5-ai-pink-mid));
     border-radius: 3px;
     transition: width 0.6s ease;
   }
@@ -829,7 +903,7 @@
 .ai-card-spinner {
   width: 14px;
   height: 14px;
-  border: 2px solid rgba(37, 108, 255, 0.2);
+  border: 2px solid rgba(255, 143, 176, 0.2);
   border-top-color: var(--ai-brand);
   border-radius: 50%;
   animation: spin 0.8s linear infinite;
@@ -861,7 +935,8 @@
   text-align: center;
 
   .ai-card-icon {
-    background: #f3efff;
+    background: var(--h5-ai-pink-soft);
+    color: var(--h5-ai-pink-deep);
   }
 
   .ai-card-label {
@@ -905,12 +980,13 @@
   padding: 10px 14px;
   border: none;
   border-radius: 18px;
-  background: var(--h5-grad-brand);
+  /* 招财喵粉色渐变：会话抽屉属于 AI 对话页专属组件，使用页内品牌色 */
+  background: linear-gradient(135deg, var(--h5-ai-pink-deep) 0%, var(--h5-ai-pink-mid) 100%);
   color: #fff;
   font-size: 13px;
   font-weight: 600;
   cursor: pointer;
-  box-shadow: var(--h5-shadow-icon);
+  box-shadow: 0 5px 12px rgba(255, 143, 176, 0.28);
   box-sizing: border-box;
   transition: opacity 0.15s;
 
@@ -1103,7 +1179,8 @@
   max-width: 340px;
   border: 1px solid var(--ai-border);
   box-sizing: border-box;
-  --adm-color-primary: #256cff;
+  /* 确认卡主按钮跟随页内品牌点缀色（粉） */
+  --adm-color-primary: var(--h5-ai-pink-deep);
 }
 
 .ai-confirmation-title {
@@ -1221,9 +1298,9 @@
   }
 
   .adm-button-primary {
-    background: var(--h5-grad-brand);
+    background: linear-gradient(135deg, var(--h5-ai-pink-deep) 0%, var(--h5-ai-pink-mid) 100%);
     border: none;
-    box-shadow: 0 4px 10px rgba(37, 108, 255, 0.3);
+    box-shadow: 0 4px 10px rgba(255, 143, 176, 0.3);
   }
 }
 

@@ -107,7 +107,7 @@ export default [
         path: '/h5/ai-talk',
         component: '@/pages/h5/AITalk',
         exact: true,
-        title: 'AI助手',
+        title: '招财喵',
         auth: true,
       },
       {
