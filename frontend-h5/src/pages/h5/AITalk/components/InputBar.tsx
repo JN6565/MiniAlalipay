@@ -1,4 +1,4 @@
-import React, { KeyboardEvent } from 'react';
+import React, { KeyboardEvent, useEffect } from 'react';
 import { IconSet } from '@/components/h5/common';
 
 interface Props {
@@ -31,8 +31,40 @@ const InputBar: React.FC<Props> = ({
   };
 
   /**
-   * 键盘适配：移动端软键盘弹出时可视区域收缩，延迟等滚动容器高度
-   * 变化后再把输入框滚入可见区域，避免输入框被键盘遮挡。
+   * 软键盘检测：以 visualViewport 实测高度变化判断键盘弹出/收起，
+   * 而非 focus/blur——桌面端仅点击输入框不会误隐藏 TabBar 产生跳动。
+   * 高度差超过 120px 才认定键盘（排除浏览器地址栏收展引起的几十像素波动）。
+   * 弹出时给 body 挂 ai-keyboard-open（TabBar 隐藏），并写入实测键盘高度
+   * 到 --ai-keyboard-offset：Android 布局视口随键盘收缩、偏移为 0；
+   * iOS 布局视口不收缩、偏移即键盘高度，由样式托起输入栏贴合键盘上沿。
+   */
+  useEffect(() => {
+    const vv = window.visualViewport;
+    if (!vv) return undefined;
+    const baseHeight = vv.height;
+
+    const handleViewportResize = () => {
+      const keyboardHeight = Math.max(0, baseHeight - vv.height);
+      const isOpen = keyboardHeight > 120;
+      document.body.classList.toggle('ai-keyboard-open', isOpen);
+      // window.innerHeight 未同步收缩 → iOS 行为，需手动抬高输入栏
+      const layoutShrunk = window.innerHeight < baseHeight - 120;
+      const offset = isOpen && !layoutShrunk ? keyboardHeight : 0;
+      document.body.style.setProperty('--ai-keyboard-offset', `${offset}px`);
+    };
+
+    vv.addEventListener('resize', handleViewportResize);
+    return () => {
+      vv.removeEventListener('resize', handleViewportResize);
+      // 组件卸载时清理状态，避免残留类名影响其他页面的 TabBar
+      document.body.classList.remove('ai-keyboard-open');
+      document.body.style.removeProperty('--ai-keyboard-offset');
+    };
+  }, []);
+
+  /**
+   * 聚焦后延迟把输入框滚入可见区域，确保最后一条消息不被输入栏遮挡
+   * （键盘弹出后的视口收缩由上方 visualViewport 逻辑兼容）。
    */
   const handleFocus = (e: React.FocusEvent<HTMLTextAreaElement>) => {
     const target = e.target;
@@ -50,7 +82,7 @@ const InputBar: React.FC<Props> = ({
         <div className="ai-input-wrapper">
           <textarea
             className="ai-input"
-            placeholder="和小智说点什么…"
+            placeholder="和招财喵说点什么…"
             value={value}
             onChange={(e) => onChange(e.target.value)}
             onKeyDown={handleKeyDown}
