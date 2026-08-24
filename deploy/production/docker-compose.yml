@@ -1,7 +1,7 @@
 # 生产环境编排：5 个后端服务 + Nginx 统一入口。
 #
 # 部署前提：
-# 1. 服务器（121.43.51.164）上 MySQL、Redis、Nacos 已在运行（本地开发期即连远端库，
+# 1. 服务器（114.55.75.194）上 MySQL、Redis、Nacos 已在运行（本地开发期即连远端库，
 #    Flyway 迁移已就绪），本编排不重复部署这些基础设施；
 # 2. 各服务未在此处覆盖的配置沿用代码内默认值（见各服务 application.yml），
 #    需要覆盖的变量写入同级 .env 文件（模板见 .env.example）；
@@ -127,7 +127,7 @@ services:
       STORE_MODE: file
       SEATA_REGISTRY_TYPE: nacos
       SEATA_REGISTRY_NACOS_APPLICATION: seata-server
-      SEATA_REGISTRY_NACOS_SERVER_ADDR: ${NACOS_SERVER_ADDR:-121.43.51.164:8848}
+      SEATA_REGISTRY_NACOS_SERVER_ADDR: ${NACOS_SERVER_ADDR:-114.55.75.194:8848}
       SEATA_REGISTRY_NACOS_GROUP: SEATA_GROUP
       SEATA_REGISTRY_NACOS_CLUSTER: default
       SEATA_REGISTRY_NACOS_NAMESPACE: ${NACOS_NAMESPACE:-}

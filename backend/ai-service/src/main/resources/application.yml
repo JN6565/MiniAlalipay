@@ -10,7 +10,7 @@ spring:
       - org.springframework.ai.model.openai.autoconfigure.OpenAiEmbeddingAutoConfiguration
       - org.springframework.ai.model.openai.autoconfigure.OpenAiModerationAutoConfiguration
   datasource:
-    url: ${AGENT_DB_URL:jdbc:mysql://121.43.51.164:3306/agent_db?useSSL=false&serverTimezone=Asia/Shanghai&allowPublicKeyRetrieval=true&characterEncoding=UTF-8}
+    url: ${AGENT_DB_URL:jdbc:mysql://114.55.75.194:3306/agent_db?useSSL=false&serverTimezone=Asia/Shanghai&allowPublicKeyRetrieval=true&characterEncoding=UTF-8}
     username: ${AGENT_DB_USERNAME:root}
     password: ${AGENT_DB_PASSWORD:teamuser2026}
     driver-class-name: com.mysql.cj.jdbc.Driver
@@ -25,7 +25,7 @@ spring:
     default-schema: ${AGENT_DB_SCHEMA:agent_db}
   data:
     redis:
-      host: ${REDIS_HOST:121.43.51.164}
+      host: ${REDIS_HOST:114.55.75.194}
       port: ${REDIS_PORT:6379}
       password: ${REDIS_PASSWORD:teamuser2026}
       timeout: 2000ms

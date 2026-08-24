@@ -2,7 +2,7 @@ server:
   port: ${ACCOUNT_CENTER_PORT:8083}
 spring:
   datasource:
-    url: ${ACCOUNT_DB_URL:jdbc:mysql://121.43.51.164:3306/account_db?useSSL=false&serverTimezone=Asia/Shanghai&allowPublicKeyRetrieval=true&characterEncoding=UTF-8}
+    url: ${ACCOUNT_DB_URL:jdbc:mysql://114.55.75.194:3306/account_db?useSSL=false&serverTimezone=Asia/Shanghai&allowPublicKeyRetrieval=true&characterEncoding=UTF-8}
     username: ${ACCOUNT_DB_USERNAME:root}
     password: ${ACCOUNT_DB_PASSWORD:teamuser2026}
     driver-class-name: com.mysql.cj.jdbc.Driver
@@ -41,7 +41,7 @@ seata:
     type: ${SEATA_REGISTRY_TYPE:nacos}
     nacos:
       application: ${SEATA_REGISTRY_APPLICATION:seata-server}
-      server-addr: ${NACOS_SERVER_ADDR:121.43.51.164:8848}
+      server-addr: ${NACOS_SERVER_ADDR:114.55.75.194:8848}
       group: ${SEATA_REGISTRY_GROUP:SEATA_GROUP}
       cluster: ${SEATA_REGISTRY_CLUSTER:default}
       namespace: ${NACOS_NAMESPACE:}

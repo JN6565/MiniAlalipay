@@ -19,7 +19,7 @@ param(
     [string]$Service = '',
     [switch]$Repair,
     [string]$MvnRepo = 'D:\develop\apache-maven-3.9.4\mvn_repo',
-    [string]$DbHost = '121.43.51.164',
+    [string]$DbHost = '114.55.75.194',
     [string]$DbUser = 'root',
     [string]$DbPassword = 'teamuser2026'
 )

@@ -5,12 +5,12 @@ spring:
     name: user-center
   data:
     redis:
-      host: ${REDIS_HOST:121.43.51.164}
+      host: ${REDIS_HOST:114.55.75.194}
       port: ${REDIS_PORT:6379}
       password: ${REDIS_PASSWORD:teamuser2026}
       timeout: 2000ms
   datasource:
-    url: ${USER_DB_URL:jdbc:mysql://121.43.51.164:3306/user_db?useSSL=false&serverTimezone=Asia/Shanghai&allowPublicKeyRetrieval=true&characterEncoding=UTF-8}
+    url: ${USER_DB_URL:jdbc:mysql://114.55.75.194:3306/user_db?useSSL=false&serverTimezone=Asia/Shanghai&allowPublicKeyRetrieval=true&characterEncoding=UTF-8}
     username: ${USER_DB_USERNAME:root}
     password: ${USER_DB_PASSWORD:teamuser2026}
     driver-class-name: com.mysql.cj.jdbc.Driver

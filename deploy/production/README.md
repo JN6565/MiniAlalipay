@@ -1,6 +1,6 @@
 # 生产环境部署手册
 
-本目录包含 MiniAIalipay 前后端在服务器上的部署产物与编排配置。目标服务器：`121.43.51.164`（4 核，内存需升级至 16G），服务器上已运行 MySQL 8.4、Redis、Nacos（本地开发期即直连，数据库 Schema 已由 Flyway 迁移就绪）。
+本目录包含 MiniAIalipay 前后端在服务器上的部署产物与编排配置。目标服务器：`114.55.75.194`（4 核，内存需升级至 16G），服务器上已运行 MySQL 8.4、Redis、Nacos（本地开发期即直连，数据库 Schema 已由 Flyway 迁移就绪）。
 
 ## 目录结构
 
@@ -41,15 +41,15 @@ mkdir -p /opt/minialalipay/nginx/certs
 openssl req -x509 -nodes -days 3650 -newkey rsa:2048 \
   -keyout /opt/minialalipay/nginx/certs/h5.key \
   -out /opt/minialalipay/nginx/certs/h5.crt \
-  -subj "/CN=121.43.51.164" \
-  -addext "subjectAltName=IP:121.43.51.164"
+  -subj "/CN=114.55.75.194" \
+  -addext "subjectAltName=IP:114.55.75.194"
 ```
 
 **适用范围与局限**：
 
 - 桌面 Chrome/Edge、安卓 Chrome：首次访问提示「连接不安全」，点「高级 → 继续访问」后即可正常使用扫码
 - iPhone Safari、微信等内置浏览器：无法跳过自签证书告警，扫码暂不可用
-- `.env` 的 `GATEWAY_CORS_ORIGINS` 必须包含 `https://121.43.51.164`（模板已默认包含），否则浏览器登录会被网关拒绝为 403 空体
+- `.env` 的 `GATEWAY_CORS_ORIGINS` 必须包含 `https://114.55.75.194`（模板已默认包含），否则浏览器登录会被网关拒绝为 403 空体
 
 **后续换正式证书**（购买域名并完成备案后）：将正式证书文件覆盖为 `nginx/certs/h5.crt` 与 `h5.key`，执行 `docker compose exec nginx nginx -s reload` 即可，无需改代码；同步把新域名来源追加到 `GATEWAY_CORS_ORIGINS` 并重建网关。
 
@@ -59,7 +59,7 @@ openssl req -x509 -nodes -days 3650 -newkey rsa:2048 \
 
 1. 云控制台将内存升级至 16G，重启后确认：`free -h`
 2. 确认 Docker 已安装：`docker --version && docker compose version`（未安装则按发行版文档安装）
-3. 检查 Nacos 控制台（`http://121.43.51.164:8848/nacos`）服务列表 `SEATA_GROUP` 分组：
+3. 检查 Nacos 控制台（`http://114.55.75.194:8848/nacos`）服务列表 `SEATA_GROUP` 分组：
    - 已有 `seata-server` 且实例健康 → 无需额外操作
    - 没有 → 第 4 步启动时追加 `--profile seata`
 4. 生成 H5 站点自签证书（见上文「HTTPS 与自签证书」章节的 openssl 命令）
@@ -96,12 +96,12 @@ docker compose ps
 ## 验证清单
 
 1. **注册中心**：Nacos 控制台服务列表出现 `minialalipay-gateway`、`user-center`、`business-center`、`account-center`、`ai-service` 各 1 个健康实例
-2. **健康检查**：`curl -kL https://121.43.51.164/actuator/health` 返回 `{"status":"UP"}`（80 会 301 到 HTTPS，需 `-L` 跟随）
-3. **HTTPS 入口**：`curl -k https://121.43.51.164/` 返回 200 且为 H5 首页；`curl -i http://121.43.51.164/` 返回 301 指向 https
+2. **健康检查**：`curl -kL https://114.55.75.194/actuator/health` 返回 `{"status":"UP"}`（80 会 301 到 HTTPS，需 `-L` 跟随）
+3. **HTTPS 入口**：`curl -k https://114.55.75.194/` 返回 200 且为 H5 首页；`curl -i http://114.55.75.194/` 返回 301 指向 https
 4. **日志无异常**：`docker compose logs | grep -E "UnknownHostException|Service Instance cannot be null"` 应无输出
 5. **页面冒烟**：
-   - `https://121.43.51.164/`（H5，需先跳过自签证书告警）：登录、查余额、转账、明细、AI 对话、**扫一扫（摄像头应能拉起）**
-   - `http://121.43.51.164:81`（管理端）：登录与主要页面
+   - `https://114.55.75.194/`（H5，需先跳过自签证书告警）：登录、查余额、转账、明细、AI 对话、**扫一扫（摄像头应能拉起）**
+   - `http://114.55.75.194:81`（管理端）：登录与主要页面
 
 ## 升级与回滚
 
@@ -134,7 +134,7 @@ docker compose up -d --build --no-deps account-center
 | 浏览器提示「连接不安全」 | 自签证书的正常告警；点「高级 → 继续访问」即可（iPhone/微信内置浏览器无法跳过） |
 | Nginx 启动失败报证书错误 | 确认 `nginx/certs/h5.crt`、`h5.key` 已在服务器生成且路径正确 |
 | 扫码页提示「不支持摄像头」 | 确认经 `https://` 访问（80 会自动跳转）；HTTP 下浏览器不提供摄像头 API |
-| H5 登录报 403 空体 | `GATEWAY_CORS_ORIGINS` 缺 `https://121.43.51.164`；补充后 `docker compose up -d --force-recreate gateway` |
+| H5 登录报 403 空体 | `GATEWAY_CORS_ORIGINS` 缺 `https://114.55.75.194`；补充后 `docker compose up -d --force-recreate gateway` |
 
 ## 安全收敛建议（部署验证完成后）
 

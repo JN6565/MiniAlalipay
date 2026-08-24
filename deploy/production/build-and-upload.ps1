@@ -13,7 +13,7 @@
   详细步骤见同目录 README.md。
 
 .PARAMETER Server
-  目标服务器地址，默认 121.43.51.164。
+  目标服务器地址，默认 114.55.75.194。
 .PARAMETER User
   SSH 登录用户，默认 root（需已配置密钥或可交互输入密码）。
 .PARAMETER RemoteDir
@@ -31,7 +31,7 @@
   .\build-and-upload.ps1 -SkipUpload
 #>
 param(
-    [string]$Server = "121.43.51.164",
+    [string]$Server = "114.55.75.194",
     [string]$User = "root",
     [string]$RemoteDir = "/opt/minialalipay",
     [switch]$SkipBackend,

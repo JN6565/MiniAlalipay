@@ -28,14 +28,14 @@ else
   openssl req -x509 -nodes -days 3650 -newkey rsa:2048 \
     -keyout nginx/certs/h5.key \
     -out nginx/certs/h5.crt \
-    -subj "/CN=121.43.51.164" \
-    -addext "subjectAltName=IP:121.43.51.164"
+    -subj "/CN=114.55.75.194" \
+    -addext "subjectAltName=IP:114.55.75.194"
   chmod 600 nginx/certs/h5.key
 fi
 
 echo "==> 重写 .env 中的 GATEWAY_CORS_ORIGINS"
 sed -i '/^GATEWAY_CORS_ORIGINS=/d' .env
-echo 'GATEWAY_CORS_ORIGINS=https://121.43.51.164,http://121.43.51.164,http://121.43.51.164:81' >> .env
+echo 'GATEWAY_CORS_ORIGINS=https://114.55.75.194,http://114.55.75.194,http://114.55.75.194:81' >> .env
 grep '^GATEWAY_CORS_ORIGINS=' .env
 
 echo "==> 校验 nginx 配置与证书（预检容器挂到 compose 网络以解析服务名 gateway）"
@@ -53,4 +53,4 @@ docker run --rm --network "$NET" \
 
 echo "==> 强制重建 nginx 与 gateway"
 docker compose up -d --force-recreate nginx gateway
-echo "==> 完成。请确认阿里云安全组已放行 TCP 443，然后用 https://121.43.51.164 访问。"
+echo "==> 完成。请确认阿里云安全组已放行 TCP 443，然后用 https://114.55.75.194 访问。"
